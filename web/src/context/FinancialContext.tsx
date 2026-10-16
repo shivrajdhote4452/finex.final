@@ -111,10 +111,10 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
   });
 
   const [holdings, setHoldings] = useState<HoldingItem[]>([
-    { symbol: 'RELIANCE', name: 'Reliance Industries', shares: 10, avgPrice: 2300, currentPrice: 2500, dayChangePct: 1.21, assetClass: 'Energy', color: '#3B82F6' },
-    { symbol: 'TCS', name: 'Tata Consultancy Services', shares: 10, avgPrice: 3450, currentPrice: 3600, dayChangePct: -0.80, assetClass: 'IT', color: '#10B981' },
-    { symbol: 'INFY', name: 'Infosys', shares: 10, avgPrice: 1350, currentPrice: 1450, dayChangePct: 0.55, assetClass: 'IT', color: '#F59E0B' },
-    { symbol: 'HDFCBANK', name: 'HDFC Bank', shares: 15, avgPrice: 1533, currentPrice: 1600, dayChangePct: 0.32, assetClass: 'Banking', color: '#8B5CF6' },
+    { symbol: 'RELIANCE', name: 'Reliance Industries', shares: 10, avgPrice: 2300, currentPrice: 2500, dayChangePct: 1.21, assetClass: 'Energy', color: '#F29A60' },
+    { symbol: 'TCS', name: 'Tata Consultancy Services', shares: 10, avgPrice: 3450, currentPrice: 3600, dayChangePct: -0.80, assetClass: 'IT', color: '#4DD5AD' },
+    { symbol: 'INFY', name: 'Infosys', shares: 10, avgPrice: 1350, currentPrice: 1450, dayChangePct: 0.55, assetClass: 'IT', color: '#E0854B' },
+    { symbol: 'HDFCBANK', name: 'HDFC Bank', shares: 15, avgPrice: 1533, currentPrice: 1600, dayChangePct: 0.32, assetClass: 'Banking', color: '#A1A1AA' },
   ]);
 
   const [ledger, setLedger] = useState<LedgerEntry[]>([
@@ -315,10 +315,10 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
   const resetAccount = () => {
     setVirtualCash(50000);
     setHoldings([
-      { symbol: 'RELIANCE', name: 'Reliance Industries', shares: 10, avgPrice: 2300, currentPrice: 2500, dayChangePct: 1.21, assetClass: 'Energy', color: '#3B82F6' },
-      { symbol: 'TCS', name: 'Tata Consultancy Services', shares: 10, avgPrice: 3450, currentPrice: 3600, dayChangePct: -0.80, assetClass: 'IT', color: '#10B981' },
-      { symbol: 'INFY', name: 'Infosys', shares: 10, avgPrice: 1350, currentPrice: 1450, dayChangePct: 0.55, assetClass: 'IT', color: '#F59E0B' },
-      { symbol: 'HDFCBANK', name: 'HDFC Bank', shares: 15, avgPrice: 1533, currentPrice: 1600, dayChangePct: 0.32, assetClass: 'Banking', color: '#8B5CF6' },
+      { symbol: 'RELIANCE', name: 'Reliance Industries', shares: 10, avgPrice: 2300, currentPrice: 2500, dayChangePct: 1.21, assetClass: 'Energy', color: '#F29A60' },
+      { symbol: 'TCS', name: 'Tata Consultancy Services', shares: 10, avgPrice: 3450, currentPrice: 3600, dayChangePct: -0.80, assetClass: 'IT', color: '#4DD5AD' },
+      { symbol: 'INFY', name: 'Infosys', shares: 10, avgPrice: 1350, currentPrice: 1450, dayChangePct: 0.55, assetClass: 'IT', color: '#E0854B' },
+      { symbol: 'HDFCBANK', name: 'HDFC Bank', shares: 15, avgPrice: 1533, currentPrice: 1600, dayChangePct: 0.32, assetClass: 'Banking', color: '#A1A1AA' },
     ]);
     addNotification('Account Reset', 'Restored sandbox balance to ₹50,000 virtual cash and baseline portfolio', 'execution');
   };
@@ -380,7 +380,7 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
               currentPrice: unitPrice,
               dayChangePct: targetQuote?.changePct || 0.0,
               assetClass: 'Equity',
-              color: '#3B82F6',
+              color: '#F29A60',
             },
           ];
         }

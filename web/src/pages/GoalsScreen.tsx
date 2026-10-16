@@ -58,13 +58,13 @@ export const GoalsScreen: React.FC = () => {
                 className={`glass-card ${isSelected ? '' : 'glass-card-interactive'}`}
                 style={{
                   padding: '24px',
-                  border: isSelected ? '1px solid var(--border-active)' : '1px solid var(--border-subtle)',
-                  background: isSelected ? 'rgba(59, 130, 246, 0.08)' : 'var(--bg-card)',
+                  border: isSelected ? '1px solid var(--color-action)' : '1px solid var(--border-subtle)',
+                  background: isSelected ? 'rgba(242, 154, 96, 0.1)' : 'var(--bg-card)',
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                   <strong style={{ fontSize: '16px', color: '#FFFFFF' }}>{g.name}</strong>
-                  <span className="badge badge-cyan">{pct}% Funded</span>
+                  <span className="badge badge-virtual">{pct}% Funded</span>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: 'var(--text-muted)', marginBottom: '10px' }}>
@@ -73,8 +73,8 @@ export const GoalsScreen: React.FC = () => {
                 </div>
 
                 {/* Progress bar */}
-                <div style={{ width: '100%', height: '6px', borderRadius: '3px', backgroundColor: 'rgba(255, 255, 255, 0.08)', overflow: 'hidden' }}>
-                  <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg, #3B82F6, #06B6D4)' }} />
+                <div style={{ width: '100%', height: '6px', borderRadius: '3px', backgroundColor: '#1A1A1A', overflow: 'hidden' }}>
+                  <div style={{ width: `${pct}%`, height: '100%', background: 'var(--color-action)' }} />
                 </div>
               </div>
             );

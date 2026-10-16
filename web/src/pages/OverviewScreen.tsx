@@ -261,8 +261,8 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ onNavigate }) =>
             <svg viewBox="0 0 600 180" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
               <defs>
                 <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#3B82F6" stopOpacity="0.35" />
-                  <stop offset="100%" stopColor="#3B82F6" stopOpacity="0.0" />
+                  <stop offset="0%" stopColor="#F29A60" stopOpacity="0.3" />
+                  <stop offset="100%" stopColor="#F29A60" stopOpacity="0.0" />
                 </linearGradient>
               </defs>
 
@@ -282,8 +282,8 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ onNavigate }) =>
                   {/* Main Curve */}
                   <polyline
                     fill="none"
-                    stroke="#3B82F6"
-                    strokeWidth="3"
+                    stroke="#F29A60"
+                    strokeWidth="2.5"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     points="20,140 130,120 250,130 370,95 490,75 580,45"
@@ -297,9 +297,9 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ onNavigate }) =>
                         key={d.month}
                         cx={xs[i]}
                         cy={ys[i]}
-                        r="5"
-                        fill="#3B82F6"
-                        stroke="#111827"
+                        r="4.5"
+                        fill="#F29A60"
+                        stroke="#111111"
                         strokeWidth="2"
                         style={{ cursor: 'pointer', transition: 'r 0.15s ease' }}
                         onMouseEnter={() => setHoveredPoint(d)}

@@ -9,82 +9,105 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
   const [selectedHorizon, setSelectedHorizon] = useState('3-5');
 
   const horizonOptions = [
-    { id: '<1', title: 'Less than 1 year', desc: 'Liquid, immediate capital requirements' },
-    { id: '1-3', title: '1 – 3 years', desc: 'Short-term horizon with minimal drawdown tolerance' },
-    { id: '3-5', title: '3 – 5 years', desc: 'Medium-term horizon; time to navigate market cycles' },
-    { id: '>5', title: 'More than 5 years', desc: 'Long-term wealth building with compounding focus' },
+    { id: '<1', title: 'Less than 1 year', desc: 'Short-term needs, lower tolerance for volatility' },
+    { id: '1-3', title: '1-3 years', desc: 'Near-term capital protection priority' },
+    { id: '3-5', title: '3-5 years', desc: 'Balanced window navigating market cycles' },
+    { id: '>5', title: 'More than 5 years', desc: 'Long-term equity compounding timeframe' },
   ];
 
   if (step === 3) {
-    // Risk Profile Result Explained
+    // Screen 03 / 06: Risk Result & Explanation
     return (
-      <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '32px 0' }}>
-        <span style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>
-          Deterministic Evaluation • Step 04 / 04
-        </span>
-        <h1 style={{ fontSize: '36px', fontWeight: 700, color: '#FFFFFF', margin: '8px 0' }}>
-          Your Risk Profile, Grounded & Explained
+      <div style={{ maxWidth: '960px', margin: '0 auto', padding: '16px 0' }}>
+        <div style={{ fontSize: '11px', color: 'var(--color-action)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+          SCREEN 03 / 06 · RISK RESULT & EXPLANATION
+        </div>
+        <h1 style={{ fontSize: '32px', fontWeight: 700, color: '#FFFFFF', margin: '6px 0 4px 0' }}>
+          Your risk profile
         </h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginBottom: '32px' }}>
-          Derived strictly by the deterministic scoring engine. AI explains the outcome without altering calculations.
+        <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '28px' }}>
+          Illustrated result: actual scoring uses approved deterministic rules.
         </p>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: '32px', alignItems: 'start' }}>
-          {/* Left Result Card */}
-          <div className="glass-card" style={{ padding: '36px', border: '1px solid var(--border-active)' }}>
-            <span className="badge badge-cyan">Assessed Band</span>
-            <h2 style={{ fontSize: '42px', fontWeight: 800, color: '#FFFFFF', margin: '16px 0 12px 0' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '24px', alignItems: 'start' }}>
+          {/* Profile Summary Panel */}
+          <div className="glass-card" style={{ padding: '28px', border: '1px solid var(--border-medium)', backgroundColor: '#111111' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              Profile summary
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--color-action)', fontWeight: 600, marginTop: '2px' }}>
+              Illustrative result
+            </div>
+            <div style={{ fontSize: '36px', fontWeight: 800, color: '#FFFFFF', margin: '14px 0 8px 0' }}>
               Moderate
-            </h2>
-            <p style={{ fontSize: '14px', lineHeight: 1.6, color: 'var(--text-muted)', marginBottom: '24px' }}>
-              Your willingness to accept equity volatility is balanced with a disciplined capacity to absorb downside over a 3–5 year investment window.
+            </div>
+            <p style={{ fontSize: '13px', lineHeight: 1.5, color: 'var(--text-muted)', marginBottom: '20px' }}>
+              Willingness to take risk and capacity to absorb loss are evaluated separately.
             </p>
-            <button onClick={() => setStep(2)} className="btn btn-secondary" style={{ width: '100%' }}>
-              ← Review Answers
-            </button>
+            <div
+              onClick={() => setStep(2)}
+              style={{
+                fontSize: '12px',
+                color: 'var(--color-action)',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                marginBottom: '16px',
+              }}
+            >
+              Review your answers →
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--text-faint)', borderTop: '1px solid var(--border-subtle)', paddingTop: '12px' }}>
+              No return is guaranteed.
+            </div>
           </div>
 
-          {/* Right Breakdown */}
-          <div className="glass-card" style={{ padding: '32px' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#FFFFFF', marginBottom: '20px' }}>
-              Influencing Factors Breakdown
+          {/* Influencing Answers */}
+          <div className="glass-card" style={{ padding: '28px', backgroundColor: '#111111' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#FFFFFF', marginBottom: '20px' }}>
+              What influenced the result
             </h3>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <div style={{ borderBottom: '1px solid var(--border-subtle)', paddingBottom: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                  <strong style={{ color: '#FFFFFF', fontSize: '14px' }}>01. Investment Horizon</strong>
-                  <span className="badge badge-profit">3–5 Years</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+              <div style={{ borderBottom: '1px solid var(--border-subtle)', paddingBottom: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+                  <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--color-action)', fontWeight: 700 }}>01</span>
+                  <strong style={{ color: '#FFFFFF', fontSize: '13px' }}>Time horizon</strong>
                 </div>
-                <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                  A medium horizon allows temporary market drawdowns to recover through equity cycles.
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', paddingLeft: '24px' }}>
+                  Selected answer: 3-5 years in this example.
                 </p>
               </div>
 
-              <div style={{ borderBottom: '1px solid var(--border-subtle)', paddingBottom: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                  <strong style={{ color: '#FFFFFF', fontSize: '14px' }}>02. Willingness to Take Risk</strong>
-                  <span className="badge badge-cyan">Balanced (Score: 68/100)</span>
+              <div style={{ borderBottom: '1px solid var(--border-subtle)', paddingBottom: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+                  <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--color-action)', fontWeight: 700 }}>02</span>
+                  <strong style={{ color: '#FFFFFF', fontSize: '13px' }}>Willingness to take risk</strong>
                 </div>
-                <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                  Psychological tolerance evaluated via questionnaire weighting version v1.0.
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', paddingLeft: '24px' }}>
+                  Explain the approved response factors in plain language.
                 </p>
               </div>
 
               <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                  <strong style={{ color: '#FFFFFF', fontSize: '14px' }}>03. Capacity to Absorb Loss</strong>
-                  <span className="badge badge-virtual">Medium Buffer</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+                  <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--color-action)', fontWeight: 700 }}>03</span>
+                  <strong style={{ color: '#FFFFFF', fontSize: '13px' }}>Capacity to absorb loss</strong>
                 </div>
-                <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                  Assessed based on liquidity buffers and absence of high near-term debt liabilities.
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', paddingLeft: '24px' }}>
+                  Keep financial capacity separate from risk preference.
                 </p>
               </div>
             </div>
 
-            <div style={{ marginTop: '28px', display: 'flex', justifyContent: 'flex-end' }}>
-              <button onClick={onComplete} className="btn btn-primary" style={{ padding: '12px 28px', fontSize: '14px' }}>
-                Confirm Profile & Enter Workspace →
+            <div style={{ marginTop: '28px', display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+              <button onClick={() => setStep(2)} className="btn btn-secondary">
+                View scoring details
+              </button>
+              <button onClick={onComplete} className="btn btn-action">
+                Confirm profile
               </button>
             </div>
           </div>
@@ -93,22 +116,34 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
     );
   }
 
-  // Question 02 View
+  // Screen 02 / 05: Risk Onboarding Questionnaire
   return (
-    <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '32px 0' }}>
-      <span style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>
-        Risk Assessment • Question 02 / 04
-      </span>
-      <h1 style={{ fontSize: '36px', fontWeight: 700, color: '#FFFFFF', margin: '8px 0' }}>
-        What is your expected investment horizon?
+    <div style={{ maxWidth: '960px', margin: '0 auto', padding: '16px 0' }}>
+      <div style={{ fontSize: '11px', color: 'var(--color-action)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+        SCREEN 02 / 05 · RISK ONBOARDING
+      </div>
+      <h1 style={{ fontSize: '32px', fontWeight: 700, color: '#FFFFFF', margin: '6px 0 4px 0' }}>
+        Understand your investment horizon
       </h1>
-      <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginBottom: '32px' }}>
-        Select the timeframe when you anticipate needing to liquidate or access these funds.
+      <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '24px' }}>
+        Question 2 of 4 in this illustrative layout. Use the approved questionnaire in production.
       </p>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '32px', alignItems: 'start' }}>
-        {/* Options */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+      {/* Progress Steps */}
+      <div style={{ display: 'flex', gap: '24px', marginBottom: '28px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '14px' }}>
+        <div style={{ fontSize: '12px', color: 'var(--text-faint)' }}>01 Basics</div>
+        <div style={{ fontSize: '12px', color: 'var(--color-action)', fontWeight: 700 }}>02 Time horizon</div>
+        <div style={{ fontSize: '12px', color: 'var(--text-faint)' }}>03 Capacity</div>
+        <div style={{ fontSize: '12px', color: 'var(--text-faint)' }}>04 Review</div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '28px', alignItems: 'start' }}>
+        {/* Question Options */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ fontSize: '15px', fontWeight: 600, color: '#FFFFFF', marginBottom: '4px' }}>
+            When might you need this money?
+          </div>
+
           {horizonOptions.map((opt) => {
             const isSelected = selectedHorizon === opt.id;
             return (
@@ -117,48 +152,51 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
                 onClick={() => setSelectedHorizon(opt.id)}
                 className="glass-card glass-card-interactive"
                 style={{
-                  padding: '20px',
-                  border: isSelected ? '1px solid var(--color-primary)' : '1px solid var(--border-subtle)',
-                  background: isSelected ? 'rgba(59, 130, 246, 0.12)' : 'var(--bg-card)',
+                  padding: '16px 20px',
+                  border: isSelected ? '1px solid var(--color-action)' : '1px solid var(--border-subtle)',
+                  backgroundColor: isSelected ? '#181818' : '#111111',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '16px',
+                  gap: '14px',
                 }}
               >
                 <div
                   style={{
-                    width: '20px',
-                    height: '20px',
+                    width: '16px',
+                    height: '16px',
                     borderRadius: '50%',
-                    border: isSelected ? '6px solid var(--color-primary)' : '2px solid var(--border-medium)',
-                    backgroundColor: '#111827',
+                    border: isSelected ? '5px solid var(--color-action)' : '2px solid var(--border-medium)',
+                    backgroundColor: '#000000',
                   }}
                 />
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: '15px', color: '#FFFFFF' }}>{opt.title}</div>
-                  <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{opt.desc}</div>
+                  <div style={{ fontWeight: 600, fontSize: '14px', color: '#FFFFFF' }}>{opt.title}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{opt.desc}</div>
                 </div>
               </div>
             );
           })}
 
           <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
-            <button onClick={() => setStep(3)} className="btn btn-primary" style={{ padding: '12px 28px' }}>
-              Continue to Evaluation →
+            <button onClick={() => {}} className="btn btn-secondary">
+              Back
+            </button>
+            <button onClick={() => setStep(3)} className="btn btn-action">
+              Continue
             </button>
           </div>
         </div>
 
-        {/* Right Info Box */}
-        <div className="glass-card" style={{ padding: '28px' }}>
-          <span className="badge badge-cyan" style={{ marginBottom: '12px' }}>
-            Why Horizon Matters
-          </span>
-          <h3 style={{ fontSize: '18px', fontWeight: 600, color: '#FFFFFF', marginBottom: '8px' }}>
-            Time Diversifies Volatility
-          </h3>
-          <p style={{ fontSize: '13px', lineHeight: 1.6, color: 'var(--text-muted)' }}>
-            According to the Securities and Exchange Board of India (SEBI), short-term investments in equity carry high timing risk. Longer horizons afford portfolios the resilience to absorb downturns without forcing premature liquidations.
+        {/* Right Explanatory Box: Why We Ask */}
+        <div className="glass-card" style={{ padding: '24px', backgroundColor: '#111111' }}>
+          <div style={{ fontSize: '11px', color: 'var(--color-action)', fontWeight: 700, textTransform: 'uppercase', marginBottom: '8px' }}>
+            Why we ask
+          </div>
+          <p style={{ fontSize: '13px', lineHeight: 1.6, color: '#D4D4D8', marginBottom: '16px' }}>
+            Your time horizon helps explain how investment risk relates to your plans. It is only one part of your profile.
+          </p>
+          <p style={{ fontSize: '12px', lineHeight: 1.5, color: 'var(--text-muted)' }}>
+            You can go back and revise an answer before confirming your profile.
           </p>
         </div>
       </div>

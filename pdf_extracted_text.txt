@@ -1,0 +1,1613 @@
+
+--- PAGE 1 ---
+FINEX / GRAPHITE TERMINAL
+SELECTED THEME  /  01
+FinEx. Graphite Terminal.
+Web + Flutter visual guide  Complete mobile journeys and platform behavior  Selected Graphite theme
+Fin
+Ex
+Learn   Practice   Plan
+Overview
+Markets
+Portfolio
+Ask FinEx
+Paper trading
+Alerts
+Goals
+Spending
+Virtual trading.
+Educational use only. No
+real-money orders.
+Settings
+Shivraj’s workspace
+Search for an instrument, topic or command…
+Ctrl K
+INR
+S
+Shivraj
+↓
+Virtual account
+Illustrative
+Holdings
+₹
+99,500
+Virtual cash
+₹
+25,000
+Total value
+₹
+1,24,500
+Your market workspace.
+Markets, virtual portfolios and evidence-backed AI, in one coherent interface.
+PRACTICE PORTFOLIO VALUE / INR
+₹
+1,24,500
+Illustrative account
+1M
+6M
+1Y
+127,000
+124,000
+121,000
+118,000
+May
+Jun
+Jul
+Aug
+Sep
+Oct
+Watchlist
++ Add
+RELIANCE
+₹
+2,500
+TCS
+₹
+3,600
+INFY
+₹
+1,450
+Ask FinEx
+TCS is 36.2% of invested holdings. Inspect the source
+before taking the next step.
+View holdings evidence 
+→
+Positions (4)
+Orders
+History
+Symbol
+Qty
+Value
+P&L
+RELIANCE
+10
+₹
+25,000
++
+₹
+2,000
+TCS
+10
+₹
+36,000
++
+₹
+1,500
+DESIGN
+Charcoal surfaces, orange actions, compact tables and green/red market signals match your
+chosen theme.
+BEHAVIOR
+All figures are mock data. The production interface must use approved, timestamped backend
+data.
+VISUAL MOCKUP  All financial figures, dates and chart series are illustrative.
+Theme selected by Shivraj  No live market data in this PDF
+
+--- PAGE 2 ---
+FINEX / GRAPHITE TERMINAL
+FOUNDATIONS  /  02
+The Graphite design system
+Palette, typography and components derived from the selected reference.
+Canvas
+#090D0B
+Surface
+#111715
+Panel
+#151D19
+Action
+#F29A60
+Positive
+#4DD5AD
+Negative
+#F48C7B
+Typography & hierarchy
+Portfolio workspace
+Numbers should line up.
+₹
+1,24,500.00    +
+₹
+5,500
+Nimbus Sans Narrow gives headings their terminal character. Nimbus Sans handles
+labels and reading. Nimbus Mono aligns prices, quantities and timestamps.
+PROPOSED IMPLEMENTATION SCALE
+Headings 24-32px  Body 14-16px  Dense metadata 11-12px. Use 4-6px radii, 1px dividers
+and an 8px spacing rhythm.
+Controls & semantic colors
+Primary action
+Secondary action
+Virtual only
+FOCUSED INPUT
+Search instruments…
+Search instruments…
+Filled
+Delayed
+Unavailable
+Orange signals navigation and action. Green/red indicate positive/negative values,
+always with a sign or text label. Use neutral gray for unavailable data; never substitute
+zero.
+Keep contrast readable on every dark surface. Show keyboard focus without relying on animation.
+DESIGN
+Treat the reference as a coherent system, not just a dark background with orange buttons.
+BEHAVIOR
+The PDF embeds its preview fonts. Use approved equivalents and check font licensing before
+bundling.
+VISUAL MOCKUP  All financial figures, dates and chart series are illustrative.
+Theme selected by Shivraj  No live market data in this PDF
+
+--- PAGE 3 ---
+FINEX / GRAPHITE TERMINAL
+FOUNDATIONS  /  03
+One workspace. Clear routes.
+Application anatomy and navigation for all FinEx modules.
+Fin
+Ex
+Learn   Practice   Plan
+Overview
+Markets
+Portfolio
+Ask FinEx
+Paper trading
+Alerts
+Goals
+Spending
+Virtual trading.
+Educational use only. No
+real-money orders.
+Settings
+Shivraj’s workspace
+Search for an instrument, topic or command…
+Ctrl K
+INR
+S
+Shivraj
+↓
+Virtual account
+Illustrative
+Holdings
+₹
+99,500
+Virtual cash
+₹
+25,000
+Total value
+₹
+1,24,500
+Navigation & workspace behavior
+The left navigation stays stable while the central workspace changes.
+Primary destinations
+Navigation
+Web route
+Overview
+/dashboard
+Markets
+/markets
+Portfolio
+/portfolio
+Ask FinEx
+/chat
+Paper trading
+/paper-trading
+Alerts / Goals
+/alerts · /goals
+Spending
+/spending
+Session, search & account context
+Global search
+Search instruments or topics. Never place an order from search alone.
+Protected routes
+Require a valid session. Preserve the intended destination through sign-in.
+Context continuity
+Carry instrument or portfolio context into AI and alerts with visible labels.
+Small screens
+Replace the side rail with four tabs: Home, Markets, Ask, More.
+DESIGN
+The navigation matches the reference; all core handbook flows remain available.
+BEHAVIOR
+Routes shown are frontend proposals. Reuse actual frozen API contracts, not invented endpoint
+names.
+VISUAL MOCKUP  All financial figures, dates and chart series are illustrative.
+Theme selected by Shivraj  No live market data in this PDF
+
+--- PAGE 4 ---
+FINEX / GRAPHITE TERMINAL
+SCREEN 01  /  04
+Welcome & sign-in
+Identity / consent / returning session
+Fin
+Ex
+Learn the market.
+Practice with intent.
+ A workspace for understanding your money, exploring
+evidence and practicing with virtual funds.
+REAL INFORMATION
+Source labels. Data timestamps. Clear evidence.
+VIRTUAL EXECUTION
+No real-money orders or brokerage connection.
+Sign in to FinEx
+Your workspace starts here.
+Use Google sign-in to create or return to your personal workspace.
+✓
+I accept the Terms and Privacy Policy, and understand FinEx is an
+educational platform.
+Continue with Google
+Your consent is recorded with its policy version. Risk and portfolio information
+remain private to your account.
+Privacy policy
+Terms
+Need help?
+DESIGN
+Match the terminal identity before the user enters the application. Consent is shown selected for this
+mockup.
+BEHAVIOR
+Disable Continue until consent is accepted. Show cancelled sign-in and expired-session messages
+inline.
+VISUAL MOCKUP  All financial figures, dates and chart series are illustrative.
+Theme selected by Shivraj  No live market data in this PDF
+
+--- PAGE 5 ---
+FINEX / GRAPHITE TERMINAL
+SCREEN 02  /  05
+Risk onboarding
+Questionnaire / progress / saved answers
+Fin
+Ex
+Learn   Practice   Plan
+Overview
+Markets
+Portfolio
+Ask FinEx
+Paper trading
+Alerts
+Goals
+Spending
+Virtual trading.
+Educational use only. No
+real-money orders.
+Settings
+Shivraj’s workspace
+Search for an instrument, topic or command…
+Ctrl K
+INR
+S
+Shivraj
+↓
+Virtual account
+Illustrative
+Holdings
+₹
+99,500
+Virtual cash
+₹
+25,000
+Total value
+₹
+1,24,500
+Understand your investment horizon
+Question 2 of 4 in this illustrative layout. Use the approved questionnaire in production.
+01  Basics
+02  Time horizon
+03  Capacity
+04  Review
+When might you need this money?
+○
+Less than 1 year
+○
+1-3 years
+●
+3-5 years
+○
+More than 5 years
+Why we ask
+Your time horizon helps explain how investment
+risk relates to your plans. It is only one part of
+your profile.
+You can go back and revise an answer before confirming
+your profile.
+Back
+Continue
+DESIGN
+Keep the dark terminal shell, but reduce density for the questionnaire. One decision at a time.
+BEHAVIOR
+Save answers across Back/Continue. Field errors identify the unanswered question without
+clearing progress.
+VISUAL MOCKUP  All financial figures, dates and chart series are illustrative.
+Theme selected by Shivraj  No live market data in this PDF
+
+--- PAGE 6 ---
+FINEX / GRAPHITE TERMINAL
+SCREEN 03  /  06
+Risk result & explanation
+Profile category / influencing answers / confirmation
+Fin
+Ex
+Learn   Practice   Plan
+Overview
+Markets
+Portfolio
+Ask FinEx
+Paper trading
+Alerts
+Goals
+Spending
+Virtual trading.
+Educational use only. No
+real-money orders.
+Settings
+Shivraj’s workspace
+Search for an instrument, topic or command…
+Ctrl K
+INR
+S
+Shivraj
+↓
+Virtual account
+Illustrative
+Holdings
+₹
+99,500
+Virtual cash
+₹
+25,000
+Total value
+₹
+1,24,500
+Your risk profile
+Illustrated result: actual scoring uses approved deterministic rules.
+Profile summary
+Illustrative result
+Moderate
+Willingness to take risk and capacity to
+absorb loss are evaluated separately.
+Review your answers 
+→
+No return is guaranteed.
+What influenced the result
+01
+Time horizon
+Selected answer: 3-5 years in this example.
+02
+Willingness to take risk
+Explain the approved response factors in plain language.
+03
+Capacity to absorb loss
+Keep financial capacity separate from risk preference.
+Confirm profile
+View scoring details
+DESIGN
+Explain the category. Avoid an invented precision score or a decorative speedometer.
+BEHAVIOR
+The AI can explain a result; it must not change scores, thresholds or the approved questionnaire.
+VISUAL MOCKUP  All financial figures, dates and chart series are illustrative.
+Theme selected by Shivraj  No live market data in this PDF
+
+--- PAGE 7 ---
+FINEX / GRAPHITE TERMINAL
+SCREEN 04  /  07
+The daily overview
+Account summary / historical value / next actions
+Fin
+Ex
+Learn   Practice   Plan
+Overview
+Markets
+Portfolio
+Ask FinEx
+Paper trading
+Alerts
+Goals
+Spending
+Virtual trading.
+Educational use only. No
+real-money orders.
+Settings
+Shivraj’s workspace
+Search for an instrument, topic or command…
+Ctrl K
+INR
+S
+Shivraj
+↓
+Virtual account
+Illustrative
+Holdings
+₹
+99,500
+Virtual cash
+₹
+25,000
+Total value
+₹
+1,24,500
+Overview
+Good afternoon, Shivraj. Your practice portfolio and the information behind it.
+Portfolio value
+Allocation
+Activity
+VIRTUAL PORTFOLIO / INR
+₹
+1,24,500
++
+₹
+5,500 unrealized P&L
+6 MONTHS
+127,000
+124,000
+121,000
+118,000
+May
+Jun
+Jul
+Aug
+Sep
+Oct
+Holdings + virtual cash. This is account value, not a guaranteed return.
+Portfolio insight
+36.2%
+TCS share of invested holdings. Cash excluded.
+Open evidence 
+→
+Needs your attention
+1 price alert
+Review the trigger details and the quote used.
+Goal contribution check-in
+View all alerts 
+→
+DESIGN
+The overview summarizes what exists and points to the next useful action. Keep its numeric
+hierarchy strong.
+BEHAVIOR
+Empty accounts get a clear start state. The account value and AI insight must come from the same
+snapshot.
+VISUAL MOCKUP  All financial figures, dates and chart series are illustrative.
+Theme selected by Shivraj  No live market data in this PDF
+
+--- PAGE 8 ---
+FINEX / GRAPHITE TERMINAL
+SCREEN 05  /  08
+Markets & watchlists
+Instrument search / sortable rows / saved instruments
+Fin
+Ex
+Learn   Practice   Plan
+Overview
+Markets
+Portfolio
+Ask FinEx
+Paper trading
+Alerts
+Goals
+Spending
+Virtual trading.
+Educational use only. No
+real-money orders.
+Settings
+Shivraj’s workspace
+Search for an instrument, topic or command…
+Ctrl K
+INR
+S
+Shivraj
+↓
+Virtual account
+Illustrative
+Holdings
+₹
+99,500
+Virtual cash
+₹
+25,000
+Total value
+₹
+1,24,500
+Markets
+Discover instruments and maintain your watchlist. All rows below are illustrative.
+Search by symbol or company name
+Add to watchlist
+Filters
+My watchlist
+All instruments
+Symbol
+Company
+Price / INR
+Day change
+Data status
+Action
+RELIANCE
+Reliance Industries
+₹
+2,500.00
++1.21%
+Design sample
+Open 
+→
+TCS
+Tata Consultancy
+₹
+3,600.00
+-0.80%
+Design sample
+Open 
+→
+INFY
+Infosys
+₹
+1,450.00
++0.55%
+Design sample
+Open 
+→
+HDFCBANK
+HDFC Bank
+₹
+1,600.00
++0.32%
+Design sample
+Open 
+→
+Source and quote timestamps appear here once real provider data is connected.
+DESIGN
+Dense rows, fixed numeric columns and small status labels keep the terminal useful without visual
+noise.
+BEHAVIOR
+Debounce search; preserve filters; expose sort order; confirm watchlist removal through an undo or
+clear action.
+VISUAL MOCKUP  All financial figures, dates and chart series are illustrative.
+Theme selected by Shivraj  No live market data in this PDF
+
+--- PAGE 9 ---
+FINEX / GRAPHITE TERMINAL
+SCREEN 06  /  09
+Instrument detail
+Price history / source metadata / alert and practice actions
+Fin
+Ex
+Learn   Practice   Plan
+Overview
+Markets
+Portfolio
+Ask FinEx
+Paper trading
+Alerts
+Goals
+Spending
+Virtual trading.
+Educational use only. No
+real-money orders.
+Settings
+Shivraj’s workspace
+Search for an instrument, topic or command…
+Ctrl K
+INR
+S
+Shivraj
+↓
+Virtual account
+Illustrative
+Holdings
+₹
+99,500
+Virtual cash
+₹
+25,000
+Total value
+₹
+1,24,500
+RELIANCE
+Reliance Industries  NSE  Equity  INR
+In watchlist 
+✓
+₹
+2,500.00
++
+₹
+30.00  (+1.21%)
+Illustrative daily change
+1D
+1W
+1M
+6M
+1Y
+HISTORICAL PRICE / INR
+2,530
+2,470
+2,410
+2,350
+16 Sep
+23 Sep
+30 Sep
+07 Oct
+16 Oct
+Quote & source
+PROVIDER
+Not connected in mockup
+OBSERVATION TIME
+Not a live quote
+HISTORY BASIS
+Unadjusted illustration
+Set price alert
+Practice a trade
+Virtual funds only.
+DESIGN
+Keep the source panel adjacent to the chart. A visible data-status label prevents a mockup or
+cached quote looking live.
+BEHAVIOR
+Show observation and retrieval time separately. Disable execution when the backend rejects quote
+eligibility.
+VISUAL MOCKUP  All financial figures, dates and chart series are illustrative.
+Theme selected by Shivraj  No live market data in this PDF
+
+--- PAGE 10 ---
+FINEX / GRAPHITE TERMINAL
+SCREEN 07  /  10
+Portfolio & allocation
+Position values / cost basis / unrealized profit and loss
+Fin
+Ex
+Learn   Practice   Plan
+Overview
+Markets
+Portfolio
+Ask FinEx
+Paper trading
+Alerts
+Goals
+Spending
+Virtual trading.
+Educational use only. No
+real-money orders.
+Settings
+Shivraj’s workspace
+Search for an instrument, topic or command…
+Ctrl K
+INR
+S
+Shivraj
+↓
+Virtual account
+Illustrative
+Holdings
+₹
+99,500
+Virtual cash
+₹
+25,000
+Total value
+₹
+1,24,500
+Portfolio
+Virtual positions and cash, reconciled from the backend ledger.
+Holdings
+Allocation
+Performance
+HOLDINGS VALUE
+₹
+99,500
+COST BASIS
+₹
+94,000
+UNREALIZED P&L
++
+₹
+5,500
+VIRTUAL CASH
+₹
+25,000
+Holding
+Quantity
+Market value
+Cost basis
+Unrealized P&L
+RELIANCE
+10
+₹
+25,000
+₹
+23,000
++
+₹
+2,000
+TCS
+10
+₹
+36,000
+₹
+34,500
++
+₹
+1,500
+INFY
+10
+₹
+14,500
+₹
+13,500
++
+₹
+1,000
+HDFCBANK
+15
+₹
+24,000
+₹
+23,000
++
+₹
+1,000
+TCS  36.2%
+RELIANCE  25.1%
+HDFCBANK  24.1%
+INFY  14.6%
+DESIGN
+The ledger and allocation strip share the same snapshot. Allocation here totals 100% of holdings
+and excludes cash.
+BEHAVIOR
+Mark missing prices explicitly. Do not calculate financial values differently in React and Flutter.
+VISUAL MOCKUP  All financial figures, dates and chart series are illustrative.
+Theme selected by Shivraj  No live market data in this PDF
+
+--- PAGE 11 ---
+FINEX / GRAPHITE TERMINAL
+SCREEN 08  /  11
+Ask FinEx
+Conversation / portfolio context / citations
+Fin
+Ex
+Learn   Practice   Plan
+Overview
+Markets
+Portfolio
+Ask FinEx
+Paper trading
+Alerts
+Goals
+Spending
+Virtual trading.
+Educational use only. No
+real-money orders.
+Settings
+Shivraj’s workspace
+Search for an instrument, topic or command…
+Ctrl K
+INR
+S
+Shivraj
+↓
+Virtual account
+Illustrative
+Holdings
+₹
+99,500
+Virtual cash
+₹
+25,000
+Total value
+₹
+1,24,500
+Ask FinEx
+Explain the data. Inspect the evidence. Keep the next action under your control.
+Which holding is the largest in my portfolio?
+FINEX ASSISTANT
+TCS is your largest holding.
+In this illustrated portfolio, TCS is valued at 
+₹
+36,000. That is 36.2% of invested holdings
+worth 
+₹
+99,500. Cash is excluded. [1]
+This describes concentration; it is not a recommendation to buy or sell.
+[1] Open holdings snapshot
+Ask a follow-up question…
+Send
+Evidence
+01 / PORTFOLIO SNAPSHOT
+TCS: 
+₹
+36,000
+Holdings: 
+₹
+99,500
+36,000 ÷ 99,500 = 36.2%
+Production evidence includes snapshot ID,
+valuation timestamp, source and freshness.
+Illustrative evidence
+DESIGN
+Use a practical answer panel with a permanent evidence column. Keep AI branding restrained and
+functional.
+BEHAVIOR
+The assistant never invents prices, balances or citations. It does not place orders from a
+conversation.
+VISUAL MOCKUP  All financial figures, dates and chart series are illustrative.
+Theme selected by Shivraj  No live market data in this PDF
+
+--- PAGE 12 ---
+FINEX / GRAPHITE TERMINAL
+SCREEN 09  /  12
+Document evidence & source reading
+RAG / source viewer / passage and metadata
+Fin
+Ex
+Learn   Practice   Plan
+Overview
+Markets
+Portfolio
+Ask FinEx
+Paper trading
+Alerts
+Goals
+Spending
+Virtual trading.
+Educational use only. No
+real-money orders.
+Settings
+Shivraj’s workspace
+Search for an instrument, topic or command…
+Ctrl K
+INR
+S
+Shivraj
+↓
+Virtual account
+Illustrative
+Holdings
+₹
+99,500
+Virtual cash
+₹
+25,000
+Total value
+₹
+1,24,500
+Read the source
+A separate evidence view for published financial documents. This page shows a layout sample.
+Answer references
+[1] Selected document
+[2] Related document
+Portfolio context
+Only sources actually retrieved for the
+answer appear in this list.
+Selected source / reading pane
+DOCUMENT TITLE FROM THE SOURCE REGISTRY
+Publisher  Reporting period  Page number
+Supporting passage appears here. Highlight the exact retrieved text that
+supports the answer. Preserve its wording and page reference.
+This is a source-viewer design placeholder, not a quote from a real publication.
+Open original document
+Back to answer 
+→
+DESIGN
+Evidence needs a readable document view, not only a tiny citation badge. Display title, publisher,
+period and page.
+BEHAVIOR
+Retrieved text is untrusted content. Follow source access rules and never turn document
+instructions into actions.
+VISUAL MOCKUP  All financial figures, dates and chart series are illustrative.
+Theme selected by Shivraj  No live market data in this PDF
+
+--- PAGE 13 ---
+FINEX / GRAPHITE TERMINAL
+SCREEN 10  /  13
+Paper trading: order ticket
+Buy / sell / quantity / quote eligibility
+Fin
+Ex
+Learn   Practice   Plan
+Overview
+Markets
+Portfolio
+Ask FinEx
+Paper trading
+Alerts
+Goals
+Spending
+Virtual trading.
+Educational use only. No
+real-money orders.
+Settings
+Shivraj’s workspace
+Search for an instrument, topic or command…
+Ctrl K
+INR
+S
+Shivraj
+↓
+Virtual account
+Illustrative
+Holdings
+₹
+99,500
+Virtual cash
+₹
+25,000
+Total value
+₹
+1,24,500
+Practice a trade
+Virtual funds only. No real-money order is placed.
+PAPER ACCOUNT
+Order ticket
+INSTRUMENT
+RELIANCE / NSE
+SIDE
+Buy
+Sell
+QUANTITY
+2 shares
+Reference price
+₹
+2,500.00
+The final execution price and quote eligibility are validated by the backend.
+Estimated virtual order
+₹
+5,000.00
+2 shares × 
+₹
+2,500.00
+Virtual cash
+₹
+25,000
+Demo fee assumption
+₹
+0
+Estimated cash after
+₹
+20,000
+Review virtual order
+Illustrative estimate. Confirm on the next step.
+DESIGN
+A two-column ticket makes the inputs and financial consequences easy to compare. Buy/sell remain
+visibly distinct.
+BEHAVIOR
+Reject invalid quantity, insufficient cash and stale quotes inline. Do not permit unsupported order
+types.
+VISUAL MOCKUP  All financial figures, dates and chart series are illustrative.
+Theme selected by Shivraj  No live market data in this PDF
+
+--- PAGE 14 ---
+FINEX / GRAPHITE TERMINAL
+SCREEN 11  /  14
+Paper trading: review & receipt
+Explicit confirmation / execution result / persistent order identifier
+Fin
+Ex
+Learn   Practice   Plan
+Overview
+Markets
+Portfolio
+Ask FinEx
+Paper trading
+Alerts
+Goals
+Spending
+Virtual trading.
+Educational use only. No
+real-money orders.
+Settings
+Shivraj’s workspace
+Search for an instrument, topic or command…
+Ctrl K
+INR
+S
+Shivraj
+↓
+Virtual account
+Illustrative
+Holdings
+₹
+99,500
+Virtual cash
+₹
+25,000
+Total value
+₹
+1,24,500
+Review before confirming
+The review and receipt are shown side by side to explain the flow; they are separate application states.
+Review virtual buy
+RELIANCE
+2 shares / NSE
+Reference price
+₹
+2,500.00
+Estimated value
+₹
+5,000.00
+Demo fee
+₹
+0
+Cash after estimate
+₹
+20,000.00
+Confirm virtual buy
+←
+ Edit order
+Receipt / illustrated completed state
+Filled
+Virtual purchase complete.
+Order ID
+DEMO-ORDER-001
+Quantity filled
+2 shares
+Fill price
+₹
+2,500.00
+Filled value
+₹
+5,000.00
+View order activity
+No real-money trade was placed.
+DESIGN
+A deliberate review precedes an explicit receipt. The displayed demo fee is not an approved
+production fee rule.
+BEHAVIOR
+Use backend order IDs and idempotency. A timeout becomes “checking status”, never an
+automatic second order.
+VISUAL MOCKUP  All financial figures, dates and chart series are illustrative.
+Theme selected by Shivraj  No live market data in this PDF
+
+--- PAGE 15 ---
+FINEX / GRAPHITE TERMINAL
+SCREEN 12  /  15
+Orders, activity & virtual ledger
+Pending / filled / rejected / unknown / cash audit
+Fin
+Ex
+Learn   Practice   Plan
+Overview
+Markets
+Portfolio
+Ask FinEx
+Paper trading
+Alerts
+Goals
+Spending
+Virtual trading.
+Educational use only. No
+real-money orders.
+Settings
+Shivraj’s workspace
+Search for an instrument, topic or command…
+Ctrl K
+INR
+S
+Shivraj
+↓
+Virtual account
+Illustrative
+Holdings
+₹
+99,500
+Virtual cash
+₹
+25,000
+Total value
+₹
+1,24,500
+Order activity
+Inspect what happened and how the virtual cash balance changed.
+Orders
+Trades
+Cash ledger
+Order ID
+Instrument
+Side / Qty
+State
+Action
+DEMO-001
+RELIANCE
+Buy / 2
+Filled
+View receipt
+DEMO-002
+TCS
+Buy / 1
+Pending
+Check status
+DEMO-003
+INFY
+Buy / 5
+Rejected
+View reason
+DEMO-004
+HDFCBANK
+Sell / 1
+Unknown
+Check status
+ILLUSTRATED CASH-LEDGER EXAMPLE
+Opening cash
+₹
+25,000
+Virtual buy / DEMO-001
+-
+₹
+5,000
+Resulting cash
+₹
+20,000
+DESIGN
+State and ledger detail are first-class screens. Users should be able to explain every virtual cash
+movement.
+BEHAVIOR
+Pending/unknown disable duplicate submission. Reconcile existing requests and keep correction
+entries auditable.
+VISUAL MOCKUP  All financial figures, dates and chart series are illustrative.
+Theme selected by Shivraj  No live market data in this PDF
+
+--- PAGE 16 ---
+FINEX / GRAPHITE TERMINAL
+SCREEN 13  /  16
+Alerts & notification rules
+Timeline / read state / trigger condition / delivery
+Fin
+Ex
+Learn   Practice   Plan
+Overview
+Markets
+Portfolio
+Ask FinEx
+Paper trading
+Alerts
+Goals
+Spending
+Virtual trading.
+Educational use only. No
+real-money orders.
+Settings
+Shivraj’s workspace
+Search for an instrument, topic or command…
+Ctrl K
+INR
+S
+Shivraj
+↓
+Virtual account
+Illustrative
+Holdings
+₹
+99,500
+Virtual cash
+₹
+25,000
+Total value
+₹
+1,24,500
+Alerts
+Choose what deserves attention, then keep a readable history.
+Create alert
+Notification centre
+NEW
+Price threshold reached
+RELIANCE / illustrative threshold event
+→
+NEW
+Allocation changed
+Review the latest holdings snapshot
+→
+READ
+Goal contribution reminder
+Monthly check-in for your existing goal
+→
+Create a price alert
+INSTRUMENT
+RELIANCE
+TRIGGER
+Price above 
+₹
+2,600.00
+DELIVERY
+In-app + push when allowed
+Save alert
+Pause or edit any saved rule.
+DESIGN
+Use a timeline for received events and a dedicated rule editor. “Read” never looks like “resolved”.
+BEHAVIOR
+Apply deduplication and cooldowns. Push failure must preserve in-app alerts; goal rules need a
+real goal.
+VISUAL MOCKUP  All financial figures, dates and chart series are illustrative.
+Theme selected by Shivraj  No live market data in this PDF
+
+--- PAGE 17 ---
+FINEX / GRAPHITE TERMINAL
+SCREEN 14  /  17
+Goals overview
+Targets / saved contributions / status / next action
+Fin
+Ex
+Learn   Practice   Plan
+Overview
+Markets
+Portfolio
+Ask FinEx
+Paper trading
+Alerts
+Goals
+Spending
+Virtual trading.
+Educational use only. No
+real-money orders.
+Settings
+Shivraj’s workspace
+Search for an instrument, topic or command…
+Ctrl K
+INR
+S
+Shivraj
+↓
+Virtual account
+Illustrative
+Holdings
+₹
+99,500
+Virtual cash
+₹
+25,000
+Total value
+₹
+1,24,500
+Your goals
+A place for practical targets and progress you can verify.
+New goal
+Active goals
+01
+Emergency fund
+₹
+60,000 saved / 
+₹
+1,00,000 target
+60%
+→
+02
+New laptop
+₹
+30,000 saved / 
+₹
+75,000 target
+40%
+→
+03
+Higher education
+₹
+50,000 saved / 
+₹
+5,00,000 target
+10%
+→
+DESIGN
+A wide goal list preserves terminal density while giving each target a distinct progress indicator.
+BEHAVIOR
+Selecting a goal opens its contributions and scenario. New goals require a target amount, currency
+and date.
+VISUAL MOCKUP  All financial figures, dates and chart series are illustrative.
+Theme selected by Shivraj  No live market data in this PDF
+
+--- PAGE 18 ---
+FINEX / GRAPHITE TERMINAL
+SCREEN 15  /  18
+Goal detail & contribution scenario
+Actual progress / monthly input / projection assumptions
+Fin
+Ex
+Learn   Practice   Plan
+Overview
+Markets
+Portfolio
+Ask FinEx
+Paper trading
+Alerts
+Goals
+Spending
+Virtual trading.
+Educational use only. No
+real-money orders.
+Settings
+Shivraj’s workspace
+Search for an instrument, topic or command…
+Ctrl K
+INR
+S
+Shivraj
+↓
+Virtual account
+Illustrative
+Holdings
+₹
+99,500
+Virtual cash
+₹
+25,000
+Total value
+₹
+1,24,500
+New laptop
+Saved contributions are facts. Future outcomes are clearly labelled scenarios.
+Goal progress
+₹
+30,000
+of 
+₹
+75,000 target
+Illustrated contribution
+Amount
+Contribution 01
+₹
+10,000
+Contribution 02
+₹
+10,000
+Contribution 03
+₹
+10,000
+Add contribution
+Monthly scenario
+MONTHLY CONTRIBUTION
+₹
+5,000
+AMOUNT REMAINING
+₹
+45,000
+ILLUSTRATIVE RESULT
+9 contributions
+Assumes no interest, fees or withdrawals. Timing and return
+assumptions must be shown if used.
+Edit goal 
+→
+DESIGN
+Keep contribution history separate from hypothetical inputs. This simple scenario is 45,000 ÷ 5,000
+= 9.
+BEHAVIOR
+Calculate projections in the backend, version assumptions and do not present an estimate as a
+guaranteed result.
+VISUAL MOCKUP  All financial figures, dates and chart series are illustrative.
+Theme selected by Shivraj  No live market data in this PDF
+
+--- PAGE 19 ---
+FINEX / GRAPHITE TERMINAL
+SCREEN 16  /  19
+Spending analytics
+Monthly outflow / category mix / correction queue
+Fin
+Ex
+Learn   Practice   Plan
+Overview
+Markets
+Portfolio
+Ask FinEx
+Paper trading
+Alerts
+Goals
+Spending
+Virtual trading.
+Educational use only. No
+real-money orders.
+Settings
+Shivraj’s workspace
+Search for an instrument, topic or command…
+Ctrl K
+INR
+S
+Shivraj
+↓
+Virtual account
+Illustrative
+Holdings
+₹
+99,500
+Virtual cash
+₹
+25,000
+Total value
+₹
+1,24,500
+Spending / October
+Illustrative INR transactions. Transfers and refunds are excluded from outflow.
+Import CSV
+MONTHLY OUTFLOW
+₹
+24,800
+₹
+1,400 less than September
+Month
+Quarter
+Year
+Food & dining
+₹
+8,000
+Shopping
+₹
+6,500
+Transport
+₹
+4,300
+Other
+₹
+6,000
+Review categories
+4 transactions
+Confirm uncertain categories before accepting insights.
+Your corrections are saved.
+Merchant 42      
+₹
+1,200
+Review transactions
+DESIGN
+A category strip and exact amounts make the composition easy to read. Corrections receive a
+visible place.
+BEHAVIOR
+Mask descriptions; preserve category provenance. Do not treat an AI confidence value as a
+guarantee.
+VISUAL MOCKUP  All financial figures, dates and chart series are illustrative.
+Theme selected by Shivraj  No live market data in this PDF
+
+--- PAGE 20 ---
+FINEX / GRAPHITE TERMINAL
+SCREEN 17  /  20
+CSV mapping & import preview
+Column matching / validation / duplicates / commit
+Fin
+Ex
+Learn   Practice   Plan
+Overview
+Markets
+Portfolio
+Ask FinEx
+Paper trading
+Alerts
+Goals
+Spending
+Virtual trading.
+Educational use only. No
+real-money orders.
+Settings
+Shivraj’s workspace
+Search for an instrument, topic or command…
+Ctrl K
+INR
+S
+Shivraj
+↓
+Virtual account
+Illustrative
+Holdings
+₹
+99,500
+Virtual cash
+₹
+25,000
+Total value
+₹
+1,24,500
+Review your CSV
+october-transactions.csv  Preview only  Nothing has been imported yet.
+DATE
+transaction_date
+DESCRIPTION
+description
+AMOUNT
+amount
+CURRENCY
+currency
+128 rows found   /   120 valid   /   5 duplicates   /   3 need correction
+Date
+Masked description
+Amount
+Category
+Validation
+05 Oct 2026
+Merchant 42
+₹
+1,200
+Shopping
+Valid
+06 Oct 2026
+Merchant 86
+₹
+650
+Transport
+Duplicate
+Invalid date
+Merchant 19
+₹
+2,100
+Unassigned
+Fix date
+Duplicates stay excluded. Correct invalid rows or explicitly exclude them before committing the selected valid rows.
+Import 120 valid rows
+DESIGN
+Preview includes the column mapping, row checks and a deliberate final import action.
+BEHAVIOR
+Enforce size/type limits. Detect duplicate files and rows, reconcile totals and show
+imported/skipped counts.
+VISUAL MOCKUP  All financial figures, dates and chart series are illustrative.
+Theme selected by Shivraj  No live market data in this PDF
+
+--- PAGE 21 ---
+FINEX / GRAPHITE TERMINAL
+SCREEN 18  /  21
+Profile, privacy & device preferences
+Account / risk / consent / notifications / sign-out
+Fin
+Ex
+Learn   Practice   Plan
+Overview
+Markets
+Portfolio
+Ask FinEx
+Paper trading
+Alerts
+Goals
+Spending
+Virtual trading.
+Educational use only. No
+real-money orders.
+Settings
+Shivraj’s workspace
+Search for an instrument, topic or command…
+Ctrl K
+INR
+S
+Shivraj
+↓
+Virtual account
+Illustrative
+Holdings
+₹
+99,500
+Virtual cash
+₹
+25,000
+Total value
+₹
+1,24,500
+Settings
+Your profile and the way FinEx communicates with you.
+Account
+SD
+Shivraj Dhote
+Personal workspace
+Profile
+Notifications
+Privacy & consent
+Sign out
+Profile & preferences
+Display name
+Shivraj Dhote
+Edit 
+→
+Risk profile
+Review your latest assessment and answers
+View 
+→
+Consent history
+Accepted policy and questionnaire versions
+View 
+→
+Push notifications
+Show the actual permission for this device
+Manage 
+→
+DESIGN
+Practical rows keep settings predictable. Preserve the same type, border and interaction language
+as the trading views.
+BEHAVIOR
+Verify device permission rather than assuming it. Confirm any supported destructive account action
+explicitly.
+VISUAL MOCKUP  All financial figures, dates and chart series are illustrative.
+Theme selected by Shivraj  No live market data in this PDF

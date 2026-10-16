@@ -290,7 +290,7 @@ export const QuickTradeModal: React.FC = () => {
                   }}
                 >
                   {Object.values(marketQuotes).map((q) => (
-                    <option key={q.symbol} value={q.symbol} style={{ backgroundColor: '#111827', color: '#FFFFFF' }}>
+                    <option key={q.symbol} value={q.symbol} style={{ backgroundColor: '#111111', color: '#FFFFFF' }}>
                       {q.symbol} — {q.name}
                     </option>
                   ))}

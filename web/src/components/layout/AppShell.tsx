@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useFinancial } from '../../context/FinancialContext';
 import { QuickTradeModal } from '../trading/QuickTradeModal';
 
@@ -21,49 +21,60 @@ interface AppShellProps {
 }
 
 export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, children }) => {
-  const { virtualCash, notifications, totalTradesCount, marketQuotes, openQuickTrade } = useFinancial();
+  const {
+    virtualCash,
+    holdings,
+    totalHoldingsValue,
+    totalPortfolioValue,
+    notifications,
+    totalTradesCount,
+    marketQuotes,
+    openQuickTrade,
+  } = useFinancial();
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+
   const unreadAlerts = notifications.filter((n) => !n.read).length;
 
-  const navItems: { id: NavigationTab; label: string; badge?: string | number; isHot?: boolean }[] = [
+  const navItems: { id: NavigationTab; label: string; badge?: string | number }[] = [
     { id: 'overview', label: 'Overview' },
     { id: 'markets', label: 'Markets' },
     { id: 'portfolio', label: 'Portfolio' },
-    { id: 'transactions', label: 'Transactions', badge: totalTradesCount },
-    { id: 'practice', label: 'Trade Desk', isHot: true },
-    { id: 'ask-finex', label: 'Ask FinEx AI' },
+    { id: 'ask-finex', label: 'Ask FinEx' },
+    { id: 'practice', label: 'Paper trading' },
+    { id: 'transactions', label: 'Order activity', badge: totalTradesCount },
     { id: 'alerts', label: 'Alerts', badge: unreadAlerts > 0 ? unreadAlerts : undefined },
     { id: 'goals', label: 'Goals' },
     { id: 'spending', label: 'Spending' },
   ];
 
-  // Ticker items
   const tickerStocks = Object.values(marketQuotes);
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-app)' }}>
-      {/* Live Market Ticker Tape Marquee */}
+      {/* 1. Top Live Market Ticker Tape (Pure Black Terminal Marquee) */}
       <div className="ticker-tape-container">
         <div className="ticker-tape-track">
-          {/* Broad Market Indices */}
           <div className="ticker-pill">
-            <span style={{ color: '#9CA3AF', fontWeight: 600 }}>NIFTY 50</span>
+            <span style={{ color: '#8E8E93', fontWeight: 600 }}>NIFTY 50</span>
             <span style={{ color: '#FFFFFF' }}>25,480.30</span>
-            <span style={{ color: 'var(--color-profit)' }}>▲ +0.45%</span>
+            <span style={{ color: 'var(--color-positive)', fontWeight: 600 }}>▲ +0.45%</span>
           </div>
           <div className="ticker-pill">
-            <span style={{ color: '#9CA3AF', fontWeight: 600 }}>SENSEX</span>
+            <span style={{ color: '#8E8E93', fontWeight: 600 }}>SENSEX</span>
             <span style={{ color: '#FFFFFF' }}>83,120.15</span>
-            <span style={{ color: 'var(--color-profit)' }}>▲ +0.38%</span>
+            <span style={{ color: 'var(--color-positive)', fontWeight: 600 }}>▲ +0.38%</span>
           </div>
           <div className="ticker-pill">
-            <span style={{ color: '#9CA3AF', fontWeight: 600 }}>BANK NIFTY</span>
+            <span style={{ color: '#8E8E93', fontWeight: 600 }}>BANK NIFTY</span>
             <span style={{ color: '#FFFFFF' }}>52,190.40</span>
-            <span style={{ color: 'var(--color-loss)' }}>▼ -0.12%</span>
+            <span style={{ color: 'var(--color-negative)', fontWeight: 600 }}>▼ -0.12%</span>
           </div>
           <div className="ticker-pill">
-            <span style={{ color: '#9CA3AF', fontWeight: 600 }}>INDIA VIX</span>
+            <span style={{ color: '#8E8E93', fontWeight: 600 }}>INDIA VIX</span>
             <span style={{ color: '#FFFFFF' }}>12.85</span>
-            <span style={{ color: 'var(--color-loss)' }}>▼ -2.40%</span>
+            <span style={{ color: 'var(--color-negative)', fontWeight: 600 }}>▼ -2.40%</span>
           </div>
 
           {/* Dynamic Stock Quotes from Context */}
@@ -75,34 +86,33 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
               title={`Click to trade ${s.symbol}`}
             >
               <span style={{ color: '#FFFFFF', fontWeight: 700 }}>{s.symbol}</span>
-              <span style={{ color: '#E5E7EB' }}>₹{s.price.toLocaleString('en-IN')}</span>
-              <span style={{ color: s.isPositive ? 'var(--color-profit)' : 'var(--color-loss)' }}>
+              <span style={{ color: '#D4D4D8' }}>₹{s.price.toLocaleString('en-IN')}</span>
+              <span style={{ color: s.isPositive ? 'var(--color-positive)' : 'var(--color-negative)', fontWeight: 600 }}>
                 {s.isPositive ? '▲' : '▼'} {s.isPositive ? '+' : ''}{s.changePct}%
               </span>
             </div>
           ))}
 
-          {/* Repeat for continuous marquee illusion */}
+          {/* Repeat for continuous marquee */}
           <div className="ticker-pill">
-            <span style={{ color: '#9CA3AF', fontWeight: 600 }}>NIFTY 50</span>
+            <span style={{ color: '#8E8E93', fontWeight: 600 }}>NIFTY 50</span>
             <span style={{ color: '#FFFFFF' }}>25,480.30</span>
-            <span style={{ color: 'var(--color-profit)' }}>▲ +0.45%</span>
+            <span style={{ color: 'var(--color-positive)', fontWeight: 600 }}>▲ +0.45%</span>
           </div>
           <div className="ticker-pill">
-            <span style={{ color: '#9CA3AF', fontWeight: 600 }}>SENSEX</span>
+            <span style={{ color: '#8E8E93', fontWeight: 600 }}>SENSEX</span>
             <span style={{ color: '#FFFFFF' }}>83,120.15</span>
-            <span style={{ color: 'var(--color-profit)' }}>▲ +0.38%</span>
+            <span style={{ color: 'var(--color-positive)', fontWeight: 600 }}>▲ +0.38%</span>
           </div>
           {tickerStocks.map((s) => (
             <div
-              key={`${s.symbol}-repeat`}
+              key={`${s.symbol}-rep`}
               className="ticker-pill"
               onClick={() => openQuickTrade(s.symbol)}
-              title={`Click to trade ${s.symbol}`}
             >
               <span style={{ color: '#FFFFFF', fontWeight: 700 }}>{s.symbol}</span>
-              <span style={{ color: '#E5E7EB' }}>₹{s.price.toLocaleString('en-IN')}</span>
-              <span style={{ color: s.isPositive ? 'var(--color-profit)' : 'var(--color-loss)' }}>
+              <span style={{ color: '#D4D4D8' }}>₹{s.price.toLocaleString('en-IN')}</span>
+              <span style={{ color: s.isPositive ? 'var(--color-positive)' : 'var(--color-negative)', fontWeight: 600 }}>
                 {s.isPositive ? '▲' : '▼'} {s.isPositive ? '+' : ''}{s.changePct}%
               </span>
             </div>
@@ -110,73 +120,46 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
         </div>
       </div>
 
-      {/* Top Glassmorphic Navigation Header */}
-      <header
-        style={{
-          borderBottom: '1px solid var(--border-subtle)',
-          backgroundColor: 'rgba(11, 15, 25, 0.88)',
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
-          position: 'sticky',
-          top: 0,
-          zIndex: 50,
-        }}
-      >
-        <div
+      {/* 2. Main Two-Column Terminal Container (Sidebar + Central Workspace) */}
+      <div style={{ display: 'flex', flex: 1, minHeight: 'calc(100vh - 34px)' }}>
+        {/* Left Navigation Rail (Per Graphite Terminal Full Frontend Guide) */}
+        <aside
           style={{
-            maxWidth: '1440px',
-            margin: '0 auto',
-            padding: '0 32px',
-            height: '66px',
+            width: '240px',
+            backgroundColor: 'var(--bg-sidebar)',
+            borderRight: '1px solid var(--border-subtle)',
             display: 'flex',
-            alignItems: 'center',
+            flexDirection: 'column',
             justifyContent: 'space-between',
+            padding: '24px 16px',
+            flexShrink: 0,
+            position: 'sticky',
+            top: 0,
+            height: 'calc(100vh - 34px)',
+            overflowY: 'auto',
           }}
         >
-          {/* Brand & Tabs */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '36px' }}>
-            {/* Logo */}
+          {/* Rail Header / Brand */}
+          <div>
             <div
               onClick={() => onNavigate('overview')}
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
                 cursor: 'pointer',
+                marginBottom: '28px',
+                paddingLeft: '8px',
               }}
             >
-              <div
-                style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: 'var(--radius-sm)',
-                  background: 'linear-gradient(135deg, #3B82F6 0%, #06B6D4 100%)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: 800,
-                  fontSize: '17px',
-                  color: '#FFFFFF',
-                  boxShadow: '0 0 16px rgba(59, 130, 246, 0.4)',
-                }}
-              >
-                F
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '3px' }}>
+                <span style={{ fontSize: '24px', fontWeight: 900, color: '#FFFFFF', letterSpacing: '-0.03em' }}>Fin</span>
+                <span style={{ fontSize: '24px', fontWeight: 900, color: 'var(--color-action)', letterSpacing: '-0.03em' }}>Ex</span>
               </div>
-              <span
-                style={{
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: '22px',
-                  fontWeight: 700,
-                  letterSpacing: '-0.03em',
-                  color: '#FFFFFF',
-                }}
-              >
-                finex<span style={{ color: 'var(--color-primary)' }}>.</span>
-              </span>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500, letterSpacing: '0.04em', marginTop: '2px' }}>
+                Learn &nbsp;·&nbsp; Practice &nbsp;·&nbsp; Plan
+              </div>
             </div>
 
-            {/* Navigation Tabs */}
-            <nav style={{ display: 'flex', gap: '4px', height: '66px', alignItems: 'center' }}>
+            {/* Navigation Menu Links */}
+            <nav style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
               {navItems.map((item) => {
                 const isActive = currentTab === item.id;
                 return (
@@ -184,9 +167,10 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
                     key={item.id}
                     onClick={() => onNavigate(item.id)}
                     style={{
-                      background: isActive ? 'rgba(59, 130, 246, 0.12)' : 'transparent',
+                      background: isActive ? '#141414' : 'transparent',
                       border: 'none',
-                      borderRadius: 'var(--radius-sm)',
+                      borderLeft: isActive ? '2px solid var(--color-action)' : '2px solid transparent',
+                      borderRadius: 'var(--radius-xs)',
                       color: isActive ? '#FFFFFF' : 'var(--text-muted)',
                       fontFamily: 'var(--font-sans)',
                       fontSize: '13px',
@@ -195,26 +179,34 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
                       padding: '8px 12px',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: '6px',
+                      justifyContent: 'space-between',
+                      textAlign: 'left',
                       transition: 'all var(--transition-fast)',
                     }}
                     onMouseEnter={(e) => {
-                      if (!isActive) e.currentTarget.style.color = '#FFFFFF';
+                      if (!isActive) {
+                        e.currentTarget.style.color = '#FFFFFF';
+                        e.currentTarget.style.backgroundColor = '#101010';
+                      }
                     }}
                     onMouseLeave={(e) => {
-                      if (!isActive) e.currentTarget.style.color = 'var(--text-muted)';
+                      if (!isActive) {
+                        e.currentTarget.style.color = 'var(--text-muted)';
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                      }
                     }}
                   >
                     <span>{item.label}</span>
                     {item.badge !== undefined && (
                       <span
                         style={{
-                          backgroundColor: item.id === 'alerts' ? 'var(--color-loss)' : 'rgba(59, 130, 246, 0.25)',
+                          backgroundColor: item.id === 'alerts' ? 'var(--color-loss)' : '#242424',
                           color: '#FFFFFF',
                           fontSize: '10px',
                           fontWeight: 700,
                           borderRadius: '10px',
                           padding: '1px 6px',
+                          fontFamily: 'var(--font-mono)',
                         }}
                       >
                         {item.badge}
@@ -226,124 +218,225 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
             </nav>
           </div>
 
-          {/* Right Header Status, Quick Trade, Cash Pill, and Avatar */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            {/* Live Indicator */}
+          {/* Bottom Rail Disclaimer & Settings Link */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', paddingTop: '16px', borderTop: '1px solid var(--border-subtle)' }}>
+            {/* Legal Educational Badge */}
             <div
-              className="glass-card"
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '6px 12px',
-                borderRadius: 'var(--radius-full)',
+                backgroundColor: '#101010',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 'var(--radius-xs)',
+                padding: '10px 12px',
                 fontSize: '11px',
+                lineHeight: 1.4,
                 color: 'var(--text-muted)',
               }}
             >
-              <div className="pulse-dot" />
-              <span>NSE Live Paper Route</span>
+              <div style={{ color: 'var(--color-action)', fontWeight: 600, marginBottom: '2px' }}>
+                Virtual trading.
+              </div>
+              <div>Educational use only. No real-money orders.</div>
             </div>
 
-            {/* Quick Trade Button */}
+            {/* Settings Link */}
             <button
-              onClick={() => openQuickTrade()}
-              className="btn-emerald"
+              onClick={() => onNavigate('settings')}
               style={{
-                padding: '7px 14px',
-                borderRadius: 'var(--radius-full)',
-                fontSize: '12px',
+                background: currentTab === 'settings' ? '#141414' : 'transparent',
+                border: 'none',
+                borderLeft: currentTab === 'settings' ? '2px solid var(--color-action)' : '2px solid transparent',
+                borderRadius: 'var(--radius-xs)',
+                color: currentTab === 'settings' ? '#FFFFFF' : 'var(--text-muted)',
+                fontSize: '13px',
+                fontWeight: 500,
                 cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-              }}
-            >
-              <span>⚡</span>
-              <span>Quick Trade</span>
-            </button>
-
-            {/* Virtual Cash Pill */}
-            <div
-              onClick={() => onNavigate('practice')}
-              className="glass-card glass-card-interactive"
-              style={{
+                padding: '8px 12px',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                padding: '6px 14px',
-                borderRadius: 'var(--radius-full)',
-                border: '1px solid var(--color-virtual-border)',
-                background: 'rgba(245, 158, 11, 0.08)',
+                textAlign: 'left',
               }}
-              title="Click to trade with virtual balance"
             >
-              <span style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--color-virtual)', fontWeight: 700 }}>
-                Virtual Cash
-              </span>
-              <span className="tabular-nums" style={{ fontSize: '13px', fontWeight: 600, color: '#FFFFFF' }}>
-                ₹{virtualCash.toLocaleString('en-IN')}
+              <span>⚙</span>
+              <span>Settings</span>
+            </button>
+          </div>
+        </aside>
+
+        {/* Central Workspace + Top Workspace Bar */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, backgroundColor: 'var(--bg-app)' }}>
+          {/* Top Workspace Header Bar */}
+          <header
+            style={{
+              height: '56px',
+              borderBottom: '1px solid var(--border-subtle)',
+              backgroundColor: 'var(--bg-app)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '0 28px',
+              position: 'sticky',
+              top: 0,
+              zIndex: 40,
+            }}
+          >
+            {/* Left: Workspace Identifier */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div className="pulse-dot" style={{ backgroundColor: 'var(--color-action)', boxShadow: '0 0 6px var(--color-action)' }} />
+              <span style={{ fontSize: '13px', fontWeight: 600, color: '#FFFFFF', letterSpacing: '-0.01em' }}>
+                Shivraj’s workspace
               </span>
             </div>
 
-            {/* User Profile Avatar */}
-            <button
-              onClick={() => onNavigate('settings')}
-              title="Shivraj Dhote (Profile & Settings)"
-              style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '50%',
-                background: 'linear-gradient(135deg, #1E293B 0%, #0F172A 100%)',
-                color: '#FFFFFF',
-                border: '1.5px solid var(--border-medium)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '13px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
-              }}
-            >
-              SD
-            </button>
-          </div>
+            {/* Center: Global Search Bar (with Ctrl K) */}
+            <div style={{ position: 'relative', width: '380px' }}>
+              <input
+                type="text"
+                placeholder="Search for an instrument, topic or command…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onFocus={() => setIsSearchFocused(true)}
+                onBlur={() => setIsSearchFocused(false)}
+                style={{
+                  width: '100%',
+                  backgroundColor: 'var(--bg-input)',
+                  border: isSearchFocused ? '1px solid var(--color-action)' : '1px solid var(--border-subtle)',
+                  borderRadius: 'var(--radius-xs)',
+                  padding: '7px 64px 7px 12px',
+                  color: '#FFFFFF',
+                  fontSize: '12px',
+                  fontFamily: 'var(--font-sans)',
+                  outline: 'none',
+                  transition: 'border-color var(--transition-fast)',
+                }}
+              />
+              <span
+                style={{
+                  position: 'absolute',
+                  right: '8px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  backgroundColor: '#1C1C1C',
+                  border: '1px solid #2C2C2C',
+                  borderRadius: '3px',
+                  padding: '1px 5px',
+                  fontSize: '10px',
+                  fontFamily: 'var(--font-mono)',
+                  color: 'var(--text-muted)',
+                }}
+              >
+                Ctrl K
+              </span>
+            </div>
+
+            {/* Right: Currency, Account Stats Ribbon, and Profile Avatar */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '18px' }}>
+              {/* Account Quick Metrics Summary (From PDF Page 3 & Page 1) */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '14px',
+                  fontSize: '11px',
+                  fontFamily: 'var(--font-mono)',
+                  borderRight: '1px solid var(--border-subtle)',
+                  paddingRight: '18px',
+                }}
+              >
+                <div>
+                  <span style={{ color: 'var(--text-muted)' }}>Virtual account: </span>
+                  <span style={{ color: 'var(--color-action)', fontWeight: 600 }}>Illustrative</span>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-muted)' }}>Holdings: </span>
+                  <span style={{ color: '#FFFFFF', fontWeight: 600 }}>₹{totalHoldingsValue.toLocaleString('en-IN')}</span>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-muted)' }}>Virtual cash: </span>
+                  <span style={{ color: '#FFFFFF', fontWeight: 600 }}>₹{virtualCash.toLocaleString('en-IN')}</span>
+                </div>
+                <div>
+                  <span style={{ color: 'var(--text-muted)' }}>Total: </span>
+                  <span style={{ color: 'var(--color-positive)', fontWeight: 700 }}>₹{totalPortfolioValue.toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+
+              {/* Currency Tag */}
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontFamily: 'var(--font-mono)',
+                  color: 'var(--text-muted)',
+                  border: '1px solid var(--border-subtle)',
+                  padding: '3px 6px',
+                  borderRadius: 'var(--radius-xs)',
+                }}
+              >
+                INR
+              </span>
+
+              {/* Quick Trade Button */}
+              <button
+                onClick={() => openQuickTrade()}
+                className="btn btn-action"
+                style={{
+                  padding: '5px 12px',
+                  fontSize: '12px',
+                  borderRadius: 'var(--radius-xs)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                }}
+              >
+                <span>+</span>
+                <span>Trade</span>
+              </button>
+
+              {/* Profile Avatar */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '7px',
+                  cursor: 'pointer',
+                  padding: '3px 6px',
+                  borderRadius: 'var(--radius-xs)',
+                  backgroundColor: '#121212',
+                  border: '1px solid var(--border-subtle)',
+                }}
+                onClick={() => onNavigate('settings')}
+              >
+                <div
+                  style={{
+                    width: '20px',
+                    height: '20px',
+                    borderRadius: 'var(--radius-xs)',
+                    backgroundColor: 'var(--color-action)',
+                    color: '#000000',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 800,
+                    fontSize: '11px',
+                  }}
+                >
+                  S
+                </div>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: '#FFFFFF' }}>Shivraj</span>
+                <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>↓</span>
+              </div>
+            </div>
+          </header>
+
+          {/* Main Content Pane */}
+          <main style={{ flex: 1, padding: '24px 28px', overflowY: 'auto' }}>
+            {children}
+          </main>
         </div>
-      </header>
+      </div>
 
-      {/* Main Viewport */}
-      <main style={{ flex: 1, maxWidth: '1440px', width: '100%', margin: '0 auto', padding: '36px 32px' }}>
-        {children}
-      </main>
-
-      {/* Global Quick Trade Drawer Modal */}
+      {/* Global Quick Trade Modal Drawer */}
       <QuickTradeModal />
-
-      {/* Footer */}
-      <footer
-        style={{
-          borderTop: '1px solid var(--border-subtle)',
-          padding: '20px 32px',
-          maxWidth: '1440px',
-          width: '100%',
-          margin: '0 auto',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          fontSize: '12px',
-          color: 'var(--text-faint)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <span>FinEx Financial Excellence</span>
-          <span>•</span>
-          <span style={{ color: 'var(--color-accent-cyan)' }}>Live Paper Trading Ledger Engine</span>
-          <span>•</span>
-          <span>NSE End-Of-Day Observation Reconciled</span>
-        </div>
-        <span>Developer: Shivraj Dhote</span>
-      </footer>
     </div>
   );
 };

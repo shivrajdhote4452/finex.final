@@ -1,65 +1,73 @@
 /* ==========================================================================
-   FINEX — HIGH-PRECISION PRO FINANCIAL SYSTEM
-   Aesthetic: Ultra-Sleek Institutional Dark with Glassmorphism & Micro-animations
+   FINEX — GRAPHITE TERMINAL DESIGN SYSTEM (PURE BLACK EDITION)
+   Specification: FinEx Graphite Terminal Full Frontend Guide
+   Theme: Pure Deep Black (#000000 Canvas) with Warm Terminal Amber Action (#F29A60)
    ========================================================================== */
 
 :root {
-  /* Surface Layers */
-  --bg-app: #0B0F19;
-  --bg-card: rgba(17, 24, 39, 0.7);
-  --bg-card-hover: rgba(26, 36, 56, 0.85);
-  --bg-card-solid: #111827;
-  --bg-card-secondary: #162032;
-  --bg-input: rgba(15, 23, 42, 0.8);
+  /* Canvas & Pure Black Surface Layers (Zero Green Tint) */
+  --bg-app: #000000;
+  --bg-sidebar: #080808;
+  --bg-card: #111111;
+  --bg-card-hover: #181818;
+  --bg-card-solid: #121212;
+  --bg-panel: #161616;
+  --bg-input: #0A0A0A;
 
-  /* Borders & Dividers */
-  --border-subtle: rgba(255, 255, 255, 0.07);
-  --border-medium: rgba(255, 255, 255, 0.14);
-  --border-active: rgba(59, 130, 246, 0.6);
-  --border-glow: 0 0 20px rgba(59, 130, 246, 0.25);
+  /* Crisp Dividers & Borders */
+  --border-subtle: #222222;
+  --border-medium: #2E2E2E;
+  --border-active: #F29A60;
+  --border-glow: 0 0 12px rgba(242, 154, 96, 0.25);
 
-  /* Brand & Accents */
-  --color-primary: #3B82F6;
-  --color-primary-hover: #2563EB;
-  --color-primary-glow: rgba(59, 130, 246, 0.35);
-  
-  --color-accent-cyan: #06B6D4;
-  --color-accent-cyan-glow: rgba(6, 182, 212, 0.3);
+  /* Graphite Terminal Semantic Colors */
+  --color-action: #F29A60;         /* Primary Action (Warm Amber / Orange) */
+  --color-action-hover: #E0854B;
+  --color-action-bg: rgba(242, 154, 96, 0.12);
+  --color-action-border: rgba(242, 154, 96, 0.35);
 
-  /* Semantic Financial Accents */
-  --color-profit: #10B981;
-  --color-profit-bg: rgba(16, 185, 129, 0.12);
-  --color-profit-border: rgba(16, 185, 129, 0.25);
-  
-  --color-loss: #EF4444;
-  --color-loss-bg: rgba(239, 68, 68, 0.12);
-  --color-loss-border: rgba(239, 68, 68, 0.25);
+  --color-primary: #F29A60;
+  --color-primary-hover: #E0854B;
+  --color-primary-glow: rgba(242, 154, 96, 0.3);
 
-  --color-virtual: #F59E0B;
-  --color-virtual-bg: rgba(245, 158, 11, 0.12);
-  --color-virtual-border: rgba(245, 158, 11, 0.3);
+  --color-positive: #4DD5AD;       /* Terminal Mint Green */
+  --color-profit: #4DD5AD;
+  --color-profit-bg: rgba(77, 213, 173, 0.12);
+  --color-profit-border: rgba(77, 213, 173, 0.3);
+
+  --color-negative: #F48C7B;       /* Terminal Coral / Salmon Red */
+  --color-loss: #F48C7B;
+  --color-loss-bg: rgba(244, 140, 123, 0.12);
+  --color-loss-border: rgba(244, 140, 123, 0.3);
+
+  --color-virtual: #F29A60;
+  --color-virtual-bg: rgba(242, 154, 96, 0.12);
+  --color-virtual-border: rgba(242, 154, 96, 0.3);
+
+  --color-accent-cyan: #4DD5AD;
+  --color-accent-cyan-glow: rgba(77, 213, 173, 0.25);
 
   /* Typography Colors */
-  --text-main: #F3F4F6;
-  --text-muted: #9CA3AF;
-  --text-faint: #6B7280;
-  --text-inverse: #0B0F19;
+  --text-main: #FFFFFF;
+  --text-primary: #F4F4F5;
+  --text-muted: #8E8E93;
+  --text-faint: #52525B;
+  --text-inverse: #000000;
 
   /* Font Families */
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
-  --font-serif: 'Newsreader', Georgia, serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
 
-  /* Radii */
-  --radius-xs: 4px;
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
+  /* Terminal Precision Radii (4px to 6px per Guide) */
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
   --radius-full: 9999px;
 
-  /* Transitions */
-  --transition-fast: 160ms cubic-bezier(0.16, 1, 0.3, 1);
-  --transition-smooth: 240ms cubic-bezier(0.16, 1, 0.3, 1);
+  /* Fast Transitions */
+  --transition-fast: 140ms cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-smooth: 220ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 *, *::before, *::after {
@@ -70,27 +78,24 @@
 
 body {
   background-color: var(--bg-app);
-  color: var(--text-main);
+  color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-image: 
-    radial-gradient(circle at 15% 10%, rgba(59, 130, 246, 0.08) 0%, transparent 40%),
-    radial-gradient(circle at 85% 85%, rgba(6, 182, 212, 0.06) 0%, transparent 45%);
+  background-image: none; /* Pure deep solid black */
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
-/* Glassmorphic Card Container */
+/* Terminal Glass / Panel Card Container */
 .glass-card {
   background: var(--bg-card);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.3);
-  transition: border-color var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
 }
 
 .glass-card:hover {
@@ -102,19 +107,19 @@ body {
 }
 
 .glass-card-interactive:hover {
-  border-color: var(--border-active);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.4), var(--border-glow);
+  border-color: var(--color-action);
+  background-color: var(--bg-card-hover);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6), 0 0 10px rgba(242, 154, 96, 0.15);
 }
 
-/* Tabular Numerals */
+/* Tabular Numerals (Strict Monospace Alignment) */
 .tabular-nums {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
 }
 
-/* Button Variants */
+/* Action & Button System */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -122,7 +127,7 @@ body {
   gap: 8px;
   font-family: var(--font-sans);
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   border-radius: var(--radius-sm);
   padding: 8px 16px;
   cursor: pointer;
@@ -132,41 +137,61 @@ body {
   outline: none;
 }
 
-.btn-primary {
-  background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);
-  color: #FFFFFF;
-  box-shadow: 0 2px 10px rgba(37, 99, 235, 0.3);
+/* Primary Action: Warm Graphite Amber (#F29A60) */
+.btn-primary, .btn-action {
+  background: var(--color-action);
+  color: #000000;
+  font-weight: 700;
+  border: 1px solid var(--color-action);
+  box-shadow: 0 1px 8px rgba(242, 154, 96, 0.3);
 }
 
-.btn-primary:hover {
-  background: linear-gradient(135deg, #60A5FA 0%, #3B82F6 100%);
-  box-shadow: 0 4px 16px rgba(37, 99, 235, 0.45);
-  transform: translateY(-1px);
+.btn-primary:hover, .btn-action:hover {
+  background: var(--color-action-hover);
+  border-color: var(--color-action-hover);
+  box-shadow: 0 2px 14px rgba(242, 154, 96, 0.45);
 }
 
-.btn-primary:active {
-  transform: translateY(0);
+.btn-primary:active, .btn-action:active {
+  transform: translateY(1px);
 }
 
+/* Terminal Mint Radiant Button */
+.btn-emerald {
+  background: var(--color-action);
+  color: #000000;
+  font-weight: 700;
+  border: 1px solid var(--color-action);
+  box-shadow: 0 1px 8px rgba(242, 154, 96, 0.35);
+}
+
+.btn-emerald:hover {
+  background: var(--color-action-hover);
+  border-color: var(--color-action-hover);
+}
+
+/* Secondary Button */
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-main);
+  background: #181818;
+  color: var(--text-primary);
   border: 1px solid var(--border-medium);
 }
 
 .btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.3);
+  background: #222222;
+  border-color: #444444;
+  color: #FFFFFF;
 }
 
+/* Danger / Negative Button */
 .btn-danger {
-  background: rgba(239, 68, 68, 0.15);
+  background: var(--color-loss-bg);
   color: var(--color-loss);
   border: 1px solid var(--color-loss-border);
 }
 
 .btn-danger:hover {
-  background: rgba(239, 68, 68, 0.25);
+  background: rgba(244, 140, 123, 0.22);
   border-color: var(--color-loss);
 }
 
@@ -177,37 +202,38 @@ body {
   gap: 5px;
   padding: 3px 8px;
   border-radius: var(--radius-xs);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: 600;
   font-family: var(--font-mono);
+  letter-spacing: 0.02em;
 }
 
-.badge-profit {
+.badge-profit, .badge-positive {
   background: var(--color-profit-bg);
-  color: var(--color-profit);
+  color: var(--color-positive);
   border: 1px solid var(--color-profit-border);
 }
 
-.badge-loss {
+.badge-loss, .badge-negative {
   background: var(--color-loss-bg);
-  color: var(--color-loss);
+  color: var(--color-negative);
   border: 1px solid var(--color-loss-border);
 }
 
-.badge-virtual {
-  background: var(--color-virtual-bg);
-  color: var(--color-virtual);
-  border: 1px solid var(--color-virtual-border);
+.badge-virtual, .badge-action {
+  background: var(--color-action-bg);
+  color: var(--color-action);
+  border: 1px solid var(--color-action-border);
 }
 
 .badge-cyan {
-  background: rgba(6, 182, 212, 0.12);
-  color: var(--color-accent-cyan);
-  border: 1px solid rgba(6, 182, 212, 0.25);
+  background: var(--color-profit-bg);
+  color: var(--color-positive);
+  border: 1px solid var(--color-profit-border);
 }
 
 .badge-neutral {
-  background: rgba(255, 255, 255, 0.08);
+  background: #1E1E1E;
   color: var(--text-muted);
   border: 1px solid var(--border-subtle);
 }
@@ -217,8 +243,8 @@ body {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background-color: var(--color-profit);
-  box-shadow: 0 0 8px var(--color-profit);
+  background-color: var(--color-positive);
+  box-shadow: 0 0 6px var(--color-positive);
   animation: pulse 2s infinite ease-in-out;
 }
 
@@ -228,28 +254,28 @@ body {
   100% { transform: scale(0.95); opacity: 0.8; }
 }
 
-/* Modal Overlay Animation */
+/* Modal Overlay & Dialog */
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(8px);
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(4px);
   z-index: 100;
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: fadeIn 180ms ease-out;
+  animation: fadeIn 140ms ease-out;
 }
 
 .modal-content {
-  background: #111827;
+  background: #111111;
   border: 1px solid var(--border-medium);
-  border-radius: var(--radius-lg);
-  padding: 32px;
-  max-width: 500px;
+  border-radius: var(--radius-md);
+  padding: 28px;
+  max-width: 520px;
   width: 90%;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6), 0 0 30px rgba(59, 130, 246, 0.2);
-  animation: slideUp 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.9), 0 0 20px rgba(0, 0, 0, 0.8);
+  animation: slideUp 160ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes fadeIn {
@@ -258,35 +284,35 @@ body {
 }
 
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(16px); }
+  from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Custom Scrollbar */
+/* Custom Clean Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--bg-app);
+  background: #000000;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 3px;
+  background: #242424;
+  border-radius: 2px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: #383838;
 }
 
 /* ==========================================================================
-   TICKER TAPE MARQUEE & LIVE MARKET ANIMATIONS
+   TICKER TAPE MARQUEE & TERMINAL SIGNALS
    ========================================================================== */
 .ticker-tape-container {
   overflow: hidden;
   white-space: nowrap;
-  background: rgba(6, 10, 18, 0.95);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  height: 36px;
+  background: #000000;
+  border-bottom: 1px solid var(--border-subtle);
+  height: 34px;
   display: flex;
   align-items: center;
   position: relative;
@@ -296,8 +322,8 @@ body {
 
 .ticker-tape-track {
   display: inline-flex;
-  gap: 32px;
-  animation: tickerScroll 45s linear infinite;
+  gap: 28px;
+  animation: tickerScroll 40s linear infinite;
 }
 
 .ticker-tape-track:hover {
@@ -313,59 +339,44 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: #D1D5DB;
+  color: #D4D4D8;
   cursor: pointer;
-  padding: 2px 8px;
-  border-radius: 4px;
-  transition: background 0.15s ease;
+  padding: 3px 8px;
+  border-radius: var(--radius-xs);
+  transition: background 0.12s ease;
 }
 
 .ticker-pill:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-/* Emerald Radiant Action Button */
-.btn-emerald {
-  background: linear-gradient(135deg, #10B981 0%, #059669 100%);
-  color: #FFFFFF;
-  font-weight: 700;
-  box-shadow: 0 0 16px rgba(16, 185, 129, 0.35);
-  border: 1px solid rgba(16, 185, 129, 0.4);
-}
-
-.btn-emerald:hover {
-  background: linear-gradient(135deg, #059669 0%, #047857 100%);
-  box-shadow: 0 0 24px rgba(16, 185, 129, 0.55);
-  transform: translateY(-1px);
+  background: #181818;
 }
 
 /* Flash Price Animations */
 .flash-green {
-  animation: flashGreen 0.8s ease;
+  animation: flashGreen 0.7s ease;
 }
 
 .flash-red {
-  animation: flashRed 0.8s ease;
+  animation: flashRed 0.7s ease;
 }
 
 @keyframes flashGreen {
-  0% { background-color: rgba(16, 185, 129, 0.3); }
+  0% { background-color: rgba(77, 213, 173, 0.3); }
   100% { background-color: transparent; }
 }
 
 @keyframes flashRed {
-  0% { background-color: rgba(239, 68, 68, 0.3); }
+  0% { background-color: rgba(244, 140, 123, 0.3); }
   100% { background-color: transparent; }
 }
 
 /* Contract Note Digital Paper Styling */
 .contract-note {
-  background: #0D131F;
+  background: #0F0F0F;
   border: 1px solid var(--border-medium);
   border-radius: var(--radius-md);
   position: relative;
   overflow: hidden;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.9);
 }
 
 .compliance-watermark {
@@ -373,11 +384,17 @@ body {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%) rotate(-30deg);
-  font-size: 52px;
+  font-size: 48px;
   font-weight: 900;
-  color: rgba(255, 255, 255, 0.025);
+  color: rgba(255, 255, 255, 0.02);
   pointer-events: none;
   white-space: nowrap;
   letter-spacing: 0.15em;
   text-transform: uppercase;
+}
+
+/* Terminal Input Focus Outline */
+input:focus, select:focus, textarea:focus {
+  outline: 1px solid var(--color-action) !important;
+  border-color: var(--color-action) !important;
 }

@@ -316,7 +316,7 @@ export const SpendingScreen: React.FC = () => {
                   }}
                 >
                   {categories.filter((c) => c !== 'All').map((c) => (
-                    <option key={c} value={c} style={{ backgroundColor: '#111827', color: '#FFFFFF' }}>
+                    <option key={c} value={c} style={{ backgroundColor: '#111111', color: '#FFFFFF' }}>
                       {c}
                     </option>
                   ))}

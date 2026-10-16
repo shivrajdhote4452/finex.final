@@ -39,15 +39,15 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
             style={{
               width: '56px',
               height: '56px',
-              borderRadius: '50%',
-              background: 'linear-gradient(135deg, #3B82F6 0%, #06B6D4 100%)',
+              borderRadius: 'var(--radius-sm)',
+              backgroundColor: 'var(--color-action)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               fontWeight: 800,
               fontSize: '20px',
-              color: '#FFFFFF',
-              boxShadow: '0 0 20px rgba(59, 130, 246, 0.4)',
+              color: '#000000',
+              boxShadow: '0 0 16px rgba(242, 154, 96, 0.35)',
               marginBottom: '20px',
             }}
           >

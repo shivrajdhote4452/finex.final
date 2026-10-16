@@ -220,7 +220,7 @@ export const PracticeScreen: React.FC = () => {
               }}
             >
               {Object.values(marketQuotes).map((item) => (
-                <option key={item.symbol} value={item.symbol} style={{ background: '#111827', color: '#FFFFFF' }}>
+                <option key={item.symbol} value={item.symbol} style={{ background: '#111111', color: '#FFFFFF' }}>
                   {item.symbol} — ₹{item.price.toLocaleString('en-IN')}
                 </option>
               ))}

@@ -92,11 +92,11 @@ export const AskFinExScreen: React.FC = () => {
                     style={{
                       alignSelf: 'flex-end',
                       maxWidth: '85%',
-                      backgroundColor: 'rgba(59, 130, 246, 0.15)',
-                      border: '1px solid rgba(59, 130, 246, 0.3)',
-                      borderRadius: 'var(--radius-md)',
-                      padding: '14px 18px',
-                      fontSize: '14px',
+                      backgroundColor: 'rgba(242, 154, 96, 0.12)',
+                      border: '1px solid rgba(242, 154, 96, 0.25)',
+                      borderRadius: 'var(--radius-sm)',
+                      padding: '12px 16px',
+                      fontSize: '13px',
                       color: '#FFFFFF',
                     }}
                   >
