@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { useFinancial } from '../context/FinancialContext';
 
 export const AskFinExScreen: React.FC = () => {
-  const { holdings } = useFinancial();
+
 
   const [messages, setMessages] = useState([
     {

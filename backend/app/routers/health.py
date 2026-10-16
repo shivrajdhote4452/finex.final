@@ -45,6 +45,10 @@ class ReadinessData(BaseModel):
     summary="Process Liveness Probe",
     description="Returns 200 when the FastAPI application process is alive and responding.",
 )
+@router.get(
+    "/healthz",
+    include_in_schema=False,
+)
 async def get_liveness(request: Request):
     settings = request.app.state.settings
     cid = getattr(request.state, "correlation_id", "none")
@@ -61,6 +65,10 @@ async def get_liveness(request: Request):
     summary="Dependency Readiness Probe",
     description="Returns 200 when all required backing dependencies are healthy; 503 if any critical dependency is down.",
 )
+@router.get(
+    "/readyz",
+    include_in_schema=False,
+)
 async def get_readiness(request: Request, response: Response):
     cid = getattr(request.state, "correlation_id", "none")
     db_status = await check_db_ready()
@@ -76,3 +84,4 @@ async def get_readiness(request: Request, response: Response):
         },
     )
     return create_response_envelope(data.model_dump(), correlation_id=cid)
+

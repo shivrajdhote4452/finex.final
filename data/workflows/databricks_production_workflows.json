@@ -1,0 +1,133 @@
+{
+  "catalog": "finex_prod",
+  "owner": "Shivraj Dhote <shivraj.dhote@finex.internal>",
+  "task_id": "S8-DAT-02",
+  "version": "1.0.0",
+  "global_retry_policy": {
+    "max_retries": 3,
+    "min_retry_interval_millis": 5000,
+    "retry_on_timeout": true
+  },
+  "failure_notification": {
+    "email_notifications": {
+      "on_failure": ["shivraj.dhote@finex.internal"],
+      "no_alert_for_skipped_runs": true
+    }
+  },
+  "workflows": [
+    {
+      "name": "eod_market_ingestion",
+      "description": "NSE EOD Bhavcopy ingestion and market bar validation pipeline",
+      "schedule": "0 30 16 * * ?",
+      "tasks": [
+        {
+          "task_key": "fetch_bhavcopy_nse",
+          "description": "Download and parse verified NSE Bhavcopy reports",
+          "notebook_task": {
+            "notebook_path": "/Workspace/Finex/Pipelines/fetch_nse_bhavcopy"
+          },
+          "max_retries": 3
+        },
+        {
+          "task_key": "validate_market_data_quality",
+          "description": "Run strict DQ checks (zero negative prices, complete volume, timestamps)",
+          "depends_on": [{"task_key": "fetch_bhavcopy_nse"}],
+          "notebook_task": {
+            "notebook_path": "/Workspace/Finex/Pipelines/validate_market_dq"
+          },
+          "max_retries": 2
+        },
+        {
+          "task_key": "publish_market_candles_delta",
+          "description": "Publish verified market quotes to finex_prod.market_data Delta tables",
+          "depends_on": [{"task_key": "validate_market_data_quality"}],
+          "notebook_task": {
+            "notebook_path": "/Workspace/Finex/Pipelines/publish_market_delta"
+          },
+          "max_retries": 3
+        }
+      ]
+    },
+    {
+      "name": "eod_portfolio_snapshot",
+      "description": "End-of-day portfolio valuation and sector concentration pipeline",
+      "schedule": "0 45 16 * * ?",
+      "tasks": [
+        {
+          "task_key": "verify_market_close_prices",
+          "description": "Ensure current date Bhavcopy prices are present",
+          "notebook_task": {
+            "notebook_path": "/Workspace/Finex/Pipelines/verify_close_prices"
+          },
+          "max_retries": 2
+        },
+        {
+          "task_key": "compute_portfolio_valuations_and_pnl",
+          "description": "Compute deterministic portfolio equity, unrealized/realized PnL and sector exposures",
+          "depends_on": [{"task_key": "verify_market_close_prices"}],
+          "notebook_task": {
+            "notebook_path": "/Workspace/Finex/Pipelines/compute_valuations"
+          },
+          "max_retries": 2
+        },
+        {
+          "task_key": "store_portfolio_eod_delta",
+          "description": "Write immutable daily snapshots to finex_prod.portfolio_analytics",
+          "depends_on": [{"task_key": "compute_portfolio_valuations_and_pnl"}],
+          "notebook_task": {
+            "notebook_path": "/Workspace/Finex/Pipelines/store_portfolio_delta"
+          },
+          "max_retries": 3
+        }
+      ]
+    },
+    {
+      "name": "paper_trading_reconciliation_and_coaching",
+      "description": "Mark-to-market paper portfolios and evaluate simulated trading execution",
+      "schedule": "0 0 17 * * ?",
+      "tasks": [
+        {
+          "task_key": "reconcile_orders_and_ledger",
+          "description": "Verify zero ledger discrepancies between orders and cash movements",
+          "notebook_task": {
+            "notebook_path": "/Workspace/Finex/Pipelines/reconcile_paper_orders"
+          },
+          "max_retries": 2
+        },
+        {
+          "task_key": "mark_to_market_paper_positions",
+          "description": "Update paper trading open positions to verified closing prices",
+          "depends_on": [{"task_key": "reconcile_orders_and_ledger"}],
+          "notebook_task": {
+            "notebook_path": "/Workspace/Finex/Pipelines/mtm_paper_positions"
+          },
+          "max_retries": 2
+        }
+      ]
+    },
+    {
+      "name": "monthly_spending_aggregation",
+      "description": "Monthly recurring transaction rollup and anomaly identification",
+      "schedule": "0 0 2 1 * ?",
+      "tasks": [
+        {
+          "task_key": "aggregate_monthly_spending_categories",
+          "description": "Roll up masked transaction totals per category for active users",
+          "notebook_task": {
+            "notebook_path": "/Workspace/Finex/Pipelines/aggregate_spending"
+          },
+          "max_retries": 2
+        },
+        {
+          "task_key": "detect_spending_anomalies",
+          "description": "Compute MoM trend variations and flag >50% anomalous increases",
+          "depends_on": [{"task_key": "aggregate_monthly_spending_categories"}],
+          "notebook_task": {
+            "notebook_path": "/Workspace/Finex/Pipelines/detect_anomalies"
+          },
+          "max_retries": 2
+        }
+      ]
+    }
+  ]
+}

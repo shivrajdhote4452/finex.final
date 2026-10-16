@@ -13,9 +13,9 @@ export const GoalsScreen: React.FC = () => {
 
   const active = goals[selectedGoal];
   const remaining = Math.max(0, active.target - active.current);
-  const progressPct = Math.min(100, Math.round((active.current / active.target) * 100));
 
   // Deterministic Goal Math: Monthly effective rate
+
   const monthlyRate = Math.pow(1 + expectedAnnualRate / 100, 1 / 12) - 1;
   const n = active.horizonMonths;
   const P = active.current;

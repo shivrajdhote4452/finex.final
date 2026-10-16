@@ -7,11 +7,10 @@ export const TransactionsScreen: React.FC = () => {
     totalTradesCount,
     totalTradedVolume,
     totalRealizedPnL,
-    virtualCash,
     openQuickTrade,
     depositFunds,
-    resetAccount,
   } = useFinancial();
+
 
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'BUY' | 'SELL' | 'SIP' | 'DEPOSIT'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
@@ -234,9 +233,9 @@ export const TransactionsScreen: React.FC = () => {
                   const isBuy = entry.type === 'BUY';
                   const isSell = entry.type === 'SELL';
                   const isDeposit = entry.type === 'DEPOSIT';
-                  const isSip = entry.type === 'SIP';
 
                   return (
+
                     <tr
                       key={entry.id}
                       style={{

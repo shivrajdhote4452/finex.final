@@ -3,6 +3,7 @@
 Task ID: S2-API-01, S2-API-02
 """
 
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -40,12 +41,24 @@ class ConsentSubmission(BaseModel):
     educational_disclaimer_accepted: bool = True
 
 
+REVOKED_TOKENS: set = set()
+
+
+def revoke_token(token: str):
+    REVOKED_TOKENS.add(token)
+
+
+def is_token_revoked(token: str) -> bool:
+    return token in REVOKED_TOKENS
+
+
 def create_access_token(user_id: str, email: str, name: str) -> str:
     expires = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
         "sub": user_id,
         "email": email,
         "name": name,
+        "jti": str(uuid.uuid4()),
         "exp": expires,
         "iat": datetime.now(timezone.utc),
     }
@@ -58,6 +71,12 @@ def get_current_user_id(authorization: Optional[str] = Header(None)) -> dict:
         return {"sub": "usr-shivraj-001", "email": "shivraj@finex.local", "name": "Shivraj Dhote"}
 
     token = authorization.split(" ")[1]
+    if is_token_revoked(token):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Access token has been revoked",
+        )
+
     if token.startswith("mock-") or token.startswith("test-"):
         sub = "usr-shivraj-001"
         if "sub-" in token:
@@ -90,6 +109,64 @@ async def google_auth_callback(request: Request, payload: GoogleLoginRequest):
         user_id=user_id,
         email=email,
         name=name,
+    )
+    return create_response_envelope(data.model_dump(), correlation_id=cid)
+
+
+class RevokeRequest(BaseModel):
+    token: Optional[str] = None
+
+
+@router.post("/revoke")
+async def revoke_access_token(
+    request: Request,
+    payload: Optional[RevokeRequest] = None,
+    authorization: Optional[str] = Header(None),
+):
+    """Revoke an active JWT token to immediately deny subsequent requests."""
+    token = None
+    if payload and payload.token:
+        token = payload.token
+    elif authorization and authorization.startswith("Bearer "):
+        token = authorization.split(" ")[1]
+
+    if not token:
+        raise HTTPException(status_code=400, detail="Token must be provided in payload or Authorization header")
+
+    revoke_token(token)
+    cid = getattr(request.state, "correlation_id", "none")
+    return create_response_envelope({"revoked": True, "token_prefix": token[:10] + "..."}, correlation_id=cid)
+
+
+@router.post("/refresh")
+async def refresh_access_token(
+    request: Request,
+    authorization: Optional[str] = Header(None),
+):
+    """Rotate and refresh an active token. Revokes the prior token to enforce single-use rotation."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Bearer token required for refresh")
+
+    old_token = authorization.split(" ")[1]
+    if is_token_revoked(old_token):
+        raise HTTPException(status_code=401, detail="Cannot refresh a revoked token")
+
+    user_info = get_current_user_id(authorization)
+    # Revoke previous token on successful rotation
+    revoke_token(old_token)
+
+    new_token = create_access_token(
+        user_id=user_info.get("sub", "usr-shivraj-001"),
+        email=user_info.get("email", "shivraj@finex.local"),
+        name=user_info.get("name", "Shivraj Dhote"),
+    )
+    cid = getattr(request.state, "correlation_id", "none")
+    data = TokenResponse(
+        access_token=new_token,
+        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        user_id=user_info.get("sub", "usr-shivraj-001"),
+        email=user_info.get("email", "shivraj@finex.local"),
+        name=user_info.get("name", "Shivraj Dhote"),
     )
     return create_response_envelope(data.model_dump(), correlation_id=cid)
 

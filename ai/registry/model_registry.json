@@ -1,0 +1,113 @@
+{
+  "author": "Shivraj Dhote",
+  "task_id": "S8-AI-02",
+  "mlflow_experiment": "finex_production_ai_registry",
+  "total_registered_components": 7,
+  "components": [
+    {
+      "model_name": "finex-market-fundamentals",
+      "version": "1.0.0",
+      "engine": "deterministic_bhavcopy_engine",
+      "owner": "Shivraj Dhote",
+      "registered_at": "2026-10-16T14:56:40Z",
+      "stage": "Production",
+      "prompt_checksum": "sha256:ac01a6469b0e01bb",
+      "dataset_hash": "sha256:4b39e604f8aa4c33c2a129d2149b1a5e",
+      "metrics": {
+        "numerical_fidelity": 1.0,
+        "hallucination_rate": 0.0
+      },
+      "rollback_target": "1.0.0-baseline"
+    },
+    {
+      "model_name": "finex-risk-calculator",
+      "version": "1.0.0",
+      "engine": "deterministic_covariance_engine",
+      "owner": "Shivraj Dhote",
+      "registered_at": "2026-10-16T14:56:40Z",
+      "stage": "Production",
+      "prompt_checksum": "sha256:fae9a8ba1935c416",
+      "dataset_hash": "sha256:d8a92bc516cf09ef8914ab1829471132",
+      "metrics": {
+        "numerical_fidelity": 1.0,
+        "beta_accuracy": 1.0
+      },
+      "rollback_target": "1.0.0-baseline"
+    },
+    {
+      "model_name": "finex-sebi-rag-retriever",
+      "version": "1.2.0",
+      "engine": "all-MiniLM-L6-v2 + bm25_hybrid",
+      "owner": "Shivraj Dhote",
+      "registered_at": "2026-10-16T14:56:40Z",
+      "stage": "Production",
+      "prompt_checksum": "sha256:38b619fd884d4517",
+      "dataset_hash": "sha256:7c9e01349fba9828d1149e917aa88512",
+      "metrics": {
+        "recall_at_3": 0.933,
+        "unsupported_claim_refusal_rate": 1.0
+      },
+      "rollback_target": "1.1.0"
+    },
+    {
+      "model_name": "finex-paper-coach",
+      "version": "1.0.0",
+      "engine": "deterministic_coaching_engine_v1",
+      "owner": "Shivraj Dhote",
+      "registered_at": "2026-10-16T14:56:40Z",
+      "stage": "Production",
+      "prompt_checksum": "sha256:d56f4c463df9dce9",
+      "dataset_hash": "sha256:3a1b9472eec3057112c30089fba77112",
+      "metrics": {
+        "disclaimer_compliance": 1.0,
+        "risk_lesson_coverage": 1.0
+      },
+      "rollback_target": "1.0.0-baseline"
+    },
+    {
+      "model_name": "finex-portfolio-intent-router",
+      "version": "1.1.0",
+      "engine": "deterministic_regex_rule_classifier",
+      "owner": "Shivraj Dhote",
+      "registered_at": "2026-10-16T14:56:40Z",
+      "stage": "Production",
+      "prompt_checksum": "sha256:bc59bba4685836ee",
+      "dataset_hash": "sha256:88941cfb2e987115ea011248abef8992",
+      "metrics": {
+        "classification_accuracy": 1.0,
+        "security_refusal_accuracy": 1.0
+      },
+      "rollback_target": "1.0.0"
+    },
+    {
+      "model_name": "finex-goal-explainer",
+      "version": "1.0.0",
+      "engine": "deterministic_compound_fv_engine",
+      "owner": "Shivraj Dhote",
+      "registered_at": "2026-10-16T14:56:40Z",
+      "stage": "Production",
+      "prompt_checksum": "sha256:6e93b9a8710a082d",
+      "dataset_hash": "sha256:5a914398bc7214ff9001b2a75cd88219",
+      "metrics": {
+        "math_fidelity": 1.0,
+        "statutory_disclaimer": 1.0
+      },
+      "rollback_target": "1.0.0-baseline"
+    },
+    {
+      "model_name": "finex-spending-classifier",
+      "version": "1.0.0",
+      "engine": "privacy_masking_keyword_classifier",
+      "owner": "Shivraj Dhote",
+      "registered_at": "2026-10-16T14:56:40Z",
+      "stage": "Production",
+      "prompt_checksum": "sha256:d4028f20cc68c80f",
+      "dataset_hash": "sha256:199042bbf1829e847cd11928374a5e01",
+      "metrics": {
+        "privacy_masking_rate": 1.0,
+        "categorization_accuracy": 1.0
+      },
+      "rollback_target": "1.0.0-baseline"
+    }
+  ]
+}

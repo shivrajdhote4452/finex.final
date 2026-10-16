@@ -8,7 +8,12 @@ from backend.app.core.errors import (
     unhandled_exception_handler,
     validation_exception_handler,
 )
-from backend.app.core.middleware import CorrelationIdMiddleware, SecurityHeadersMiddleware
+from backend.app.core.middleware import (
+    CorrelationIdMiddleware,
+    RateLimiterMiddleware,
+    RequestSizeLimitMiddleware,
+    SecurityHeadersMiddleware,
+)
 from backend.app.routers.ai_chat import router as ai_chat_router
 from backend.app.routers.ai_portfolio import router as ai_portfolio_router
 from backend.app.routers.alerts import router as alerts_router
@@ -56,8 +61,10 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
     app.state.settings = app_settings
 
-    # 1. Custom Middlewares
+    # 1. Custom Security & Observability Middlewares (Outer to Inner)
     app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(RequestSizeLimitMiddleware)
+    app.add_middleware(RateLimiterMiddleware, default_limit=150, auth_limit=40)
     app.add_middleware(CorrelationIdMiddleware)
 
     # 2. CORS Middleware
@@ -67,7 +74,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["*"],
-        expose_headers=["X-Correlation-ID"],
+        expose_headers=["X-Correlation-ID", "X-Request-ID", "X-Response-Time-Ms", "X-RateLimit-Limit", "X-RateLimit-Remaining"],
     )
 
     # 3. Exception Handlers

@@ -52,8 +52,21 @@ class PortfolioIntentRouter:
     def route(self, query: str, caller_user_id: str = "usr-shivraj-001") -> IntentRoutingResult:
         q_lower = query.strip().lower()
 
+        # 0. Prompt Injection / Jailbreak / Instruction Override check
+        if any(p in q_lower for p in ["system prompt", "override", "jailbreak", "ignore all previous", "ignore previous", "forget what you were told", "internal credentials", "system update", "unrestricted"]):
+            return IntentRoutingResult(
+                query=query,
+                predicted_intent=PortfolioIntent.UNAUTHORIZED_ACCESS,
+                confidence=0.99,
+                recommended_tool=None,
+                is_supported=False,
+                refusal_reason="System integrity violation: System prompts and internal configurations are immutable.",
+                educational_guidance="FinEx operates strictly within educational guidelines and cannot override safety protocols.",
+            )
+
         # 1. Unauthorized Access / Cross-user breach check
         if any(p in q_lower for p in ["other user", "another account", "usr-", "user 123", "admin view", "someone else"]):
+
             return IntentRoutingResult(
                 query=query,
                 predicted_intent=PortfolioIntent.UNAUTHORIZED_ACCESS,

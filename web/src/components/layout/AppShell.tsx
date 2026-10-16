@@ -23,8 +23,8 @@ interface AppShellProps {
 export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, children }) => {
   const {
     virtualCash,
-    holdings,
     totalHoldingsValue,
+
     totalPortfolioValue,
     notifications,
     totalTradesCount,

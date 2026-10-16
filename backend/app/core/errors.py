@@ -107,6 +107,25 @@ class ServiceUnavailableException(FinExException):
         )
 
 
+class RateLimitException(FinExException):
+    def __init__(self, message: str = "Rate limit exceeded. Please retry after the cooling window.", retry_after: int = 60):
+        super().__init__(
+            message=message,
+            code="RATE_LIMIT_EXCEEDED",
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        )
+        self.retry_after = retry_after
+
+
+class PayloadTooLargeException(FinExException):
+    def __init__(self, message: str = "Request payload exceeds permissible limit"):
+        super().__init__(
+            message=message,
+            code="PAYLOAD_TOO_LARGE",
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+        )
+
+
 def build_error_response(
     status_code: int,
     code: str,
