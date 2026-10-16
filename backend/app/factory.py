@@ -14,6 +14,7 @@ from backend.app.routers.ai_portfolio import router as ai_portfolio_router
 from backend.app.routers.alerts import router as alerts_router
 from backend.app.routers.auth import router as auth_router
 from backend.app.routers.auth import users_router
+from backend.app.routers.goals import router as goals_router
 from backend.app.routers.health import router as health_router
 from backend.app.routers.market import router as market_router
 from backend.app.routers.notifications import router as notifications_router
@@ -22,6 +23,7 @@ from backend.app.routers.portfolio import router as portfolio_router
 from backend.app.routers.portfolio_intelligence import router as portfolio_intelligence_router
 from backend.app.routers.risk import router as risk_router
 from backend.app.routers.sample import router as sample_router
+from backend.app.routers.spending import router as spending_router
 from backend.app.routers.watchlists import router as watchlists_router
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
@@ -88,6 +90,8 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     app.include_router(alerts_router, prefix=v1_prefix)
     app.include_router(notifications_router, prefix=v1_prefix)
     app.include_router(portfolio_intelligence_router, prefix=v1_prefix)
+    app.include_router(goals_router, prefix=v1_prefix)
+    app.include_router(spending_router, prefix=v1_prefix)
     app.include_router(sample_router, prefix=v1_prefix)
 
     return app

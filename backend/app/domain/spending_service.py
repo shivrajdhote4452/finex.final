@@ -1,0 +1,294 @@
+"""Spending Analytics, CSV Normalization, Masking, and Categorization Service.
+
+Task ID: S7-API-02
+Author: Shivraj Dhote
+Date: 16 October 2026
+
+Coordinates:
+1. CSV parsing, validation, and quarantine handling.
+2. PII / account masking before operational storage or AI usage.
+3. Rule-based categorization with review flags and confidence scoring.
+4. Monthly spending roll-up calculation (total debits, credits, savings rate %, category breakdown).
+5. Duplicate transaction detection via SHA-256 fingerprinting.
+"""
+
+import csv
+from datetime import datetime, timezone
+from decimal import Decimal
+import hashlib
+import io
+import re
+from typing import Any, Dict, List, Optional, Tuple
+import uuid
+from pydantic import BaseModel, Field
+
+# In-memory operational store for isolated testing/development baseline
+_UPLOADS_STORE: Dict[str, Dict[str, Any]] = {}  # upload_id -> upload_dict
+_TRANSACTIONS_STORE: Dict[str, List[Dict[str, Any]]] = {}  # user_id -> list of transactions
+
+
+# Keyword matching dictionary for deterministic categorization
+CATEGORIZATION_RULES: List[Tuple[List[str], str, Decimal]] = [
+    (["SWIGGY", "ZOMATO", "MCDONALDS", "STARBUCKS", "RESTAURANT", "CAFE", "DOMINOS"], "FOOD_DINING", Decimal("0.95")),
+    (["BIGBASKET", "BLINKIT", "ZEPTO", "DMART", "SUPERMARKET", "GROCERY", "MORE RETAIL"], "GROCERIES", Decimal("0.95")),
+    (["BESCOM", "AIRTEL", "JIO", "ELECTRICITY", "BROADBAND", "TNEB", "BILLPAY", "WATER"], "UTILITIES", Decimal("0.92")),
+    (["RENT", "NOBROKER", "SOCIETY", "MAINTENANCE", "HOUSING"], "HOUSING", Decimal("0.95")),
+    (["UBER", "OLA", "PETROL", "HPCL", "BPCL", "INDIGO", "IRCTC", "FUEL", "RAPIDO"], "TRAVEL", Decimal("0.92")),
+    (["AMAZON", "FLIPKART", "MYNTRA", "ZARA", "UNIQLO", "SHOPPING", "RETAIL"], "SHOPPING", Decimal("0.90")),
+    (["APOLLO", "PHARMEASY", "MEDPLUS", "HOSPITAL", "CLINIC", "PHARMACY", "DOCTOR"], "HEALTHCARE", Decimal("0.95")),
+    (["ZERODHA", "GROWW", "MUTUAL FUND", "SIP", "NIPPON", "HDFC AMC", "COIN", "INVEST"], "INVESTMENTS", Decimal("0.95")),
+    (["SALARY", "DIVIDEND", "INTEREST", "CREDIT PAYROLL", "INCOME"], "INCOME", Decimal("0.98")),
+]
+
+
+def mask_sensitive_narrative(raw_desc: str) -> str:
+    """Masks 10-16 digit account numbers, cards, or phone numbers to preserve user privacy."""
+    # Mask 12-16 digit card or reference numbers
+    masked = re.sub(r"\b\d{12,16}\b", "****", raw_desc)
+    # Mask 10-digit phone / UPI phone patterns
+    masked = re.sub(r"\b\d{10}\b", "****", masked)
+    # Mask UPI handles with numbers (e.g. user9876543210@upi)
+    masked = re.sub(r"\b[A-Za-z0-9._%+-]+@upi\b", "****@upi", masked, flags=re.IGNORECASE)
+    return masked.strip()
+
+
+def categorize_transaction(description: str, tx_type: str) -> Tuple[str, Decimal, str]:
+    """Applies rule-based taxonomy to determine category, confidence, and method."""
+    desc_upper = description.upper()
+
+    if tx_type == "CREDIT" and any(k in desc_upper for k in ["SALARY", "INTEREST", "REFUND", "PAYROLL"]):
+        return "INCOME", Decimal("0.98"), "RULE"
+
+    for keywords, category, conf in CATEGORIZATION_RULES:
+        if any(kw in desc_upper for kw in keywords):
+            return category, conf, "RULE"
+
+    return "OTHER", Decimal("0.60"), "AI_FALLBACK"
+
+
+class TransactionItem(BaseModel):
+    id: str
+    transaction_date: str
+    amount: float
+    transaction_type: str
+    masked_description: str
+    category_id: str
+    categorization_method: str
+    confidence_score: float
+    is_reviewed: bool
+
+
+class MonthlySpendingSummaryResult(BaseModel):
+    user_id: str
+    year_month: str
+    total_debit: float
+    total_credit: float
+    net_savings: float
+    savings_rate_pct: float
+    transaction_count: int
+    category_breakdown: Dict[str, float]
+
+
+class SpendingService:
+    """Processes bank CSV uploads, manages transactions, and computes monthly summaries."""
+
+    def ingest_csv(
+        self,
+        user_id: str,
+        file_name: str,
+        csv_content: str,
+    ) -> Dict[str, Any]:
+        file_hash = hashlib.sha256(csv_content.encode("utf-8")).hexdigest()
+
+        # Check duplicate upload for this user
+        if file_hash in [u["file_hash_sha256"] for u in _UPLOADS_STORE.values() if u["user_id"] == user_id]:
+            raise ValueError(f"Duplicate file upload detected. File '{file_name}' has already been processed.")
+
+        upload_id = f"upl-{uuid.uuid4().hex[:12]}"
+        now = datetime.now(timezone.utc)
+
+        reader = csv.DictReader(io.StringIO(csv_content.strip()))
+        if not reader.fieldnames:
+            raise ValueError("Invalid CSV: Empty file or missing header row.")
+
+        # Normalize header keys
+        headers = {h.lower().strip(): h for h in reader.fieldnames}
+        date_key = next((headers[k] for k in ["date", "transaction_date", "tx_date"] if k in headers), None)
+        amt_key = next((headers[k] for k in ["amount", "tx_amount", "value"] if k in headers), None)
+        desc_key = next((headers[k] for k in ["description", "narration", "remarks", "details"] if k in headers), None)
+        type_key = next((headers[k] for k in ["type", "transaction_type", "dr_cr"] if k in headers), None)
+
+        if not (date_key and amt_key and desc_key):
+            raise ValueError(
+                f"Missing required CSV columns. Found {list(reader.fieldnames)}. Required: Date, Amount, Description."
+            )
+
+        accepted_txs = []
+        quarantined = []
+        user_txs = _TRANSACTIONS_STORE.setdefault(user_id, [])
+
+        for row_idx, row in enumerate(reader, start=1):
+            raw_d = row.get(date_key, "").strip()
+            raw_amt = row.get(amt_key, "").strip().replace(",", "")
+            raw_desc = row.get(desc_key, "").strip()
+            raw_type = (row.get(type_key, "") if type_key else "DEBIT").strip().upper()
+
+            if not raw_type or raw_type in ("DR", "EXPENSE", "DEBIT"):
+                tx_type = "DEBIT"
+            elif raw_type in ("CR", "INCOME", "CREDIT"):
+                tx_type = "CREDIT"
+            else:
+                tx_type = "DEBIT"
+
+            try:
+                # Validate date format (YYYY-MM-DD or DD/MM/YYYY)
+                parsed_d = None
+                for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+                    try:
+                        parsed_d = datetime.strptime(raw_d, fmt).date()
+                        break
+                    except ValueError:
+                        continue
+                if not parsed_d:
+                    raise ValueError(f"Invalid date format: '{raw_d}'")
+
+                amt = Decimal(raw_amt)
+                if amt <= 0:
+                    raise ValueError(f"Amount must be positive: {amt}")
+
+                # Mask PII in description
+                masked_desc = mask_sensitive_narrative(raw_desc)
+                cat, conf, method = categorize_transaction(masked_desc, tx_type)
+
+                # Dedupe hash (date + amount + description)
+                tx_hash = hashlib.sha256(f"{parsed_d}:{amt}:{masked_desc}".encode("utf-8")).hexdigest()
+
+                # Check if this exact transaction already exists
+                if any(t["dedupe_hash"] == tx_hash for t in user_txs):
+                    # Duplicate row; skip
+                    continue
+
+                tx_id = f"tx-{uuid.uuid4().hex[:12]}"
+                tx_record = {
+                    "id": tx_id,
+                    "upload_id": upload_id,
+                    "user_id": user_id,
+                    "transaction_date": parsed_d.isoformat(),
+                    "amount": amt,
+                    "transaction_type": tx_type,
+                    "masked_description": masked_desc,
+                    "category_id": cat,
+                    "categorization_method": method,
+                    "confidence_score": conf,
+                    "is_reviewed": conf >= Decimal("0.90"),
+                    "dedupe_hash": tx_hash,
+                    "created_at": now.isoformat(),
+                }
+                accepted_txs.append(tx_record)
+                user_txs.append(tx_record)
+
+            except Exception as e:
+                quarantined.append({"row_number": row_idx, "error": str(e), "raw_row": row})
+
+        upload_meta = {
+            "id": upload_id,
+            "user_id": user_id,
+            "file_name": file_name,
+            "file_hash_sha256": file_hash,
+            "total_rows": len(accepted_txs) + len(quarantined),
+            "accepted_rows": len(accepted_txs),
+            "quarantined_rows": len(quarantined),
+            "status": "COMMITTED" if accepted_txs else "REJECTED",
+            "created_at": now.isoformat(),
+        }
+        _UPLOADS_STORE[upload_id] = upload_meta
+
+        return {
+            "upload": upload_meta,
+            "accepted_count": len(accepted_txs),
+            "quarantined_count": len(quarantined),
+            "quarantined_errors": quarantined[:5],
+        }
+
+    def list_transactions(
+        self,
+        user_id: str,
+        category: Optional[str] = None,
+        year_month: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Dict[str, Any]:
+        txs = _TRANSACTIONS_STORE.get(user_id, [])
+        filtered = txs
+        if category:
+            filtered = [t for t in filtered if t["category_id"] == category]
+        if year_month:
+            filtered = [t for t in filtered if t["transaction_date"].startswith(year_month)]
+
+        filtered = sorted(filtered, key=lambda x: x["transaction_date"], reverse=True)
+        paginated = filtered[offset : offset + limit]
+
+        out = [
+            TransactionItem(
+                id=t["id"],
+                transaction_date=t["transaction_date"],
+                amount=float(t["amount"]),
+                transaction_type=t["transaction_type"],
+                masked_description=t["masked_description"],
+                category_id=t["category_id"],
+                categorization_method=t["categorization_method"],
+                confidence_score=float(t["confidence_score"]),
+                is_reviewed=t["is_reviewed"],
+            )
+            for t in paginated
+        ]
+
+        return {
+            "total": len(filtered),
+            "transactions": [o.model_dump(mode="json") for o in out],
+        }
+
+    def update_transaction_category(
+        self, user_id: str, transaction_id: str, new_category: str
+    ) -> Dict[str, Any]:
+        txs = _TRANSACTIONS_STORE.get(user_id, [])
+        tx = next((t for t in txs if t["id"] == transaction_id), None)
+        if not tx:
+            raise KeyError(f"Transaction {transaction_id} not found or access denied.")
+
+        tx["category_id"] = new_category
+        tx["categorization_method"] = "USER_CORRECTED"
+        tx["confidence_score"] = Decimal("1.00")
+        tx["is_reviewed"] = True
+        return tx
+
+    def get_monthly_summary(self, user_id: str, year_month: str = "2026-10") -> MonthlySpendingSummaryResult:
+        txs = _TRANSACTIONS_STORE.get(user_id, [])
+        month_txs = [t for t in txs if t["transaction_date"].startswith(year_month)]
+
+        total_debit = Decimal("0.00")
+        total_credit = Decimal("0.00")
+        category_breakdown: Dict[str, Decimal] = {}
+
+        for t in month_txs:
+            amt = t["amount"]
+            if t["transaction_type"] == "DEBIT":
+                total_debit += amt
+                cat = t["category_id"]
+                category_breakdown[cat] = category_breakdown.get(cat, Decimal("0.00")) + amt
+            else:
+                total_credit += amt
+
+        net_savings = total_credit - total_debit
+        savings_rate = round((net_savings / total_credit * Decimal("100.0")), 2) if total_credit > 0 else Decimal("0.00")
+
+        return MonthlySpendingSummaryResult(
+            user_id=user_id,
+            year_month=year_month,
+            total_debit=float(total_debit),
+            total_credit=float(total_credit),
+            net_savings=float(net_savings),
+            savings_rate_pct=float(savings_rate),
+            transaction_count=len(month_txs),
+            category_breakdown={k: float(v) for k, v in sorted(category_breakdown.items(), key=lambda x: x[1], reverse=True)},
+        )

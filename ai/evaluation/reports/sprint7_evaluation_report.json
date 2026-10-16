@@ -1,0 +1,111 @@
+{
+  "timestamp": "2026-10-16T14:23:47.737666+00:00",
+  "task_id": "S7-AI-01, S7-AI-02, S7-AI-03",
+  "author": "Shivraj Dhote",
+  "metrics": {
+    "total_goal_scenarios": 12,
+    "goal_numeric_accuracy_pct": 100.0,
+    "goal_disclaimer_compliance_pct": 100.0,
+    "privacy_masking_score_pct": 100.0,
+    "categorization_accuracy_pct": 100.0,
+    "overall_status": "PASSED"
+  },
+  "goal_scenarios": [
+    {
+      "goal_name": "Retirement Corpus",
+      "target_amount": 20000000.0,
+      "months_remaining": 240,
+      "required_monthly_savings": 16687.45,
+      "numeric_ok": true,
+      "disclaimer_ok": true
+    },
+    {
+      "goal_name": "Emergency Fund",
+      "target_amount": 300000.0,
+      "months_remaining": 12,
+      "required_monthly_savings": 20016.61,
+      "numeric_ok": true,
+      "disclaimer_ok": true
+    },
+    {
+      "goal_name": "House Down Payment",
+      "target_amount": 2500000.0,
+      "months_remaining": 60,
+      "required_monthly_savings": 23886.12,
+      "numeric_ok": true,
+      "disclaimer_ok": true
+    },
+    {
+      "goal_name": "Child Higher Education",
+      "target_amount": 4000000.0,
+      "months_remaining": 121,
+      "required_monthly_savings": 17891.16,
+      "numeric_ok": true,
+      "disclaimer_ok": true
+    },
+    {
+      "goal_name": "International Vacation",
+      "target_amount": 300000.0,
+      "months_remaining": 19,
+      "required_monthly_savings": 13303.94,
+      "numeric_ok": true,
+      "disclaimer_ok": true
+    },
+    {
+      "goal_name": "Electric Vehicle",
+      "target_amount": 1500000.0,
+      "months_remaining": 37,
+      "required_monthly_savings": 32821.51,
+      "numeric_ok": true,
+      "disclaimer_ok": true
+    },
+    {
+      "goal_name": "Tech / Laptop Upgrade",
+      "target_amount": 150000.0,
+      "months_remaining": 6,
+      "required_monthly_savings": 21358.73,
+      "numeric_ok": true,
+      "disclaimer_ok": true
+    },
+    {
+      "goal_name": "Wedding Expenses",
+      "target_amount": 1200000.0,
+      "months_remaining": 25,
+      "required_monthly_savings": 36103.88,
+      "numeric_ok": true,
+      "disclaimer_ok": true
+    },
+    {
+      "goal_name": "Sabbatical Runway",
+      "target_amount": 1000000.0,
+      "months_remaining": 37,
+      "required_monthly_savings": 19774.6,
+      "numeric_ok": true,
+      "disclaimer_ok": true
+    },
+    {
+      "goal_name": "Solar Rooftop",
+      "target_amount": 250000.0,
+      "months_remaining": 12,
+      "required_monthly_savings": 16823.95,
+      "numeric_ok": true,
+      "disclaimer_ok": true
+    },
+    {
+      "goal_name": "Already Fully Funded",
+      "target_amount": 500000.0,
+      "months_remaining": 25,
+      "required_monthly_savings": 0.0,
+      "numeric_ok": true,
+      "disclaimer_ok": true
+    },
+    {
+      "goal_name": "Zero Return Cash Preservation",
+      "target_amount": 600000.0,
+      "months_remaining": 25,
+      "required_monthly_savings": 19200.0,
+      "numeric_ok": true,
+      "disclaimer_ok": true
+    }
+  ]
+}

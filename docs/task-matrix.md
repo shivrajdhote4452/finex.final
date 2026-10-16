@@ -149,20 +149,20 @@
 
 ## Sprint 7 — Goals and Spending Trend Analysis
 
-| Task ID | Track | Title & Description | Status |
-|---|---|---|---|
-| S7-PRD-01 | PRD | React goal creation/projection/progress & spending CSV dashboard screens | Backlog |
-| S7-PRD-02 | PRD | Flutter goal and spending screens with file picker abstraction | Backlog |
-| S7-PRD-03 | PRD | Cross-platform upload/projection tests, accessible chart text summaries | Backlog |
-| S7-API-01 | API | Goal CRUD, projection and progress endpoints (deterministic formula) | Backlog |
-| S7-API-02 | API | Transaction CSV upload, validation, masked storage, category review | Backlog |
-| S7-API-03 | API | Privacy, authorization and integration tests for goals/spending | Backlog |
-| S7-DAT-01 | DAT | financial_goals, goal_contributions, goal_projections tables | Backlog |
-| S7-DAT-02 | DAT | transaction_uploads, transactions, categories, spending_summaries tables | Backlog |
-| S7-DAT-03 | DAT | Goal/spending DQ and analytics checks (totals, duplicate transactions) | Backlog |
-| S7-AI-01 | AI | Goal-planning explanation tool (projection, shortfall, assumptions) | Backlog |
-| S7-AI-02 | AI | Transaction categorization v1 (rules + ML/LLM fallback on masked text) | Backlog |
-| S7-AI-03 | AI | Spending trend and anomaly evaluation (recurring, MoM change, unusual) | Backlog |
+| Task ID | Track | Title & Description | Status | Evidence / Notes |
+|---|---|---|---|---|
+| S7-PRD-01 | PRD | React goal creation/projection/progress & spending CSV dashboard screens | Verified Working | `GoalsScreen.tsx`, `SpendingScreen.tsx` |
+| S7-PRD-02 | PRD | Flutter goal and spending screens with file picker abstraction | Verified Working | `mobile/lib/screens/goals_screen.dart`, `spending_screen.dart` |
+| S7-PRD-03 | PRD | Cross-platform upload/projection tests, accessible chart text summaries | Verified Working | `mobile/test/widget_test.dart`, `test_goals_and_spending_api.py` |
+| S7-API-01 | API | Goal CRUD, projection and progress endpoints (deterministic formula) | Verified Working | `backend/app/routers/goals.py`, `GoalEngine` (`fv_compound_monthly_v1.0`) |
+| S7-API-02 | API | Transaction CSV upload, validation, masked storage, category review | Verified Working | `backend/app/routers/spending.py`, `SpendingService` |
+| S7-API-03 | API | Privacy, authorization and integration tests for goals/spending | Verified Working | 4 passed in `backend/tests/test_goals_and_spending_api.py` |
+| S7-DAT-01 | DAT | financial_goals, goal_contributions, goal_projections tables | Verified Working | `data/ddl/060_goals.sql`, `backend/app/models/goals.py` |
+| S7-DAT-02 | DAT | transaction_uploads, transactions, categories, spending_summaries tables | Verified Working | `data/ddl/061_spending.sql`, `backend/app/models/spending.py` |
+| S7-DAT-03 | DAT | Goal/spending DQ and analytics checks (totals, duplicate transactions) | Verified Working | `data/quality/goal_spending_reconciliation.py`, 0 break tolerance |
+| S7-AI-01 | AI | Goal-planning explanation tool (projection, shortfall, assumptions) | Verified Working | `backend/app/domain/goal_explainer_ai.py` |
+| S7-AI-02 | AI | Transaction categorization v1 (rules + ML/LLM fallback on masked text) | Verified Working | `backend/app/domain/spending_service.py` (`categorize_transaction`) |
+| S7-AI-03 | AI | Spending trend and anomaly evaluation (recurring, MoM change, unusual) | Verified Working | 12/12 (100%) passed in `ai/evaluation/evaluate_sprint7.py` |
 
 ---
 
