@@ -9,7 +9,10 @@ from backend.app.core.errors import (
     validation_exception_handler,
 )
 from backend.app.core.middleware import CorrelationIdMiddleware, SecurityHeadersMiddleware
+from backend.app.routers.auth import router as auth_router
+from backend.app.routers.auth import users_router
 from backend.app.routers.health import router as health_router
+from backend.app.routers.risk import router as risk_router
 from backend.app.routers.sample import router as sample_router
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
@@ -64,6 +67,9 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     # 4. Mount API v1 Routers
     v1_prefix = app_settings.API_V1_PREFIX
     app.include_router(health_router, prefix=v1_prefix)
+    app.include_router(auth_router, prefix=v1_prefix)
+    app.include_router(users_router, prefix=v1_prefix)
+    app.include_router(risk_router, prefix=v1_prefix)
     app.include_router(sample_router, prefix=v1_prefix)
 
     return app

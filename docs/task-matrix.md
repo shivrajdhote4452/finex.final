@@ -54,20 +54,20 @@
 
 ## Sprint 2 — Identity, Onboarding and Risk Profile
 
-| Task ID | Track | Title & Description | Status |
-|---|---|---|---|
-| S2-PRD-01 | PRD | React login, consent, onboarding and risk questionnaire screens | Backlog |
-| S2-PRD-02 | PRD | Flutter login, consent, onboarding and risk questionnaire flow | Backlog |
-| S2-PRD-03 | PRD | Cross-platform onboarding test automation and analytics events | Backlog |
-| S2-API-01 | API | Google OAuth callback, JWT lifecycle, refresh/logout, /users/me | Backlog |
-| S2-API-02 | API | Onboarding & consent endpoints, /risk/questions, /risk/assessments | Backlog |
-| S2-API-03 | API | Contract and integration tests for auth, profile, consent and risk | Backlog |
-| S2-DAT-01 | DAT | Tables users, user_profiles, user_preferences, user_consents, auth_audit_events | Backlog |
-| S2-DAT-02 | DAT | Versioned risk_questionnaires, questions, assessments, answers tables & loader | Backlog |
-| S2-DAT-03 | DAT | Identity/risk data quality checks and audit query | Backlog |
-| S2-AI-01 | AI | Deterministic risk scoring v1 (willingness/capacity, conservative/moderate/aggressive) | Backlog |
-| S2-AI-02 | AI | Risk explanation prompt/template (beginner language, citations, limitations) | Backlog |
-| S2-AI-03 | AI | Risk evaluation harness extension (score consistency, factor coverage, safety) | Backlog |
+| Task ID | Track | Title & Description | Status | Evidence / Notes |
+|---|---|---|---|---|
+| S2-PRD-01 | PRD | React login, consent, onboarding and risk questionnaire screens | Verified Working | `WelcomeScreen.tsx`, `OnboardingScreen.tsx` |
+| S2-PRD-02 | PRD | Flutter login, consent, onboarding and risk questionnaire flow | Backlog | Mobile track |
+| S2-PRD-03 | PRD | Cross-platform onboarding test automation and analytics events | Backlog | |
+| S2-API-01 | API | Google OAuth callback, JWT lifecycle, refresh/logout, /users/me | Verified Working | `backend/app/routers/auth.py` |
+| S2-API-02 | API | Onboarding & consent endpoints, /risk/questions, /risk/assessments | Verified Working | `backend/app/routers/risk.py` |
+| S2-API-03 | API | Contract and integration tests for auth, profile, consent and risk | Verified Working | `backend/tests/test_auth_and_risk_api.py` |
+| S2-DAT-01 | DAT | Tables users, user_profiles, user_preferences, user_consents, auth_audit_events | Verified Working | `backend/app/models/core.py` |
+| S2-DAT-02 | DAT | Versioned risk_questionnaires, questions, assessments, answers tables & loader | Verified Working | `backend/app/domain/risk.py` (v1 catalog) |
+| S2-DAT-03 | DAT | Identity/risk data quality checks and audit query | Backlog | |
+| S2-AI-01 | AI | Deterministic risk scoring v1 (willingness/capacity, conservative/moderate/aggressive) | Verified Working | `backend/app/domain/risk.py` |
+| S2-AI-02 | AI | Risk explanation prompt/template (beginner language, citations, limitations) | Verified Working | `backend/app/domain/risk.py` |
+| S2-AI-03 | AI | Risk evaluation harness extension (score consistency, factor coverage, safety) | Verified Working | 4 scenario tests in `test_auth_and_risk_api.py` |
 
 ---
 
