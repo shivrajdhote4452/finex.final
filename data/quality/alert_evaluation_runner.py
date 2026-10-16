@@ -11,16 +11,15 @@ Coordinates:
 4. Emits run metrics: rules_processed, events_triggered, events_suppressed, failed_evaluations.
 """
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
+
 from pydantic import BaseModel
 
 from backend.app.domain.alerts_service import (
     AlertRuleCreate,
     AlertsService,
-    _ALERT_EVENTS_STORE,
-    _ALERT_RULES_STORE,
 )
 
 
@@ -88,7 +87,7 @@ class AlertEvaluationRunner:
             except Exception:
                 failures += 1
 
-        is_healthy = (cooldown_violations == 0 and failures == 0)
+        is_healthy = cooldown_violations == 0 and failures == 0
         summary = (
             f"Alert evaluation run {run_id} completed: {total_rules} rules evaluated, "
             f"{events_triggered} triggered, {events_suppressed} suppressed by cooldown. "

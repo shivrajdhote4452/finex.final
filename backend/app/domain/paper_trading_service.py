@@ -14,12 +14,14 @@ Implements:
 7. Separation from real-money brokerages.
 """
 
+import hashlib
 import uuid
 from datetime import datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Dict, List, Optional
 
 from backend.app.adapters.market_data_provider import VERIFIED_OBSERVATIONS
+from fastapi import HTTPException, status
 from pydantic import BaseModel, Field
 
 
@@ -29,7 +31,7 @@ class OrderSubmitRequest(BaseModel):
     quantity: Decimal = Field(..., gt=0, description="Positive quantity of shares to trade")
     order_type: str = Field("MARKET", description="'MARKET' or 'LIMIT'")
     limit_price: Optional[Decimal] = None
-    idempotency_key: str = Field(..., min_length=8, max_length=128)
+    idempotency_key: Optional[str] = Field(None, min_length=8, max_length=128)
 
 
 class ExecutionResult(BaseModel):
@@ -48,6 +50,7 @@ class ExecutionResult(BaseModel):
     realized_pnl: Optional[Decimal] = None
     executed_at: str
     disclaimer: str
+    replayed: bool = False
 
 
 # In-memory storage for isolated operational baseline
@@ -113,15 +116,45 @@ class PaperTradingEngine:
         side = payload.side.upper().strip()
         qty = payload.quantity
         now_str = datetime.now(timezone.utc).isoformat()
+        order_type = payload.order_type.upper().strip()
 
-        # 1. Idempotency Check
+        # 0. Validate supported order types
+        if order_type not in ["MARKET", "LIMIT"]:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Unsupported order type '{payload.order_type}'. Supported types: 'MARKET', 'LIMIT'.",
+            )
+
+        if order_type == "LIMIT" and (payload.limit_price is None or payload.limit_price <= Decimal("0.00")):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="LIMIT orders require a strictly positive limit_price.",
+            )
+
+        # 1. Canonical Fingerprint & Idempotency Check
         idemp_key = payload.idempotency_key
+        if not idemp_key:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Idempotency key required via body or X-Idempotency-Key header.",
+            )
+        limit_str = f"{Decimal(str(payload.limit_price)):.2f}" if payload.limit_price is not None else "NONE"
+        canonical_str = f"{user_id}:{sym}:{side}:{Decimal(str(qty)):.4f}:{order_type}:{limit_str}"
+        fingerprint = hashlib.sha256(canonical_str.encode("utf-8")).hexdigest()
+
         existing_order = next(
             (o for o in _ORDERS_STORE.values() if o["account_id"] == acct_id and o["idempotency_key"] == idemp_key),
             None,
         )
         if existing_order:
-            # Return prior result idempotently
+            # Check for conflict: same key with different payload
+            if existing_order.get("fingerprint") and existing_order["fingerprint"] != fingerprint:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Idempotency conflict (payload collision): Key was previously submitted with a different order payload.",
+                )
+
+            # Replay identical prior result with exact saved execution receipt
             return ExecutionResult(
                 order_id=existing_order["id"],
                 account_id=acct_id,
@@ -134,13 +167,14 @@ class PaperTradingEngine:
                 net_value=existing_order.get("net_value", Decimal("0.00")),
                 status=existing_order["status"],
                 rejection_reason=existing_order.get("rejection_reason"),
-                cash_balance_after=acct["current_cash"],
+                cash_balance_after=existing_order.get("cash_balance_after", acct["current_cash"]),
                 realized_pnl=existing_order.get("realized_pnl"),
                 executed_at=existing_order["created_at"],
                 disclaimer=self.SIMULATION_DISCLAIMER,
+                replayed=True,
             )
 
-        # 2. Price verification
+        # 2. Price verification & Limit marketability rules
         market_price = self.get_market_price(sym)
         order_id = f"ord-{uuid.uuid4().hex[:12]}"
 
@@ -152,10 +186,17 @@ class PaperTradingEngine:
                 "symbol": sym,
                 "side": side,
                 "quantity": qty,
-                "fill_price": None,
+                "order_type": order_type,
+                "limit_price": payload.limit_price,
+                "fill_price": Decimal("0.00"),
+                "gross_value": Decimal("0.00"),
+                "fee": Decimal("0.00"),
+                "net_value": Decimal("0.00"),
                 "status": "REJECTED",
                 "rejection_reason": f"No verified market quote available for symbol '{sym}'. Trade rejected.",
+                "cash_balance_after": acct["current_cash"],
                 "idempotency_key": idemp_key,
+                "fingerprint": fingerprint,
                 "created_at": now_str,
             }
             _ORDERS_STORE[order_id] = order_record
@@ -177,6 +218,88 @@ class PaperTradingEngine:
                 disclaimer=self.SIMULATION_DISCLAIMER,
             )
 
+        # Enforce non-marketable limit rules (never fill above limit buy or below limit sell)
+        if order_type == "LIMIT":
+            assert payload.limit_price is not None
+            if side == "BUY" and market_price > payload.limit_price:
+                order_record = {
+                    "id": order_id,
+                    "account_id": acct_id,
+                    "user_id": user_id,
+                    "symbol": sym,
+                    "side": side,
+                    "quantity": qty,
+                    "order_type": order_type,
+                    "limit_price": payload.limit_price,
+                    "fill_price": Decimal("0.00"),
+                    "gross_value": Decimal("0.00"),
+                    "fee": Decimal("0.00"),
+                    "net_value": Decimal("0.00"),
+                    "status": "REJECTED",
+                    "rejection_reason": f"Non-marketable LIMIT buy: Market price (₹{market_price:,.2f}) exceeds submitted limit price (₹{payload.limit_price:,.2f}).",
+                    "cash_balance_after": acct["current_cash"],
+                    "idempotency_key": idemp_key,
+                    "fingerprint": fingerprint,
+                    "created_at": now_str,
+                }
+                _ORDERS_STORE[order_id] = order_record
+                return ExecutionResult(
+                    order_id=order_id,
+                    account_id=acct_id,
+                    symbol=sym,
+                    side=side,
+                    quantity=qty,
+                    fill_price=Decimal("0.00"),
+                    gross_value=Decimal("0.00"),
+                    fee=Decimal("0.00"),
+                    net_value=Decimal("0.00"),
+                    status="REJECTED",
+                    rejection_reason=order_record["rejection_reason"],
+                    cash_balance_after=acct["current_cash"],
+                    realized_pnl=None,
+                    executed_at=now_str,
+                    disclaimer=self.SIMULATION_DISCLAIMER,
+                )
+            if side == "SELL" and market_price < payload.limit_price:
+                order_record = {
+                    "id": order_id,
+                    "account_id": acct_id,
+                    "user_id": user_id,
+                    "symbol": sym,
+                    "side": side,
+                    "quantity": qty,
+                    "order_type": order_type,
+                    "limit_price": payload.limit_price,
+                    "fill_price": Decimal("0.00"),
+                    "gross_value": Decimal("0.00"),
+                    "fee": Decimal("0.00"),
+                    "net_value": Decimal("0.00"),
+                    "status": "REJECTED",
+                    "rejection_reason": f"Non-marketable LIMIT sell: Market price (₹{market_price:,.2f}) is below submitted limit price (₹{payload.limit_price:,.2f}).",
+                    "cash_balance_after": acct["current_cash"],
+                    "idempotency_key": idemp_key,
+                    "fingerprint": fingerprint,
+                    "created_at": now_str,
+                }
+                _ORDERS_STORE[order_id] = order_record
+                return ExecutionResult(
+                    order_id=order_id,
+                    account_id=acct_id,
+                    symbol=sym,
+                    side=side,
+                    quantity=qty,
+                    fill_price=Decimal("0.00"),
+                    gross_value=Decimal("0.00"),
+                    fee=Decimal("0.00"),
+                    net_value=Decimal("0.00"),
+                    status="REJECTED",
+                    rejection_reason=order_record["rejection_reason"],
+                    cash_balance_after=acct["current_cash"],
+                    realized_pnl=None,
+                    executed_at=now_str,
+                    disclaimer=self.SIMULATION_DISCLAIMER,
+                )
+
         fill_price = market_price
         gross_val = (qty * fill_price).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         fee = Decimal("0.00")  # Zero brokerage for educational tier
@@ -195,10 +318,17 @@ class PaperTradingEngine:
                     "symbol": sym,
                     "side": side,
                     "quantity": qty,
+                    "order_type": order_type,
+                    "limit_price": payload.limit_price,
                     "fill_price": fill_price,
+                    "gross_value": gross_val,
+                    "fee": fee,
+                    "net_value": required_cash,
                     "status": "REJECTED",
                     "rejection_reason": f"Insufficient virtual cash. Required: ₹{required_cash:,.2f}, Available: ₹{acct['current_cash']:,.2f}.",
+                    "cash_balance_after": acct["current_cash"],
                     "idempotency_key": idemp_key,
+                    "fingerprint": fingerprint,
                     "created_at": now_str,
                 }
                 _ORDERS_STORE[order_id] = order_record
@@ -271,10 +401,17 @@ class PaperTradingEngine:
                     "symbol": sym,
                     "side": side,
                     "quantity": qty,
+                    "order_type": order_type,
+                    "limit_price": payload.limit_price,
                     "fill_price": fill_price,
+                    "gross_value": gross_val,
+                    "fee": fee,
+                    "net_value": gross_val - fee,
                     "status": "REJECTED",
                     "rejection_reason": f"Insufficient holding quantity. Attempted to sell {qty} shares, but you hold {current_holding_qty} shares of {sym}.",
+                    "cash_balance_after": acct["current_cash"],
                     "idempotency_key": idemp_key,
+                    "fingerprint": fingerprint,
                     "created_at": now_str,
                 }
                 _ORDERS_STORE[order_id] = order_record
@@ -338,13 +475,17 @@ class PaperTradingEngine:
             "symbol": sym,
             "side": side,
             "quantity": qty,
+            "order_type": order_type,
+            "limit_price": payload.limit_price,
             "fill_price": fill_price,
             "gross_value": gross_val,
             "fee": fee,
             "net_value": gross_val,
             "status": "FILLED",
             "realized_pnl": realized_pnl,
+            "cash_balance_after": cash_after,
             "idempotency_key": idemp_key,
+            "fingerprint": fingerprint,
             "created_at": now_str,
         }
         _ORDERS_STORE[order_id] = order_record

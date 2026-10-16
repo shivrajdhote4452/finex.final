@@ -10,6 +10,8 @@ Exposes:
 - POST /paper-trading/reset: Reset virtual cash with audit entry
 """
 
+from typing import Optional
+
 from backend.app.core.envelope import create_response_envelope
 from backend.app.domain.paper_trading_service import (
     _LEDGER_STORE,
@@ -18,7 +20,7 @@ from backend.app.domain.paper_trading_service import (
     PaperTradingEngine,
 )
 from backend.app.routers.auth import get_current_user_id
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/paper-trading", tags=["Paper Trading (Simulated)"])
@@ -46,11 +48,20 @@ async def get_paper_account(
 async def submit_paper_order(
     request: Request,
     payload: OrderSubmitRequest,
+    x_idempotency_key: Optional[str] = Header(None, alias="X-Idempotency-Key"),
     current_user: dict = Depends(get_current_user_id),
 ):
     """Execute simulated market order atomically with idempotency protection."""
     cid = getattr(request.state, "correlation_id", None)
     user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+
+    key = payload.idempotency_key or x_idempotency_key
+    if not key:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Idempotency key required via body or X-Idempotency-Key header",
+        )
+    payload.idempotency_key = key
 
     result = engine.execute_order(user_id, payload)
     return create_response_envelope(data=result.model_dump(mode="json"), correlation_id=cid)

@@ -12,7 +12,6 @@ Simulates and verifies:
 """
 
 import json
-import os
 import sys
 from typing import Any, Callable, Dict, List, Optional
 
@@ -85,7 +84,7 @@ class WorkflowRunner:
             "max_retries": task.max_retries,
             "error": task.error_message,
             "recipient": "shivraj.dhote@finex.internal",
-            "actionable_context": f"Upstream data validation blocked pipeline progression to prevent corrupt downstream writes.",
+            "actionable_context": "Upstream data validation blocked pipeline progression to prevent corrupt downstream writes.",
         }
         self.notifications.append(alert)
 
@@ -115,7 +114,9 @@ def run_orchestration_verification() -> Dict[str, bool]:
     res3 = runner3.execute(custom_handlers={"validate_market_data_quality": lambda att: False})
     results["dq_task_marked_failed"] = res3["validate_market_data_quality"] == "FAILED"
     results["downstream_publish_safely_skipped"] = res3["publish_market_candles_delta"] == "SKIPPED"
-    results["failure_alert_emitted_to_owner"] = len(runner3.notifications) > 0 and runner3.notifications[0]["recipient"] == "shivraj.dhote@finex.internal"
+    results["failure_alert_emitted_to_owner"] = (
+        len(runner3.notifications) > 0 and runner3.notifications[0]["recipient"] == "shivraj.dhote@finex.internal"
+    )
 
     return results
 

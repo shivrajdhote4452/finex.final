@@ -11,11 +11,10 @@ Coordinates:
 4. Database Snapshot Backup and Restoration Integrity Verification.
 """
 
-import json
 import os
 import sys
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 sys.path.insert(0, os.path.abspath("."))
 
@@ -24,7 +23,6 @@ sys.path.insert(0, os.path.abspath("."))
 from backend.app.domain.alerts_service import (
     _ALERT_EVENTS_STORE,
     _ALERT_RULES_STORE,
-    _DELIVERY_ATTEMPTS_STORE,
     _NOTIFICATIONS_STORE,
 )
 from backend.app.domain.goal_engine import (
@@ -38,7 +36,6 @@ from backend.app.domain.paper_trading_service import (
     _ORDERS_STORE,
     _POSITIONS_STORE,
 )
-
 from backend.app.domain.spending_service import (
     _TRANSACTIONS_STORE,
     _UPLOADS_STORE,
@@ -55,8 +52,10 @@ def export_user_data(user_id: str) -> Dict[str, Any]:
     user_accounts = [a for a in _ACCOUNTS_STORE.values() if a.get("user_id") == user_id]
     user_account_ids = {a["id"] for a in user_accounts}
     user_orders = [o for o in _ORDERS_STORE.values() if o.get("account_id") in user_account_ids]
-    user_positions = [pos for aid in user_account_ids if aid in _POSITIONS_STORE for pos in _POSITIONS_STORE[aid].values()]
-    user_ledger = [l for aid in user_account_ids if aid in _LEDGER_STORE for l in _LEDGER_STORE[aid]]
+    user_positions = [
+        pos for aid in user_account_ids if aid in _POSITIONS_STORE for pos in _POSITIONS_STORE[aid].values()
+    ]
+    user_ledger = [entry for aid in user_account_ids if aid in _LEDGER_STORE for entry in _LEDGER_STORE[aid]]
 
     # 3. Alerts
     user_alerts = [r for r in _ALERT_RULES_STORE.values() if r.get("user_id") == user_id]
@@ -129,7 +128,6 @@ def hard_delete_user_data(user_id: str) -> Dict[str, int]:
         _ACCOUNTS_STORE.pop(aid, None)
     deleted_counts["paper_orders"] = len(o_to_del)
     deleted_counts["paper_accounts"] = len(user_accounts)
-
 
     # 3. Alerts
     r_to_del = [rid for rid, r in _ALERT_RULES_STORE.items() if r.get("user_id") == user_id]

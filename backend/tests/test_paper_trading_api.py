@@ -235,3 +235,140 @@ async def test_paper_account_reset(app, auth_headers):
         assert data["reset"] is True
         assert data["summary"]["cash_balance"] == 100000.00
         assert len(data["summary"]["positions"]) == 0
+
+
+@pytest.mark.asyncio
+async def test_non_marketable_limit_buy_rejected_never_fills_above_limit(app, auth_headers):
+    """CH-05: LIMIT buy at INR 1.00 must never fill at market price of INR 2,500."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.post(
+            "/api/v1/paper-trading/orders",
+            json={
+                "symbol": "RELIANCE",
+                "side": "BUY",
+                "quantity": 10.0,
+                "order_type": "LIMIT",
+                "limit_price": 1.00,
+                "idempotency_key": "idemp-limit-buy-underpriced-01",
+            },
+            headers=auth_headers,
+        )
+        assert res.status_code == 200
+        data = res.json()["data"]
+        assert data["status"] == "REJECTED"
+        assert "exceeds submitted limit price" in data["rejection_reason"]
+        assert float(data["fill_price"]) == 0.0
+
+
+@pytest.mark.asyncio
+async def test_idempotency_same_key_same_payload_returns_identical_receipt(app, auth_headers):
+    """CH-05: Submitting identical key and payload returns saved receipt with 1 financial effect."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # First execution
+        payload = {
+            "symbol": "RELIANCE",
+            "side": "BUY",
+            "quantity": 2.0,
+            "order_type": "MARKET",
+            "idempotency_key": "idemp-repro-exact-01",
+        }
+        res1 = await client.post("/api/v1/paper-trading/orders", json=payload, headers=auth_headers)
+        assert res1.status_code == 200
+        data1 = res1.json()["data"]
+        assert data1["status"] == "FILLED"
+        order_id1 = data1["order_id"]
+        cash_after1 = data1["cash_balance_after"]
+
+        # Identical second execution
+        res2 = await client.post("/api/v1/paper-trading/orders", json=payload, headers=auth_headers)
+        assert res2.status_code == 200
+        data2 = res2.json()["data"]
+        assert data2["order_id"] == order_id1
+        assert data2["cash_balance_after"] == cash_after1
+
+
+@pytest.mark.asyncio
+async def test_idempotency_same_key_changed_payload_returns_409_conflict(app, auth_headers):
+    """CH-05: Submitting same key with changed payload produces HTTP 409 Conflict without second execution."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # First order: 2 RELIANCE
+        res1 = await client.post(
+            "/api/v1/paper-trading/orders",
+            json={
+                "symbol": "RELIANCE",
+                "side": "BUY",
+                "quantity": 2.0,
+                "order_type": "MARKET",
+                "idempotency_key": "idemp-collision-test-01",
+            },
+            headers=auth_headers,
+        )
+        assert res1.status_code == 200
+
+        # Second order: Same key, changed symbol TCS
+        res2 = await client.post(
+            "/api/v1/paper-trading/orders",
+            json={
+                "symbol": "TCS",
+                "side": "BUY",
+                "quantity": 2.0,
+                "order_type": "MARKET",
+                "idempotency_key": "idemp-collision-test-01",
+            },
+            headers=auth_headers,
+        )
+        assert res2.status_code == 409
+        assert "collision" in res2.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_idempotency_replay_preserves_historical_cash_after(app, auth_headers):
+    """CH-05: Replaying an old order after subsequent trades returns original cash-after receipt."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Order 1: 1 RELIANCE
+        res1 = await client.post(
+            "/api/v1/paper-trading/orders",
+            json={
+                "symbol": "RELIANCE",
+                "side": "BUY",
+                "quantity": 1.0,
+                "order_type": "MARKET",
+                "idempotency_key": "idemp-history-test-01",
+            },
+            headers=auth_headers,
+        )
+        cash_after1 = res1.json()["data"]["cash_balance_after"]
+
+        # Order 2: 1 TCS (causes cash balance to decrease further)
+        res2 = await client.post(
+            "/api/v1/paper-trading/orders",
+            json={
+                "symbol": "TCS",
+                "side": "BUY",
+                "quantity": 1.0,
+                "order_type": "MARKET",
+                "idempotency_key": "idemp-history-test-02",
+            },
+            headers=auth_headers,
+        )
+        cash_after2 = res2.json()["data"]["cash_balance_after"]
+        assert cash_after2 < cash_after1
+
+        # Replay Order 1 with original key: MUST return original cash_after1, not current cash_after2!
+        replay = await client.post(
+            "/api/v1/paper-trading/orders",
+            json={
+                "symbol": "RELIANCE",
+                "side": "BUY",
+                "quantity": 1.0,
+                "order_type": "MARKET",
+                "idempotency_key": "idemp-history-test-01",
+            },
+            headers=auth_headers,
+        )
+        assert replay.status_code == 200
+        assert replay.json()["data"]["cash_balance_after"] == cash_after1

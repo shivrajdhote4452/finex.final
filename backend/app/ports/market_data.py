@@ -16,6 +16,8 @@ class Quote(BaseModel):
     source: str = Field(..., description="Data provider name (e.g. yfinance, nse_report)")
     served_from_cache: bool = Field(False, description="Whether returned from cached storage")
     is_delayed: bool = Field(False, description="Whether the quote is delayed")
+    is_stale: bool = Field(False, description="Whether the quote is stale")
+    data_status: str = Field("fresh", description="Freshness status: fresh, delayed, stale, or unavailable")
 
 
 class HistoricalBar(BaseModel):

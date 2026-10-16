@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/api_client.dart';
 import '../theme/terminal_theme.dart';
 
 class MobileAskFinExScreen extends StatefulWidget {
@@ -10,41 +11,67 @@ class MobileAskFinExScreen extends StatefulWidget {
 
 class _MobileAskFinExScreenState extends State<MobileAskFinExScreen> {
   final TextEditingController _controller = TextEditingController();
+  bool _isLoading = false;
 
   final List<Map<String, dynamic>> _messages = [
     {
-      "role": "user",
-      "text": "Which holding is the largest in my portfolio?",
-    },
-    {
       "role": "assistant",
-      "headline": "TCS is your largest holding.",
-      "body": "In this illustrated portfolio, TCS is valued at ₹ 36,000. That is 36.2% of invested holdings worth ₹ 99,500. Cash is excluded. [1]",
-      "citation": "[1] Open holdings snapshot",
-      "evidence": "TCS: ₹ 36,000 / Holdings: ₹ 99,500 (36.2%). SEBI guideline: avoid single-stock concentration above 30%.",
+      "headline": "Welcome to Ask FinEx Mobile",
+      "body": "Ask questions grounded in verified regulatory publications (SEBI, RBI, NSE) and your authorized portfolio metrics. Citations and passage offsets are verifiable.",
+      "citation": "[1] Regulatory Evidence Index",
+      "evidence": "Verified citations are extracted from official circulars and handbooks without synthetic modification.",
     },
   ];
 
-  void _sendMessage() {
-    if (_controller.text.trim().isEmpty) return;
-    final text = _controller.text;
+  void _sendMessage() async {
+    if (_controller.text.trim().isEmpty || _isLoading) return;
+    final text = _controller.text.trim();
     _controller.clear();
 
     setState(() {
       _messages.add({"role": "user", "text": text});
+      _isLoading = true;
     });
 
-    Future.delayed(const Duration(milliseconds: 400), () {
+    try {
+      final res = await apiClient.sendAiMessage("conv-welcome-001", text);
+      final asst = res['assistant_message'];
+      if (asst != null) {
+        final citations = (asst['citations'] as List?) ?? [];
+        String citationLabel = "[1] Grounded Citation";
+        String evidenceText = "Grounded in verified regulatory documentation.";
+
+        if (citations.isNotEmpty) {
+          final first = citations[0];
+          citationLabel = "[1] ${first['publisher'] ?? 'SEBI'} (p. ${first['page_number'] ?? 1})";
+          evidenceText = first['excerpt'] ?? first['title'] ?? evidenceText;
+        }
+
+        setState(() {
+          _messages.add({
+            "role": "assistant",
+            "headline": asst['headline'] ?? "Regulatory Insights",
+            "body": asst['content'] ?? "",
+            "citation": citationLabel,
+            "evidence": evidenceText,
+          });
+        });
+      }
+    } catch (e) {
       setState(() {
         _messages.add({
           "role": "assistant",
-          "headline": "Asset allocation balances risk across sectors.",
-          "body": "According to the SEBI Investor Education Handbook, diversifying into multiple sectors reduces drawdown impact. [2]",
-          "citation": "[2] SEBI Investor Education Handbook (p. 14)",
-          "evidence": "Sector weights: Technology (42%), Energy (25%), Financials (24%).",
+          "headline": "Connection Issue",
+          "body": "Could not connect to the live FinEx RAG engine. Please verify the backend API is active at ${apiClient.baseUrl}.",
+          "citation": "[Warning] Offline Mode",
+          "evidence": "Offline fallback: live retrieval requires backend connectivity.",
         });
       });
-    });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   @override

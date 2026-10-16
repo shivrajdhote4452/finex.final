@@ -56,26 +56,29 @@ export const QuickTradeModal: React.FC = () => {
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     setErrorMessage(null);
     setIsSubmitting(true);
 
-    setTimeout(() => {
-      const res = executeOrder(
+    try {
+      const res = await executeOrder(
         symbol,
         tradeType,
         shares,
         orderType,
         orderType === 'LIMIT' ? limitPrice : undefined
       );
-      setIsSubmitting(false);
 
       if (res.success && res.receipt) {
         setReceipt(res.receipt);
       } else if (res.error) {
         setErrorMessage(res.error);
       }
-    }, 350);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Order execution failed.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleClose = () => {

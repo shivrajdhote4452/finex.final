@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { FinancialProvider } from './context/FinancialContext';
 import { AppShell, NavigationTab } from './components/layout/AppShell';
 import { WelcomeScreen } from './pages/WelcomeScreen';
@@ -13,14 +13,77 @@ import { AlertsScreen } from './pages/AlertsScreen';
 import { GoalsScreen } from './pages/GoalsScreen';
 import { SpendingScreen } from './pages/SpendingScreen';
 import { SettingsScreen } from './pages/SettingsScreen';
+import { apiClient } from './api/client';
 
 export const AppContent: React.FC = () => {
-  const [authState, setAuthState] = useState<'welcome' | 'onboarding' | 'authenticated'>('authenticated');
+  const [authState, setAuthState] = useState<'checking' | 'welcome' | 'onboarding' | 'authenticated'>('checking');
   const [currentTab, setCurrentTab] = useState<NavigationTab>('overview');
+
+  // Fail-closed initial session check against FastAPI /users/me
+  useEffect(() => {
+    const checkSession = async () => {
+      if (!apiClient.isAuthenticated()) {
+        setAuthState('welcome');
+        return;
+      }
+      try {
+        const user = await apiClient.auth.getMe();
+        if (user && user.onboarding_completed) {
+          setAuthState('authenticated');
+        } else {
+          setAuthState('onboarding');
+        }
+      } catch {
+        setAuthState('welcome');
+      }
+    };
+
+    checkSession();
+  }, []);
+
+  // Sleek Pure-Black Loading Splash
+  if (authState === 'checking') {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          backgroundColor: '#000000',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '16px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: '3px' }}>
+          <span style={{ fontSize: '32px', fontWeight: 900, color: '#FFFFFF', letterSpacing: '-0.03em' }}>Fin</span>
+          <span style={{ fontSize: '32px', fontWeight: 900, color: 'var(--color-action)', letterSpacing: '-0.03em' }}>Ex</span>
+        </div>
+        <div style={{ fontSize: '12px', color: '#8E8E93', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+          Initializing Session...
+        </div>
+      </div>
+    );
+  }
 
   // Handle flow transitions
   if (authState === 'welcome') {
-    return <WelcomeScreen onLoginSuccess={() => setAuthState('onboarding')} />;
+    return (
+      <WelcomeScreen
+        onLoginSuccess={async () => {
+          try {
+            const user = await apiClient.auth.getMe();
+            if (user && user.onboarding_completed) {
+              setAuthState('authenticated');
+            } else {
+              setAuthState('onboarding');
+            }
+          } catch {
+            setAuthState('authenticated');
+          }
+        }}
+      />
+    );
   }
 
   if (authState === 'onboarding') {
@@ -38,7 +101,14 @@ export const AppContent: React.FC = () => {
       {currentTab === 'alerts' && <AlertsScreen />}
       {currentTab === 'goals' && <GoalsScreen />}
       {currentTab === 'spending' && <SpendingScreen />}
-      {currentTab === 'settings' && <SettingsScreen onSignOut={() => setAuthState('welcome')} />}
+      {currentTab === 'settings' && (
+        <SettingsScreen
+          onSignOut={async () => {
+            await apiClient.auth.logout();
+            setAuthState('welcome');
+          }}
+        />
+      )}
     </AppShell>
   );
 };

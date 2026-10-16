@@ -55,6 +55,8 @@ mobile/ios/Flutter/app.framework
 mobile/android/app/gradlew
 mobile/android/app/gradlew.bat
 mobile/android/local.properties
+.gradle/
+*/.gradle/
 
 # Database & local data
 *.sqlite3

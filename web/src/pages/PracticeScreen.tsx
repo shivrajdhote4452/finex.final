@@ -53,19 +53,18 @@ export const PracticeScreen: React.FC = () => {
     }
   };
 
-  const handleExecute = () => {
+  const handleExecute = async () => {
     setErrorMessage(null);
     setIsExecuting(true);
 
-    setTimeout(() => {
-      const result = executeOrder(
+    try {
+      const result = await executeOrder(
         selectedSymbol,
         orderAction,
         shares,
         orderType,
         orderType === 'LIMIT' ? limitPrice : undefined
       );
-      setIsExecuting(false);
 
       if (result.success && result.receipt) {
         setLastReceipt(result.receipt);
@@ -73,12 +72,16 @@ export const PracticeScreen: React.FC = () => {
       } else if (result.error) {
         setErrorMessage(result.error);
       }
-    }, 350);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Execution failed.');
+    } finally {
+      setIsExecuting(false);
+    }
   };
 
   // 1-Click Square Off Position
-  const handleSquareOff = (symbol: string, qty: number) => {
-    const res = executeOrder(symbol, 'SELL', qty, 'MARKET');
+  const handleSquareOff = async (symbol: string, qty: number) => {
+    const res = await executeOrder(symbol, 'SELL', qty, 'MARKET');
     if (res.success && res.receipt) {
       setLastReceipt(res.receipt);
       playTradeChime();
@@ -86,8 +89,8 @@ export const PracticeScreen: React.FC = () => {
   };
 
   // 1-Click Add Shares
-  const handleAddShares = (symbol: string, qty: number) => {
-    const res = executeOrder(symbol, 'BUY', qty, 'MARKET');
+  const handleAddShares = async (symbol: string, qty: number) => {
+    const res = await executeOrder(symbol, 'BUY', qty, 'MARKET');
     if (res.success && res.receipt) {
       setLastReceipt(res.receipt);
       playTradeChime();

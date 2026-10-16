@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiClient } from '../api/client';
 
 interface WelcomeScreenProps {
   onLoginSuccess: () => void;
@@ -9,7 +10,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onLoginSuccess }) 
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleGoogleSignIn = () => {
+  const handleGoogleSignIn = async () => {
     if (!consentChecked) {
       setErrorMessage('You must accept the Terms and Privacy Policy to proceed.');
       return;
@@ -17,10 +18,16 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onLoginSuccess }) 
     setLoading(true);
     setErrorMessage(null);
 
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      // Connect to verified identity endpoint
+      await apiClient.auth.devLogin('shivraj.dhote@finex.internal', 'Shivraj Dhote');
+      await apiClient.auth.recordConsent('v1.0');
       onLoginSuccess();
-    }, 300);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Authentication failed. Please verify the backend service is running.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

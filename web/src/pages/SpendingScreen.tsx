@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useFinancial } from '../context/FinancialContext';
+import { apiClient } from '../api/client';
 
 export const SpendingScreen: React.FC = () => {
-  const { spendingItems, addSpendingItem } = useFinancial();
+  const { spendingItems, addSpendingItem, refreshAccount } = useFinancial();
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [view, setView] = useState<'transactions' | 'csv-import'>('transactions');
@@ -30,6 +31,57 @@ export const SpendingScreen: React.FC = () => {
     setShowAddModal(false);
   };
 
+  const [csvPreview, setCsvPreview] = useState<{
+    preview_id: string;
+    file_name: string;
+    total_rows: number;
+    valid_count: number;
+    duplicate_count: number;
+    invalid_count: number;
+    valid_rows: any[];
+    invalid_rows: any[];
+  } | null>(null);
+  const [uploadLoading, setUploadLoading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      const content = evt.target?.result as string;
+      if (!content) return;
+      setUploadLoading(true);
+      setUploadError(null);
+      try {
+        const preview = await apiClient.spending.previewCsv(file.name, content);
+        setCsvPreview(preview);
+        setView('csv-import');
+      } catch (err: any) {
+        setUploadError(err?.message || 'CSV parse failed.');
+      } finally {
+        setUploadLoading(false);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleCommitPreview = async () => {
+    if (!csvPreview) return;
+    setUploadLoading(true);
+    try {
+      await apiClient.spending.commitCsv(csvPreview.preview_id);
+      await refreshAccount();
+      setCsvPreview(null);
+      setView('transactions');
+    } catch (err: any) {
+      setUploadError(err?.message || 'Failed to commit transactions.');
+    } finally {
+      setUploadLoading(false);
+    }
+  };
+
   if (view === 'csv-import') {
     return (
       <div style={{ maxWidth: '1440px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '28px' }}>
@@ -39,34 +91,57 @@ export const SpendingScreen: React.FC = () => {
               Privacy-Preserving Ingestion
             </span>
             <h1 style={{ fontSize: '32px', fontWeight: 700, color: '#FFFFFF', marginTop: '4px' }}>
-              CSV Audit & Staging Preview
+              CSV Audit & Staging Preview: {csvPreview?.file_name || 'Bank Statement'}
             </h1>
             <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginTop: '4px' }}>
               Raw merchant descriptions are masked server-side before category enrichment.
             </p>
           </div>
-          <button onClick={() => setView('transactions')} className="btn btn-secondary">
-            ← Back to Transactions
-          </button>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <button onClick={() => { setCsvPreview(null); setView('transactions'); }} className="btn btn-secondary">
+              Cancel (0 Transactions Committed)
+            </button>
+            <button
+              onClick={handleCommitPreview}
+              disabled={Boolean(uploadLoading || !csvPreview || csvPreview.valid_count === 0)}
+              className="btn btn-action"
+            >
+              {uploadLoading ? 'Committing...' : `Confirm & Commit (${csvPreview?.valid_count ?? 0} Rows)`}
+            </button>
+          </div>
         </div>
+
+        {uploadError && (
+          <div style={{ padding: '12px 16px', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid #EF4444', color: '#FCA5A5', borderRadius: '4px', fontSize: '13px' }}>
+            {uploadError}
+          </div>
+        )}
 
         {/* Audit Metrics */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px' }}>
           <div className="glass-card" style={{ padding: '20px' }}>
             <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Rows Parsed</span>
-            <div className="tabular-nums" style={{ fontSize: '32px', fontWeight: 700, color: '#FFFFFF', marginTop: '6px' }}>128</div>
+            <div className="tabular-nums" style={{ fontSize: '32px', fontWeight: 700, color: '#FFFFFF', marginTop: '6px' }}>
+              {csvPreview?.total_rows ?? 128}
+            </div>
           </div>
           <div className="glass-card" style={{ padding: '20px' }}>
             <span style={{ fontSize: '11px', color: 'var(--color-profit)', textTransform: 'uppercase' }}>Valid Staged</span>
-            <div className="tabular-nums" style={{ fontSize: '32px', fontWeight: 700, color: 'var(--color-profit)', marginTop: '6px' }}>120</div>
+            <div className="tabular-nums" style={{ fontSize: '32px', fontWeight: 700, color: 'var(--color-profit)', marginTop: '6px' }}>
+              {csvPreview?.valid_count ?? 120}
+            </div>
           </div>
           <div className="glass-card" style={{ padding: '20px' }}>
             <span style={{ fontSize: '11px', color: 'var(--color-virtual)', textTransform: 'uppercase' }}>Duplicates</span>
-            <div className="tabular-nums" style={{ fontSize: '32px', fontWeight: 700, color: 'var(--color-virtual)', marginTop: '6px' }}>5</div>
+            <div className="tabular-nums" style={{ fontSize: '32px', fontWeight: 700, color: 'var(--color-virtual)', marginTop: '6px' }}>
+              {csvPreview?.duplicate_count ?? 5}
+            </div>
           </div>
           <div className="glass-card" style={{ padding: '20px' }}>
             <span style={{ fontSize: '11px', color: 'var(--color-loss)', textTransform: 'uppercase' }}>Requires Fix</span>
-            <div className="tabular-nums" style={{ fontSize: '32px', fontWeight: 700, color: 'var(--color-loss)', marginTop: '6px' }}>3</div>
+            <div className="tabular-nums" style={{ fontSize: '32px', fontWeight: 700, color: 'var(--color-loss)', marginTop: '6px' }}>
+              {csvPreview?.invalid_count ?? 3}
+            </div>
           </div>
         </div>
 
@@ -83,33 +158,29 @@ export const SpendingScreen: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
-                <td style={{ padding: '12px 14px' }}>05 Oct 2026</td>
-                <td style={{ padding: '12px 14px' }}>Merchant ••42</td>
-                <td style={{ padding: '12px 14px' }} className="tabular-nums">₹1,200.00</td>
-                <td style={{ padding: '12px 14px' }}>Shopping</td>
-                <td style={{ padding: '12px 14px', textAlign: 'right' }}>
-                  <span className="badge badge-profit">Valid</span>
-                </td>
-              </tr>
-              <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
-                <td style={{ padding: '12px 14px' }}>06 Oct 2026</td>
-                <td style={{ padding: '12px 14px' }}>Merchant ••86</td>
-                <td style={{ padding: '12px 14px' }} className="tabular-nums">₹650.00</td>
-                <td style={{ padding: '12px 14px' }}>Transport</td>
-                <td style={{ padding: '12px 14px', textAlign: 'right' }}>
-                  <span className="badge badge-virtual">Duplicate Ignored</span>
-                </td>
-              </tr>
-              <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)', background: 'rgba(239, 68, 68, 0.05)' }}>
-                <td style={{ padding: '12px 14px', color: 'var(--color-loss)' }}>Invalid date format</td>
-                <td style={{ padding: '12px 14px' }}>Merchant ••19</td>
-                <td style={{ padding: '12px 14px' }} className="tabular-nums">₹2,100.00</td>
-                <td style={{ padding: '12px 14px' }}>Unassigned</td>
-                <td style={{ padding: '12px 14px', textAlign: 'right' }}>
-                  <span className="badge badge-loss">Fix Required</span>
-                </td>
-              </tr>
+              {csvPreview && csvPreview.valid_rows.length > 0 ? (
+                csvPreview.valid_rows.slice(0, 15).map((r, idx) => (
+                  <tr key={idx} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
+                    <td style={{ padding: '12px 14px' }}>{r.date}</td>
+                    <td style={{ padding: '12px 14px' }}>{r.masked_description}</td>
+                    <td style={{ padding: '12px 14px' }} className="tabular-nums">₹{Number(r.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td style={{ padding: '12px 14px' }}>{r.category}</td>
+                    <td style={{ padding: '12px 14px', textAlign: 'right' }}>
+                      <span className="badge badge-profit">Valid ({Math.round(r.confidence * 100)}%)</span>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
+                  <td style={{ padding: '12px 14px' }}>05 Oct 2026</td>
+                  <td style={{ padding: '12px 14px' }}>Merchant ••42</td>
+                  <td style={{ padding: '12px 14px' }} className="tabular-nums">₹1,200.00</td>
+                  <td style={{ padding: '12px 14px' }}>Shopping</td>
+                  <td style={{ padding: '12px 14px', textAlign: 'right' }}>
+                    <span className="badge badge-profit">Valid</span>
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -137,9 +208,10 @@ export const SpendingScreen: React.FC = () => {
           <button onClick={() => setShowAddModal(true)} className="btn-emerald" style={{ padding: '10px 18px', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
             + Log Transaction
           </button>
-          <button onClick={() => setView('csv-import')} className="btn btn-secondary">
-            CSV Staging Audit
-          </button>
+          <label className="btn btn-secondary" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}>
+            Upload CSV Statement
+            <input type="file" accept=".csv" onChange={handleFileUpload} style={{ display: 'none' }} />
+          </label>
         </div>
       </div>
 

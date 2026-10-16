@@ -11,7 +11,7 @@ Simulates and validates RBAC matrices against Databricks Unity Catalog permissio
 """
 
 import sys
-from typing import Dict, List, Set
+from typing import Dict, Set
 
 
 class MockUnityCatalogAuthorizer:

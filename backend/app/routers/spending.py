@@ -32,6 +32,87 @@ class CsvTextUploadRequest(BaseModel):
     csv_content: str
 
 
+class CsvCommitRequest(BaseModel):
+    preview_id: str
+    accepted_indices: Optional[list[int]] = None
+
+
+class ManualTransactionRequest(BaseModel):
+    transaction_date: str
+    amount: float
+    description: str
+    transaction_type: str = "DEBIT"
+    category_id: Optional[str] = None
+
+
+@router.post("/upload/preview")
+async def preview_transactions_csv(
+    request: Request,
+    payload: CsvTextUploadRequest,
+    current_user: dict = Depends(get_current_user_id),
+):
+    """CH-09: Parse bank statement CSV into preview without committing transactions."""
+    cid = getattr(request.state, "correlation_id", None)
+    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+
+    try:
+        res = spending_service.preview_csv(
+            user_id=user_id,
+            file_name=payload.file_name,
+            csv_content=payload.csv_content,
+        )
+        return create_response_envelope(data=res, correlation_id=cid)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+
+
+@router.post("/upload/commit")
+async def commit_transactions_csv(
+    request: Request,
+    payload: CsvCommitRequest,
+    current_user: dict = Depends(get_current_user_id),
+):
+    """CH-09: Commit accepted transactions from an approved preview session."""
+    cid = getattr(request.state, "correlation_id", None)
+    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+
+    try:
+        res = spending_service.commit_csv(
+            user_id=user_id,
+            preview_id=payload.preview_id,
+            accepted_indices=payload.accepted_indices,
+        )
+        return create_response_envelope(data=res, correlation_id=cid)
+    except KeyError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.post("/manual")
+async def add_manual_transaction(
+    request: Request,
+    payload: ManualTransactionRequest,
+    current_user: dict = Depends(get_current_user_id),
+):
+    """CH-09: Create a manual expense/income entry."""
+    cid = getattr(request.state, "correlation_id", None)
+    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+
+    try:
+        from decimal import Decimal
+
+        res = spending_service.add_manual_transaction(
+            user_id=user_id,
+            transaction_date=payload.transaction_date,
+            amount=Decimal(str(payload.amount)),
+            description=payload.description,
+            transaction_type=payload.transaction_type,
+            category_id=payload.category_id,
+        )
+        return create_response_envelope(data=res, correlation_id=cid)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+
+
 @router.post("/upload")
 async def upload_transactions_csv(
     request: Request,

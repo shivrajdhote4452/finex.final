@@ -259,3 +259,31 @@ class AlertsService:
                 _DELIVERY_ATTEMPTS_STORE.setdefault(notif_id, []).append(attempt)
 
         return triggered_events
+
+    def get_user_notifications(self, user_id: str, unread_only: bool = False) -> List[Dict[str, Any]]:
+        """CH-09: Retrieve in-app notifications for authenticated user."""
+        notifs = [n for n in _NOTIFICATIONS_STORE.values() if n["user_id"] == user_id]
+        if unread_only:
+            notifs = [n for n in notifs if not n["is_read"]]
+        notifs.sort(key=lambda x: x["created_at"], reverse=True)
+        return notifs
+
+    def mark_notification_read(self, user_id: str, notif_id: str) -> bool:
+        """Mark single notification as read."""
+        n = _NOTIFICATIONS_STORE.get(notif_id)
+        if n and n["user_id"] == user_id:
+            n["is_read"] = True
+            n["read_at"] = datetime.now(timezone.utc).isoformat()
+            return True
+        return False
+
+    def mark_all_notifications_read(self, user_id: str) -> int:
+        """Mark all notifications as read for user."""
+        count = 0
+        now_str = datetime.now(timezone.utc).isoformat()
+        for n in _NOTIFICATIONS_STORE.values():
+            if n["user_id"] == user_id and not n["is_read"]:
+                n["is_read"] = True
+                n["read_at"] = now_str
+                count += 1
+        return count

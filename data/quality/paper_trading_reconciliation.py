@@ -64,9 +64,7 @@ class PaperTradingReconciler:
 
         # 1. Cash Balance vs Ledger Sum
         checks_run += 1
-        ledger_cash_sum = sum(
-            Decimal(str(e["amount"])) for e in ledger if e.get("account_id") == acct_id
-        )
+        ledger_cash_sum = sum(Decimal(str(e["amount"])) for e in ledger if e.get("account_id") == acct_id)
         acct_cash = Decimal(str(account.get("current_cash", "0.00")))
 
         if abs(acct_cash - ledger_cash_sum) > Decimal("0.001"):
@@ -111,9 +109,7 @@ class PaperTradingReconciler:
                 trade_qtys[sym] = trade_qtys.get(sym, Decimal("0.00")) - qty
 
         pos_map = {
-            p["symbol"].upper(): Decimal(str(p["quantity"]))
-            for p in positions
-            if p.get("account_id") == acct_id
+            p["symbol"].upper(): Decimal(str(p["quantity"])) for p in positions if p.get("account_id") == acct_id
         }
 
         # Check all traded symbols against position map

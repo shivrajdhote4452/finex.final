@@ -13,7 +13,7 @@ Implements verifiable data quality rules:
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set
@@ -71,9 +71,7 @@ class MarketDataQualityChecker:
     ) -> MarketDQReport:
         now = reference_time or datetime.now(timezone.utc)
         violations: List[MarketDQViolation] = []
-        total_records = (
-            len(quotes) + len(watchlists) + len(watchlist_items) + len(portfolios) + len(holdings)
-        )
+        total_records = len(quotes) + len(watchlists) + len(watchlist_items) + len(portfolios) + len(holdings)
 
         known_security_symbols: Set[str] = set()
 
@@ -111,7 +109,7 @@ class MarketDataQualityChecker:
             else:
                 age = now - obs_at
                 is_weekend = now.weekday() in (5, 6) or obs_at.weekday() in (5, 6)
-                
+
                 # Check for holiday / weekend vs active feed outage
                 if age > timedelta(hours=self.weekend_grace_hours):
                     violations.append(
@@ -126,14 +124,18 @@ class MarketDataQualityChecker:
                     )
                 elif age > timedelta(hours=self.stale_threshold_hours):
                     severity = DQSeverity.WARNING if is_weekend else DQSeverity.BLOCKING
-                    reason = "Market closed / weekend observation grace." if is_weekend else "Trading day quote is delayed > 24 hours."
+                    reason = (
+                        "Market closed / weekend observation grace."
+                        if is_weekend
+                        else "Trading day quote is delayed > 24 hours."
+                    )
                     violations.append(
                         MarketDQViolation(
                             rule_name="QUOTE_FRESHNESS",
                             severity=severity,
                             entity_type="market_quote",
                             entity_id=q.get("id"),
-                            details=f"Quote for '{sym}' is stale (age: {age.total_seconds()/3600:.1f}h). {reason}",
+                            details=f"Quote for '{sym}' is stale (age: {age.total_seconds() / 3600:.1f}h). {reason}",
                             affected_symbol=sym,
                         )
                     )
@@ -310,9 +312,7 @@ class MarketDataQualityChecker:
                 continue
 
             # Check if all holdings have quotes
-            missing_symbols = [
-                h["symbol"].upper() for h in port_holdings if h["symbol"].upper() not in latest_prices
-            ]
+            missing_symbols = [h["symbol"].upper() for h in port_holdings if h["symbol"].upper() not in latest_prices]
 
             if missing_symbols:
                 violations.append(
@@ -327,10 +327,7 @@ class MarketDataQualityChecker:
                 )
             else:
                 # Fully valued portfolio: verify weights sum to 1.0 (100%)
-                total_val = sum(
-                    Decimal(str(h["quantity"])) * latest_prices[h["symbol"].upper()]
-                    for h in port_holdings
-                )
+                total_val = sum(Decimal(str(h["quantity"])) * latest_prices[h["symbol"].upper()] for h in port_holdings)
                 if total_val > Decimal("0"):
                     weights_sum = sum(
                         (Decimal(str(h["quantity"])) * latest_prices[h["symbol"].upper()]) / total_val
