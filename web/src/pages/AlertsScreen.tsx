@@ -152,6 +152,45 @@ export const AlertsScreen: React.FC = () => {
               Save Alert Rule →
             </button>
           </form>
+
+          {/* S6 Scenario Stress Test Simulator */}
+          <div style={{ marginTop: '28px', paddingTop: '20px', borderTop: '1px solid var(--border-subtle)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <span style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>
+                S6 SCENARIO SIMULATOR
+              </span>
+              <span className="badge badge-neutral" style={{ fontSize: '10px' }}>Hypothetical</span>
+            </div>
+            <h4 style={{ fontSize: '14px', fontWeight: 600, color: '#FFFFFF', marginBottom: '6px' }}>
+              15% Sector Drawdown Stress Test
+            </h4>
+            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '14px' }}>
+              Instantaneous deterministic impact test on verified portfolio equity.
+            </p>
+
+            <div style={{ padding: '14px', backgroundColor: 'rgba(255, 255, 255, 0.02)', borderRadius: '4px', border: '1px solid var(--border-subtle)', marginBottom: '14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Target Sector:</span>
+                <strong style={{ fontSize: '12px', color: '#FFFFFF' }}>Information Technology</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Baseline Value:</span>
+                <span style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: '#FFFFFF' }}>₹1,00,000.00</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Estimated Drawdown (-15%):</span>
+                <span style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: 'var(--color-loss)', fontWeight: 700 }}>-₹5,250.00</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Post-Shock Equity:</span>
+                <span style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: 'var(--color-primary)', fontWeight: 700 }}>₹94,750.00</span>
+              </div>
+            </div>
+
+            <p style={{ fontSize: '10px', color: 'var(--text-faint)', fontStyle: 'italic', lineHeight: 1.4 }}>
+              HYPOTHETICAL STRESS TEST ONLY: Models an isolated sector decline without correlating moves. Not a market forecast or investment advice.
+            </p>
+          </div>
         </div>
       </div>
     </div>

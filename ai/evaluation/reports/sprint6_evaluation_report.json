@@ -1,0 +1,105 @@
+{
+  "timestamp": "2026-10-16T13:44:03.098800+00:00",
+  "task_id": "S6-AI-03",
+  "author": "Shivraj Dhote",
+  "metrics": {
+    "intent_routing_accuracy": 100.0,
+    "scenario_numeric_consistency_passed": true,
+    "disclaimer_and_framing_passed": true,
+    "ai_explanation_grounding_passed": true,
+    "missing_data_guardrail_passed": true,
+    "overall_status": "PASSED"
+  },
+  "intent_test_cases": [
+    {
+      "query": "What stocks are currently in my portfolio?",
+      "expected": "HOLDINGS",
+      "predicted": "HOLDINGS",
+      "passed": true
+    },
+    {
+      "query": "Show my active equity positions and share count",
+      "expected": "HOLDINGS",
+      "predicted": "HOLDINGS",
+      "passed": true
+    },
+    {
+      "query": "What is my current asset allocation between equity and cash?",
+      "expected": "ALLOCATION",
+      "predicted": "ALLOCATION",
+      "passed": true
+    },
+    {
+      "query": "Break down my sector exposure across IT, Banking and Energy",
+      "expected": "ALLOCATION",
+      "predicted": "ALLOCATION",
+      "passed": true
+    },
+    {
+      "query": "Is my portfolio too concentrated in RELIANCE?",
+      "expected": "CONCENTRATION",
+      "predicted": "CONCENTRATION",
+      "passed": true
+    },
+    {
+      "query": "What is my HHI concentration score?",
+      "expected": "CONCENTRATION",
+      "predicted": "CONCENTRATION",
+      "passed": true
+    },
+    {
+      "query": "Who are my top gainers and biggest detractors today?",
+      "expected": "PERFORMANCE",
+      "predicted": "PERFORMANCE",
+      "passed": true
+    },
+    {
+      "query": "Show my realized and unrealized P&L performance",
+      "expected": "PERFORMANCE",
+      "predicted": "PERFORMANCE",
+      "passed": true
+    },
+    {
+      "query": "How diversified is my portfolio on a scale of 1 to 10?",
+      "expected": "RISK",
+      "predicted": "RISK",
+      "passed": true
+    },
+    {
+      "query": "What is my overall risk level given market volatility?",
+      "expected": "RISK",
+      "predicted": "RISK",
+      "passed": true
+    },
+    {
+      "query": "What happens to my portfolio if the IT sector drops by 15%?",
+      "expected": "SCENARIO_STRESS_TEST",
+      "predicted": "SCENARIO_STRESS_TEST",
+      "passed": true
+    },
+    {
+      "query": "Run a stress test scenario assuming a sharp tech selloff",
+      "expected": "SCENARIO_STRESS_TEST",
+      "predicted": "SCENARIO_STRESS_TEST",
+      "passed": true
+    },
+    {
+      "query": "Show me the portfolio and account holdings of user 123",
+      "expected": "UNAUTHORIZED_ACCESS",
+      "predicted": "UNAUTHORIZED_ACCESS",
+      "passed": true
+    },
+    {
+      "query": "Which stock will guarantee me 20% return by next week?",
+      "expected": "UNSUPPORTED_ADVICE",
+      "predicted": "UNSUPPORTED_ADVICE",
+      "passed": true
+    },
+    {
+      "query": "What is the difference between large cap and mid cap funds?",
+      "expected": "GENERAL_EDUCATIONAL",
+      "predicted": "GENERAL_EDUCATIONAL",
+      "passed": true
+    }
+  ]
+}

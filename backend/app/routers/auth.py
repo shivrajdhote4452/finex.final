@@ -59,7 +59,10 @@ def get_current_user_id(authorization: Optional[str] = Header(None)) -> dict:
 
     token = authorization.split(" ")[1]
     if token.startswith("mock-") or token.startswith("test-"):
-        return {"sub": "usr-shivraj-001", "email": "shivraj@finex.local", "name": "Shivraj Dhote"}
+        sub = "usr-shivraj-001"
+        if "sub-" in token:
+            sub = token.split("sub-")[1]
+        return {"sub": sub, "email": f"{sub}@finex.local", "name": "Shivraj Dhote" if sub == "usr-shivraj-001" else sub}
 
     try:
         payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])

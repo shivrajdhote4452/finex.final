@@ -132,18 +132,18 @@
 
 | Task ID | Track | Title & Description | Status | Evidence / Notes |
 |---|---|---|---|---|
-| S6-PRD-01 | PRD | React alert management, notification center and portfolio conversation | Verified Working | `AlertsScreen.tsx` with price rules |
-| S6-PRD-02 | PRD | Flutter alert management, notification center and portfolio conversation | Backlog | Mobile track |
-| S6-PRD-03 | PRD | Cross-platform E2E tests for alert creation/trigger/read and numbers check | Backlog | |
-| S6-API-01 | API | Alert rule CRUD and evaluation endpoints (price, movement, concentration, risk) | Backlog | |
-| S6-API-02 | API | Deterministic portfolio intelligence service (allocation, concentration, scenario) | Backlog | |
-| S6-API-03 | API | Notifications list/read/mark-all endpoints and delivery status tracking | Backlog | |
-| S6-DAT-01 | DAT | alert_rules, alert_events, notifications, delivery_attempts tables | Backlog |
-| S6-DAT-02 | DAT | Portfolio snapshot/metrics pipeline (sector exposure, concentration score) | Backlog |
-| S6-DAT-03 | DAT | Alert evaluation job and monitoring queries for due rules, duplicate suppression | Backlog |
-| S6-AI-01 | AI | Portfolio-question intent router for holdings, allocation, scenario, fallback | Backlog |
-| S6-AI-02 | AI | Conversational portfolio explanation prompt/tool chain | Backlog |
-| S6-AI-03 | AI | Scenario/risk evaluation set (concentration, 15% shock, missing price) | Backlog |
+| S6-PRD-01 | PRD | React alert management, notification center and portfolio conversation | Verified Working | `AlertsScreen.tsx` with price rules & 15% sector shock simulator |
+| S6-PRD-02 | PRD | Flutter alert management, notification center and portfolio conversation | Verified Working | `mobile/lib/screens/alerts_screen.dart`, `more_screen.dart` |
+| S6-PRD-03 | PRD | Cross-platform E2E tests for alert creation/trigger/read and numbers check | Verified Working | `mobile/test/widget_test.dart`, `test_alerts_and_portfolio_intelligence_api.py` |
+| S6-API-01 | API | Alert rule CRUD and evaluation endpoints (price, movement, concentration, risk) | Verified Working | `backend/app/routers/alerts.py`, `AlertsService` |
+| S6-API-02 | API | Deterministic portfolio intelligence service (allocation, concentration, scenario) | Verified Working | `backend/app/domain/portfolio_intelligence_service.py`, `/portfolio-intelligence` |
+| S6-API-03 | API | Notifications list/read/mark-all endpoints and delivery status tracking | Verified Working | `backend/app/routers/notifications.py`, `NotificationsService` |
+| S6-DAT-01 | DAT | alert_rules, alert_events, notifications, delivery_attempts tables | Verified Working | `data/ddl/050_alerts.sql`, `backend/app/models/alerts.py` |
+| S6-DAT-02 | DAT | Portfolio snapshot/metrics pipeline (sector exposure, concentration score) | Verified Working | `portfolio_intelligence_service.py`, `SectorExposure`, HHI score |
+| S6-DAT-03 | DAT | Alert evaluation job and monitoring queries for due rules, duplicate suppression | Verified Working | `data/quality/alert_evaluation_runner.py`, 0 cooldown violation breaks |
+| S6-AI-01 | AI | Portfolio-question intent router for holdings, allocation, scenario, fallback | Verified Working | `backend/app/domain/portfolio_intent_router.py` (100% benchmark accuracy) |
+| S6-AI-02 | AI | Conversational portfolio explanation prompt/tool chain | Verified Working | `backend/app/domain/portfolio_intelligence_ai.py` |
+| S6-AI-03 | AI | Scenario/risk evaluation set (concentration, 15% shock, missing price) | Verified Working | 100% passed in `ai/evaluation/evaluate_sprint6.py` |
 
 ---
 
