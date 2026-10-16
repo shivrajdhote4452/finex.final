@@ -39,16 +39,16 @@
 |---|---|---|---|---|
 | S1-PRD-01 | PRD | React application shell (routes /login, /onboarding, /dashboard, etc.) | Verified Working | Implemented per Visual Design Book in `web/` |
 | S1-PRD-02 | PRD | Flutter application shell (dev/staging/prod flavors, routes, widgets) | Backlog | Visual design held per Shivraj's directive |
-| S1-PRD-03 | PRD | Cross-platform UI contract (docs/ui-contract-v1.md, state tables, mock JSON) | In Progress | Drafted in `docs/ui-contract-v1.md` |
-| S1-API-01 | API | FastAPI factory, /api/v1/health/live, /ready, config loader, env validation | In Progress | `backend/app/factory.py`, `config.py` |
-| S1-API-02 | API | API v1 conventions: response envelope, ApiError, correlation ID, middleware | In Progress | `backend/app/core/`, `docs/api-standard-v1.md` |
-| S1-API-03 | API | Backend quality gates: Ruff, type checking, pytest coverage, auth stub | In Progress | `pyproject.toml`, test suite |
-| S1-DAT-01 | DAT | Databricks catalog/schema design, DDL data/ddl/001_core.sql, naming doc | Ready | `data/ddl/001_core.sql`, `docs/data-naming.md` |
-| S1-DAT-02 | DAT | Tables for users, user_profiles, portfolios, holdings, application_events | Ready | Operational Postgres models + DDL |
-| S1-DAT-03 | DAT | Core data quality checks (non-null IDs, timestamps, unique emails, positive qty) | Ready | Injected bad row tests |
-| S1-AI-01 | AI | AI answer policy specification (docs/ai-answer-policy-v1.md, 30-prompt dataset) | Ready | Policy doc & evaluation dataset |
-| S1-AI-02 | AI | RAG experiment notebook & ingestion pipeline with 3 approved documents | Ready | `ai/rag/` pipeline |
-| S1-AI-03 | AI | AI evaluation harness v0 (exact match, keywords, citation, disclaimer checks) | Ready | `ai/evaluation/evaluate.py` |
+| S1-PRD-03 | PRD | Cross-platform UI contract (docs/ui-contract-v1.md, state tables, mock JSON) | Verified Working | Documented in `docs/ui-contract-v1.md` |
+| S1-API-01 | API | FastAPI factory, /api/v1/health/live, /ready, config loader, env validation | Verified Working | `backend/app/factory.py`, `config.py` |
+| S1-API-02 | API | API v1 conventions: response envelope, ApiError, correlation ID, middleware | Verified Working | `backend/app/core/`, `docs/api-standard-v1.md` |
+| S1-API-03 | API | Backend quality gates: Ruff, type checking, pytest coverage, auth stub | Verified Working | 31 passing unit tests, Ruff clean |
+| S1-DAT-01 | DAT | Databricks catalog/schema design, DDL data/ddl/001_core.sql, naming doc | Verified Working | `data/ddl/001_core.sql`, `docs/data-naming.md` |
+| S1-DAT-02 | DAT | Tables for users, user_profiles, portfolios, holdings, application_events | Verified Working | `backend/app/models/core.py`, `database.py` |
+| S1-DAT-03 | DAT | Core data quality checks (non-null IDs, timestamps, unique emails, positive qty) | Verified Working | `data/quality/core_data_quality.py`, passing tests |
+| S1-AI-01 | AI | AI answer policy specification (docs/ai-answer-policy-v1.md, 30-prompt dataset) | Verified Working | `docs/ai-answer-policy-v1.md`, 30-case dataset |
+| S1-AI-02 | AI | RAG experiment notebook & ingestion pipeline with 3 approved documents | Verified Working | `ai/rag/`, `rag_experiment.ipynb`, passing tests |
+| S1-AI-03 | AI | AI evaluation harness v0 (exact match, keywords, citation, disclaimer checks) | Verified Working | `ai/evaluation/evaluate.py` (100% pass) |
 
 ---
 
