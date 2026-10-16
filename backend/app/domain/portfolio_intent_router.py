@@ -19,8 +19,8 @@ Coordinates:
 """
 
 from enum import Enum
-import re
-from typing import Any, Dict, List, Optional
+from typing import Optional
+
 from pydantic import BaseModel
 
 
@@ -53,7 +53,20 @@ class PortfolioIntentRouter:
         q_lower = query.strip().lower()
 
         # 0. Prompt Injection / Jailbreak / Instruction Override check
-        if any(p in q_lower for p in ["system prompt", "override", "jailbreak", "ignore all previous", "ignore previous", "forget what you were told", "internal credentials", "system update", "unrestricted"]):
+        if any(
+            p in q_lower
+            for p in [
+                "system prompt",
+                "override",
+                "jailbreak",
+                "ignore all previous",
+                "ignore previous",
+                "forget what you were told",
+                "internal credentials",
+                "system update",
+                "unrestricted",
+            ]
+        ):
             return IntentRoutingResult(
                 query=query,
                 predicted_intent=PortfolioIntent.UNAUTHORIZED_ACCESS,
@@ -65,8 +78,9 @@ class PortfolioIntentRouter:
             )
 
         # 1. Unauthorized Access / Cross-user breach check
-        if any(p in q_lower for p in ["other user", "another account", "usr-", "user 123", "admin view", "someone else"]):
-
+        if any(
+            p in q_lower for p in ["other user", "another account", "usr-", "user 123", "admin view", "someone else"]
+        ):
             return IntentRoutingResult(
                 query=query,
                 predicted_intent=PortfolioIntent.UNAUTHORIZED_ACCESS,
@@ -78,7 +92,17 @@ class PortfolioIntentRouter:
             )
 
         # 2. Unsupported advice / return guarantee / tips check
-        if any(p in q_lower for p in ["guarantee", "tip", "which stock to buy now", "tell me what to trade", "sure shot", "double money"]):
+        if any(
+            p in q_lower
+            for p in [
+                "guarantee",
+                "tip",
+                "which stock to buy now",
+                "tell me what to trade",
+                "sure shot",
+                "double money",
+            ]
+        ):
             return IntentRoutingResult(
                 query=query,
                 predicted_intent=PortfolioIntent.UNSUPPORTED_ADVICE,
@@ -90,7 +114,20 @@ class PortfolioIntentRouter:
             )
 
         # 3. Scenario / Stress Test (check before general sector queries)
-        if any(p in q_lower for p in ["scenario", "stress test", "what if", "what happens if", "drop", "fall", "crash", "shock", "decline"]):
+        if any(
+            p in q_lower
+            for p in [
+                "scenario",
+                "stress test",
+                "what if",
+                "what happens if",
+                "drop",
+                "fall",
+                "crash",
+                "shock",
+                "decline",
+            ]
+        ):
             return IntentRoutingResult(
                 query=query,
                 predicted_intent=PortfolioIntent.SCENARIO_STRESS_TEST,
@@ -110,7 +147,9 @@ class PortfolioIntentRouter:
             )
 
         # 5. Asset Allocation & Sector Exposure
-        if any(p in q_lower for p in ["allocation", "sector", "cash vs equity", "asset class", "exposure", "breakdown"]):
+        if any(
+            p in q_lower for p in ["allocation", "sector", "cash vs equity", "asset class", "exposure", "breakdown"]
+        ):
             return IntentRoutingResult(
                 query=query,
                 predicted_intent=PortfolioIntent.ALLOCATION,
@@ -120,7 +159,20 @@ class PortfolioIntentRouter:
             )
 
         # 6. Performance (gainers, losers, P&L, returns)
-        if any(p in q_lower for p in ["performance", "gainers", "losers", "contributors", "detractors", "pnl", "profit", "loss", "return"]):
+        if any(
+            p in q_lower
+            for p in [
+                "performance",
+                "gainers",
+                "losers",
+                "contributors",
+                "detractors",
+                "pnl",
+                "profit",
+                "loss",
+                "return",
+            ]
+        ):
             return IntentRoutingResult(
                 query=query,
                 predicted_intent=PortfolioIntent.PERFORMANCE,

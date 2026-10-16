@@ -11,10 +11,10 @@ Coordinates:
 4. Preserves all input numbers with 100% mathematical fidelity.
 """
 
-from typing import Any, Dict, List, Optional
-from pydantic import BaseModel
+from typing import List
 
 from backend.app.domain.goal_engine import GoalProjectionResult
+from pydantic import BaseModel
 
 
 class GoalExplanationResponse(BaseModel):

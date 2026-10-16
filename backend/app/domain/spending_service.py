@@ -13,14 +13,15 @@ Coordinates:
 """
 
 import csv
-from datetime import datetime, timezone
-from decimal import Decimal
 import hashlib
 import io
 import re
-from typing import Any, Dict, List, Optional, Tuple
 import uuid
-from pydantic import BaseModel, Field
+from datetime import datetime, timezone
+from decimal import Decimal
+from typing import Any, Dict, List, Optional, Tuple
+
+from pydantic import BaseModel
 
 # In-memory operational store for isolated testing/development baseline
 _UPLOADS_STORE: Dict[str, Dict[str, Any]] = {}  # upload_id -> upload_dict
@@ -36,7 +37,11 @@ CATEGORIZATION_RULES: List[Tuple[List[str], str, Decimal]] = [
     (["UBER", "OLA", "PETROL", "HPCL", "BPCL", "INDIGO", "IRCTC", "FUEL", "RAPIDO"], "TRAVEL", Decimal("0.92")),
     (["AMAZON", "FLIPKART", "MYNTRA", "ZARA", "UNIQLO", "SHOPPING", "RETAIL"], "SHOPPING", Decimal("0.90")),
     (["APOLLO", "PHARMEASY", "MEDPLUS", "HOSPITAL", "CLINIC", "PHARMACY", "DOCTOR"], "HEALTHCARE", Decimal("0.95")),
-    (["ZERODHA", "GROWW", "MUTUAL FUND", "SIP", "NIPPON", "HDFC AMC", "COIN", "INVEST"], "INVESTMENTS", Decimal("0.95")),
+    (
+        ["ZERODHA", "GROWW", "MUTUAL FUND", "SIP", "NIPPON", "HDFC AMC", "COIN", "INVEST"],
+        "INVESTMENTS",
+        Decimal("0.95"),
+    ),
     (["SALARY", "DIVIDEND", "INTEREST", "CREDIT PAYROLL", "INCOME"], "INCOME", Decimal("0.98")),
 ]
 
@@ -248,9 +253,7 @@ class SpendingService:
             "transactions": [o.model_dump(mode="json") for o in out],
         }
 
-    def update_transaction_category(
-        self, user_id: str, transaction_id: str, new_category: str
-    ) -> Dict[str, Any]:
+    def update_transaction_category(self, user_id: str, transaction_id: str, new_category: str) -> Dict[str, Any]:
         txs = _TRANSACTIONS_STORE.get(user_id, [])
         tx = next((t for t in txs if t["id"] == transaction_id), None)
         if not tx:
@@ -280,7 +283,9 @@ class SpendingService:
                 total_credit += amt
 
         net_savings = total_credit - total_debit
-        savings_rate = round((net_savings / total_credit * Decimal("100.0")), 2) if total_credit > 0 else Decimal("0.00")
+        savings_rate = (
+            round((net_savings / total_credit * Decimal("100.0")), 2) if total_credit > 0 else Decimal("0.00")
+        )
 
         return MonthlySpendingSummaryResult(
             user_id=user_id,
@@ -290,5 +295,7 @@ class SpendingService:
             net_savings=float(net_savings),
             savings_rate_pct=float(savings_rate),
             transaction_count=len(month_txs),
-            category_breakdown={k: float(v) for k, v in sorted(category_breakdown.items(), key=lambda x: x[1], reverse=True)},
+            category_breakdown={
+                k: float(v) for k, v in sorted(category_breakdown.items(), key=lambda x: x[1], reverse=True)
+            },
         )

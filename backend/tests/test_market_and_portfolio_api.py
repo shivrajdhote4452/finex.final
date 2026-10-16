@@ -6,12 +6,13 @@ holdings validation, deterministic valuation calculations, and error handling.
 """
 
 from decimal import Decimal
-import pytest
-from httpx import ASGITransport, AsyncClient
 
+import pytest
 from backend.app.config import Settings
 from backend.app.domain.portfolio import calculate_portfolio_valuation
 from backend.app.factory import create_app
+from backend.app.routers.auth import create_access_token
+from httpx import ASGITransport, AsyncClient
 
 
 @pytest.fixture
@@ -25,7 +26,8 @@ def app():
 
 @pytest.fixture
 def auth_headers():
-    return {"Authorization": "Bearer mock-valid-token-user-123"}
+    token = create_access_token("usr-shivraj-001", "shivraj.dhote@finex.internal", "Shivraj Dhote")
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.mark.asyncio
@@ -153,9 +155,7 @@ async def test_portfolio_valuation_and_summary(app, auth_headers):
         assert len(portfolio["holdings"]) == 4
 
         # 2. Get deterministic summary
-        sum_res = await client.get(
-            f"/api/v1/portfolios/{portfolio_id}/summary", headers=auth_headers
-        )
+        sum_res = await client.get(f"/api/v1/portfolios/{portfolio_id}/summary", headers=auth_headers)
         assert sum_res.status_code == 200
         summary = sum_res.json()["data"]
         assert float(summary["total_market_value"]) > 0

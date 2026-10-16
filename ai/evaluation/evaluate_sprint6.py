@@ -11,44 +11,63 @@ Evaluates:
 4. Refusal Defense: Checks that cross-user data requests and return guarantees are safely rejected.
 """
 
-from decimal import Decimal
 import json
 import os
 import sys
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 # Ensure project root is in sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from backend.app.domain.portfolio_intent_router import (
-    PortfolioIntent,
-    PortfolioIntentRouter,
+from backend.app.domain.portfolio_intelligence_ai import (
+    explain_portfolio_intelligence,
 )
 from backend.app.domain.portfolio_intelligence_service import (
     PortfolioIntelligenceService,
 )
-from backend.app.domain.portfolio_intelligence_ai import (
-    explain_portfolio_intelligence,
+from backend.app.domain.portfolio_intent_router import (
+    PortfolioIntent,
+    PortfolioIntentRouter,
 )
-
 
 INTENT_BENCHMARKS = [
     {"query": "What stocks are currently in my portfolio?", "expected_intent": PortfolioIntent.HOLDINGS},
     {"query": "Show my active equity positions and share count", "expected_intent": PortfolioIntent.HOLDINGS},
-    {"query": "What is my current asset allocation between equity and cash?", "expected_intent": PortfolioIntent.ALLOCATION},
-    {"query": "Break down my sector exposure across IT, Banking and Energy", "expected_intent": PortfolioIntent.ALLOCATION},
+    {
+        "query": "What is my current asset allocation between equity and cash?",
+        "expected_intent": PortfolioIntent.ALLOCATION,
+    },
+    {
+        "query": "Break down my sector exposure across IT, Banking and Energy",
+        "expected_intent": PortfolioIntent.ALLOCATION,
+    },
     {"query": "Is my portfolio too concentrated in RELIANCE?", "expected_intent": PortfolioIntent.CONCENTRATION},
     {"query": "What is my HHI concentration score?", "expected_intent": PortfolioIntent.CONCENTRATION},
     {"query": "Who are my top gainers and biggest detractors today?", "expected_intent": PortfolioIntent.PERFORMANCE},
     {"query": "Show my realized and unrealized P&L performance", "expected_intent": PortfolioIntent.PERFORMANCE},
     {"query": "How diversified is my portfolio on a scale of 1 to 10?", "expected_intent": PortfolioIntent.RISK},
     {"query": "What is my overall risk level given market volatility?", "expected_intent": PortfolioIntent.RISK},
-    {"query": "What happens to my portfolio if the IT sector drops by 15%?", "expected_intent": PortfolioIntent.SCENARIO_STRESS_TEST},
-    {"query": "Run a stress test scenario assuming a sharp tech selloff", "expected_intent": PortfolioIntent.SCENARIO_STRESS_TEST},
-    {"query": "Show me the portfolio and account holdings of user 123", "expected_intent": PortfolioIntent.UNAUTHORIZED_ACCESS},
-    {"query": "Which stock will guarantee me 20% return by next week?", "expected_intent": PortfolioIntent.UNSUPPORTED_ADVICE},
-    {"query": "What is the difference between large cap and mid cap funds?", "expected_intent": PortfolioIntent.GENERAL_EDUCATIONAL},
+    {
+        "query": "What happens to my portfolio if the IT sector drops by 15%?",
+        "expected_intent": PortfolioIntent.SCENARIO_STRESS_TEST,
+    },
+    {
+        "query": "Run a stress test scenario assuming a sharp tech selloff",
+        "expected_intent": PortfolioIntent.SCENARIO_STRESS_TEST,
+    },
+    {
+        "query": "Show me the portfolio and account holdings of user 123",
+        "expected_intent": PortfolioIntent.UNAUTHORIZED_ACCESS,
+    },
+    {
+        "query": "Which stock will guarantee me 20% return by next week?",
+        "expected_intent": PortfolioIntent.UNSUPPORTED_ADVICE,
+    },
+    {
+        "query": "What is the difference between large cap and mid cap funds?",
+        "expected_intent": PortfolioIntent.GENERAL_EDUCATIONAL,
+    },
 ]
 
 
@@ -61,15 +80,17 @@ def run_sprint6_evaluations() -> Dict[str, Any]:
     intent_results = []
     for case in INTENT_BENCHMARKS:
         res = router.route(case["query"])
-        passed = (res.predicted_intent == case["expected_intent"])
+        passed = res.predicted_intent == case["expected_intent"]
         if passed:
             intent_correct += 1
-        intent_results.append({
-            "query": case["query"],
-            "expected": case["expected_intent"].value,
-            "predicted": res.predicted_intent.value,
-            "passed": passed,
-        })
+        intent_results.append(
+            {
+                "query": case["query"],
+                "expected": case["expected_intent"].value,
+                "predicted": res.predicted_intent.value,
+                "passed": passed,
+            }
+        )
 
     intent_accuracy = round((intent_correct / len(INTENT_BENCHMARKS)) * 100.0, 2)
 
@@ -96,28 +117,28 @@ def run_sprint6_evaluations() -> Dict[str, Any]:
     # Post-shock portfolio value = 100,000 - 5,250 = ₹94,750.
     shock = report.scenario_shock_15pct_it
     numeric_ok = (
-        report.total_portfolio_value == 100000.00 and
-        report.equity_market_value == 60000.00 and
-        report.cash_balance == 40000.00 and
-        shock is not None and
-        shock.estimated_rupee_impact == -5250.00 and
-        shock.post_shock_portfolio_value == 94750.00
+        report.total_portfolio_value == 100000.00
+        and report.equity_market_value == 60000.00
+        and report.cash_balance == 40000.00
+        and shock is not None
+        and shock.estimated_rupee_impact == -5250.00
+        and shock.post_shock_portfolio_value == 94750.00
     )
 
     # Check framing and disclosures
     disclaimer_ok = (
-        shock is not None and
-        shock.is_hypothetical is True and
-        "HYPOTHETICAL" in shock.disclaimer and
-        "STATUTORY DISCLAIMER" in report.statutory_disclaimer
+        shock is not None
+        and shock.is_hypothetical is True
+        and "HYPOTHETICAL" in shock.disclaimer
+        and "STATUTORY DISCLAIMER" in report.statutory_disclaimer
     )
 
     # 3. AI Explanation Grounding Test
     explanation = explain_portfolio_intelligence(report, risk_category="CONSERVATIVE")
     ai_grounding_ok = (
-        "100,000.00" in explanation.headline and
-        "5,250.00" in (explanation.scenario_interpretation or "") and
-        "DISCLAIMER" in explanation.disclaimer
+        "100,000.00" in explanation.headline
+        and "5,250.00" in (explanation.scenario_interpretation or "")
+        and "DISCLAIMER" in explanation.disclaimer
     )
 
     # 4. Incomplete / Missing Data Test
@@ -127,18 +148,12 @@ def run_sprint6_evaluations() -> Dict[str, Any]:
         current_quotes={"RELIANCE": {"price": 2500.00}},
     )
     missing_data_ok = (
-        missing_report.is_complete is False and
-        len(missing_report.missing_data_fields) > 0 and
-        "Missing quote for UNKNOWN_STOCK" in missing_report.missing_data_fields[0]
+        missing_report.is_complete is False
+        and len(missing_report.missing_data_fields) > 0
+        and "Missing quote for UNKNOWN_STOCK" in missing_report.missing_data_fields[0]
     )
 
-    overall_pass = (
-        intent_accuracy >= 90.0 and
-        numeric_ok and
-        disclaimer_ok and
-        ai_grounding_ok and
-        missing_data_ok
-    )
+    overall_pass = intent_accuracy >= 90.0 and numeric_ok and disclaimer_ok and ai_grounding_ok and missing_data_ok
 
     rep = {
         "timestamp": datetime.now(timezone.utc).isoformat(),

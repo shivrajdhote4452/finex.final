@@ -13,21 +13,19 @@ Tests:
 - Paper Trading Coach: deterministic coaching insight and simulation disclaimer
 """
 
-from decimal import Decimal
 import pytest
-from httpx import ASGITransport, AsyncClient
-
 from backend.app.config import Settings
-from backend.app.domain.paper_trading_coach import generate_performance_narrative, generate_trade_coaching
+from backend.app.domain.paper_trading_coach import generate_trade_coaching
 from backend.app.domain.paper_trading_service import (
-    OrderSubmitRequest,
-    PaperTradingEngine,
     _LEDGER_STORE,
     _ORDERS_STORE,
     _POSITIONS_STORE,
+    PaperTradingEngine,
 )
 from backend.app.factory import create_app
+from backend.app.routers.auth import create_access_token
 from data.quality.paper_trading_reconciliation import PaperTradingReconciler
+from httpx import ASGITransport, AsyncClient
 
 
 @pytest.fixture
@@ -41,7 +39,8 @@ def app():
 
 @pytest.fixture
 def auth_headers():
-    return {"Authorization": "Bearer mock-valid-token-user-123"}
+    token = create_access_token("usr-shivraj-001", "shivraj.dhote@finex.internal", "Shivraj Dhote")
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.mark.asyncio
@@ -126,9 +125,12 @@ async def test_paper_buy_and_partial_sell_lifecycle(app, auth_headers):
 
         # Verify coaching commentary on buy
         from backend.app.domain.paper_trading_service import ExecutionResult
+
         coach_buy = generate_trade_coaching(ExecutionResult(**buy_data))
         assert "Buy Order Filled" in coach_buy.headline
-        assert "Capital Discipline" in coach_buy.learning_points[0] or "Opportunity Cost" in coach_buy.learning_points[0]
+        assert (
+            "Capital Discipline" in coach_buy.learning_points[0] or "Opportunity Cost" in coach_buy.learning_points[0]
+        )
         assert "SIMULATION NOTICE" in coach_buy.disclaimer
 
         # 2. Re-submitting the exact same idempotency key must deduplicate

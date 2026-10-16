@@ -16,6 +16,7 @@ Implements:
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -288,15 +289,17 @@ def compare_securities(symbol_a: str, symbol_b: str) -> Optional[StructuredCompa
         val_a = m_a.value if m_a.is_available else "not available"
         val_b = m_b.value if m_b.is_available else "not available"
 
-        summary_matrix.append({
-            "metric": name,
-            "entity_a_value": val_a,
-            "entity_b_value": val_b,
-            "entity_a_source": m_a.source,
-            "entity_b_source": m_b.source,
-            "data_date": m_a.data_date,
-            "basis": m_a.basis,
-        })
+        summary_matrix.append(
+            {
+                "metric": name,
+                "entity_a_value": val_a,
+                "entity_b_value": val_b,
+                "entity_a_source": m_a.source,
+                "entity_b_source": m_b.source,
+                "data_date": m_a.data_date,
+                "basis": m_a.basis,
+            }
+        )
 
         if not m_a.is_available:
             missing_disclosures.append(f"{profile_a.symbol} {name}: {m_a.notes or 'Metric unavailable'}")
@@ -306,18 +309,26 @@ def compare_securities(symbol_a: str, symbol_b: str) -> Optional[StructuredCompa
     # Generate educational objective observations (no buy/sell advice)
     insights = []
     if profile_a.sector == profile_b.sector:
-        insights.append(f"Both {profile_a.symbol} and {profile_b.symbol} operate within the {profile_a.sector} sector, exposing them to shared industry headwinds and regulatory cycles.")
+        insights.append(
+            f"Both {profile_a.symbol} and {profile_b.symbol} operate within the {profile_a.sector} sector, exposing them to shared industry headwinds and regulatory cycles."
+        )
     else:
-        insights.append(f"{profile_a.symbol} operates in {profile_a.sector}, whereas {profile_b.symbol} operates in {profile_b.sector}, offering sector-level diversification.")
+        insights.append(
+            f"{profile_a.symbol} operates in {profile_a.sector}, whereas {profile_b.symbol} operates in {profile_b.sector}, offering sector-level diversification."
+        )
 
     if profile_a.pe_ratio.is_available and profile_b.pe_ratio.is_available:
         if profile_a.pe_ratio.numeric_value and profile_b.pe_ratio.numeric_value:
             if profile_a.pe_ratio.numeric_value > profile_b.pe_ratio.numeric_value:
                 diff = profile_a.pe_ratio.numeric_value - profile_b.pe_ratio.numeric_value
-                insights.append(f"{profile_a.symbol} trades at a higher trailing earnings multiple ({profile_a.pe_ratio.value}) compared to {profile_b.symbol} ({profile_b.pe_ratio.value}), a difference of {diff:.1f}x.")
+                insights.append(
+                    f"{profile_a.symbol} trades at a higher trailing earnings multiple ({profile_a.pe_ratio.value}) compared to {profile_b.symbol} ({profile_b.pe_ratio.value}), a difference of {diff:.1f}x."
+                )
             else:
                 diff = profile_b.pe_ratio.numeric_value - profile_a.pe_ratio.numeric_value
-                insights.append(f"{profile_b.symbol} trades at a higher trailing earnings multiple ({profile_b.pe_ratio.value}) compared to {profile_a.symbol} ({profile_a.pe_ratio.value}), a difference of {diff:.1f}x.")
+                insights.append(
+                    f"{profile_b.symbol} trades at a higher trailing earnings multiple ({profile_b.pe_ratio.value}) compared to {profile_a.symbol} ({profile_a.pe_ratio.value}), a difference of {diff:.1f}x."
+                )
 
     disclaimer = (
         "EDUCATIONAL DISCLAIMER: This side-by-side security comparison is compiled strictly for financial education "
@@ -341,16 +352,16 @@ def compare_securities(symbol_a: str, symbol_b: str) -> Optional[StructuredCompa
 
 # 12 Benchmark Comparison Examples for verification and testing
 BENCHMARK_COMPARISONS: List[tuple] = [
-    ("RELIANCE", "TCS"),         # 1. Conglomerate vs Tech
-    ("INFY", "TCS"),             # 2. Tech peer comparison
-    ("HDFCBANK", "ICICIBANK"),   # 3. Private banking peers
-    ("SBIN", "HDFCBANK"),        # 4. Public vs Private banking
+    ("RELIANCE", "TCS"),  # 1. Conglomerate vs Tech
+    ("INFY", "TCS"),  # 2. Tech peer comparison
+    ("HDFCBANK", "ICICIBANK"),  # 3. Private banking peers
+    ("SBIN", "HDFCBANK"),  # 4. Public vs Private banking
     ("TATAMOTORS", "RELIANCE"),  # 5. Auto vs Conglomerate
-    ("ITC", "RELIANCE"),         # 6. FMCG vs Energy
-    ("ITC", "INFY"),             # 7. High dividend yield vs Growth tech
-    ("TATAMOTORS", "ICICIBANK"), # 8. Auto vs Banking
-    ("SBIN", "ICICIBANK"),       # 9. Public bank vs Private bank
-    ("INFY", "HDFCBANK"),        # 10. Tech vs Banking
-    ("TCS", "ITC"),              # 11. Tech vs Consumer goods
-    ("TATAMOTORS", "TCS"),       # 12. Tata group conglomerate cross-sector
+    ("ITC", "RELIANCE"),  # 6. FMCG vs Energy
+    ("ITC", "INFY"),  # 7. High dividend yield vs Growth tech
+    ("TATAMOTORS", "ICICIBANK"),  # 8. Auto vs Banking
+    ("SBIN", "ICICIBANK"),  # 9. Public bank vs Private bank
+    ("INFY", "HDFCBANK"),  # 10. Tech vs Banking
+    ("TCS", "ITC"),  # 11. Tech vs Consumer goods
+    ("TATAMOTORS", "TCS"),  # 12. Tata group conglomerate cross-sector
 ]

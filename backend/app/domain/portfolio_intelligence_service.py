@@ -11,8 +11,8 @@ Coordinates:
 4. Missing data defense: missing quotes produce explicit 'UNAVAILABLE' values, never hallucinated.
 """
 
-from decimal import Decimal
 from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
 
 # Verified Official NSE Sector Taxonomy Mapping
@@ -120,16 +120,18 @@ class PortfolioIntelligenceService:
                 equity_value += mkt_val
 
             sector = SECTOR_TAXONOMY.get(sym, "Unclassified Sector")
-            enriched_holdings.append({
-                "symbol": sym,
-                "quantity": qty,
-                "avg_price": avg_price,
-                "current_price": cur_price,
-                "market_value": mkt_val,
-                "unrealized_pnl": pnl,
-                "unrealized_pnl_pct": pnl_pct,
-                "sector": sector,
-            })
+            enriched_holdings.append(
+                {
+                    "symbol": sym,
+                    "quantity": qty,
+                    "avg_price": avg_price,
+                    "current_price": cur_price,
+                    "market_value": mkt_val,
+                    "unrealized_pnl": pnl,
+                    "unrealized_pnl_pct": pnl_pct,
+                    "sector": sector,
+                }
+            )
 
         total_val = equity_value + cash_balance
         cash_pct = round((cash_balance / total_val * 100.0), 2) if total_val > 0 else 100.0
@@ -165,11 +167,19 @@ class PortfolioIntelligenceService:
                 weights.append((eh["market_value"] / total_val) * 100.0)
             weights.append(cash_pct)
 
-        hhi = sum(w ** 2 for w in weights)
+        hhi = sum(w**2 for w in weights)
         sorted_holdings = sorted(enriched_holdings, key=lambda x: x["market_value"], reverse=True)
         top_sym = sorted_holdings[0]["symbol"] if sorted_holdings else "NONE"
-        top_pct = round((sorted_holdings[0]["market_value"] / total_val * 100.0), 2) if sorted_holdings and total_val > 0 else 0.0
-        top_3_pct = round((sum(h["market_value"] for h in sorted_holdings[:3]) / total_val * 100.0), 2) if total_val > 0 else 0.0
+        top_pct = (
+            round((sorted_holdings[0]["market_value"] / total_val * 100.0), 2)
+            if sorted_holdings and total_val > 0
+            else 0.0
+        )
+        top_3_pct = (
+            round((sum(h["market_value"] for h in sorted_holdings[:3]) / total_val * 100.0), 2)
+            if total_val > 0
+            else 0.0
+        )
 
         # Diversification Score (1.0 to 10.0 scale, where lower HHI gives higher score)
         raw_div = 10.0 - (hhi / 1000.0)
@@ -184,7 +194,8 @@ class PortfolioIntelligenceService:
                 unrealized_pnl_pct=round(h["unrealized_pnl_pct"], 2),
                 contribution_weight_pct=round((h["market_value"] / total_val * 100.0), 2) if total_val > 0 else 0.0,
             )
-            for h in holdings_by_pnl if h["unrealized_pnl"] > 0
+            for h in holdings_by_pnl
+            if h["unrealized_pnl"] > 0
         ][:3]
 
         top_detractors = [
@@ -194,7 +205,8 @@ class PortfolioIntelligenceService:
                 unrealized_pnl_pct=round(h["unrealized_pnl_pct"], 2),
                 contribution_weight_pct=round((h["market_value"] / total_val * 100.0), 2) if total_val > 0 else 0.0,
             )
-            for h in reversed(holdings_by_pnl) if h["unrealized_pnl"] < 0
+            for h in reversed(holdings_by_pnl)
+            if h["unrealized_pnl"] < 0
         ][:3]
 
         # Hypothetical 15% Sector Decline Scenario (Sprint 6 requirement S6-API-02 / S6-AI-03)

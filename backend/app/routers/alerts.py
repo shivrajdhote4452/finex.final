@@ -15,14 +15,11 @@ Exposes:
 """
 
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from pydantic import BaseModel, Field
 
 from backend.app.adapters.market_data_provider import (
     INSTRUMENT_REGISTRY,
-    RealMarketDataProvider,
     VERIFIED_OBSERVATIONS,
+    RealMarketDataProvider,
 )
 from backend.app.core.envelope import create_response_envelope
 from backend.app.domain.alerts_service import (
@@ -31,6 +28,7 @@ from backend.app.domain.alerts_service import (
     AlertsService,
 )
 from backend.app.routers.auth import get_current_user_id
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 router = APIRouter(prefix="/alerts", tags=["Smart Alerts & Rules"])
 alerts_service = AlertsService()

@@ -13,21 +13,19 @@ Deterministic portfolio explanation tool that:
 6. Strictly avoids personalized trade advice or price predictions.
 """
 
-from decimal import Decimal
-from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
-
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
 
 from backend.app.domain.portfolio import PortfolioSummary
+from pydantic import BaseModel, Field
 
 
 class ConcentrationMetrics(BaseModel):
     hhi_score: float = Field(..., description="Herfindahl-Hirschman Index for sector concentration (0 to 10000)")
-    concentration_level: str = Field(..., description="'Well Diversified', 'Moderately Concentrated', or 'Highly Concentrated'")
+    concentration_level: str = Field(
+        ..., description="'Well Diversified', 'Moderately Concentrated', or 'Highly Concentrated'"
+    )
     top_sector_name: str
     top_sector_pct: float
     total_sectors_count: int
@@ -93,7 +91,7 @@ def generate_portfolio_explanation(
     snapshot_version: Optional[str] = None,
 ) -> PortfolioExplanation:
     """Generates an educational diversification narrative strictly from deterministic metrics.
-    
+
     CRITICAL RULE: No arithmetic is delegated to an external model. All numbers, percentages,
     and thresholds are calculated deterministically by Python logic.
     """
@@ -150,7 +148,9 @@ def generate_portfolio_explanation(
         f"Overall concentration status: {conc.concentration_level}.",
     ]
     if not summary.is_fully_valued:
-        observations.append(f"Incomplete pricing: {len(summary.missing_quote_symbols)} holding(s) awaiting verified quote.")
+        observations.append(
+            f"Incomplete pricing: {len(summary.missing_quote_symbols)} holding(s) awaiting verified quote."
+        )
 
     # Educational notes on risk
     risk_notes = [

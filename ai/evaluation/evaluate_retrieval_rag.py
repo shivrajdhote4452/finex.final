@@ -15,7 +15,7 @@ import json
 import os
 import sys
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 # Ensure project root is in sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
@@ -153,10 +153,7 @@ async def run_retrieval_evaluation(report_output_path: str) -> Dict[str, Any]:
         hit_at_5 = False
 
         for rank, chunk in enumerate(retrieved, start=1):
-            is_match = (
-                chunk.document_id == expected_doc
-                and expected_sec in (chunk.section or "").lower()
-            )
+            is_match = chunk.document_id == expected_doc and expected_sec in (chunk.section or "").lower()
             if is_match:
                 if rank == 1:
                     hit_at_1 = True
@@ -173,17 +170,19 @@ async def run_retrieval_evaluation(report_output_path: str) -> Dict[str, Any]:
         if hit_at_5:
             top_5_hits += 1
 
-        results.append({
-            "query_id": qid,
-            "query": q,
-            "expected_doc_id": expected_doc,
-            "expected_section": item["expected_section_contains"],
-            "retrieved_top_doc_id": retrieved[0].document_id if retrieved else None,
-            "retrieved_top_section": retrieved[0].section if retrieved else None,
-            "hit_at_1": hit_at_1,
-            "hit_at_3": hit_at_3,
-            "hit_at_5": hit_at_5,
-        })
+        results.append(
+            {
+                "query_id": qid,
+                "query": q,
+                "expected_doc_id": expected_doc,
+                "expected_section": item["expected_section_contains"],
+                "retrieved_top_doc_id": retrieved[0].document_id if retrieved else None,
+                "retrieved_top_section": retrieved[0].section if retrieved else None,
+                "hit_at_1": hit_at_1,
+                "hit_at_3": hit_at_3,
+                "hit_at_5": hit_at_5,
+            }
+        )
 
     recall_at_1 = round((top_1_hits / total_queries) * 100, 2)
     recall_at_3 = round((top_3_hits / total_queries) * 100, 2)
@@ -212,9 +211,7 @@ async def run_retrieval_evaluation(report_output_path: str) -> Dict[str, Any]:
 
 
 if __name__ == "__main__":
-    report_file = os.path.join(
-        os.path.dirname(__file__), "reports", "sprint4_retrieval_report.json"
-    )
+    report_file = os.path.join(os.path.dirname(__file__), "reports", "sprint4_retrieval_report.json")
     rep = asyncio.run(run_retrieval_evaluation(report_file))
     print("=" * 60)
     print(f"Sprint 4 Retrieval Evaluation: {rep['total_queries']} Queries Evaluated")

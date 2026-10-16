@@ -5,10 +5,10 @@ Tests warning vs blocking failures, stale quotes, holiday awareness,
 duplicate observations, orphan items, invalid quantities, and partial valuation handling.
 """
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-import pytest
 
+import pytest
 from data.quality.market_data_quality import (
     DQSeverity,
     MarketDataQualityChecker,
@@ -32,16 +32,12 @@ def clean_market_dataset():
             "observed_at": (ref_time - timedelta(hours=3)).isoformat(),
         },
     ]
-    watchlists = [
-        {"id": "wl1", "user_id": "usr-shivraj-001", "name": "Tech & Energy"}
-    ]
+    watchlists = [{"id": "wl1", "user_id": "usr-shivraj-001", "name": "Tech & Energy"}]
     watchlist_items = [
         {"id": "wli1", "watchlist_id": "wl1", "symbol": "RELIANCE"},
         {"id": "wli2", "watchlist_id": "wl1", "symbol": "TCS"},
     ]
-    portfolios = [
-        {"id": "p1", "user_id": "usr-shivraj-001", "name": "Growth"}
-    ]
+    portfolios = [{"id": "p1", "user_id": "usr-shivraj-001", "name": "Growth"}]
     holdings = [
         {
             "id": "h1",
@@ -147,21 +143,25 @@ def test_detects_invalid_holding_quantity_and_negative_cost(clean_market_dataset
     quotes, watchlists, watchlist_items, portfolios, holdings, ref_time = clean_market_dataset
 
     # Zero or negative quantity
-    holdings.append({
-        "id": "h_bad1",
-        "portfolio_id": "p1",
-        "symbol": "RELIANCE",
-        "quantity": Decimal("-5"),
-        "cost_basis_per_share": Decimal("100"),
-    })
+    holdings.append(
+        {
+            "id": "h_bad1",
+            "portfolio_id": "p1",
+            "symbol": "RELIANCE",
+            "quantity": Decimal("-5"),
+            "cost_basis_per_share": Decimal("100"),
+        }
+    )
     # Negative cost basis
-    holdings.append({
-        "id": "h_bad2",
-        "portfolio_id": "p1",
-        "symbol": "TCS",
-        "quantity": Decimal("2"),
-        "cost_basis_per_share": Decimal("-50"),
-    })
+    holdings.append(
+        {
+            "id": "h_bad2",
+            "portfolio_id": "p1",
+            "symbol": "TCS",
+            "quantity": Decimal("2"),
+            "cost_basis_per_share": Decimal("-50"),
+        }
+    )
 
     checker = MarketDataQualityChecker()
     report = checker.evaluate(
@@ -181,13 +181,15 @@ def test_partial_valuation_generates_warning_not_blocking(clean_market_dataset):
     quotes, watchlists, watchlist_items, portfolios, holdings, ref_time = clean_market_dataset
 
     # Holding for which quote is not available
-    holdings.append({
-        "id": "h_unquoted",
-        "portfolio_id": "p1",
-        "symbol": "UNQUOTED_CORP",
-        "quantity": Decimal("10"),
-        "cost_basis_per_share": Decimal("500"),
-    })
+    holdings.append(
+        {
+            "id": "h_unquoted",
+            "portfolio_id": "p1",
+            "symbol": "UNQUOTED_CORP",
+            "quantity": Decimal("10"),
+            "cost_basis_per_share": Decimal("500"),
+        }
+    )
 
     checker = MarketDataQualityChecker()
     report = checker.evaluate(

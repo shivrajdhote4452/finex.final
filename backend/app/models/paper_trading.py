@@ -6,6 +6,8 @@ Date: 16 October 2026
 """
 
 from datetime import datetime, timezone
+
+from backend.app.models.core import Base
 from sqlalchemy import (
     Column,
     DateTime,
@@ -16,8 +18,6 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
-
-from backend.app.models.core import Base
 
 
 class PaperAccount(Base):
@@ -61,9 +61,7 @@ class PaperOrder(Base):
     account = relationship("PaperAccount", back_populates="orders")
     trade = relationship("PaperTrade", back_populates="order", uselist=False, cascade="all, delete-orphan")
 
-    __table_args__ = (
-        UniqueConstraint("account_id", "idempotency_key", name="uq_paper_order_idempotency"),
-    )
+    __table_args__ = (UniqueConstraint("account_id", "idempotency_key", name="uq_paper_order_idempotency"),)
 
 
 class PaperTrade(Base):
@@ -98,9 +96,7 @@ class PaperPosition(Base):
 
     account = relationship("PaperAccount", back_populates="positions")
 
-    __table_args__ = (
-        UniqueConstraint("account_id", "symbol", name="uq_paper_position_symbol"),
-    )
+    __table_args__ = (UniqueConstraint("account_id", "symbol", name="uq_paper_position_symbol"),)
 
 
 class PaperCashLedger(Base):

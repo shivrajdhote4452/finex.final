@@ -108,7 +108,9 @@ class ServiceUnavailableException(FinExException):
 
 
 class RateLimitException(FinExException):
-    def __init__(self, message: str = "Rate limit exceeded. Please retry after the cooling window.", retry_after: int = 60):
+    def __init__(
+        self, message: str = "Rate limit exceeded. Please retry after the cooling window.", retry_after: int = 60
+    ):
         super().__init__(
             message=message,
             code="RATE_LIMIT_EXCEEDED",

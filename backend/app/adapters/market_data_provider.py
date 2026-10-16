@@ -220,9 +220,7 @@ class RealMarketDataProvider(AbstractMarketDataProvider):
         self._cache[norm] = quote
         return quote
 
-    async def get_historical_bars(
-        self, symbol: str, start_date: str, end_date: str
-    ) -> List[HistoricalBar]:
+    async def get_historical_bars(self, symbol: str, start_date: str, end_date: str) -> List[HistoricalBar]:
         norm = self._normalize_symbol(symbol)
         if norm not in VERIFIED_OBSERVATIONS:
             return []

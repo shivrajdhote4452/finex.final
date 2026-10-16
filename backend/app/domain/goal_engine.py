@@ -11,11 +11,12 @@ Coordinates:
 4. Zero LLM arithmetic: All numerical projections are computed deterministically.
 """
 
+import math
+import uuid
 from datetime import date, datetime, timezone
 from decimal import Decimal
-import math
 from typing import Any, Dict, List, Optional
-import uuid
+
 from pydantic import BaseModel, Field
 
 # In-memory operational store for isolated testing/development baseline
@@ -26,7 +27,10 @@ _PROJECTIONS_STORE: Dict[str, List[Dict[str, Any]]] = {}  # goal_id -> list of p
 
 class GoalCreate(BaseModel):
     title: str = Field(..., min_length=2, max_length=128)
-    category: str = Field(..., description="'RETIREMENT', 'EMERGENCY_FUND', 'HOME_PURCHASE', 'EDUCATION', 'TRAVEL', 'WEALTH_CREATION', 'CUSTOM'")
+    category: str = Field(
+        ...,
+        description="'RETIREMENT', 'EMERGENCY_FUND', 'HOME_PURCHASE', 'EDUCATION', 'TRAVEL', 'WEALTH_CREATION', 'CUSTOM'",
+    )
     target_amount: Decimal = Field(..., gt=0, description="Target corpus in INR")
     current_amount: Decimal = Field(Decimal("0.00"), ge=0, description="Initial corpus already saved")
     target_date: str = Field(..., description="Target completion date (YYYY-MM-DD)")

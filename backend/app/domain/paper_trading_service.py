@@ -14,13 +14,13 @@ Implements:
 7. Separation from real-money brokerages.
 """
 
-from datetime import datetime, timezone
-from decimal import Decimal, ROUND_HALF_UP
 import uuid
-from typing import Dict, List, Optional, Tuple
-from pydantic import BaseModel, Field
+from datetime import datetime, timezone
+from decimal import ROUND_HALF_UP, Decimal
+from typing import Dict, List, Optional
 
 from backend.app.adapters.market_data_provider import VERIFIED_OBSERVATIONS
+from pydantic import BaseModel, Field
 
 
 class OrderSubmitRequest(BaseModel):
@@ -54,7 +54,7 @@ class ExecutionResult(BaseModel):
 _ACCOUNTS_STORE: Dict[str, Dict] = {}
 _ORDERS_STORE: Dict[str, Dict] = {}
 _POSITIONS_STORE: Dict[str, Dict[str, Dict]] = {}  # account_id -> {symbol: position_dict}
-_LEDGER_STORE: Dict[str, List[Dict]] = {}          # account_id -> list of ledger entries
+_LEDGER_STORE: Dict[str, List[Dict]] = {}  # account_id -> list of ledger entries
 
 
 class PaperTradingEngine:
@@ -246,16 +246,18 @@ class PaperTradingEngine:
                 }
 
             # Append to cash ledger
-            _LEDGER_STORE.setdefault(acct_id, []).append({
-                "id": f"led-{uuid.uuid4().hex[:12]}",
-                "account_id": acct_id,
-                "entry_type": "BUY_DEBIT",
-                "amount": -required_cash,
-                "balance_after": cash_after,
-                "reference_id": order_id,
-                "description": f"Bought {qty} shares of {sym} @ ₹{fill_price:,.2f}",
-                "created_at": now_str,
-            })
+            _LEDGER_STORE.setdefault(acct_id, []).append(
+                {
+                    "id": f"led-{uuid.uuid4().hex[:12]}",
+                    "account_id": acct_id,
+                    "entry_type": "BUY_DEBIT",
+                    "amount": -required_cash,
+                    "balance_after": cash_after,
+                    "reference_id": order_id,
+                    "description": f"Bought {qty} shares of {sym} @ ₹{fill_price:,.2f}",
+                    "created_at": now_str,
+                }
+            )
 
             realized_pnl = None
 
@@ -313,16 +315,18 @@ class PaperTradingEngine:
                 current_pos["updated_at"] = now_str
 
             # Append to cash ledger
-            _LEDGER_STORE.setdefault(acct_id, []).append({
-                "id": f"led-{uuid.uuid4().hex[:12]}",
-                "account_id": acct_id,
-                "entry_type": "SELL_CREDIT",
-                "amount": net_proceeds,
-                "balance_after": cash_after,
-                "reference_id": order_id,
-                "description": f"Sold {qty} shares of {sym} @ ₹{fill_price:,.2f} (Realized P&L: ₹{realized_pnl:+,.2f})",
-                "created_at": now_str,
-            })
+            _LEDGER_STORE.setdefault(acct_id, []).append(
+                {
+                    "id": f"led-{uuid.uuid4().hex[:12]}",
+                    "account_id": acct_id,
+                    "entry_type": "SELL_CREDIT",
+                    "amount": net_proceeds,
+                    "balance_after": cash_after,
+                    "reference_id": order_id,
+                    "description": f"Sold {qty} shares of {sym} @ ₹{fill_price:,.2f} (Realized P&L: ₹{realized_pnl:+,.2f})",
+                    "created_at": now_str,
+                }
+            )
         else:
             raise ValueError(f"Unsupported order side: {side}")
 
@@ -378,16 +382,18 @@ class PaperTradingEngine:
         acct["updated_at"] = now_str
 
         # Add audit ledger record
-        _LEDGER_STORE.setdefault(acct_id, []).append({
-            "id": f"led-{uuid.uuid4().hex[:12]}",
-            "account_id": acct_id,
-            "entry_type": "RESET_ADJUST",
-            "amount": Decimal("100000.00"),
-            "balance_after": Decimal("100000.00"),
-            "reference_id": f"RESET-{acct['reset_count']}",
-            "description": f"Virtual account reset #{acct['reset_count']} by user. Restored ₹1,00,000 cash balance.",
-            "created_at": now_str,
-        })
+        _LEDGER_STORE.setdefault(acct_id, []).append(
+            {
+                "id": f"led-{uuid.uuid4().hex[:12]}",
+                "account_id": acct_id,
+                "entry_type": "RESET_ADJUST",
+                "amount": Decimal("100000.00"),
+                "balance_after": Decimal("100000.00"),
+                "reference_id": f"RESET-{acct['reset_count']}",
+                "description": f"Virtual account reset #{acct['reset_count']} by user. Restored ₹1,00,000 cash balance.",
+                "created_at": now_str,
+            }
+        )
 
         return acct
 
@@ -410,22 +416,25 @@ class PaperTradingEngine:
             unrealized_pnl = (market_val - cost_basis).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
             pnl_pct = (
                 (unrealized_pnl / cost_basis * Decimal("100.00")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-                if cost_basis > 0 else Decimal("0.00")
+                if cost_basis > 0
+                else Decimal("0.00")
             )
 
             total_market_val += market_val
             total_cost_basis += cost_basis
 
-            pos_list.append({
-                "symbol": sym,
-                "quantity": float(qty),
-                "average_buy_price": float(avg_cost),
-                "current_price": float(current_price),
-                "market_value": float(market_val),
-                "cost_basis": float(cost_basis),
-                "unrealized_pnl": float(unrealized_pnl),
-                "unrealized_pnl_pct": float(pnl_pct),
-            })
+            pos_list.append(
+                {
+                    "symbol": sym,
+                    "quantity": float(qty),
+                    "average_buy_price": float(avg_cost),
+                    "current_price": float(current_price),
+                    "market_value": float(market_val),
+                    "cost_basis": float(cost_basis),
+                    "unrealized_pnl": float(unrealized_pnl),
+                    "unrealized_pnl_pct": float(pnl_pct),
+                }
+            )
 
         cash = acct["current_cash"]
         total_equity = cash + total_market_val

@@ -12,16 +12,13 @@ Coordinates:
 5. Correlation ID tracing and latency tracking across retrieval and synthesis.
 """
 
-from datetime import datetime, timezone
-from enum import Enum
-import re
 import time
 import uuid
-from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+from enum import Enum
+from typing import List, Optional
 
 from ai.rag.retriever import RegulatoryDocumentRetriever
-from backend.app.ports.retriever import DocumentChunk
+from pydantic import BaseModel
 
 
 class AIIntent(str, Enum):
@@ -96,7 +93,9 @@ class AIOrchestrator:
             return AIIntent.COMPANY_COMPARISON
 
         # 3. Personal portfolio inquiry (e.g. "my portfolio", "my holdings", "my concentration")
-        if any(w in q_lower for w in ["my portfolio", "my holdings", "my allocation", "my concentration", "my positions"]):
+        if any(
+            w in q_lower for w in ["my portfolio", "my holdings", "my allocation", "my concentration", "my positions"]
+        ):
             return AIIntent.PORTFOLIO_INQUIRY
 
         # 4. Financial education (default for learning queries)

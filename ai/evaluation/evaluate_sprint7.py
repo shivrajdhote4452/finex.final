@@ -12,12 +12,12 @@ Evaluates:
 5. Statutory Disclaimers: Checks that no guaranteed return claims are made.
 """
 
-from decimal import Decimal
 import json
 import os
 import sys
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from decimal import Decimal
+from typing import Any, Dict
 
 # Ensure project root is in sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
@@ -29,20 +29,91 @@ from backend.app.domain.spending_service import (
     mask_sensitive_narrative,
 )
 
-
 GOAL_BENCHMARKS = [
-    {"name": "Retirement Corpus", "target": Decimal("20000000.00"), "current": Decimal("1000000.00"), "target_date": "2046-10-16", "rate": Decimal("10.00")},
-    {"name": "Emergency Fund", "target": Decimal("300000.00"), "current": Decimal("50000.00"), "target_date": "2027-10-16", "rate": Decimal("6.00")},
-    {"name": "House Down Payment", "target": Decimal("2500000.00"), "current": Decimal("500000.00"), "target_date": "2031-10-16", "rate": Decimal("8.00")},
-    {"name": "Child Higher Education", "target": Decimal("4000000.00"), "current": Decimal("200000.00"), "target_date": "2036-10-16", "rate": Decimal("9.00")},
-    {"name": "International Vacation", "target": Decimal("300000.00"), "current": Decimal("30000.00"), "target_date": "2028-04-16", "rate": Decimal("7.00")},
-    {"name": "Electric Vehicle", "target": Decimal("1500000.00"), "current": Decimal("100000.00"), "target_date": "2029-10-16", "rate": Decimal("8.00")},
-    {"name": "Tech / Laptop Upgrade", "target": Decimal("150000.00"), "current": Decimal("20000.00"), "target_date": "2027-04-16", "rate": Decimal("5.00")},
-    {"name": "Wedding Expenses", "target": Decimal("1200000.00"), "current": Decimal("200000.00"), "target_date": "2028-10-16", "rate": Decimal("7.00")},
-    {"name": "Sabbatical Runway", "target": Decimal("1000000.00"), "current": Decimal("150000.00"), "target_date": "2029-10-16", "rate": Decimal("7.00")},
-    {"name": "Solar Rooftop", "target": Decimal("250000.00"), "current": Decimal("40000.00"), "target_date": "2027-10-16", "rate": Decimal("6.00")},
-    {"name": "Already Fully Funded", "target": Decimal("500000.00"), "current": Decimal("600000.00"), "target_date": "2028-10-16", "rate": Decimal("8.00")},
-    {"name": "Zero Return Cash Preservation", "target": Decimal("600000.00"), "current": Decimal("120000.00"), "target_date": "2028-10-16", "rate": Decimal("0.00")},
+    {
+        "name": "Retirement Corpus",
+        "target": Decimal("20000000.00"),
+        "current": Decimal("1000000.00"),
+        "target_date": "2046-10-16",
+        "rate": Decimal("10.00"),
+    },
+    {
+        "name": "Emergency Fund",
+        "target": Decimal("300000.00"),
+        "current": Decimal("50000.00"),
+        "target_date": "2027-10-16",
+        "rate": Decimal("6.00"),
+    },
+    {
+        "name": "House Down Payment",
+        "target": Decimal("2500000.00"),
+        "current": Decimal("500000.00"),
+        "target_date": "2031-10-16",
+        "rate": Decimal("8.00"),
+    },
+    {
+        "name": "Child Higher Education",
+        "target": Decimal("4000000.00"),
+        "current": Decimal("200000.00"),
+        "target_date": "2036-10-16",
+        "rate": Decimal("9.00"),
+    },
+    {
+        "name": "International Vacation",
+        "target": Decimal("300000.00"),
+        "current": Decimal("30000.00"),
+        "target_date": "2028-04-16",
+        "rate": Decimal("7.00"),
+    },
+    {
+        "name": "Electric Vehicle",
+        "target": Decimal("1500000.00"),
+        "current": Decimal("100000.00"),
+        "target_date": "2029-10-16",
+        "rate": Decimal("8.00"),
+    },
+    {
+        "name": "Tech / Laptop Upgrade",
+        "target": Decimal("150000.00"),
+        "current": Decimal("20000.00"),
+        "target_date": "2027-04-16",
+        "rate": Decimal("5.00"),
+    },
+    {
+        "name": "Wedding Expenses",
+        "target": Decimal("1200000.00"),
+        "current": Decimal("200000.00"),
+        "target_date": "2028-10-16",
+        "rate": Decimal("7.00"),
+    },
+    {
+        "name": "Sabbatical Runway",
+        "target": Decimal("1000000.00"),
+        "current": Decimal("150000.00"),
+        "target_date": "2029-10-16",
+        "rate": Decimal("7.00"),
+    },
+    {
+        "name": "Solar Rooftop",
+        "target": Decimal("250000.00"),
+        "current": Decimal("40000.00"),
+        "target_date": "2027-10-16",
+        "rate": Decimal("6.00"),
+    },
+    {
+        "name": "Already Fully Funded",
+        "target": Decimal("500000.00"),
+        "current": Decimal("600000.00"),
+        "target_date": "2028-10-16",
+        "rate": Decimal("8.00"),
+    },
+    {
+        "name": "Zero Return Cash Preservation",
+        "target": Decimal("600000.00"),
+        "current": Decimal("120000.00"),
+        "target_date": "2028-10-16",
+        "rate": Decimal("0.00"),
+    },
 ]
 
 
@@ -83,21 +154,23 @@ def run_sprint7_evaluations() -> Dict[str, Any]:
             goal_numeric_passed += 1
 
         disc_ok = (
-            "DISCLAIMER" in expl.disclaimer and
-            "guarantee" not in expl.required_savings_narrative.lower() and
-            "STATUTORY DISCLAIMER" in proj.statutory_disclaimer
+            "DISCLAIMER" in expl.disclaimer
+            and "guarantee" not in expl.required_savings_narrative.lower()
+            and "STATUTORY DISCLAIMER" in proj.statutory_disclaimer
         )
         if disc_ok:
             goal_disclaimer_passed += 1
 
-        goal_results.append({
-            "goal_name": g["name"],
-            "target_amount": float(g["target"]),
-            "months_remaining": proj.months_remaining,
-            "required_monthly_savings": proj.required_monthly_savings,
-            "numeric_ok": num_ok,
-            "disclaimer_ok": disc_ok,
-        })
+        goal_results.append(
+            {
+                "goal_name": g["name"],
+                "target_amount": float(g["target"]),
+                "months_remaining": proj.months_remaining,
+                "required_monthly_savings": proj.required_monthly_savings,
+                "numeric_ok": num_ok,
+                "disclaimer_ok": disc_ok,
+            }
+        )
 
     # 2. Evaluate Privacy Masking
     privacy_passed = 0
@@ -128,10 +201,10 @@ def run_sprint7_evaluations() -> Dict[str, Any]:
     cat_accuracy = round((cat_correct / len(cat_samples)) * 100.0, 2)
 
     overall_pass = (
-        goal_numeric_passed == len(GOAL_BENCHMARKS) and
-        goal_disclaimer_passed == len(GOAL_BENCHMARKS) and
-        privacy_score == 100.0 and
-        cat_accuracy == 100.0
+        goal_numeric_passed == len(GOAL_BENCHMARKS)
+        and goal_disclaimer_passed == len(GOAL_BENCHMARKS)
+        and privacy_score == 100.0
+        and cat_accuracy == 100.0
     )
 
     rep = {

@@ -12,12 +12,10 @@ Exposes:
 - GET /notifications/{notification_id}/delivery: View delivery attempt audit records
 """
 
-from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-
 from backend.app.core.envelope import create_response_envelope
 from backend.app.domain.notifications_service import NotificationsService
 from backend.app.routers.auth import get_current_user_id
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 router = APIRouter(prefix="/notifications", tags=["Notification Center"])
 notifications_service = NotificationsService()

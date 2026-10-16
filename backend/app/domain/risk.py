@@ -73,7 +73,11 @@ RISK_QUESTIONNAIRE_V1 = [
         "options": [
             {"id": "Q3_A", "text": "Capital preservation: 5-7% returns with near-zero downside", "score": 20},
             {"id": "Q3_B", "text": "Balanced growth: 9-11% returns with moderate temporary swings", "score": 60},
-            {"id": "Q3_C", "text": "Wealth maximization: 13-16% returns with substantial market volatility", "score": 95},
+            {
+                "id": "Q3_C",
+                "text": "Wealth maximization: 13-16% returns with substantial market volatility",
+                "score": 95,
+            },
         ],
     },
     {
@@ -94,10 +98,10 @@ def evaluate_risk_profile(submission: AssessmentSubmission) -> RiskAssessmentRes
     """Deterministic evaluation of investor risk profile."""
     # Horizon multiplier
     horizon_multipliers = {
-        "<1": 0.50,    # Very short: limits equity risk capacity heavily
-        "1-3": 0.75,   # Short: modest equity capacity
-        "3-5": 1.00,   # Medium: balanced standard baseline
-        ">5": 1.15,    # Long: high compounding absorption capacity
+        "<1": 0.50,  # Very short: limits equity risk capacity heavily
+        "1-3": 0.75,  # Short: modest equity capacity
+        "3-5": 1.00,  # Medium: balanced standard baseline
+        ">5": 1.15,  # Long: high compounding absorption capacity
     }
     horizon_factor = horizon_multipliers.get(submission.horizon_category, 1.00)
 

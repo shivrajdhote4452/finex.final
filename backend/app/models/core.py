@@ -35,17 +35,13 @@ class User(Base):
 
     __tablename__ = "users"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
     provider: Mapped[str] = mapped_column(String(50), nullable=False, default="google")
     provider_subject: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     is_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=datetime.utcnow
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
     )
@@ -60,13 +56,9 @@ class User(Base):
     portfolios: Mapped[List["Portfolio"]] = relationship(
         "Portfolio", back_populates="user", cascade="all, delete-orphan"
     )
-    events: Mapped[List["ApplicationEvent"]] = relationship(
-        "ApplicationEvent", back_populates="user"
-    )
+    events: Mapped[List["ApplicationEvent"]] = relationship("ApplicationEvent", back_populates="user")
 
-    __table_args__ = (
-        UniqueConstraint("provider", "provider_subject", name="uq_users_provider_subject"),
-    )
+    __table_args__ = (UniqueConstraint("provider", "provider_subject", name="uq_users_provider_subject"),)
 
 
 class UserProfile(Base):
@@ -74,9 +66,7 @@ class UserProfile(Base):
 
     __tablename__ = "user_profiles"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True
     )
@@ -85,9 +75,7 @@ class UserProfile(Base):
     country: Mapped[str] = mapped_column(String(3), nullable=False, default="IND")
     experience_level: Mapped[str] = mapped_column(String(50), nullable=False, default="BEGINNER")
     onboarding_completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=datetime.utcnow
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
     )
@@ -100,9 +88,7 @@ class UserConsent(Base):
 
     __tablename__ = "user_consents"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -110,17 +96,13 @@ class UserConsent(Base):
     terms_accepted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     privacy_accepted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     educational_disclaimer_accepted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    accepted_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=datetime.utcnow
-    )
+    accepted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     ip_address: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)
     user_agent: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     user: Mapped["User"] = relationship("User", back_populates="consents")
 
-    __table_args__ = (
-        UniqueConstraint("user_id", "consent_version", name="uq_user_consent_version"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "consent_version", name="uq_user_consent_version"),)
 
 
 class Portfolio(Base):
@@ -128,9 +110,7 @@ class Portfolio(Base):
 
     __tablename__ = "portfolios"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -138,9 +118,7 @@ class Portfolio(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="INR")
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=datetime.utcnow
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
     )
@@ -156,9 +134,7 @@ class PortfolioHolding(Base):
 
     __tablename__ = "portfolio_holdings"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     portfolio_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("portfolios.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -169,9 +145,7 @@ class PortfolioHolding(Base):
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="INR")
     purchase_date: Mapped[date] = mapped_column(Date, nullable=False)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=datetime.utcnow
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
     )
@@ -190,9 +164,7 @@ class ApplicationEvent(Base):
 
     __tablename__ = "application_events"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
@@ -200,8 +172,6 @@ class ApplicationEvent(Base):
     correlation_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     payload: Mapped[Dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     ip_address: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=datetime.utcnow
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
 
     user: Mapped[Optional["User"]] = relationship("User", back_populates="events")

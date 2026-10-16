@@ -7,7 +7,7 @@ Author: Shivraj Dhote
 import pytest
 from backend.app.core.middleware import RateLimiterMiddleware
 from backend.app.factory import create_app
-from backend.app.routers.auth import create_access_token, revoke_token
+from backend.app.routers.auth import create_access_token
 from backend.app.routers.health import set_database_health_checker
 from fastapi.testclient import TestClient
 
@@ -117,9 +117,10 @@ def test_dependency_aware_readiness_probe_healthy_and_degraded(client):
 
 
 def test_multi_tenant_cross_user_isolation(client):
-    """S8-API-01: Verify strict cross-user data isolation between tenants."""
-    user1_headers = {"Authorization": "Bearer test-dev-token-sub-usr-tenant-001"}
-    user2_headers = {"Authorization": "Bearer test-dev-token-sub-usr-tenant-002"}
+    token1 = create_access_token("usr-tenant-001", "tenant1@finex.internal", "Tenant One")
+    token2 = create_access_token("usr-tenant-002", "tenant2@finex.internal", "Tenant Two")
+    user1_headers = {"Authorization": f"Bearer {token1}"}
+    user2_headers = {"Authorization": f"Bearer {token2}"}
 
     # 1. User 1 creates an alert rule
     alert_payload = {
@@ -133,7 +134,6 @@ def test_multi_tenant_cross_user_isolation(client):
     create_alert = client.post("/api/v1/alerts/rules", json=alert_payload, headers=user1_headers)
     assert create_alert.status_code == 201
     rule_id = create_alert.json()["data"]["id"]
-
 
     # User 2 list rules -> must NOT see User 1's rule
     user2_rules = client.get("/api/v1/alerts/rules", headers=user2_headers)
@@ -153,7 +153,6 @@ def test_multi_tenant_cross_user_isolation(client):
     create_goal = client.post("/api/v1/goals", json=goal_payload, headers=user1_headers)
     assert create_goal.status_code == 201
     goal_id = create_goal.json()["data"]["id"]
-
 
     # User 2 cannot access or view User 1's goal
     user2_get_goal = client.get(f"/api/v1/goals/{goal_id}", headers=user2_headers)

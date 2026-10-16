@@ -5,14 +5,13 @@ Exposes caller-owned watchlists CRUD with duplicate protection and error handlin
 """
 
 import uuid
-from typing import Dict, List
-
-from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel, Field
+from typing import Dict
 
 from backend.app.core.envelope import create_response_envelope
 from backend.app.core.errors import ConflictException, NotFoundException
 from backend.app.routers.auth import get_current_user_id
+from fastapi import APIRouter, Depends, Request
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/watchlists", tags=["Watchlists"])
 
@@ -29,9 +28,7 @@ class AddWatchlistItemRequest(BaseModel):
 
 
 @router.get("")
-async def get_user_watchlists(
-    request: Request, current_user: dict = Depends(get_current_user_id)
-):
+async def get_user_watchlists(request: Request, current_user: dict = Depends(get_current_user_id)):
     """Fetch all watchlists belonging to the authenticated caller."""
     cid = getattr(request.state, "correlation_id", None)
     user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
@@ -65,9 +62,7 @@ async def create_user_watchlist(
     # Duplicate name check
     for w in _WATCHLIST_STORE.values():
         if w["user_id"] == user_id and w["name"].lower() == payload.name.lower():
-            raise ConflictException(
-                message=f"Watchlist with name '{payload.name}' already exists for this account."
-            )
+            raise ConflictException(message=f"Watchlist with name '{payload.name}' already exists for this account.")
 
     wl_id = str(uuid.uuid4())
     new_wl = {
@@ -98,9 +93,7 @@ async def add_symbol_to_watchlist(
 
     sym = payload.symbol.upper().strip()
     if sym in wl["items"]:
-        raise ConflictException(
-            message=f"Instrument '{sym}' is already pinned in this watchlist."
-        )
+        raise ConflictException(message=f"Instrument '{sym}' is already pinned in this watchlist.")
 
     wl["items"].append(sym)
     return create_response_envelope(
@@ -126,9 +119,7 @@ async def remove_symbol_from_watchlist(
 
     sym = symbol.upper().strip()
     if sym not in wl["items"]:
-        raise NotFoundException(
-            message=f"Instrument '{sym}' is not in this watchlist."
-        )
+        raise NotFoundException(message=f"Instrument '{sym}' is not in this watchlist.")
 
     wl["items"].remove(sym)
     return create_response_envelope(

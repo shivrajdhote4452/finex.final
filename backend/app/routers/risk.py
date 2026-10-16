@@ -1,7 +1,11 @@
 """Deterministic Risk Profile Evaluation Router.
 
-Task ID: S2-API-02, S2-AI-01
+Task ID: CH-01, S2-API-02, S2-AI-01
+Evaluates risk profiles deterministically based on willingness, capacity, and horizon.
+Persists evaluated score and band to user profile upon submission.
 """
+
+from typing import Optional
 
 from backend.app.core.envelope import create_response_envelope
 from backend.app.domain.risk import (
@@ -9,7 +13,9 @@ from backend.app.domain.risk import (
     AssessmentSubmission,
     evaluate_risk_profile,
 )
-from fastapi import APIRouter, Request
+from backend.app.domain.user_store import user_store
+from backend.app.routers.auth import get_current_user_id
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 
 router = APIRouter(prefix="/risk", tags=["Risk Profile & Assessment"])
 
@@ -22,8 +28,48 @@ async def get_risk_questionnaire(request: Request):
 
 
 @router.post("/assessments")
-async def submit_risk_assessment(request: Request, submission: AssessmentSubmission):
-    """Deterministically score investor answers and generate explanation."""
+async def submit_risk_assessment(
+    request: Request,
+    submission: AssessmentSubmission,
+    authorization: Optional[str] = Header(None),
+):
+    """
+    Deterministically score investor answers and generate explanation.
+    Persists risk assessment to user profile if session token is provided.
+    """
     cid = getattr(request.state, "correlation_id", "none")
     result = evaluate_risk_profile(submission)
+
+    # If caller is authenticated, persist assessment against verified identity
+    if authorization and authorization.startswith("Bearer "):
+        try:
+            current_user = get_current_user_id(authorization)
+            uid = current_user["sub"]
+            user_store.record_risk_assessment(uid, result.model_dump())
+        except HTTPException:
+            pass  # Allow unauthenticated demo evaluation if explicitly requested, but do not persist
+
     return create_response_envelope(result.model_dump(), correlation_id=cid)
+
+
+@router.get("/assessments/me")
+async def get_my_risk_assessment(
+    request: Request,
+    current_user: dict = Depends(get_current_user_id),
+):
+    """Retrieve verified investor's latest saved risk assessment."""
+    cid = getattr(request.state, "correlation_id", "none")
+    uid = current_user["sub"]
+    saved = user_store.get_risk_assessment(uid)
+    if not saved:
+        profile = user_store.get_profile(uid)
+        return create_response_envelope(
+            {
+                "has_assessment": False,
+                "experience_level": profile.experience_level,
+                "risk_band": profile.risk_band,
+                "composite_score": profile.composite_score,
+            },
+            correlation_id=cid,
+        )
+    return create_response_envelope({"has_assessment": True, **saved}, correlation_id=cid)
