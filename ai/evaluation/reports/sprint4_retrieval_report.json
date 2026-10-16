@@ -1,0 +1,180 @@
+{
+  "evaluation_name": "Sprint 4 RAG Regulatory Document Retrieval Evaluation",
+  "author": "Shivraj Dhote",
+  "evaluated_at": "2026-10-16T13:17:28.854517+00:00",
+  "total_queries": 15,
+  "metrics": {
+    "recall_at_1_pct": 93.33,
+    "recall_at_3_pct": 93.33,
+    "recall_at_5_pct": 93.33,
+    "target_threshold_recall_at_3": 80.0,
+    "target_passed": true
+  },
+  "query_results": [
+    {
+      "query_id": "RQ-01",
+      "query": "How many months of emergency fund is recommended before investing in equities?",
+      "expected_doc_id": "SEBI-ED-2024-01",
+      "expected_section": "Foundations of Financial Planning",
+      "retrieved_top_doc_id": "SEBI-ED-2024-01",
+      "retrieved_top_section": "Chapter 1: The Foundations of Financial Planning",
+      "hit_at_1": true,
+      "hit_at_3": true,
+      "hit_at_5": true
+    },
+    {
+      "query_id": "RQ-02",
+      "query": "What are the asset allocation limits for single stock and single sector recommended by SEBI?",
+      "expected_doc_id": "SEBI-ED-2024-01",
+      "expected_section": "Diversification Principles",
+      "retrieved_top_doc_id": "SEBI-ED-2024-01",
+      "retrieved_top_section": "Chapter 3: Asset Allocation and Diversification Principles",
+      "hit_at_1": true,
+      "hit_at_3": true,
+      "hit_at_5": true
+    },
+    {
+      "query_id": "RQ-03",
+      "query": "How does Systematic Investment Plan (SIP) help mitigate market timing risk?",
+      "expected_doc_id": "SEBI-ED-2024-01",
+      "expected_section": "Compounding",
+      "retrieved_top_doc_id": "SEBI-ED-2024-01",
+      "retrieved_top_section": "Chapter 4: Systematic Investment Plans (SIP) and Compounding",
+      "hit_at_1": true,
+      "hit_at_3": true,
+      "hit_at_5": true
+    },
+    {
+      "query_id": "RQ-04",
+      "query": "What is the SCORES portal and how does an investor file a complaint against an intermediary?",
+      "expected_doc_id": "SEBI-ED-2024-01",
+      "expected_section": "SCORES Portal",
+      "retrieved_top_doc_id": "AMFI-MF-GUIDE-2024",
+      "retrieved_top_section": "Chapter 5: Exit Load Structure and NAV Computation",
+      "hit_at_1": false,
+      "hit_at_3": false,
+      "hit_at_5": false
+    },
+    {
+      "query_id": "RQ-05",
+      "query": "What is the relationship between capital market risk and expected return?",
+      "expected_doc_id": "SEBI-ED-2024-01",
+      "expected_section": "Risk and Return",
+      "retrieved_top_doc_id": "SEBI-ED-2024-01",
+      "retrieved_top_section": "Chapter 2: Understanding Risk and Return in Securities",
+      "hit_at_1": true,
+      "hit_at_3": true,
+      "hit_at_5": true
+    },
+    {
+      "query_id": "RQ-06",
+      "query": "What is the annual interest rate paid on Sovereign Gold Bonds issued by RBI?",
+      "expected_doc_id": "RBI-SGB-2024-FAQ",
+      "expected_section": "Interest Rate",
+      "retrieved_top_doc_id": "RBI-SGB-2024-FAQ",
+      "retrieved_top_section": "Section 1: Interest Rate and Coupon Payments",
+      "hit_at_1": true,
+      "hit_at_3": true,
+      "hit_at_5": true
+    },
+    {
+      "query_id": "RQ-07",
+      "query": "What is the maximum investment limit for individuals in Sovereign Gold Bonds per fiscal year?",
+      "expected_doc_id": "RBI-SGB-2024-FAQ",
+      "expected_section": "Eligibility and Limits",
+      "retrieved_top_doc_id": "RBI-SGB-2024-FAQ",
+      "retrieved_top_section": "Section 2: Eligibility and Limits",
+      "hit_at_1": true,
+      "hit_at_3": true,
+      "hit_at_5": true
+    },
+    {
+      "query_id": "RQ-08",
+      "query": "What is the capital gains tax treatment on redemption of Sovereign Gold Bonds upon maturity?",
+      "expected_doc_id": "RBI-SGB-2024-FAQ",
+      "expected_section": "Taxation and Premature Exit",
+      "retrieved_top_doc_id": "RBI-SGB-2024-FAQ",
+      "retrieved_top_section": "Section 3: Taxation and Premature Exit",
+      "hit_at_1": true,
+      "hit_at_3": true,
+      "hit_at_5": true
+    },
+    {
+      "query_id": "RQ-09",
+      "query": "What are the SEBI margin requirements and peak margin rules for equity derivative contracts?",
+      "expected_doc_id": "NISM-EQ-DERIV-2024",
+      "expected_section": "Margin Requirements",
+      "retrieved_top_doc_id": "NISM-EQ-DERIV-2024",
+      "retrieved_top_section": "Chapter 4: Margin Requirements and Risk Containment",
+      "hit_at_1": true,
+      "hit_at_3": true,
+      "hit_at_5": true
+    },
+    {
+      "query_id": "RQ-10",
+      "query": "How are index options settled on the National Stock Exchange?",
+      "expected_doc_id": "NISM-EQ-DERIV-2024",
+      "expected_section": "Settlement Mechanism",
+      "retrieved_top_doc_id": "NISM-EQ-DERIV-2024",
+      "retrieved_top_section": "Chapter 6: Settlement Mechanism of Futures and Options",
+      "hit_at_1": true,
+      "hit_at_3": true,
+      "hit_at_5": true
+    },
+    {
+      "query_id": "RQ-11",
+      "query": "What is the Total Expense Ratio (TER) cap for large-cap open-ended equity schemes under SEBI regulations?",
+      "expected_doc_id": "AMFI-MF-GUIDE-2024",
+      "expected_section": "Total Expense Ratio",
+      "retrieved_top_doc_id": "AMFI-MF-GUIDE-2024",
+      "retrieved_top_section": "Chapter 3: Total Expense Ratio (TER) Structure",
+      "hit_at_1": true,
+      "hit_at_3": true,
+      "hit_at_5": true
+    },
+    {
+      "query_id": "RQ-12",
+      "query": "How does exit load function when redeeming mutual fund units within one year?",
+      "expected_doc_id": "AMFI-MF-GUIDE-2024",
+      "expected_section": "Exit Load Structure",
+      "retrieved_top_doc_id": "AMFI-MF-GUIDE-2024",
+      "retrieved_top_section": "Chapter 5: Exit Load Structure and NAV Computation",
+      "hit_at_1": true,
+      "hit_at_3": true,
+      "hit_at_5": true
+    },
+    {
+      "query_id": "RQ-13",
+      "query": "What constitutes an emergency buffer for salaried individuals?",
+      "expected_doc_id": "SEBI-ED-2024-01",
+      "expected_section": "Foundations",
+      "retrieved_top_doc_id": "SEBI-ED-2024-01",
+      "retrieved_top_section": "Chapter 1: The Foundations of Financial Planning",
+      "hit_at_1": true,
+      "hit_at_3": true,
+      "hit_at_5": true
+    },
+    {
+      "query_id": "RQ-14",
+      "query": "Explain how compounding amplifies early investments.",
+      "expected_doc_id": "SEBI-ED-2024-01",
+      "expected_section": "Compounding",
+      "retrieved_top_doc_id": "SEBI-ED-2024-01",
+      "retrieved_top_section": "Chapter 4: Systematic Investment Plans (SIP) and Compounding",
+      "hit_at_1": true,
+      "hit_at_3": true,
+      "hit_at_5": true
+    },
+    {
+      "query_id": "RQ-15",
+      "query": "What are premature encashment windows for SGB bonds after 5 years?",
+      "expected_doc_id": "RBI-SGB-2024-FAQ",
+      "expected_section": "Premature Exit",
+      "retrieved_top_doc_id": "RBI-SGB-2024-FAQ",
+      "retrieved_top_section": "Section 3: Taxation and Premature Exit",
+      "hit_at_1": true,
+      "hit_at_3": true,
+      "hit_at_5": true
+    }
+  ]
+}

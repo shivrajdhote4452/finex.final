@@ -23,6 +23,7 @@ def ingest_corpus_documents() -> List[DocumentChunk]:
     for doc in REGULATORY_DOCUMENTS:
         doc_id = doc["document_id"]
         doc_title = doc["title"]
+        publisher = doc.get("publisher", "SEBI / Regulatory Authority")
         source_url = doc.get("source_url")
         doc_date = doc.get("document_date")
 
@@ -39,6 +40,7 @@ def ingest_corpus_documents() -> List[DocumentChunk]:
                 chunk_id=chunk_id,
                 document_id=doc_id,
                 title=doc_title,
+                publisher=publisher,
                 source_url=source_url,
                 section=section_title,
                 page_number=page_num,

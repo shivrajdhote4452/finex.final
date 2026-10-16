@@ -142,4 +142,93 @@ REGULATORY_DOCUMENTS: List[Dict[str, Any]] = [
             },
         ],
     },
+    {
+        "document_id": "RBI-SGB-2024-FAQ",
+        "title": "Reserve Bank of India Sovereign Gold Bond (SGB) Scheme FAQs",
+        "publisher": "Reserve Bank of India (RBI)",
+        "source_url": "https://www.rbi.org.in/scripts/BS_PressReleaseDisplay.aspx?prid=57022",
+        "document_date": "2024-02-12",
+        "sections": [
+            {
+                "section": "Section 1: Interest Rate and Coupon Payments",
+                "page_number": 2,
+                "content": (
+                    "Sovereign Gold Bonds (SGB) bear interest at the rate of 2.50% (fixed rate) per annum on the initial nominal amount of investment. "
+                    "Interest is credited semi-annually directly to the investor's bank account. The last coupon interest payment is made on maturity along with the principal."
+                ),
+            },
+            {
+                "section": "Section 2: Eligibility and Limits",
+                "page_number": 4,
+                "content": (
+                    "SGBs are restricted for sale to resident individuals, HUFs, Trusts, Universities, and Charitable Institutions. "
+                    "The minimum allowable investment is 1 gram of gold. The maximum limit of subscription is 4 kg for individuals and HUF, and 20 kg for trusts "
+                    "and similar entities per fiscal year (April–March) as notified by the Government of India from time to time."
+                ),
+            },
+            {
+                "section": "Section 3: Taxation and Premature Exit",
+                "page_number": 6,
+                "content": (
+                    "The tenure of the Bond is 8 years. Premature encashment or redemption of the bond is permitted after the 5th year from the date of issue on coupon payment dates. "
+                    "The capital gains tax arising on redemption of SGB to an individual upon maturity is completely exempted under Section 47 of the Income Tax Act. "
+                    "Indexation benefits are provided to long-term capital gains arising from transfer of the bond on the stock exchange."
+                ),
+            },
+        ],
+    },
+    {
+        "document_id": "NISM-EQ-DERIV-2024",
+        "title": "NISM Series VIII: Equity Derivatives Certification & Clearing Rules",
+        "publisher": "National Institute of Securities Markets (NISM)",
+        "source_url": "https://www.nism.ac.in/certifications/series-viii-equity-derivatives-certification-examination/",
+        "document_date": "2024-04-01",
+        "sections": [
+            {
+                "section": "Chapter 4: Margin Requirements and Risk Containment",
+                "page_number": 45,
+                "content": (
+                    "To safeguard financial market stability, clearing corporations enforce mandatory upfront peak margins on equity derivative contracts. "
+                    "Margin components include Value-at-Risk (VaR) margin, Extreme Loss Margin (ELM), and mark-to-market (MTM) margins. "
+                    "Brokers cannot permit intraday leverage beyond the SEBI-mandated peak margin collection framework."
+                ),
+            },
+            {
+                "section": "Chapter 6: Settlement Mechanism of Futures and Options",
+                "page_number": 72,
+                "content": (
+                    "Index derivatives (NIFTY 50 and BANK NIFTY options) are settled entirely in cash at expiration based on the weighted average closing price "
+                    "of the underlying index. Individual equity stock derivatives, however, are subject to physical delivery of the underlying shares upon expiry "
+                    "if held to contract close, requiring full capital outlay or deliverable shares."
+                ),
+            },
+        ],
+    },
+    {
+        "document_id": "AMFI-MF-GUIDE-2024",
+        "title": "AMFI Code of Conduct and Mutual Fund Investor Educational Handbook",
+        "publisher": "Association of Mutual Funds in India (AMFI)",
+        "source_url": "https://www.amfiindia.com/investor-corner/knowledge-center/what-are-mutual-funds.html",
+        "document_date": "2024-05-18",
+        "sections": [
+            {
+                "section": "Chapter 3: Total Expense Ratio (TER) Structure",
+                "page_number": 15,
+                "content": (
+                    "Total Expense Ratio (TER) represents the annual percentage fee charged by the Asset Management Company (AMC) to manage the fund. "
+                    "Under SEBI Mutual Fund Regulations, TER caps are strictly tiered based on scheme Assets Under Management (AUM): capping at 2.25% for the first ₹500 crore of AUM "
+                    "and decreasing incrementally. Direct plans have lower TER than regular plans because no distributor commissions are paid."
+                ),
+            },
+            {
+                "section": "Chapter 5: Exit Load Structure and NAV Computation",
+                "page_number": 28,
+                "content": (
+                    "An exit load is a fee levied when an investor redeems mutual fund units before a specified lock-in holding period (typically 1% if redeemed within 1 year for equity funds). "
+                    "Exit loads are credited back directly to the scheme's assets to protect remaining long-term unitholders from liquidity disruption. "
+                    "Net Asset Value (NAV) is computed daily at the close of trading after deducting scheme operational expenses."
+                ),
+            },
+        ],
+    },
 ]

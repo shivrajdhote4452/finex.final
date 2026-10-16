@@ -10,11 +10,19 @@ from ai.rag.retriever import RegulatoryDocumentRetriever
 
 def test_ingest_corpus_documents():
     chunks = ingest_corpus_documents()
-    assert len(chunks) == 11, f"Expected 11 sections across 3 documents, got {len(chunks)}"
+    assert len(chunks) == 18, f"Expected 18 sections across 6 documents, got {len(chunks)}"
 
+    approved_doc_ids = [
+        "SEBI-ED-2024-01",
+        "NSE-FACT-NIFTY50-2026",
+        "RBI-FLG-2024-02",
+        "RBI-SGB-2024-FAQ",
+        "NISM-EQ-DERIV-2024",
+        "AMFI-MF-GUIDE-2024",
+    ]
     for c in chunks:
         assert c.chunk_id.startswith("chk_")
-        assert c.document_id in ["SEBI-ED-2024-01", "NSE-FACT-NIFTY50-2026", "RBI-FLG-2024-02"]
+        assert c.document_id in approved_doc_ids
         assert c.page_number is not None and c.page_number > 0
         assert len(c.content) > 50
         assert c.title

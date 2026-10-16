@@ -9,6 +9,7 @@ from backend.app.core.errors import (
     validation_exception_handler,
 )
 from backend.app.core.middleware import CorrelationIdMiddleware, SecurityHeadersMiddleware
+from backend.app.routers.ai_chat import router as ai_chat_router
 from backend.app.routers.ai_portfolio import router as ai_portfolio_router
 from backend.app.routers.auth import router as auth_router
 from backend.app.routers.auth import users_router
@@ -78,6 +79,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     app.include_router(watchlists_router, prefix=v1_prefix)
     app.include_router(portfolio_router, prefix=v1_prefix)
     app.include_router(ai_portfolio_router, prefix=v1_prefix)
+    app.include_router(ai_chat_router, prefix=v1_prefix)
     app.include_router(sample_router, prefix=v1_prefix)
 
     return app

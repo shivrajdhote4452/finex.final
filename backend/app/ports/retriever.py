@@ -8,6 +8,7 @@ class DocumentChunk(BaseModel):
     chunk_id: str
     document_id: str
     title: str
+    publisher: Optional[str] = "SEBI / Regulatory Authority"
     source_url: Optional[str] = None
     section: Optional[str] = None
     page_number: Optional[int] = None

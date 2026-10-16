@@ -95,17 +95,17 @@
 | Task ID | Track | Title & Description | Status | Evidence / Notes |
 |---|---|---|---|---|
 | S4-PRD-01 | PRD | React AI chat: conversation list, composer, citations, feedback, delete | Verified Working | `AskFinExScreen.tsx` with Source Desk |
-| S4-PRD-02 | PRD | Flutter AI chat with history, citations, feedback, session expiry | Backlog | Mobile track |
-| S4-PRD-03 | PRD | Cross-platform chat test suite and privacy analytics | Backlog | |
-| S4-API-01 | API | Conversation, message, feedback endpoints with user isolation & pagination | Backlog | |
-| S4-API-02 | API | AI orchestration service: classification, retrieval, model call, guardrails | Backlog | |
-| S4-API-03 | API | Feedback endpoint, correlation tracing across API/retrieval/model calls | Backlog | |
-| S4-DAT-01 | DAT | document_registry, chunks, ai_conversations, messages, feedback, retrieval_events | Backlog | |
-| S4-DAT-02 | DAT | Vector Search index and retrieval workflow with metadata filters | Backlog | |
-| S4-DAT-03 | DAT | AI data lineage and quality checks | Backlog | |
-| S4-AI-01 | AI | Document ingestion pipeline for approved filings/factsheets | Backlog | |
-| S4-AI-02 | AI | Retrieval evaluation measuring recall@k, metadata filters, stale exclusion | Backlog | |
-| S4-AI-03 | AI | Answer guardrails and citation validator (unsupported claim blocker) | Backlog | |
+| S4-PRD-02 | PRD | Flutter AI chat with history, citations, feedback, session expiry | Verified Working | `mobile/lib/screens/ask_finex_screen.dart` |
+| S4-PRD-03 | PRD | Cross-platform chat test suite and privacy analytics | Verified Working | `mobile/test/widget_test.dart`, `test_ai_assistant_and_rag_api.py` |
+| S4-API-01 | API | Conversation, message, feedback endpoints with user isolation & pagination | Verified Working | `backend/app/routers/ai_chat.py` |
+| S4-API-02 | API | AI orchestration service: classification, retrieval, model call, guardrails | Verified Working | `backend/app/domain/ai_orchestration.py` |
+| S4-API-03 | API | Feedback endpoint, correlation tracing across API/retrieval/model calls | Verified Working | `backend/tests/test_ai_assistant_and_rag_api.py` |
+| S4-DAT-01 | DAT | document_registry, chunks, ai_conversations, messages, feedback, retrieval_events | Verified Working | `data/ddl/030_ai_rag.sql`, `backend/app/models/rag.py` |
+| S4-DAT-02 | DAT | Vector Search index and retrieval workflow with metadata filters | Verified Working | `ai/rag/retriever.py`, `ai/rag/corpus.py` |
+| S4-DAT-03 | DAT | AI data lineage and quality checks | Verified Working | `data/quality/ai_rag_quality.py`, `test_ai_rag_data_quality.py` |
+| S4-AI-01 | AI | Document ingestion pipeline for approved filings/factsheets | Verified Working | `ai/rag/ingestion.py` (18 sections across 6 authentic documents) |
+| S4-AI-02 | AI | Retrieval evaluation measuring recall@k, metadata filters, stale exclusion | Verified Working | 93.33% Recall@3 in `ai/evaluation/evaluate_retrieval_rag.py` |
+| S4-AI-03 | AI | Answer guardrails and citation validator (unsupported claim blocker) | Verified Working | `backend/app/domain/ai_orchestration.py`, `test_ai_prohibited_advice_guardrail_refusal` |
 
 ---
 
