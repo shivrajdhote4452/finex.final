@@ -38,6 +38,7 @@ ENV/
 web/node_modules/
 web/dist/
 web/build/
+*.tsbuildinfo
 .npm
 .eslintcache
 

@@ -1,0 +1,173 @@
+/* ==========================================================================
+   FINEX / EDITORIAL EDITION DESIGN SYSTEM (THE LEDGER COLLECTION)
+   Specification: FinEx_Frontend_Visual_Design_Book.pdf
+   ========================================================================== */
+
+:root {
+  /* Material & Palette */
+  --color-paper: #F8F6F0;
+  --color-paper-subtle: #F2EFE9;
+  --color-paper-elevated: #FFFFFF;
+  --color-ink: #242A2B;
+  --color-ink-muted: #5E6668;
+  --color-ink-faint: #8F9799;
+  --color-cobalt: #234BC0;
+  --color-cobalt-hover: #1B3CA0;
+  --color-cobalt-subtle: #EBF0FF;
+  --color-border: #E2DFD6;
+  --color-border-subtle: #EDE9E1;
+
+  /* Status Colors */
+  --color-gain: #1C7B47;
+  --color-gain-bg: #E8F6EE;
+  --color-loss: #B83A28;
+  --color-loss-bg: #FDF1EF;
+  --color-virtual-bg: #F4EFE6;
+  --color-virtual-text: #7C5227;
+
+  /* Typography */
+  --font-serif: 'Newsreader', Georgia, 'Times New Roman', serif;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+
+  /* Spacing Scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-16: 64px;
+
+  /* Radii */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  /* Transitions */
+  --transition-fast: 140ms ease-out;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Typography styles */
+h1, h2, h3, .serif-heading {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  color: var(--color-ink);
+  letter-spacing: -0.01em;
+}
+
+.tabular-nums {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Global utility classes matching Editorial Edition */
+.divider {
+  height: 1px;
+  background-color: var(--color-border);
+  border: none;
+  width: 100%;
+}
+
+.button-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background-color: var(--color-cobalt);
+  color: #FFFFFF;
+  border: 1px solid var(--color-cobalt);
+  border-radius: var(--radius-sm);
+  padding: 10px 18px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.button-primary:hover {
+  background-color: var(--color-cobalt-hover);
+  border-color: var(--color-cobalt-hover);
+}
+
+.button-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background-color: transparent;
+  color: var(--color-ink);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 10px 18px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.button-secondary:hover {
+  background-color: var(--color-paper-subtle);
+  border-color: var(--color-ink-muted);
+}
+
+.badge-virtual {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-virtual-bg);
+  color: var(--color-virtual-text);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.badge-gain {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-gain-bg);
+  color: var(--color-gain);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.badge-loss {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-loss-bg);
+  color: var(--color-loss);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* Accessible focus styles */
+:focus-visible {
+  outline: 2px solid var(--color-cobalt);
+  outline-offset: 2px;
+}

@@ -21,15 +21,15 @@
 
 | Task ID | Component | Description | Status | Evidence / Notes |
 |---|---|---|---|---|
-| W0-KHY / W0-NIL | Web (React) | Route/design shell, reusable UI kit structure | Backlog | Awaiting Shivraj's design instructions |
-| W0-SHI / W0-LIK | Mobile (Flutter) | Flutter flavors, navigation skeleton, theme | Backlog | Awaiting Shivraj's design instructions |
-| W0-DIS | Backend (FastAPI) | App factory, health/readiness, safe errors | In Progress | Implementing in S1-API-01 |
-| W0-NAY | Architecture | Ports for LLM, retrieval, market, operational/analytics storage | In Progress | Backend ports definition |
+| W0-KHY / W0-NIL | Web (React) | Route/design shell, reusable UI kit structure | Verified Working | Implemented per Visual Design Book in `web/` |
+| W0-SHI / W0-LIK | Mobile (Flutter) | Flutter flavors, navigation skeleton, theme | Ready | Design Book specifications captured |
+| W0-DIS | Backend (FastAPI) | App factory, health/readiness, safe errors | Verified Working | `backend/app/factory.py`, passing tests |
+| W0-NAY | Architecture | Ports for LLM, retrieval, market, operational/analytics storage | Verified Working | `backend/app/ports/` |
 | W0-PAL | Storage (Postgres) | Postgres connection, migration baseline, transaction proof | Ready | SQLAlchemy + Alembic setup |
 | W0-MIT | Analytics (Delta) | Databricks bundle/schema/job skeleton & Delta write proof | Ready | Local fixture / adapter path |
 | W0-PIY | Contracts | OpenAPI validation, TS/Dart generation workflow | Ready | Frozen OpenAPI schema tooling |
-| W0-PAY / W0-PRA / W0-MRU | AI / ML | Structured validation, policy/prompt registry, mock adapter | Ready | S1-AI-01 through S1-AI-03 |
-| W0-SYO | Quality & UAT | Glossary, task/acceptance templates, dependency tracking | Verified | Established in docs & matrix |
+| W0-PAY / W0-PRA / W0-MRU | AI / ML | Structured validation, policy/prompt registry, mock adapter | Verified Working | `ai/evaluation/evaluate.py` 100% pass |
+| W0-SYO | Quality & UAT | Glossary, task/acceptance templates, dependency tracking | Verified Working | Established in docs & matrix |
 
 ---
 
@@ -37,7 +37,7 @@
 
 | Task ID | Track | Title & Description | Status | Evidence / Output |
 |---|---|---|---|---|
-| S1-PRD-01 | PRD | React application shell (routes /login, /onboarding, /dashboard, etc.) | Backlog | Visual design held per Shivraj's directive |
+| S1-PRD-01 | PRD | React application shell (routes /login, /onboarding, /dashboard, etc.) | Verified Working | Implemented per Visual Design Book in `web/` |
 | S1-PRD-02 | PRD | Flutter application shell (dev/staging/prod flavors, routes, widgets) | Backlog | Visual design held per Shivraj's directive |
 | S1-PRD-03 | PRD | Cross-platform UI contract (docs/ui-contract-v1.md, state tables, mock JSON) | In Progress | Drafted in `docs/ui-contract-v1.md` |
 | S1-API-01 | API | FastAPI factory, /api/v1/health/live, /ready, config loader, env validation | In Progress | `backend/app/factory.py`, `config.py` |
