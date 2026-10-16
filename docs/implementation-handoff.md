@@ -10,25 +10,32 @@
 
 ## 1. Verified Working Features & Deliverables
 
-1. **Frontend Web Shell (S1-PRD-01, W0-KHY / W0-NIL):**
-   - Built complete React 18 + TypeScript + Vite web application in `web/` strictly following `FinEx_Frontend_Visual_Design_Book.pdf`.
-   - Editorial Edition design system tokens in `web/src/index.css`: Warm Paper (`#F8F6F0`), Cobalt Blue (`#234BC0`), Ink (`#242A2B`), Newsreader Editorial Serif, Inter Sans, and JetBrains Mono tabular numerals.
-   - Top navigation `AppShell` with lowercase `finex.` wordmark, active blue tab underlines, and `Demo workspace SD` profile trigger.
-   - Implemented all 11 core screens:
-     * Screen 01/03: `WelcomeScreen.tsx` (Split hero with cobalt blue left column and Google sign-in + educational consent checkbox).
-     * Screen 02/04: `OnboardingScreen.tsx` (Time horizon step with radio cards and "Why This Matters" editorial context column).
-     * Screen 03/05: `OnboardingScreen.tsx` (Risk Profile Explained with Navy card and 3 influencing factors).
-     * Screen 04/06: `OverviewScreen.tsx` (Good morning greeting, big stats, SVG account value trend chart, and "Worth a closer look" 36.2% concentration link).
-     * Screen 05/07: `MarketsScreen.tsx` (Watchlist with avatar circles, genuine prices, day change badges, and sparklines).
-     * Screen 06/08: `MarketsScreen.tsx` (Instrument detail with breadcrumbs, price chart, and Quote Details desk).
-     * Screen 07/09: `PortfolioScreen.tsx` (Summary row, multi-segment allocation strip, holdings table, and reconciled footer).
-     * Screen 08/10: `AskFinExScreen.tsx` (Reading-room layout with grounded chat on the left and Source Desk evidence on the right).
-     * Screen 09-10/11-12: `PracticeScreen.tsx` (Paper trading order ticket with Buy/Sell toggle, order estimate, and persistent status receipts).
-     * Screen 11/13: `AlertsScreen.tsx` (Timeline notifications on the left and Price Alert Rule creator on the right).
-     * Screen 12/14: `GoalsScreen.tsx` (Goal progress bars on the left and selected goal scenario card with laptop line drawing on the right).
-     * Screen 13-14/15-16: `SpendingScreen.tsx` (Monthly outflow category strip on the left, review queue on the right, and full CSV audit/validation table).
-     * Screen 15/17: `SettingsScreen.tsx` (Navy profile summary card with display name, risk profile, and consent history rows).
-   - Vite dev server running at `http://localhost:3000/`. Production build verified (`tsc -b && vite build` succeeded in 731ms).
+1. **Frontend Pro Institutional Upgrade & Live Transaction Engine (S1-PRD-01, S3-PRD-01, S5-PRD-01, S6-PRD-01):**
+   - Transformed frontend from basic flat paper layout into an ultra-sleek, institutional dark pro theme (`#0B0F19` Deep Obsidian, glassmorphic cards with subtle emerald/cyan borders, glowing pills, and pulsing live dots).
+   - **Continuous Live Market Ticker Marquee:** Live scrolling ticker tape running at the top of the header displaying broad indices (NIFTY 50 `25,480.30 ▲ +0.45%`, SENSEX `83,120.15 ▲ +0.38%`, BANK NIFTY `52,190.40 ▼ -0.12%`, INDIA VIX `12.85 ▼ -2.40%`) alongside dynamic stock quotes with real-time flash animations.
+   - **Centralized Reactive State Engine (`FinancialContext.tsx`):**
+     * Manages real-time virtual cash, multi-asset holdings, atomic order execution (`executeOrder`), in-app alerts, and spending ledger.
+     * Supports `MARKET`, `LIMIT`, `STOP_LOSS`, and `SIP` order mechanisms.
+     * Realistic micro-tick market pulse simulator: subtle price fluctuations every 4.5 seconds with green/red ticker flashes.
+     * Realized P&L calculation on closed `SELL` orders with profit/loss stamps.
+     * Sandbox capital management: `depositFunds` (+₹25k, +₹50k, +₹100k) and full `resetAccount` restoring ₹50,000 baseline.
+   - **Global Quick Trade Modal (`QuickTradeModal.tsx`):**
+     * Accessible globally via header `+ Quick Trade` or directly from any stock card or table.
+     * Features full order entry ticket, instrument dropdown (8 NSE equities), quantity stepper with % helpers (25%, 50%, 75%, 100%), limit price input, zero-brokerage educational fee breakdown, and animated electronic confirmation slip.
+   - **Dedicated Transaction Ledger & Audit Screen (`TransactionsScreen.tsx`):**
+     * Complete immutable execution history with filter pills (All, Buy, Sell, SIP, Deposit) and search by symbol/order ID.
+     * Real-time metrics: Traded Volume, Realized P&L, Win Rate %, Total Orders, and Simulated Fees Saved.
+     * Direct **"Export to CSV"** button generating downloadable `finex_transactions_ledger.csv`.
+     * Interactive **Electronic Contract Note Modal** with simulated SEBI/NSE compliance watermark and fee breakdown.
+   - **Pro Paper Trading Terminal (`PracticeScreen.tsx`):**
+     * Pro trading layout with simulated Level-2 Order Book (Depth of Market with Bid/Ask volume bars).
+     * 1-Click "Square Off" / "Add 5 Shares" actions on active positions with live trailing P&L.
+     * Web Audio API synthesized order fill chime on successful execution.
+   - **Interactive Overview Dashboard (`OverviewScreen.tsx`):**
+     * Switchable performance chart: Interactive Area Line vs Japanese Candlesticks.
+     * 1-Click Buy/Sell action buttons directly on top movers.
+     * Capital allocation progress bar (Equities vs Liquid Cash).
+   - Hot module replacement (HMR) verified and running cleanly on `http://localhost:3000/`.
 
 1. **API & Factory Baseline (S1-API-01, S1-API-02, S1-API-03, W0-DIS):**
    - FastAPI factory in `backend/app/factory.py` with lifespans, CORS, and security middleware.

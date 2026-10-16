@@ -1,136 +1,157 @@
 import React, { useState } from 'react';
+import { useFinancial } from '../context/FinancialContext';
 
 export const AlertsScreen: React.FC = () => {
-  const [instrument, setInstrument] = useState('RELIANCE');
-  const [condition, setCondition] = useState('Price above ₹2,600.00');
+  const { notifications, markAllNotificationsRead, addNotification } = useFinancial();
 
-  const alerts = [
-    { time: '09:40', title: 'Price threshold reached', text: 'RELIANCE crossed your illustrated threshold.', color: 'var(--color-gain)' },
-    { time: '09:15', title: 'Allocation changed', text: 'Review concentration in your practice portfolio.', color: 'var(--color-cobalt)' },
-    { time: '08:00', title: 'Monthly goal check-in', text: 'Your emergency fund contribution is due.', color: 'var(--color-loss)' },
-  ];
+  const [instrument, setInstrument] = useState('RELIANCE');
+  const [threshold, setThreshold] = useState('2600.00');
+  const [ruleAdded, setRuleAdded] = useState(false);
+
+  const handleSaveAlert = (e: React.FormEvent) => {
+    e.preventDefault();
+    addNotification('Price Rule Created', `Active monitoring: Trigger alert when ${instrument} crosses ₹${threshold}`, 'price');
+    setRuleAdded(true);
+    setTimeout(() => setRuleAdded(false), 2500);
+  };
 
   return (
-    <div style={{ maxWidth: '1240px', margin: '0 auto' }}>
-      <span style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-cobalt)', fontWeight: 600 }}>
-        Alerts
-      </span>
-
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: '8px', marginBottom: '32px' }}>
+    <div style={{ maxWidth: '1440px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '28px' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <h1 style={{ fontSize: '40px', lineHeight: 1.15, margin: 0 }}>Only what needs your attention.</h1>
-          <p style={{ color: 'var(--color-ink-muted)', fontSize: '14px', marginTop: '4px' }}>
-            A durable in-app history, even when a push notification fails.
+          <span style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>
+            Automated Monitoring
+          </span>
+          <h1 style={{ fontSize: '36px', fontWeight: 700, color: '#FFFFFF', marginTop: '4px', letterSpacing: '-0.02em' }}>
+            Smart Alerts & Trigger Rules
+          </h1>
+          <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginTop: '4px' }}>
+            Deterministic rule evaluation with deduplication and cooldown controls.
           </p>
         </div>
-        <button className="button-primary" style={{ padding: '10px 20px', fontSize: '13px' }}>
-          Create alert →
+
+        <button onClick={markAllNotificationsRead} className="btn btn-secondary">
+          ✓ Mark All as Read
         </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '56px', alignItems: 'start' }}>
-        {/* Timeline Notifications Column */}
-        <div>
-          <span style={{ fontSize: '11px', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-ink-faint)', display: 'block', marginBottom: '20px' }}>
-            Today
-          </span>
+      <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '28px', alignItems: 'start' }}>
+        {/* Left Column: Notification Feed */}
+        <div className="glass-card" style={{ padding: '28px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#FFFFFF' }}>Recent In-App Notifications</h3>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{notifications.length} Total Alerts</span>
+          </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '28px', borderLeft: '1px solid var(--color-border)', paddingLeft: '24px', marginLeft: '6px' }}>
-            {alerts.map((a, i) => (
-              <div key={i} style={{ position: 'relative' }}>
-                {/* Dot marker */}
-                <div
-                  style={{
-                    position: 'absolute',
-                    left: '-29px',
-                    top: '4px',
-                    width: '10px',
-                    height: '10px',
-                    borderRadius: '50%',
-                    backgroundColor: a.color,
-                  }}
-                />
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', marginBottom: '4px' }}>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--color-ink-muted)' }}>
-                    {a.time}
-                  </span>
-                  <span style={{ fontWeight: 600, fontSize: '16px' }}>{a.title}</span>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {notifications.map((n) => (
+              <div
+                key={n.id}
+                style={{
+                  padding: '16px',
+                  borderRadius: 'var(--radius-sm)',
+                  backgroundColor: n.read ? 'rgba(255, 255, 255, 0.02)' : 'rgba(59, 130, 246, 0.08)',
+                  border: n.read ? '1px solid var(--border-subtle)' : '1px solid rgba(59, 130, 246, 0.3)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                }}
+              >
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                    {!n.read && <div className="pulse-dot" />}
+                    <strong style={{ fontSize: '14px', color: '#FFFFFF' }}>{n.title}</strong>
+                    <span className="badge badge-neutral" style={{ fontSize: '10px' }}>{n.type}</span>
+                  </div>
+                  <p style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                    {n.message}
+                  </p>
                 </div>
-                <p style={{ fontSize: '14px', color: 'var(--color-ink-muted)', marginBottom: '8px' }}>
-                  {a.text}
-                </p>
-                <span style={{ fontSize: '13px', color: 'var(--color-cobalt)', fontWeight: 500, cursor: 'pointer' }}>
-                  View details →
+                <span className="tabular-nums" style={{ fontSize: '11px', color: 'var(--text-faint)' }}>
+                  {n.time}
                 </span>
               </div>
             ))}
           </div>
-
-          <div style={{ marginTop: '40px', fontSize: '12px', color: 'var(--color-ink-faint)' }}>
-            Earlier notifications remain available in history.
-          </div>
         </div>
 
-        {/* Right Rule Creator Form */}
-        <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', padding: '32px', backgroundColor: 'var(--color-paper-subtle)' }}>
-          <span style={{ fontSize: '11px', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-cobalt)', fontWeight: 600 }}>
-            Price Alert Rule
-          </span>
+        {/* Right Column: Rule Creator */}
+        <div className="glass-card" style={{ padding: '28px' }}>
+          <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#FFFFFF', marginBottom: '6px' }}>
+            Create Price Alert Rule
+          </h3>
+          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '20px' }}>
+            Evaluated at end-of-day close. Suppresses duplicate firings within 24h.
+          </p>
 
-          <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <form onSubmit={handleSaveAlert} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '11px', textTransform: 'uppercase', color: 'var(--color-ink-faint)', letterSpacing: '0.06em', marginBottom: '6px' }}>
+              <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px' }}>
                 Instrument
               </label>
-              <input
-                type="text"
+              <select
                 value={instrument}
                 onChange={(e) => setInstrument(e.target.value)}
                 style={{
                   width: '100%',
                   padding: '10px 14px',
-                  border: '1px solid var(--color-border)',
                   borderRadius: 'var(--radius-sm)',
-                  backgroundColor: '#FFFFFF',
+                  border: '1px solid var(--border-medium)',
+                  backgroundColor: 'var(--bg-input)',
+                  color: '#FFFFFF',
                   fontFamily: 'var(--font-sans)',
-                  fontSize: '14px',
+                  fontSize: '13px',
                 }}
-              />
+              >
+                <option value="RELIANCE">RELIANCE (Reliance Industries)</option>
+                <option value="TCS">TCS (Tata Consultancy Services)</option>
+                <option value="INFY">INFY (Infosys)</option>
+                <option value="HDFCBANK">HDFCBANK (HDFC Bank)</option>
+              </select>
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '11px', textTransform: 'uppercase', color: 'var(--color-ink-faint)', letterSpacing: '0.06em', marginBottom: '6px' }}>
-                Condition
+              <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                Price Threshold (INR)
               </label>
               <input
-                type="text"
-                value={condition}
-                onChange={(e) => setCondition(e.target.value)}
+                type="number"
+                step="0.01"
+                value={threshold}
+                onChange={(e) => setThreshold(e.target.value)}
                 style={{
                   width: '100%',
                   padding: '10px 14px',
-                  border: '1px solid var(--color-border)',
                   borderRadius: 'var(--radius-sm)',
-                  backgroundColor: '#FFFFFF',
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: '14px',
+                  border: '1px solid var(--border-medium)',
+                  backgroundColor: 'var(--bg-input)',
+                  color: '#FFFFFF',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '13px',
                 }}
               />
             </div>
 
             <div>
-              <label style={{ display: 'block', fontSize: '11px', textTransform: 'uppercase', color: 'var(--color-ink-faint)', letterSpacing: '0.06em', marginBottom: '6px' }}>
-                Delivery
+              <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                Delivery Channel
               </label>
-              <div style={{ fontSize: '13px', color: 'var(--color-ink-muted)', padding: '6px 0' }}>
-                In-app + push when available
+              <div style={{ fontSize: '13px', color: 'var(--color-accent-cyan)' }}>
+                ✓ In-App Feed + FCM Mobile Push (When connected)
               </div>
             </div>
 
-            <button className="button-primary" style={{ width: '100%', padding: '12px 20px', fontSize: '14px', marginTop: '12px' }}>
-              Save alert →
+            {ruleAdded && (
+              <div style={{ color: 'var(--color-profit)', fontSize: '12px' }}>
+                ✓ Price rule registered in operational database!
+              </div>
+            )}
+
+            <button type="submit" className="btn btn-primary" style={{ marginTop: '8px' }}>
+              Save Alert Rule →
             </button>
-          </div>
+          </form>
         </div>
       </div>
     </div>

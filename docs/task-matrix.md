@@ -73,71 +73,71 @@
 
 ## Sprint 3 — Market Data, Watchlist and Portfolio
 
-| Task ID | Track | Title & Description | Status |
-|---|---|---|---|
-| S3-PRD-01 | PRD | React market search, watchlist and portfolio dashboard | Backlog |
-| S3-PRD-02 | PRD | Flutter market search, watchlist and portfolio dashboard | Backlog |
-| S3-PRD-03 | PRD | Accessible chart wrappers, response mapping and E2E watchlist/portfolio tests | Backlog |
-| S3-API-01 | API | /market/search, /market/quotes/{symbol}, watchlists CRUD with freshness | Backlog |
-| S3-API-02 | API | Portfolio CRUD, holdings validation, deterministic snapshot calculation | Backlog |
-| S3-API-03 | API | Caching, pagination, provider error mapping and contract tests | Backlog |
-| S3-DAT-01 | DAT | Securities, market_quotes, market_price_history, watchlists tables | Backlog |
-| S3-DAT-02 | DAT | Market data ingestion pipeline, normalization, deduplication & MERGE | Backlog |
-| S3-DAT-03 | DAT | Market freshness & portfolio DQ checks (stale quote, orphan item, allocation sum) | Backlog |
-| S3-AI-01 | AI | Structured company/fund comparison prompt & schema | Backlog |
-| S3-AI-02 | AI | Portfolio explanation tool using deterministic backend metrics | Backlog |
-| S3-AI-03 | AI | Factuality/evaluation set for comparisons and portfolio explanations | Backlog |
+| Task ID | Track | Title & Description | Status | Evidence / Notes |
+|---|---|---|---|---|
+| S3-PRD-01 | PRD | React market search, watchlist and portfolio dashboard | Verified Working | `MarketsScreen.tsx`, `PortfolioScreen.tsx`, `OverviewScreen.tsx` |
+| S3-PRD-02 | PRD | Flutter market search, watchlist and portfolio dashboard | Backlog | Mobile track |
+| S3-PRD-03 | PRD | Accessible chart wrappers, response mapping and E2E watchlist/portfolio tests | Backlog | |
+| S3-API-01 | API | /market/search, /market/quotes/{symbol}, watchlists CRUD with freshness | Backlog | |
+| S3-API-02 | API | Portfolio CRUD, holdings validation, deterministic snapshot calculation | Backlog | |
+| S3-API-03 | API | Caching, pagination, provider error mapping and contract tests | Backlog | |
+| S3-DAT-01 | DAT | Securities, market_quotes, market_price_history, watchlists tables | Backlog | |
+| S3-DAT-02 | DAT | Market data ingestion pipeline, normalization, deduplication & MERGE | Backlog | |
+| S3-DAT-03 | DAT | Market freshness & portfolio DQ checks (stale quote, orphan item, allocation sum) | Backlog | |
+| S3-AI-01 | AI | Structured company/fund comparison prompt & schema | Backlog | |
+| S3-AI-02 | AI | Portfolio explanation tool using deterministic backend metrics | Backlog | |
+| S3-AI-03 | AI | Factuality/evaluation set for comparisons and portfolio explanations | Backlog | |
 
 ---
 
 ## Sprint 4 — AI Financial Assistant and RAG
 
-| Task ID | Track | Title & Description | Status |
-|---|---|---|---|
-| S4-PRD-01 | PRD | React AI chat: conversation list, composer, citations, feedback, delete | Backlog |
-| S4-PRD-02 | PRD | Flutter AI chat with history, citations, feedback, session expiry | Backlog |
-| S4-PRD-03 | PRD | Cross-platform chat test suite and privacy analytics | Backlog |
-| S4-API-01 | API | Conversation, message, feedback endpoints with user isolation & pagination | Backlog |
-| S4-API-02 | API | AI orchestration service: classification, retrieval, model call, guardrails | Backlog |
-| S4-API-03 | API | Feedback endpoint, correlation tracing across API/retrieval/model calls | Backlog |
-| S4-DAT-01 | DAT | document_registry, chunks, ai_conversations, messages, feedback, retrieval_events | Backlog |
-| S4-DAT-02 | DAT | Vector Search index and retrieval workflow with metadata filters | Backlog |
-| S4-DAT-03 | DAT | AI data lineage and quality checks | Backlog |
-| S4-AI-01 | AI | Document ingestion pipeline for approved filings/factsheets | Backlog |
-| S4-AI-02 | AI | Retrieval evaluation measuring recall@k, metadata filters, stale exclusion | Backlog |
-| S4-AI-03 | AI | Answer guardrails and citation validator (unsupported claim blocker) | Backlog |
+| Task ID | Track | Title & Description | Status | Evidence / Notes |
+|---|---|---|---|---|
+| S4-PRD-01 | PRD | React AI chat: conversation list, composer, citations, feedback, delete | Verified Working | `AskFinExScreen.tsx` with Source Desk |
+| S4-PRD-02 | PRD | Flutter AI chat with history, citations, feedback, session expiry | Backlog | Mobile track |
+| S4-PRD-03 | PRD | Cross-platform chat test suite and privacy analytics | Backlog | |
+| S4-API-01 | API | Conversation, message, feedback endpoints with user isolation & pagination | Backlog | |
+| S4-API-02 | API | AI orchestration service: classification, retrieval, model call, guardrails | Backlog | |
+| S4-API-03 | API | Feedback endpoint, correlation tracing across API/retrieval/model calls | Backlog | |
+| S4-DAT-01 | DAT | document_registry, chunks, ai_conversations, messages, feedback, retrieval_events | Backlog | |
+| S4-DAT-02 | DAT | Vector Search index and retrieval workflow with metadata filters | Backlog | |
+| S4-DAT-03 | DAT | AI data lineage and quality checks | Backlog | |
+| S4-AI-01 | AI | Document ingestion pipeline for approved filings/factsheets | Backlog | |
+| S4-AI-02 | AI | Retrieval evaluation measuring recall@k, metadata filters, stale exclusion | Backlog | |
+| S4-AI-03 | AI | Answer guardrails and citation validator (unsupported claim blocker) | Backlog | |
 
 ---
 
 ## Sprint 5 — Paper Trading
 
-| Task ID | Track | Title & Description | Status |
-|---|---|---|---|
-| S5-PRD-01 | PRD | React paper-trading screens: account summary, order ticket, positions, history | Backlog |
-| S5-PRD-02 | PRD | Flutter paper-trading account, order ticket, positions and history | Backlog |
-| S5-PRD-03 | PRD | Paper-trading E2E and reconciliation tests | Backlog |
-| S5-API-01 | API | Paper account CRUD/reset, order submit/list/get, positions with idempotency | Backlog |
-| S5-API-02 | API | Deterministic execution/ledger service for buy/sell (atomic transaction) | Backlog |
-| S5-API-03 | API | Security, concurrency and failure tests (double submit, rollback) | Backlog |
-| S5-DAT-01 | DAT | paper_accounts, orders, trades, positions, cash_ledger, snapshots tables | Backlog |
-| S5-DAT-02 | DAT | Snapshot workflow and deterministic equity, cost basis, realized/unrealized P&L | Backlog |
-| S5-DAT-03 | DAT | Reconciliation notebook comparing orders, trades, ledger and break report | Backlog |
-| S5-AI-01 | AI | Paper-trading coach prompt (order outcome, portfolio impact, learning points) | Backlog |
-| S5-AI-02 | AI | Performance narrative pipeline using deterministic paper metrics | Backlog |
-| S5-AI-03 | AI | Safety and factuality evaluation for paper-trading coaching | Backlog |
+| Task ID | Track | Title & Description | Status | Evidence / Notes |
+|---|---|---|---|---|
+| S5-PRD-01 | PRD | React paper-trading screens: account summary, order ticket, positions, history | Verified Working | `PracticeScreen.tsx`, `TransactionsScreen.tsx`, `QuickTradeModal.tsx` |
+| S5-PRD-02 | PRD | Flutter paper-trading account, order ticket, positions and history | Backlog | Mobile track |
+| S5-PRD-03 | PRD | Paper-trading E2E and reconciliation tests | Backlog | |
+| S5-API-01 | API | Paper account CRUD/reset, order submit/list/get, positions with idempotency | Backlog | |
+| S5-API-02 | API | Deterministic execution/ledger service for buy/sell (atomic transaction) | Backlog | |
+| S5-API-03 | API | Security, concurrency and failure tests (double submit, rollback) | Backlog | |
+| S5-DAT-01 | DAT | paper_accounts, orders, trades, positions, cash_ledger, snapshots tables | Backlog | |
+| S5-DAT-02 | DAT | Snapshot workflow and deterministic equity, cost basis, realized/unrealized P&L | Backlog | |
+| S5-DAT-03 | DAT | Reconciliation notebook comparing orders, trades, ledger and break report | Backlog | |
+| S5-AI-01 | AI | Paper-trading coach prompt (order outcome, portfolio impact, learning points) | Backlog | |
+| S5-AI-02 | AI | Performance narrative pipeline using deterministic paper metrics | Backlog | |
+| S5-AI-03 | AI | Safety and factuality evaluation for paper-trading coaching | Backlog | |
 
 ---
 
 ## Sprint 6 — Smart Alerts and Conversational Portfolio Intelligence
 
-| Task ID | Track | Title & Description | Status |
-|---|---|---|---|
-| S6-PRD-01 | PRD | React alert management, notification center and portfolio conversation | Backlog |
-| S6-PRD-02 | PRD | Flutter alert management, notification center and portfolio conversation | Backlog |
-| S6-PRD-03 | PRD | Cross-platform E2E tests for alert creation/trigger/read and numbers check | Backlog |
-| S6-API-01 | API | Alert rule CRUD and evaluation endpoints (price, movement, concentration, risk) | Backlog |
-| S6-API-02 | API | Deterministic portfolio intelligence service (allocation, concentration, scenario) | Backlog |
-| S6-API-03 | API | Notifications list/read/mark-all endpoints and delivery status tracking | Backlog |
+| Task ID | Track | Title & Description | Status | Evidence / Notes |
+|---|---|---|---|---|
+| S6-PRD-01 | PRD | React alert management, notification center and portfolio conversation | Verified Working | `AlertsScreen.tsx` with price rules |
+| S6-PRD-02 | PRD | Flutter alert management, notification center and portfolio conversation | Backlog | Mobile track |
+| S6-PRD-03 | PRD | Cross-platform E2E tests for alert creation/trigger/read and numbers check | Backlog | |
+| S6-API-01 | API | Alert rule CRUD and evaluation endpoints (price, movement, concentration, risk) | Backlog | |
+| S6-API-02 | API | Deterministic portfolio intelligence service (allocation, concentration, scenario) | Backlog | |
+| S6-API-03 | API | Notifications list/read/mark-all endpoints and delivery status tracking | Backlog | |
 | S6-DAT-01 | DAT | alert_rules, alert_events, notifications, delivery_attempts tables | Backlog |
 | S6-DAT-02 | DAT | Portfolio snapshot/metrics pipeline (sector exposure, concentration score) | Backlog |
 | S6-DAT-03 | DAT | Alert evaluation job and monitoring queries for due rules, duplicate suppression | Backlog |

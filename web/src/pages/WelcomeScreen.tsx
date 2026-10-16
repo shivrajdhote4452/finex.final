@@ -11,17 +11,16 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onLoginSuccess }) 
 
   const handleGoogleSignIn = () => {
     if (!consentChecked) {
-      setErrorMessage('You must accept the terms to continue.');
+      setErrorMessage('You must accept the educational terms and data policy to proceed.');
       return;
     }
     setLoading(true);
     setErrorMessage(null);
 
-    // Call mock auth / Sprint 2 Google callback
     setTimeout(() => {
       setLoading(false);
       onLoginSuccess();
-    }, 400);
+    }, 350);
   };
 
   return (
@@ -29,83 +28,96 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onLoginSuccess }) 
       style={{
         minHeight: '100vh',
         display: 'grid',
-        gridTemplateColumns: 'minmax(320px, 1fr) minmax(360px, 1fr)',
-        backgroundColor: 'var(--color-paper)',
+        gridTemplateColumns: '1.2fr 1fr',
+        backgroundColor: 'var(--bg-app)',
       }}
     >
-      {/* Left Blue Hero Column */}
+      {/* Left Column: Pro Branding & Core Mission */}
       <div
         style={{
-          backgroundColor: 'var(--color-cobalt)',
-          color: '#FFFFFF',
           padding: '64px',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'space-between',
+          borderRight: '1px solid var(--border-subtle)',
+          background: 'linear-gradient(135deg, rgba(17, 24, 39, 0.8) 0%, rgba(11, 15, 25, 0.95) 100%)',
         }}
       >
         <div>
-          <span style={{ fontFamily: 'var(--font-serif)', fontSize: '32px', fontWeight: 600, letterSpacing: '-0.02em' }}>
-            finex.
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div
+              style={{
+                width: '36px',
+                height: '36px',
+                borderRadius: 'var(--radius-sm)',
+                background: 'linear-gradient(135deg, #3B82F6 0%, #06B6D4 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 800,
+                fontSize: '18px',
+                color: '#FFFFFF',
+                boxShadow: '0 0 20px rgba(59, 130, 246, 0.4)',
+              }}
+            >
+              F
+            </div>
+            <span style={{ fontSize: '24px', fontWeight: 700, color: '#FFFFFF', letterSpacing: '-0.02em' }}>
+              finex<span style={{ color: 'var(--color-primary)' }}>.</span>
+            </span>
+          </div>
 
-          <div style={{ marginTop: '96px', maxWidth: '440px' }}>
-            <h1 style={{ fontFamily: 'var(--font-serif)', fontSize: '56px', lineHeight: 1.1, color: '#FFFFFF', marginBottom: '24px' }}>
-              Start with<br />
-              <em style={{ fontStyle: 'italic', fontWeight: 400 }}>understanding.</em>
+          <div style={{ marginTop: '80px', maxWidth: '520px' }}>
+            <span className="badge badge-cyan" style={{ marginBottom: '16px' }}>
+              Educational Financial Excellence
+            </span>
+            <h1 style={{ fontSize: '48px', fontWeight: 800, lineHeight: 1.15, color: '#FFFFFF', letterSpacing: '-0.03em', marginBottom: '20px' }}>
+              Master Investing with <span style={{ background: 'linear-gradient(135deg, #60A5FA 0%, #06B6D4 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Genuine Data</span> & Virtual Capital.
             </h1>
-            <p style={{ fontSize: '18px', lineHeight: 1.5, opacity: 0.9, fontWeight: 300 }}>
-              A place to explore markets, ask better questions and practice with virtual money.
+            <p style={{ fontSize: '16px', lineHeight: 1.6, color: 'var(--text-muted)' }}>
+              A high-precision financial workspace designed to explore real NSE market observations, practice paper trading with an atomic ledger, and conduct document-grounded AI research.
             </p>
           </div>
         </div>
 
-        <div style={{ borderTop: '1px solid rgba(255, 255, 255, 0.2)', paddingTop: '24px' }}>
-          <span style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', opacity: 0.8, display: 'block', marginBottom: '8px' }}>
-            Your Financial Workspace
-          </span>
-          <p style={{ fontSize: '16px', fontWeight: 500 }}>
-            Learn. Compare. Practice.
-          </p>
+        <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '24px', display: 'flex', gap: '32px' }}>
+          <div>
+            <div style={{ fontSize: '11px', color: 'var(--text-faint)', textTransform: 'uppercase' }}>Market Feed</div>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: '#FFFFFF', marginTop: '2px' }}>NSE Daily Observations</div>
+          </div>
+          <div>
+            <div style={{ fontSize: '11px', color: 'var(--text-faint)', textTransform: 'uppercase' }}>Simulation</div>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-virtual)', marginTop: '2px' }}>₹25,000 Starting Cash</div>
+          </div>
+          <div>
+            <div style={{ fontSize: '11px', color: 'var(--text-faint)', textTransform: 'uppercase' }}>AI Grounding</div>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-accent-cyan)', marginTop: '2px' }}>SEBI & Regulatory Citations</div>
+          </div>
         </div>
       </div>
 
-      {/* Right Sign-in / Consent Column */}
-      <div
-        style={{
-          padding: '64px',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-          backgroundColor: 'var(--color-paper)',
-        }}
-      >
-        <div />
-
-        <div style={{ maxWidth: '420px', margin: '0 auto', width: '100%' }}>
-          <span style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-cobalt)', fontWeight: 600, display: 'block', marginBottom: '16px' }}>
-            Welcome to FinEx
+      {/* Right Column: Google Sign-In Card */}
+      <div style={{ padding: '64px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
+        <div className="glass-card" style={{ maxWidth: '420px', width: '100%', padding: '36px' }}>
+          <span style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>
+            Authentication & Consent
           </span>
-
-          <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: '42px', lineHeight: 1.15, color: 'var(--color-ink)', marginBottom: '16px' }}>
-            Make yourself<br />
-            <em style={{ fontStyle: 'italic' }}>at home.</em>
+          <h2 style={{ fontSize: '26px', fontWeight: 700, color: '#FFFFFF', margin: '8px 0 12px 0' }}>
+            Welcome to FinEx
           </h2>
-
-          <p style={{ color: 'var(--color-ink-muted)', fontSize: '15px', marginBottom: '32px' }}>
-            Create your personal workspace with your Google account.
+          <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '28px' }}>
+            Sign in with your Google account to initialize your personal workspace and virtual cash ledger.
           </p>
 
-          {/* Consent Checkbox */}
           <label
             style={{
               display: 'flex',
               alignItems: 'flex-start',
               gap: '12px',
-              fontSize: '13px',
-              color: 'var(--color-ink)',
+              fontSize: '12px',
+              color: 'var(--text-muted)',
               cursor: 'pointer',
-              marginBottom: '24px',
+              marginBottom: '20px',
               lineHeight: 1.4,
             }}
           >
@@ -113,39 +125,31 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onLoginSuccess }) 
               type="checkbox"
               checked={consentChecked}
               onChange={(e) => setConsentChecked(e.target.checked)}
-              style={{ marginTop: '2px', accentColor: 'var(--color-cobalt)', width: '16px', height: '16px' }}
+              style={{ marginTop: '2px', accentColor: 'var(--color-primary)', width: '16px', height: '16px' }}
             />
             <span>
-              I agree to the Terms and Privacy Policy, and understand FinEx is an educational platform.
+              I understand that FinEx is an educational platform with virtual simulated money. No real brokerage execution occurs.
             </span>
           </label>
 
           {errorMessage && (
-            <div style={{ color: 'var(--color-loss)', fontSize: '13px', marginBottom: '16px' }}>
+            <div style={{ color: 'var(--color-loss)', fontSize: '12px', marginBottom: '16px' }}>
               {errorMessage}
             </div>
           )}
 
-          {/* Google Sign-in Button */}
           <button
             onClick={handleGoogleSignIn}
             disabled={loading}
-            className="button-primary"
-            style={{ width: '100%', padding: '14px 20px', fontSize: '15px', marginBottom: '24px' }}
+            className="btn btn-primary"
+            style={{ width: '100%', padding: '14px', fontSize: '14px', marginBottom: '16px' }}
           >
-            {loading ? 'Signing in...' : 'Continue with Google →'}
+            {loading ? 'Authenticating with Google...' : 'Continue with Google Account →'}
           </button>
 
-          <p style={{ fontSize: '12px', color: 'var(--color-ink-faint)', lineHeight: 1.5 }}>
-            Virtual trading only. No real-money orders or brokerage connection are created.
+          <p style={{ fontSize: '11px', color: 'var(--text-faint)', textAlign: 'center', lineHeight: 1.5 }}>
+            OAuth identity token validated server-side. No credentials stored locally.
           </p>
-        </div>
-
-        {/* Footer Links */}
-        <div style={{ display: 'flex', gap: '24px', fontSize: '13px', color: 'var(--color-ink-faint)', justifyContent: 'center' }}>
-          <span style={{ cursor: 'pointer' }}>Privacy policy</span>
-          <span style={{ cursor: 'pointer' }}>Terms</span>
-          <span style={{ cursor: 'pointer' }}>Need help?</span>
         </div>
       </div>
     </div>

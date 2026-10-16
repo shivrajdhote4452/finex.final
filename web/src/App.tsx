@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
+import { FinancialProvider } from './context/FinancialContext';
 import { AppShell, NavigationTab } from './components/layout/AppShell';
 import { WelcomeScreen } from './pages/WelcomeScreen';
 import { OnboardingScreen } from './pages/OnboardingScreen';
 import { OverviewScreen } from './pages/OverviewScreen';
 import { MarketsScreen } from './pages/MarketsScreen';
 import { PortfolioScreen } from './pages/PortfolioScreen';
+import { TransactionsScreen } from './pages/TransactionsScreen';
 import { AskFinExScreen } from './pages/AskFinExScreen';
 import { PracticeScreen } from './pages/PracticeScreen';
 import { AlertsScreen } from './pages/AlertsScreen';
@@ -12,7 +14,7 @@ import { GoalsScreen } from './pages/GoalsScreen';
 import { SpendingScreen } from './pages/SpendingScreen';
 import { SettingsScreen } from './pages/SettingsScreen';
 
-export const App: React.FC = () => {
+export const AppContent: React.FC = () => {
   const [authState, setAuthState] = useState<'welcome' | 'onboarding' | 'authenticated'>('authenticated');
   const [currentTab, setCurrentTab] = useState<NavigationTab>('overview');
 
@@ -30,13 +32,22 @@ export const App: React.FC = () => {
       {currentTab === 'overview' && <OverviewScreen onNavigate={(t) => setCurrentTab(t)} />}
       {currentTab === 'markets' && <MarketsScreen onNavigate={(t) => setCurrentTab(t)} />}
       {currentTab === 'portfolio' && <PortfolioScreen onNavigate={(t) => setCurrentTab(t)} />}
-      {currentTab === 'ask-finex' && <AskFinExScreen />}
+      {currentTab === 'transactions' && <TransactionsScreen />}
       {currentTab === 'practice' && <PracticeScreen />}
+      {currentTab === 'ask-finex' && <AskFinExScreen />}
       {currentTab === 'alerts' && <AlertsScreen />}
       {currentTab === 'goals' && <GoalsScreen />}
       {currentTab === 'spending' && <SpendingScreen />}
       {currentTab === 'settings' && <SettingsScreen onSignOut={() => setAuthState('welcome')} />}
     </AppShell>
+  );
+};
+
+export const App: React.FC = () => {
+  return (
+    <FinancialProvider>
+      <AppContent />
+    </FinancialProvider>
   );
 };
 
