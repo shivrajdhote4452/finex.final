@@ -1,14 +1,34 @@
 # FinEx — Implementation Handoff
 
-**Current Task:** S1 Baseline Established & Verified (Sprint 1 Foundations)  
+**Current Task:** S1-PRD-01 (React Editorial Edition Shell) Implemented & Verified  
 **Branch:** `master`  
-**Latest Commit:** `1495681` (feat(core): establish Week 0 and Sprint 1 foundations for FinEx)  
+**Latest Commit:** `bae95fb` (feat(web): implement FinEx Editorial Edition frontend per Visual Design Book)  
 **Developer:** Shivraj Dhote (Sole Developer)  
 **Date:** 16 October 2026  
 
 ---
 
 ## 1. Verified Working Features & Deliverables
+
+1. **Frontend Web Shell (S1-PRD-01, W0-KHY / W0-NIL):**
+   - Built complete React 18 + TypeScript + Vite web application in `web/` strictly following `FinEx_Frontend_Visual_Design_Book.pdf`.
+   - Editorial Edition design system tokens in `web/src/index.css`: Warm Paper (`#F8F6F0`), Cobalt Blue (`#234BC0`), Ink (`#242A2B`), Newsreader Editorial Serif, Inter Sans, and JetBrains Mono tabular numerals.
+   - Top navigation `AppShell` with lowercase `finex.` wordmark, active blue tab underlines, and `Demo workspace SD` profile trigger.
+   - Implemented all 11 core screens:
+     * Screen 01/03: `WelcomeScreen.tsx` (Split hero with cobalt blue left column and Google sign-in + educational consent checkbox).
+     * Screen 02/04: `OnboardingScreen.tsx` (Time horizon step with radio cards and "Why This Matters" editorial context column).
+     * Screen 03/05: `OnboardingScreen.tsx` (Risk Profile Explained with Navy card and 3 influencing factors).
+     * Screen 04/06: `OverviewScreen.tsx` (Good morning greeting, big stats, SVG account value trend chart, and "Worth a closer look" 36.2% concentration link).
+     * Screen 05/07: `MarketsScreen.tsx` (Watchlist with avatar circles, genuine prices, day change badges, and sparklines).
+     * Screen 06/08: `MarketsScreen.tsx` (Instrument detail with breadcrumbs, price chart, and Quote Details desk).
+     * Screen 07/09: `PortfolioScreen.tsx` (Summary row, multi-segment allocation strip, holdings table, and reconciled footer).
+     * Screen 08/10: `AskFinExScreen.tsx` (Reading-room layout with grounded chat on the left and Source Desk evidence on the right).
+     * Screen 09-10/11-12: `PracticeScreen.tsx` (Paper trading order ticket with Buy/Sell toggle, order estimate, and persistent status receipts).
+     * Screen 11/13: `AlertsScreen.tsx` (Timeline notifications on the left and Price Alert Rule creator on the right).
+     * Screen 12/14: `GoalsScreen.tsx` (Goal progress bars on the left and selected goal scenario card with laptop line drawing on the right).
+     * Screen 13-14/15-16: `SpendingScreen.tsx` (Monthly outflow category strip on the left, review queue on the right, and full CSV audit/validation table).
+     * Screen 15/17: `SettingsScreen.tsx` (Navy profile summary card with display name, risk profile, and consent history rows).
+   - Vite dev server running at `http://localhost:3000/`. Production build verified (`tsc -b && vite build` succeeded in 731ms).
 
 1. **API & Factory Baseline (S1-API-01, S1-API-02, S1-API-03, W0-DIS):**
    - FastAPI factory in `backend/app/factory.py` with lifespans, CORS, and security middleware.
