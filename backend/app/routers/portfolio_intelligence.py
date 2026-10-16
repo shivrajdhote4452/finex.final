@@ -10,22 +10,20 @@ Exposes:
 """
 
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Depends, Query, Request
-from pydantic import BaseModel, Field
 
 from backend.app.adapters.market_data_provider import (
     INSTRUMENT_REGISTRY,
-    RealMarketDataProvider,
     VERIFIED_OBSERVATIONS,
+    RealMarketDataProvider,
 )
 from backend.app.core.envelope import create_response_envelope
 from backend.app.domain.paper_trading_service import PaperTradingEngine
 from backend.app.domain.portfolio_intelligence_service import (
-    PortfolioIntelligenceReport,
     PortfolioIntelligenceService,
 )
 from backend.app.routers.auth import get_current_user_id
+from fastapi import APIRouter, Depends, Request
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/portfolio-intelligence", tags=["Portfolio Intelligence & Scenarios"])
 intelligence_service = PortfolioIntelligenceService()
@@ -34,7 +32,9 @@ paper_engine = PaperTradingEngine()
 
 
 class ScenarioRequest(BaseModel):
-    target_sector: str = Field(..., description="Target sector (e.g. 'Information Technology', 'Energy & Petrochemicals')")
+    target_sector: str = Field(
+        ..., description="Target sector (e.g. 'Information Technology', 'Energy & Petrochemicals')"
+    )
     shock_percentage: float = Field(-15.0, description="Hypothetical percentage shock (e.g. -15.0)")
 
 
@@ -123,7 +123,9 @@ async def run_scenario_stress_test(
 
     return create_response_envelope(
         data={
-            "scenario": report.scenario_shock_15pct_it.model_dump(mode="json") if report.scenario_shock_15pct_it else None,
+            "scenario": report.scenario_shock_15pct_it.model_dump(mode="json")
+            if report.scenario_shock_15pct_it
+            else None,
             "baseline_portfolio_value": report.total_portfolio_value,
             "statutory_disclaimer": report.statutory_disclaimer,
         },

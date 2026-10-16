@@ -75,7 +75,13 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["*"],
-        expose_headers=["X-Correlation-ID", "X-Request-ID", "X-Response-Time-Ms", "X-RateLimit-Limit", "X-RateLimit-Remaining"],
+        expose_headers=[
+            "X-Correlation-ID",
+            "X-Request-ID",
+            "X-Response-Time-Ms",
+            "X-RateLimit-Limit",
+            "X-RateLimit-Remaining",
+        ],
     )
 
     # 3. Exception Handlers

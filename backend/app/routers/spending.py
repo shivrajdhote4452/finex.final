@@ -11,13 +11,13 @@ Exposes:
 - GET /spending/summary: Monthly spending rollup and category breakdown
 """
 
-from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
-from pydantic import BaseModel, Field
+from typing import Optional
 
 from backend.app.core.envelope import create_response_envelope
 from backend.app.domain.spending_service import SpendingService
 from backend.app.routers.auth import get_current_user_id
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/spending", tags=["Spending Analytics & Ingestion"])
 spending_service = SpendingService()

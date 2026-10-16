@@ -10,9 +10,9 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
+from backend.app.models.core import Base
 from sqlalchemy import (
     Boolean,
-    CheckConstraint,
     DateTime,
     ForeignKey,
     Integer,
@@ -23,17 +23,13 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from backend.app.models.core import Base
-
 
 class AlertRule(Base):
     """User-configured deterministic alert rule."""
 
     __tablename__ = "alert_rules"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     rule_type: Mapped[str] = mapped_column(String(32), nullable=False)
     symbol: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, index=True)
@@ -42,19 +38,13 @@ class AlertRule(Base):
     threshold_unit: Mapped[str] = mapped_column(String(16), nullable=False)
     cooldown_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    last_triggered_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=datetime.utcnow
-    )
+    last_triggered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
     )
 
-    events: Mapped[List["AlertEvent"]] = relationship(
-        "AlertEvent", back_populates="rule", cascade="all, delete-orphan"
-    )
+    events: Mapped[List["AlertEvent"]] = relationship("AlertEvent", back_populates="rule", cascade="all, delete-orphan")
 
 
 class AlertEvent(Base):
@@ -62,9 +52,7 @@ class AlertEvent(Base):
 
     __tablename__ = "alert_events"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     rule_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("alert_rules.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -81,9 +69,7 @@ class AlertEvent(Base):
     )
 
     rule: Mapped["AlertRule"] = relationship("AlertRule", back_populates="events")
-    notifications: Mapped[List["Notification"]] = relationship(
-        "Notification", back_populates="alert_event"
-    )
+    notifications: Mapped[List["Notification"]] = relationship("Notification", back_populates="alert_event")
 
 
 class Notification(Base):
@@ -91,9 +77,7 @@ class Notification(Base):
 
     __tablename__ = "notifications"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     alert_event_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("alert_events.id", ondelete="SET NULL"), nullable=True
@@ -107,9 +91,7 @@ class Notification(Base):
         DateTime(timezone=True), nullable=False, default=datetime.utcnow, index=True
     )
 
-    alert_event: Mapped[Optional["AlertEvent"]] = relationship(
-        "AlertEvent", back_populates="notifications"
-    )
+    alert_event: Mapped[Optional["AlertEvent"]] = relationship("AlertEvent", back_populates="notifications")
     delivery_attempts: Mapped[List["NotificationDeliveryAttempt"]] = relationship(
         "NotificationDeliveryAttempt", back_populates="notification", cascade="all, delete-orphan"
     )
@@ -120,9 +102,7 @@ class NotificationDeliveryAttempt(Base):
 
     __tablename__ = "notification_delivery_attempts"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     notification_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("notifications.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -131,10 +111,6 @@ class NotificationDeliveryAttempt(Base):
     attempt_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     response_payload: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    attempted_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=datetime.utcnow
-    )
+    attempted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
 
-    notification: Mapped["Notification"] = relationship(
-        "Notification", back_populates="delivery_attempts"
-    )
+    notification: Mapped["Notification"] = relationship("Notification", back_populates="delivery_attempts")

@@ -84,4 +84,3 @@ async def get_readiness(request: Request, response: Response):
         },
     )
     return create_response_envelope(data.model_dump(), correlation_id=cid)
-

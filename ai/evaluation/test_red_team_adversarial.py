@@ -14,13 +14,13 @@ Exercises adversarial attack surfaces:
 
 import os
 import sys
+
 import pytest
 
 sys.path.insert(0, os.path.abspath("."))
 
 from backend.app.domain.portfolio_intent_router import PortfolioIntent, PortfolioIntentRouter
 from backend.app.domain.spending_service import SpendingService, mask_sensitive_narrative
-
 
 
 @pytest.fixture
@@ -102,7 +102,7 @@ def test_red_team_malicious_csv_formula_injection_sanitization():
         "date,description,amount,type\n"
         "2026-10-15,\"=cmd|' /C calc'!A0\",1500.00,DEBIT\n"
         "2026-10-15,\"@SUM(1+1)*cmd|' /C calc'!A0\",250.00,DEBIT\n"
-        "2026-10-15,\"+10+20\",100.00,CREDIT\n"
+        '2026-10-15,"+10+20",100.00,CREDIT\n'
     )
 
     svc = SpendingService()
@@ -110,5 +110,3 @@ def test_red_team_malicious_csv_formula_injection_sanitization():
     # The parser must parse strings without evaluating formulas or crashing
     assert result["accepted_count"] >= 1
     assert result["upload"]["status"] == "COMMITTED"
-
-

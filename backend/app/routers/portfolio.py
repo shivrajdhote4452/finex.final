@@ -7,16 +7,15 @@ Enforces caller ownership and prevents unauthorized access across users.
 
 import uuid
 from decimal import Decimal
-from typing import Dict, List, Optional
-
-from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel, Field
+from typing import Dict
 
 from backend.app.adapters.market_data_provider import VERIFIED_OBSERVATIONS
 from backend.app.core.envelope import create_response_envelope
 from backend.app.core.errors import ForbiddenException, NotFoundException
 from backend.app.domain.portfolio import calculate_portfolio_valuation
 from backend.app.routers.auth import get_current_user_id
+from fastapi import APIRouter, Depends, Request
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/portfolios", tags=["Portfolio"])
 
@@ -32,9 +31,7 @@ class AddHoldingRequest(BaseModel):
 
 
 @router.get("/me")
-async def get_my_portfolio(
-    request: Request, current_user: dict = Depends(get_current_user_id)
-):
+async def get_my_portfolio(request: Request, current_user: dict = Depends(get_current_user_id)):
     """Fetch or bootstrap the default portfolio for the authenticated caller."""
     cid = getattr(request.state, "correlation_id", None)
     user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
@@ -152,9 +149,7 @@ async def add_portfolio_holding(
         added_cost = payload.cost_basis_per_share
 
         total_qty = current_qty + added_qty
-        new_avg_cost = (
-            (current_qty * current_cost) + (added_qty * added_cost)
-        ) / total_qty
+        new_avg_cost = ((current_qty * current_cost) + (added_qty * added_cost)) / total_qty
 
         existing["quantity"] = total_qty
         existing["cost_basis_per_share"] = new_avg_cost.quantize(Decimal("0.01"))

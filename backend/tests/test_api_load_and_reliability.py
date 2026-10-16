@@ -4,7 +4,6 @@ Task ID: S8-API-03
 Author: Shivraj Dhote
 """
 
-import pytest
 from backend.scripts.run_load_test import run_benchmark
 
 

@@ -10,12 +10,13 @@ Tests:
 """
 
 import os
-import pytest
-from httpx import ASGITransport, AsyncClient
 
+import pytest
 from ai.evaluation.evaluate_sprint3 import run_sprint3_ai_evaluation
 from backend.app.config import Settings
 from backend.app.factory import create_app
+from backend.app.routers.auth import create_access_token
+from httpx import ASGITransport, AsyncClient
 
 
 @pytest.fixture
@@ -29,7 +30,8 @@ def app():
 
 @pytest.fixture
 def auth_headers():
-    return {"Authorization": "Bearer mock-valid-token-user-123"}
+    token = create_access_token("usr-shivraj-001", "shivraj.dhote@finex.internal", "Shivraj Dhote")
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.mark.asyncio
@@ -82,9 +84,7 @@ async def test_ai_portfolio_explainer_endpoint(app, auth_headers):
         portfolio_id = p_res.json()["data"]["id"]
 
         # Request deterministic explanation
-        exp_res = await client.get(
-            f"/api/v1/ai/portfolios/{portfolio_id}/explain", headers=auth_headers
-        )
+        exp_res = await client.get(f"/api/v1/ai/portfolios/{portfolio_id}/explain", headers=auth_headers)
         assert exp_res.status_code == 200
         data = exp_res.json()["data"]
 

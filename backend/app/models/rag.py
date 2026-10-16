@@ -6,7 +6,10 @@ Date: 16 October 2026
 """
 
 from datetime import datetime, timezone
+
+from backend.app.models.core import Base
 from sqlalchemy import (
+    JSON,
     Boolean,
     Column,
     Date,
@@ -14,14 +17,11 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
-    JSON,
     String,
     Text,
     UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
-
-from backend.app.models.core import Base
 
 
 class DocumentRegistry(Base):
@@ -59,9 +59,7 @@ class DocumentChunk(Base):
 
     document = relationship("DocumentRegistry", back_populates="chunks")
 
-    __table_args__ = (
-        UniqueConstraint("document_id", "chunk_index", name="uq_doc_chunk"),
-    )
+    __table_args__ = (UniqueConstraint("document_id", "chunk_index", name="uq_doc_chunk"),)
 
 
 class AIConversation(Base):
@@ -110,9 +108,7 @@ class AIFeedback(Base):
 
     message = relationship("AIMessage", back_populates="feedback")
 
-    __table_args__ = (
-        UniqueConstraint("user_id", "message_id", name="uq_user_message_feedback"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "message_id", name="uq_user_message_feedback"),)
 
 
 class RetrievalEvent(Base):

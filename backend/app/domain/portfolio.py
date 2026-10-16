@@ -6,8 +6,9 @@ cost basis, unrealized P&L, percentage return, and asset allocation breakdown.
 Never converts missing quotes to zero; reports partial valuation explicitly.
 """
 
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Dict, List, Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -45,7 +46,7 @@ def calculate_portfolio_valuation(
     currency: str = "INR",
 ) -> PortfolioSummary:
     """Calculate deterministic valuation across all positions.
-    
+
     If any instrument quote is missing, it is reported under missing_quote_symbols
     and is_fully_valued is set to False.
     """

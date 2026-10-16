@@ -12,10 +12,10 @@ Tests:
 """
 
 import pytest
-from httpx import ASGITransport, AsyncClient
-
 from backend.app.config import Settings
 from backend.app.factory import create_app
+from backend.app.routers.auth import create_access_token
+from httpx import ASGITransport, AsyncClient
 
 
 @pytest.fixture
@@ -29,7 +29,8 @@ def app():
 
 @pytest.fixture
 def auth_headers():
-    return {"Authorization": "Bearer mock-valid-token-user-123"}
+    token = create_access_token("usr-shivraj-001", "shivraj.dhote@finex.internal", "Shivraj Dhote")
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.mark.asyncio
@@ -42,6 +43,7 @@ async def test_conversations_crud_and_user_isolation(app, auth_headers):
         data = res.json()["data"]
         assert data["total"] >= 1
         conv_id = data["conversations"][0]["id"]
+        assert conv_id is not None
 
         # 2. Create new conversation
         create_res = await client.post(
@@ -54,9 +56,7 @@ async def test_conversations_crud_and_user_isolation(app, auth_headers):
         assert "conv-" in new_conv_id
 
         # 3. Soft delete conversation
-        del_res = await client.delete(
-            f"/api/v1/ai/conversations/{new_conv_id}", headers=auth_headers
-        )
+        del_res = await client.delete(f"/api/v1/ai/conversations/{new_conv_id}", headers=auth_headers)
         assert del_res.status_code == 200
         assert del_res.json()["data"]["deleted"] is True
 

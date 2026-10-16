@@ -6,8 +6,6 @@ Exposes:
 - GET /ai/portfolios/{id}/explain: Deterministic portfolio concentration and diversification explainer.
 """
 
-from fastapi import APIRouter, Depends, Query, Request
-
 from backend.app.adapters.market_data_provider import VERIFIED_OBSERVATIONS
 from backend.app.core.envelope import create_response_envelope
 from backend.app.core.errors import ForbiddenException, NotFoundException
@@ -16,6 +14,7 @@ from backend.app.domain.portfolio import calculate_portfolio_valuation
 from backend.app.domain.portfolio_explainer import generate_portfolio_explanation
 from backend.app.routers.auth import get_current_user_id
 from backend.app.routers.portfolio import _PORTFOLIO_STORE
+from fastapi import APIRouter, Depends, Query, Request
 
 router = APIRouter(prefix="/ai", tags=["AI Intelligence & Reasoning"])
 
@@ -27,7 +26,7 @@ async def get_security_comparison(
     symbol_b: str = Query(..., description="Second security ticker (e.g. TCS)"),
 ):
     """Compare two securities side-by-side using authentic sourced market data.
-    
+
     Guarantees:
     - Missing metrics are explicitly disclosed as 'not available' with source and date.
     - Zero fabricated financial ratios or invented prices.
@@ -51,7 +50,7 @@ async def explain_portfolio_diversification(
     current_user: dict = Depends(get_current_user_id),
 ):
     """Generate educational concentration and diversification narrative from deterministic metrics.
-    
+
     Guarantees:
     - No arithmetic delegated to LLM.
     - Frozen snapshot binding.

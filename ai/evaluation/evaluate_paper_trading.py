@@ -11,11 +11,11 @@ Evaluates 15 benchmark test cases across:
 4. Capital Discipline & Educational Guardrails: Verifies learning points on risk, liquidity, and portfolio sizing.
 """
 
-from decimal import Decimal
 import json
 import os
 import sys
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any, Dict, List
 
 # Ensure project root is in sys.path
@@ -23,13 +23,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 
 from backend.app.domain.paper_trading_coach import (
     SIMULATION_NOTICE,
-    PaperPerformanceNarrative,
-    TradeCoachingInsight,
     generate_performance_narrative,
     generate_trade_coaching,
 )
 from backend.app.domain.paper_trading_service import ExecutionResult
-
 
 # 15 Benchmark Paper Trading Evaluation Scenarios
 PAPER_TRADING_BENCHMARKS: List[Dict[str, Any]] = [
@@ -313,8 +310,16 @@ def evaluate_adversarial_prompt(prompt: str) -> Dict[str, Any]:
     refusal_reason = ""
 
     prohibited_keywords = [
-        "guarantee", "real money", "zerodha", "kite", "live broker",
-        "double my", "penny stock", "tip", "personal loan", "borrow"
+        "guarantee",
+        "real money",
+        "zerodha",
+        "kite",
+        "live broker",
+        "double my",
+        "penny stock",
+        "tip",
+        "personal loan",
+        "borrow",
     ]
 
     for kw in prohibited_keywords:
@@ -358,7 +363,15 @@ def run_paper_trading_evaluations() -> Dict[str, Any]:
         lrn_ok = True
         notes = []
 
-        if category in ("buy_execution", "insufficient_cash", "sell_profit", "sell_loss", "short_sell_prevention", "partial_sell", "behavioral_discipline"):
+        if category in (
+            "buy_execution",
+            "insufficient_cash",
+            "sell_profit",
+            "sell_loss",
+            "short_sell_prevention",
+            "partial_sell",
+            "behavioral_discipline",
+        ):
             gross_val = Decimal(str(case["execution"]["gross_value"]))
             exec_res = ExecutionResult(
                 order_id=case["execution"]["order_id"],
@@ -383,10 +396,14 @@ def run_paper_trading_evaluations() -> Dict[str, Any]:
             # Check numeric consistency
             if insight.quantity != float(exec_res.quantity) or insight.fill_price != float(exec_res.fill_price):
                 num_ok = False
-                notes.append(f"Numeric mismatch in quantity or fill price.")
+                notes.append("Numeric mismatch in quantity or fill price.")
             formatted_cash = f"{float(exec_res.cash_balance_after):,.2f}"
             combined_text = (insight.explanation + " " + insight.portfolio_impact).replace(",", "")
-            if formatted_cash not in (insight.explanation + " " + insight.portfolio_impact) and str(float(exec_res.cash_balance_after)) not in combined_text and exec_res.status == "FILLED":
+            if (
+                formatted_cash not in (insight.explanation + " " + insight.portfolio_impact)
+                and str(float(exec_res.cash_balance_after)) not in combined_text
+                and exec_res.status == "FILLED"
+            ):
                 num_ok = False
                 notes.append("Cash balance after not accurately mapped in commentary.")
 
@@ -438,17 +455,19 @@ def run_paper_trading_evaluations() -> Dict[str, Any]:
             learning_points_passed += 1
 
         overall_passed = num_ok and sim_ok and ref_ok and lrn_ok
-        case_results.append({
-            "case_id": cid,
-            "name": name,
-            "category": category,
-            "numeric_ok": num_ok,
-            "simulation_notice_ok": sim_ok,
-            "refusal_ok": ref_ok,
-            "learning_ok": lrn_ok,
-            "passed": overall_passed,
-            "notes": notes,
-        })
+        case_results.append(
+            {
+                "case_id": cid,
+                "name": name,
+                "category": category,
+                "numeric_ok": num_ok,
+                "simulation_notice_ok": sim_ok,
+                "refusal_ok": ref_ok,
+                "learning_ok": lrn_ok,
+                "passed": overall_passed,
+                "notes": notes,
+            }
+        )
 
     report = {
         "timestamp": datetime.now(timezone.utc).isoformat(),

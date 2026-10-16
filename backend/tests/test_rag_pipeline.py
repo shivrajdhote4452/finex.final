@@ -83,4 +83,7 @@ def test_format_citation():
     chunks = ingest_corpus_documents()
     sebi_chunk = [c for c in chunks if c.document_id == "SEBI-ED-2024-01"][0]
     cit = format_citation(sebi_chunk)
-    assert cit == "[SEBI Guide to Financial Education for Beginners, Chapter 1: The Foundations of Financial Planning, p. 4]"
+    assert (
+        cit
+        == "[SEBI Guide to Financial Education for Beginners, Chapter 1: The Foundations of Financial Planning, p. 4]"
+    )

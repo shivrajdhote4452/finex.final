@@ -10,16 +10,16 @@ Exposes:
 - POST /ai/feedback: Submit user rating and qualitative feedback
 """
 
-from datetime import datetime, timezone
 import uuid
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
-from fastapi import APIRouter, Depends, Query, Request
-from pydantic import BaseModel, Field
 
 from backend.app.core.envelope import create_response_envelope
 from backend.app.core.errors import ForbiddenException, NotFoundException
 from backend.app.domain.ai_orchestration import AIOrchestrator
 from backend.app.routers.auth import get_current_user_id
+from fastapi import APIRouter, Depends, Query, Request
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/ai", tags=["AI Financial Assistant"])
 orchestrator = AIOrchestrator()
@@ -41,7 +41,9 @@ class SendMessageRequest(BaseModel):
 class FeedbackSubmissionRequest(BaseModel):
     message_id: str
     rating: int = Field(..., description="1 for Thumbs Up, -1 for Thumbs Down")
-    feedback_type: Optional[str] = Field("helpful", description="'accurate', 'hallucination', 'helpful', 'missing_citation'")
+    feedback_type: Optional[str] = Field(
+        "helpful", description="'accurate', 'hallucination', 'helpful', 'missing_citation'"
+    )
     comments: Optional[str] = None
 
 
@@ -56,10 +58,7 @@ async def list_conversations(
     cid = getattr(request.state, "correlation_id", None)
     user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
 
-    user_convs = [
-        c for c in _CONVERSATION_STORE.values()
-        if c["user_id"] == user_id and not c.get("is_deleted", False)
-    ]
+    user_convs = [c for c in _CONVERSATION_STORE.values() if c["user_id"] == user_id and not c.get("is_deleted", False)]
     user_convs.sort(key=lambda x: x["updated_at"], reverse=True)
 
     # If no conversation exists yet, bootstrap one default conversation

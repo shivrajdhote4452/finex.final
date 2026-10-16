@@ -9,6 +9,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import List, Optional
 
+from backend.app.models.core import Base, User
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -23,17 +24,13 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from backend.app.models.core import Base, User
-
 
 class Security(Base):
     """Securities/instruments master entity."""
 
     __tablename__ = "securities"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     symbol: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     exchange: Mapped[str] = mapped_column(String(20), nullable=False, default="NSE")
     canonical_id: Mapped[str] = mapped_column(String(70), nullable=False, unique=True)
@@ -41,9 +38,7 @@ class Security(Base):
     sector: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="INR")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=datetime.utcnow
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
     )
@@ -59,9 +54,7 @@ class Security(Base):
         "WatchlistItem", back_populates="security", cascade="all, delete-orphan"
     )
 
-    __table_args__ = (
-        UniqueConstraint("symbol", "exchange", name="uq_securities_symbol_exchange"),
-    )
+    __table_args__ = (UniqueConstraint("symbol", "exchange", name="uq_securities_symbol_exchange"),)
 
 
 class MarketQuote(Base):
@@ -69,9 +62,7 @@ class MarketQuote(Base):
 
     __tablename__ = "market_quotes"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     security_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("securities.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -103,9 +94,7 @@ class MarketPriceHistory(Base):
 
     __tablename__ = "market_price_history"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     security_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("securities.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -137,16 +126,12 @@ class Watchlist(Base):
 
     __tablename__ = "watchlists"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     name: Mapped[str] = mapped_column(String(100), nullable=False, default="My Watchlist")
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=datetime.utcnow
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
     )
@@ -156,9 +141,7 @@ class Watchlist(Base):
         "WatchlistItem", back_populates="watchlist", cascade="all, delete-orphan"
     )
 
-    __table_args__ = (
-        UniqueConstraint("user_id", "name", name="uq_user_watchlist_name"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "name", name="uq_user_watchlist_name"),)
 
 
 class WatchlistItem(Base):
@@ -166,22 +149,16 @@ class WatchlistItem(Base):
 
     __tablename__ = "watchlist_items"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     watchlist_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("watchlists.id", ondelete="CASCADE"), nullable=False, index=True
     )
     security_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("securities.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    added_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=datetime.utcnow
-    )
+    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
 
     watchlist: Mapped["Watchlist"] = relationship("Watchlist", back_populates="items")
     security: Mapped["Security"] = relationship("Security", back_populates="watchlist_items")
 
-    __table_args__ = (
-        UniqueConstraint("watchlist_id", "security_id", name="uq_watchlist_security"),
-    )
+    __table_args__ = (UniqueConstraint("watchlist_id", "security_id", name="uq_watchlist_security"),)

@@ -14,8 +14,7 @@ Tests:
 """
 
 import pytest
-
-from data.quality.ai_rag_quality import AIRAGQualityChecker, RAGSeverity
+from data.quality.ai_rag_quality import AIRAGQualityChecker
 
 
 @pytest.fixture
@@ -46,9 +45,7 @@ def clean_rag_dataset():
             "content": "Sovereign Gold Bonds bear fixed interest at 2.50 percent per annum on initial nominal amount.",
         },
     ]
-    conversations = [
-        {"id": "conv_01", "user_id": "usr-shivraj-001"}
-    ]
+    conversations = [{"id": "conv_01", "user_id": "usr-shivraj-001"}]
     messages = [
         {
             "id": "msg_01",
@@ -82,19 +79,23 @@ def test_detects_unapproved_publisher_and_orphan_chunk(clean_rag_dataset):
     docs, chks, convs, msgs, fbs = clean_rag_dataset
 
     # Inject unapproved publisher
-    docs.append({
-        "id": "DOC-RANDOM-BLOG",
-        "title": "Random Blog Post",
-        "publisher": "Anonymous Hacker Blog",
-        "content_hash": "hash_bad_003",
-    })
+    docs.append(
+        {
+            "id": "DOC-RANDOM-BLOG",
+            "title": "Random Blog Post",
+            "publisher": "Anonymous Hacker Blog",
+            "content_hash": "hash_bad_003",
+        }
+    )
 
     # Inject orphan chunk (referencing non-existent doc)
-    chks.append({
-        "id": "chk_bad_orphan",
-        "document_id": "NON_EXISTENT_DOC",
-        "content": "This chunk has no parent document registered in system.",
-    })
+    chks.append(
+        {
+            "id": "chk_bad_orphan",
+            "document_id": "NON_EXISTENT_DOC",
+            "content": "This chunk has no parent document registered in system.",
+        }
+    )
 
     checker = AIRAGQualityChecker()
     report = checker.evaluate(docs, chks, convs, msgs, fbs)
@@ -109,19 +110,23 @@ def test_detects_orphan_citation_and_orphan_feedback(clean_rag_dataset):
     docs, chks, convs, msgs, fbs = clean_rag_dataset
 
     # Message citing an unindexed chunk ID
-    msgs.append({
-        "id": "msg_bad_citation",
-        "conversation_id": "conv_01",
-        "correlation_id": "corr-002",
-        "citations": ["non_existent_chunk_999"],
-    })
+    msgs.append(
+        {
+            "id": "msg_bad_citation",
+            "conversation_id": "conv_01",
+            "correlation_id": "corr-002",
+            "citations": ["non_existent_chunk_999"],
+        }
+    )
 
     # Feedback on non-existent message
-    fbs.append({
-        "id": "fb_orphan",
-        "message_id": "non_existent_msg_888",
-        "rating": -1,
-    })
+    fbs.append(
+        {
+            "id": "fb_orphan",
+            "message_id": "non_existent_msg_888",
+            "rating": -1,
+        }
+    )
 
     checker = AIRAGQualityChecker()
     report = checker.evaluate(docs, chks, convs, msgs, fbs)

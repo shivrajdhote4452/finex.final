@@ -12,10 +12,10 @@ Coordinates:
 """
 
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+from typing import Any, Dict, List
 
 from backend.app.domain.paper_trading_service import ExecutionResult
+from pydantic import BaseModel
 
 
 class TradeCoachingInsight(BaseModel):

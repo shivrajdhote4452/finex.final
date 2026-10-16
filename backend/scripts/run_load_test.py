@@ -31,7 +31,6 @@ from backend.app.factory import create_app
 from fastapi.testclient import TestClient
 
 
-
 def execute_request_batch(
     client: TestClient,
     auth_header: Dict[str, str],
@@ -42,12 +41,14 @@ def execute_request_batch(
         start = time.perf_counter()
         resp = client.get(endpoint, headers=auth_header)
         elapsed_ms = (time.perf_counter() - start) * 1000.0
-        results.append({
-            "endpoint": endpoint,
-            "status_code": resp.status_code,
-            "latency_ms": elapsed_ms,
-            "success": resp.status_code == 200,
-        })
+        results.append(
+            {
+                "endpoint": endpoint,
+                "status_code": resp.status_code,
+                "latency_ms": elapsed_ms,
+                "success": resp.status_code == 200,
+            }
+        )
     return results
 
 
@@ -67,12 +68,16 @@ def run_benchmark(concurrency: int = 10, iterations_per_worker: int = 5) -> Dict
         "/api/v1/spending/summary",
     ]
 
-
     all_records: List[Dict[str, Any]] = []
     start_total = time.perf_counter()
 
+    from backend.app.routers.auth import create_access_token
+
     def worker_job(worker_id: int) -> List[Dict[str, Any]]:
-        auth_header = {"Authorization": f"Bearer test-dev-token-sub-usr-worker-{worker_id:03d}"}
+        token = create_access_token(
+            f"usr-worker-{worker_id:03d}", f"worker{worker_id}@finex.internal", f"Worker {worker_id}"
+        )
+        auth_header = {"Authorization": f"Bearer {token}"}
         worker_records = []
         for _ in range(iterations_per_worker):
             batch = execute_request_batch(client, auth_header, endpoints)
@@ -137,7 +142,6 @@ def run_benchmark(concurrency: int = 10, iterations_per_worker: int = 5) -> Dict
             "zero_http_500_errors": failed_requests == 0,
             "status": "PASSED" if (failed_requests == 0 and p95 < 500.0) else "FAILED",
         },
-
     }
 
     os.makedirs("backend/reports", exist_ok=True)

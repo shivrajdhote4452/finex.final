@@ -5,10 +5,7 @@ Author: Shivraj Dhote
 Date: 16 October 2026
 """
 
-from decimal import Decimal
 import pytest
-from httpx import ASGITransport, AsyncClient
-
 from ai.evaluation.evaluate_sprint6 import run_sprint6_evaluations
 from backend.app.domain.alerts_service import (
     _ALERT_EVENTS_STORE,
@@ -17,6 +14,8 @@ from backend.app.domain.alerts_service import (
     _NOTIFICATIONS_STORE,
 )
 from backend.app.factory import create_app
+from backend.app.routers.auth import create_access_token
+from httpx import ASGITransport, AsyncClient
 
 
 @pytest.fixture
@@ -26,16 +25,18 @@ def app():
 
 @pytest.fixture
 def auth_headers():
+    token = create_access_token("usr-shivraj-001", "shivraj.dhote@finex.internal", "Shivraj Dhote")
     return {
-        "Authorization": "Bearer test-dev-token-sub-usr-shivraj-001",
+        "Authorization": f"Bearer {token}",
         "X-Correlation-ID": "corr-sprint6-test-001",
     }
 
 
 @pytest.fixture
 def other_user_headers():
+    token = create_access_token("usr-other-002", "other@finex.internal", "Other Investor")
     return {
-        "Authorization": "Bearer test-dev-token-sub-usr-other-002",
+        "Authorization": f"Bearer {token}",
         "X-Correlation-ID": "corr-sprint6-other-user",
     }
 

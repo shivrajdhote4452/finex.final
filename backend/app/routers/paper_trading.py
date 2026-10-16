@@ -10,20 +10,16 @@ Exposes:
 - POST /paper-trading/reset: Reset virtual cash with audit entry
 """
 
-from decimal import Decimal
-from typing import Dict, List, Optional
-from fastapi import APIRouter, Depends, Query, Request
-from pydantic import BaseModel, Field
-
 from backend.app.core.envelope import create_response_envelope
 from backend.app.domain.paper_trading_service import (
-    OrderSubmitRequest,
-    PaperTradingEngine,
     _LEDGER_STORE,
     _ORDERS_STORE,
-    _POSITIONS_STORE,
+    OrderSubmitRequest,
+    PaperTradingEngine,
 )
 from backend.app.routers.auth import get_current_user_id
+from fastapi import APIRouter, Depends, Query, Request
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/paper-trading", tags=["Paper Trading (Simulated)"])
 engine = PaperTradingEngine()

@@ -13,10 +13,6 @@ Exposes:
 - GET /goals/{goal_id}/projection: Return mathematical FV, required monthly contribution, and gap
 """
 
-from decimal import Decimal
-from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-
 from backend.app.core.envelope import create_response_envelope
 from backend.app.domain.goal_engine import (
     ContributionCreate,
@@ -25,6 +21,7 @@ from backend.app.domain.goal_engine import (
     GoalUpdate,
 )
 from backend.app.routers.auth import get_current_user_id
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 router = APIRouter(prefix="/goals", tags=["Financial Goals & Planning"])
 goal_engine = GoalEngine()

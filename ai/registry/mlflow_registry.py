@@ -15,10 +15,8 @@ Registers all production AI components into version-controlled tracking metadata
 import hashlib
 import json
 import os
-import sys
 import time
-from typing import Any, Dict, List
-
+from typing import Any, Dict
 
 AI_COMPONENTS = [
     {
@@ -147,5 +145,5 @@ if __name__ == "__main__":
 
     print("=" * 65)
     print(f"Total Components Registered: {doc['total_registered_components']}")
-    print(f"Saved: ai/registry/model_registry.json")
+    print("Saved: ai/registry/model_registry.json")
     print("=" * 65)

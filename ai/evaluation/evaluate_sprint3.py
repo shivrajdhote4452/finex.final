@@ -12,15 +12,12 @@ Evaluates 20 benchmark test cases across:
 5. Missing Metric Guardrail: Explicit 'not available' disclosures for unquoted/inapplicable metrics
 """
 
-from decimal import Decimal
 import json
 import os
 import sys
 from datetime import datetime, timezone
-import json
-import os
-import sys
-from typing import Any, Dict, List
+from decimal import Decimal
+from typing import Any, Dict
 
 # Ensure project root is in sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
@@ -76,7 +73,9 @@ def run_sprint3_ai_evaluation(dataset_path: str, report_output_path: str) -> Dic
                 else:
                     # 1. Citations Check
                     required_srcs = c.get("must_contain_sources", [])
-                    found_sources = {m["entity_a_source"] for m in res.summary_matrix} | {m["entity_b_source"] for m in res.summary_matrix}
+                    found_sources = {m["entity_a_source"] for m in res.summary_matrix} | {
+                        m["entity_b_source"] for m in res.summary_matrix
+                    }
                     for req in required_srcs:
                         if req not in found_sources:
                             case_eval["citation_ok"] = False
@@ -92,10 +91,16 @@ def run_sprint3_ai_evaluation(dataset_path: str, report_output_path: str) -> Dic
                     # 3. Missing Metric Check
                     req_missing = c.get("must_disclose_missing_metric")
                     if req_missing:
-                        matches = [m for m in res.summary_matrix if m["metric"] == req_missing and m["entity_a_value"] == "not available"]
+                        matches = [
+                            m
+                            for m in res.summary_matrix
+                            if m["metric"] == req_missing and m["entity_a_value"] == "not available"
+                        ]
                         if not matches:
                             case_eval["numeric_ok"] = False
-                            case_eval["notes"].append(f"Expected missing metric '{req_missing}' to be 'not available', but was present.")
+                            case_eval["notes"].append(
+                                f"Expected missing metric '{req_missing}' to be 'not available', but was present."
+                            )
 
                     # 4. Prohibited phrase & disclaimer check
                     for phrase in c.get("forbidden_phrases", []):
@@ -118,11 +123,7 @@ def run_sprint3_ai_evaluation(dataset_path: str, report_output_path: str) -> Dic
                 }
                 for h in holdings_raw
             ]
-            quotes = {
-                h["symbol"]: Decimal(str(h["price"]))
-                for h in holdings_raw
-                if h["price"] is not None
-            }
+            quotes = {h["symbol"]: Decimal(str(h["price"])) for h in holdings_raw if h["price"] is not None}
             sectors = {h["symbol"]: h["sector"] for h in holdings_raw}
 
             summary = calculate_portfolio_valuation(f"port-{case_id}", holdings, quotes, sectors)
@@ -209,7 +210,9 @@ if __name__ == "__main__":
     report_path = os.path.join(base_dir, "reports", "sprint3_evaluation_report.json")
     report = run_sprint3_ai_evaluation(data_path, report_path)
     print("=" * 60)
-    print(f"Sprint 3 AI Evaluation Run Complete: {report['overall_passed_cases']}/{report['total_test_cases']} Passed ({report['pass_rate_pct']}%)")
+    print(
+        f"Sprint 3 AI Evaluation Run Complete: {report['overall_passed_cases']}/{report['total_test_cases']} Passed ({report['pass_rate_pct']}%)"
+    )
     print(f"- Citation Compliance: {report['scores']['citation_compliance_score']}%")
     print(f"- Numeric Consistency: {report['scores']['numeric_consistency_score']}%")
     print(f"- Freshness Disclosure: {report['scores']['freshness_disclosure_score']}%")

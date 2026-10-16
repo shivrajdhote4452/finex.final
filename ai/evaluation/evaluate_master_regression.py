@@ -25,9 +25,11 @@ import json
 import os
 import sys
 import time
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 sys.path.insert(0, os.path.abspath("."))
+
+from decimal import Decimal
 
 from backend.app.domain.goal_engine import GoalCreate, GoalEngine, calculate_goal_projection
 from backend.app.domain.goal_explainer_ai import explain_goal_projection
@@ -35,11 +37,6 @@ from backend.app.domain.paper_trading_coach import generate_trade_coaching
 from backend.app.domain.paper_trading_service import ExecutionResult
 from backend.app.domain.portfolio_intent_router import PortfolioIntentRouter
 from backend.app.domain.spending_service import mask_sensitive_narrative
-from decimal import Decimal
-
-
-
-
 
 
 def run_master_regression() -> Dict[str, Any]:
@@ -111,7 +108,6 @@ def run_master_regression() -> Dict[str, Any]:
         "details": "Mandatory virtual trading disclaimer and position sizing coaching verified",
     }
 
-
     # Domain 6: Conversational Portfolio Intelligence & Intent Routing
     router = PortfolioIntentRouter()
     queries = [
@@ -131,7 +127,6 @@ def run_master_regression() -> Dict[str, Any]:
         "accuracy": intent_acc,
         "details": f"Intent routing accuracy: {intent_acc * 100}%",
     }
-
 
     # Domain 7: Financial Goals & Projections
     goal_eng = GoalEngine()
@@ -160,8 +155,6 @@ def run_master_regression() -> Dict[str, Any]:
         "details": "Deterministic FV compound math and statutory disclaimer compliance verified",
     }
 
-
-
     # Domain 8: Spending Trend & Privacy Masking
     pii_samples = [
         ("UPI-549102847192-SWIGGY-BANGALORE", "****-SWIGGY-BANGALORE"),
@@ -172,13 +165,12 @@ def run_master_regression() -> Dict[str, Any]:
     for raw, _ in pii_samples:
         masked = mask_sensitive_narrative(raw)
         if "****" in masked and not any(dig in masked for dig in ["549102847192", "4111223344551234", "0091238475"]):
-
             masked_count += 1
     privacy_score = masked_count / len(pii_samples)
     domain_scores["8_spending_privacy"] = {
         "status": "PASSED" if privacy_score == 1.0 else "FAILED",
         "accuracy": privacy_score,
-        "details": f"100% PII redaction across card PAN, account numbers, and UPI handles",
+        "details": "100% PII redaction across card PAN, account numbers, and UPI handles",
     }
 
     all_passed = all(d["status"] == "PASSED" for d in domain_scores.values())
@@ -210,12 +202,12 @@ if __name__ == "__main__":
 
     rep = run_master_regression()
     for domain, res in rep["domains"].items():
-        print(f"[{res['status']}] {domain} (Acc: {res['accuracy']*100:.1f}%)")
+        print(f"[{res['status']}] {domain} (Acc: {res['accuracy'] * 100:.1f}%)")
         print(f"   Note: {res['details']}")
 
     print("=" * 65)
     print(f"Master AI Regression Status: {rep['overall_status']}")
-    print(f"Report: ai/evaluation/reports/master_regression_report.json")
+    print("Report: ai/evaluation/reports/master_regression_report.json")
     print("=" * 65)
     if rep["overall_status"] != "PASSED":
         sys.exit(1)

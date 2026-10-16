@@ -12,10 +12,11 @@ Coordinates:
 5. Emits AlertEvents and auto-creates in-app Notifications.
 """
 
-from datetime import datetime, timezone, timedelta
+import uuid
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
-import uuid
+
 from pydantic import BaseModel, Field
 
 # In-memory operational store for isolated testing/development baseline
@@ -26,7 +27,10 @@ _DELIVERY_ATTEMPTS_STORE: Dict[str, List[Dict[str, Any]]] = {}  # notif_id -> li
 
 
 class AlertRuleCreate(BaseModel):
-    rule_type: str = Field(..., description="'PRICE_ABOVE', 'PRICE_BELOW', 'PERCENT_CHANGE_UP', 'PERCENT_CHANGE_DOWN', 'CONCENTRATION_EXCEEDED', 'RISK_CHANGE'")
+    rule_type: str = Field(
+        ...,
+        description="'PRICE_ABOVE', 'PRICE_BELOW', 'PERCENT_CHANGE_UP', 'PERCENT_CHANGE_DOWN', 'CONCENTRATION_EXCEEDED', 'RISK_CHANGE'",
+    )
     symbol: Optional[str] = Field(None, description="Security symbol for price alerts")
     comparison_operator: str = Field(..., description="'>=', '<=', '>', '<', '='")
     threshold_value: Decimal = Field(..., description="Threshold value in specified unit")
@@ -46,8 +50,12 @@ class AlertsService:
 
     def create_rule(self, user_id: str, payload: AlertRuleCreate) -> Dict[str, Any]:
         valid_types = {
-            "PRICE_ABOVE", "PRICE_BELOW", "PERCENT_CHANGE_UP",
-            "PERCENT_CHANGE_DOWN", "CONCENTRATION_EXCEEDED", "RISK_CHANGE"
+            "PRICE_ABOVE",
+            "PRICE_BELOW",
+            "PERCENT_CHANGE_UP",
+            "PERCENT_CHANGE_DOWN",
+            "CONCENTRATION_EXCEEDED",
+            "RISK_CHANGE",
         }
         if payload.rule_type not in valid_types:
             raise ValueError(f"Unsupported rule type: {payload.rule_type}. Must be one of {valid_types}")
@@ -79,8 +87,7 @@ class AlertsService:
 
     def get_user_rules(self, user_id: str, active_only: bool = False) -> List[Dict[str, Any]]:
         rules = [
-            r for r in _ALERT_RULES_STORE.values()
-            if r["user_id"] == user_id and (not active_only or r["is_active"])
+            r for r in _ALERT_RULES_STORE.values() if r["user_id"] == user_id and (not active_only or r["is_active"])
         ]
         return sorted(rules, key=lambda x: x["created_at"], reverse=True)
 
@@ -170,12 +177,12 @@ class AlertsService:
                     msg = f"{sym} is currently trading at ₹{price:,.2f}, below your limit threshold of ₹{thresh:,.2f}."
                 elif rtype == "PERCENT_CHANGE_UP":
                     current_val = change_pct
-                    triggered = (change_pct >= thresh)
+                    triggered = change_pct >= thresh
                     title = f"Movement Alert: {sym} gained +{change_pct:.2f}%"
                     msg = f"{sym} has surged by {change_pct:+.2f}%, triggering your upper volatility rule."
                 elif rtype == "PERCENT_CHANGE_DOWN":
                     current_val = change_pct
-                    triggered = (change_pct <= thresh)
+                    triggered = change_pct <= thresh
                     title = f"Movement Alert: {sym} declined {change_pct:.2f}%"
                     msg = f"{sym} dropped by {change_pct:.2f}%, reaching your downside notification floor."
 
@@ -183,14 +190,14 @@ class AlertsService:
                 # Top holding concentration percentage check
                 top_conc = Decimal(str(portfolio_metrics.get("top_holding_pct", "0.0")))
                 current_val = top_conc
-                triggered = (top_conc >= thresh)
+                triggered = top_conc >= thresh
                 title = f"Portfolio Risk: Concentration at {top_conc:.1f}%"
                 msg = f"Your highest holding exceeds {thresh:.1f}% of total portfolio equity. Consider reviewing diversification."
 
             elif rtype == "RISK_CHANGE" and portfolio_metrics:
                 hhi = Decimal(str(portfolio_metrics.get("hhi_score", "0.0")))
                 current_val = hhi
-                triggered = (hhi >= thresh)
+                triggered = hhi >= thresh
                 title = f"Portfolio Concentration Shift: HHI {hhi:.0f}"
                 msg = f"Portfolio concentration score reached {hhi:.0f}, indicating an asset concentration shift."
 

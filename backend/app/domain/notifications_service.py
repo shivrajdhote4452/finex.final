@@ -11,7 +11,8 @@ Coordinates:
 """
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
+
 from backend.app.domain.alerts_service import (
     _DELIVERY_ATTEMPTS_STORE,
     _NOTIFICATIONS_STORE,
@@ -29,7 +30,8 @@ class NotificationsService:
         offset: int = 0,
     ) -> Dict[str, Any]:
         user_notifs = [
-            n for n in _NOTIFICATIONS_STORE.values()
+            n
+            for n in _NOTIFICATIONS_STORE.values()
             if n["user_id"] == user_id and (not unread_only or not n["is_read"])
         ]
         user_notifs.sort(key=lambda x: x["created_at"], reverse=True)
@@ -55,10 +57,7 @@ class NotificationsService:
         }
 
     def get_unread_count(self, user_id: str) -> int:
-        return sum(
-            1 for n in _NOTIFICATIONS_STORE.values()
-            if n["user_id"] == user_id and not n["is_read"]
-        )
+        return sum(1 for n in _NOTIFICATIONS_STORE.values() if n["user_id"] == user_id and not n["is_read"])
 
     def mark_as_read(self, user_id: str, notification_id: str) -> Dict[str, Any]:
         notif = _NOTIFICATIONS_STORE.get(notification_id)

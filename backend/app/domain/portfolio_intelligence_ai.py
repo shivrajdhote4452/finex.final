@@ -11,10 +11,10 @@ Coordinates:
 4. Strict statutory disclosures and preservation of all input values.
 """
 
-from typing import Any, Dict, List, Optional
-from pydantic import BaseModel
+from typing import List, Optional
 
 from backend.app.domain.portfolio_intelligence_service import PortfolioIntelligenceReport
+from pydantic import BaseModel
 
 
 class PortfolioExplanationResponse(BaseModel):

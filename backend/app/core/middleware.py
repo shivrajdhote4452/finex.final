@@ -2,7 +2,7 @@ import collections
 import contextvars
 import time
 import uuid
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict
 
 from backend.app.core.errors import build_error_response
 from fastapi import Request, Response
@@ -86,7 +86,6 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
                 "frame-ancestors 'none';"
             )
         return response
-
 
 
 class RateLimiterMiddleware(BaseHTTPMiddleware):
@@ -196,4 +195,3 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
                 pass
 
         return await call_next(request)
-

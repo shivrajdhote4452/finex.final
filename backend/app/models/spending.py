@@ -10,9 +10,9 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
+from backend.app.models.core import Base
 from sqlalchemy import (
     Boolean,
-    CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
@@ -23,17 +23,13 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from backend.app.models.core import Base
-
 
 class TransactionUpload(Base):
     """File upload audit record."""
 
     __tablename__ = "transaction_uploads"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     file_name: Mapped[str] = mapped_column(String(255), nullable=False)
     file_hash_sha256: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
@@ -43,9 +39,7 @@ class TransactionUpload(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="COMMITTED")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
 
-    transactions: Mapped[List["Transaction"]] = relationship(
-        "Transaction", back_populates="upload"
-    )
+    transactions: Mapped[List["Transaction"]] = relationship("Transaction", back_populates="upload")
 
 
 class TransactionCategory(Base):
@@ -59,9 +53,7 @@ class TransactionCategory(Base):
     is_essential: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
 
-    transactions: Mapped[List["Transaction"]] = relationship(
-        "Transaction", back_populates="category"
-    )
+    transactions: Mapped[List["Transaction"]] = relationship("Transaction", back_populates="category")
 
 
 class Transaction(Base):
@@ -69,9 +61,7 @@ class Transaction(Base):
 
     __tablename__ = "transactions"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     upload_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("transaction_uploads.id", ondelete="SET NULL"), nullable=True
     )
@@ -98,9 +88,7 @@ class MonthlySpendingSummary(Base):
 
     __tablename__ = "monthly_spending_summaries"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     year_month: Mapped[str] = mapped_column(String(7), nullable=False)
     total_debit: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False, default=Decimal("0.00"))
