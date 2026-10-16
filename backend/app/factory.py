@@ -33,6 +33,7 @@ from backend.app.routers.watchlists import router as watchlists_router
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 
 
 def create_app(settings: Optional[Settings] = None) -> FastAPI:
@@ -100,5 +101,13 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     app.include_router(goals_router, prefix=v1_prefix)
     app.include_router(spending_router, prefix=v1_prefix)
     app.include_router(sample_router, prefix=v1_prefix)
+
+    @app.get("/", include_in_schema=False)
+    async def root_redirect():
+        return RedirectResponse(url=f"{app_settings.API_V1_PREFIX}/docs")
+
+    @app.get("/docs", include_in_schema=False)
+    async def docs_redirect():
+        return RedirectResponse(url=f"{app_settings.API_V1_PREFIX}/docs")
 
     return app
