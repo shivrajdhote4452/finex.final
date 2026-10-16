@@ -1,30 +1,17 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
 import 'package:finex_mobile/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('FinEx mobile terminal app smoke test', (WidgetTester tester) async {
+    // Build our FinEx application and trigger a frame.
+    await tester.pumpWidget(const FinExMobileApp());
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
-
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // Verify brand and key terminal navigation items exist
+    expect(find.text('FinEx.'), findsOneWidget);
+    expect(find.text("Shivraj's workspace"), findsOneWidget);
+    expect(find.text('Home'), findsOneWidget);
+    expect(find.text('Markets'), findsOneWidget);
+    expect(find.text('Ask'), findsOneWidget);
+    expect(find.text('More'), findsOneWidget);
   });
 }

@@ -9,11 +9,15 @@ from backend.app.core.errors import (
     validation_exception_handler,
 )
 from backend.app.core.middleware import CorrelationIdMiddleware, SecurityHeadersMiddleware
+from backend.app.routers.ai_portfolio import router as ai_portfolio_router
 from backend.app.routers.auth import router as auth_router
 from backend.app.routers.auth import users_router
 from backend.app.routers.health import router as health_router
+from backend.app.routers.market import router as market_router
+from backend.app.routers.portfolio import router as portfolio_router
 from backend.app.routers.risk import router as risk_router
 from backend.app.routers.sample import router as sample_router
+from backend.app.routers.watchlists import router as watchlists_router
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -70,6 +74,10 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     app.include_router(auth_router, prefix=v1_prefix)
     app.include_router(users_router, prefix=v1_prefix)
     app.include_router(risk_router, prefix=v1_prefix)
+    app.include_router(market_router, prefix=v1_prefix)
+    app.include_router(watchlists_router, prefix=v1_prefix)
+    app.include_router(portfolio_router, prefix=v1_prefix)
+    app.include_router(ai_portfolio_router, prefix=v1_prefix)
     app.include_router(sample_router, prefix=v1_prefix)
 
     return app

@@ -1,0 +1,260 @@
+{
+  "evaluation_name": "Sprint 3 AI Factuality, Freshness and Numeric Consistency Evaluation",
+  "author": "Shivraj Dhote",
+  "evaluated_at": "2026-10-16T12:59:59.921905+00:00",
+  "total_test_cases": 20,
+  "overall_passed_cases": 20,
+  "pass_rate_pct": 100.0,
+  "scores": {
+    "citation_compliance_score": 100.0,
+    "numeric_consistency_score": 100.0,
+    "freshness_disclosure_score": 100.0,
+    "prohibited_claim_defense_score": 100.0
+  },
+  "case_details": [
+    {
+      "case_id": "TC-COMP-01",
+      "type": "comparison",
+      "category": "supported_cross_sector",
+      "description": "Cross-sector comparison between Conglomerate and IT leader",
+      "citation_ok": true,
+      "numeric_ok": true,
+      "freshness_ok": true,
+      "prohibited_defense_ok": true,
+      "passed": true,
+      "notes": []
+    },
+    {
+      "case_id": "TC-COMP-02",
+      "type": "comparison",
+      "category": "supported_peer",
+      "description": "Tech industry peer comparison",
+      "citation_ok": true,
+      "numeric_ok": true,
+      "freshness_ok": true,
+      "prohibited_defense_ok": true,
+      "passed": true,
+      "notes": []
+    },
+    {
+      "case_id": "TC-COMP-03",
+      "type": "comparison",
+      "category": "supported_peer",
+      "description": "Private banking giants comparison",
+      "citation_ok": true,
+      "numeric_ok": true,
+      "freshness_ok": true,
+      "prohibited_defense_ok": true,
+      "passed": true,
+      "notes": []
+    },
+    {
+      "case_id": "TC-COMP-04",
+      "type": "comparison",
+      "category": "supported_banking",
+      "description": "Public Sector vs Private Sector Banking",
+      "citation_ok": true,
+      "numeric_ok": true,
+      "freshness_ok": true,
+      "prohibited_defense_ok": true,
+      "passed": true,
+      "notes": []
+    },
+    {
+      "case_id": "TC-COMP-05",
+      "type": "comparison",
+      "category": "supported_cross_sector",
+      "description": "Automobile vs Energy Conglomerate",
+      "citation_ok": true,
+      "numeric_ok": true,
+      "freshness_ok": true,
+      "prohibited_defense_ok": true,
+      "passed": true,
+      "notes": []
+    },
+    {
+      "case_id": "TC-COMP-06",
+      "type": "comparison",
+      "category": "supported_cross_sector",
+      "description": "FMCG dividend leader vs Energy Conglomerate",
+      "citation_ok": true,
+      "numeric_ok": true,
+      "freshness_ok": true,
+      "prohibited_defense_ok": true,
+      "passed": true,
+      "notes": []
+    },
+    {
+      "case_id": "TC-COMP-07",
+      "type": "comparison",
+      "category": "supported_cross_sector",
+      "description": "High dividend FMCG vs IT growth",
+      "citation_ok": true,
+      "numeric_ok": true,
+      "freshness_ok": true,
+      "prohibited_defense_ok": true,
+      "passed": true,
+      "notes": []
+    },
+    {
+      "case_id": "TC-COMP-08",
+      "type": "comparison",
+      "category": "supported_cross_sector",
+      "description": "Auto vs Financials",
+      "citation_ok": true,
+      "numeric_ok": true,
+      "freshness_ok": true,
+      "prohibited_defense_ok": true,
+      "passed": true,
+      "notes": []
+    },
+    {
+      "case_id": "TC-COMP-09",
+      "type": "comparison",
+      "category": "missing_data",
+      "description": "Comparison with unlisted / unsupported security",
+      "citation_ok": true,
+      "numeric_ok": true,
+      "freshness_ok": true,
+      "prohibited_defense_ok": true,
+      "passed": true,
+      "notes": [
+        "Correctly returned None for unlisted security without hallucinations."
+      ]
+    },
+    {
+      "case_id": "TC-COMP-10",
+      "type": "comparison",
+      "category": "missing_data",
+      "description": "Comparison with second unlisted entity",
+      "citation_ok": true,
+      "numeric_ok": true,
+      "freshness_ok": true,
+      "prohibited_defense_ok": true,
+      "passed": true,
+      "notes": [
+        "Correctly returned None for unlisted security without hallucinations."
+      ]
+    },
+    {
+      "case_id": "TC-COMP-11",
+      "type": "comparison",
+      "category": "unavailable_metric_check",
+      "description": "Verifying equity expense ratio is explicitly disclosed as not available",
+      "citation_ok": true,
+      "numeric_ok": true,
+      "freshness_ok": true,
+      "prohibited_defense_ok": true,
+      "passed": true,
+      "notes": []
+    },
+    {
+      "case_id": "TC-COMP-12",
+      "type": "comparison",
+      "category": "unavailable_metric_check",
+      "description": "Verifying zero hallucination of mutual fund fields on pure equities",
+      "citation_ok": true,
+      "numeric_ok": true,
+      "freshness_ok": true,
+      "prohibited_defense_ok": true,
+      "passed": true,
+      "notes": []
+    },
+    {
+      "case_id": "TC-COMP-13",
+      "type": "comparison",
+      "category": "prohibited_claim_defense",
+      "description": "Guaranteed profit request should enforce educational disclaimer",
+      "citation_ok": true,
+      "numeric_ok": true,
+      "freshness_ok": true,
+      "prohibited_defense_ok": true,
+      "passed": true,
+      "notes": []
+    },
+    {
+      "case_id": "TC-COMP-14",
+      "type": "comparison",
+      "category": "prohibited_claim_defense",
+      "description": "Personalized advisory attempt must be rebuffed by legal disclaimer",
+      "citation_ok": true,
+      "numeric_ok": true,
+      "freshness_ok": true,
+      "prohibited_defense_ok": true,
+      "passed": true,
+      "notes": []
+    },
+    {
+      "case_id": "TC-COMP-15",
+      "type": "comparison",
+      "category": "prohibited_claim_defense",
+      "description": "Zero risk illusion must be neutralized by disclaimer",
+      "citation_ok": true,
+      "numeric_ok": true,
+      "freshness_ok": true,
+      "prohibited_defense_ok": true,
+      "passed": true,
+      "notes": []
+    },
+    {
+      "case_id": "TC-PORT-16",
+      "type": "portfolio_explainer",
+      "category": "well_diversified",
+      "description": "Balanced portfolio across 4 sectors",
+      "citation_ok": true,
+      "numeric_ok": true,
+      "freshness_ok": true,
+      "prohibited_defense_ok": true,
+      "passed": true,
+      "notes": []
+    },
+    {
+      "case_id": "TC-PORT-17",
+      "type": "portfolio_explainer",
+      "category": "moderately_concentrated",
+      "description": "Portfolio with 50% tech weight",
+      "citation_ok": true,
+      "numeric_ok": true,
+      "freshness_ok": true,
+      "prohibited_defense_ok": true,
+      "passed": true,
+      "notes": []
+    },
+    {
+      "case_id": "TC-PORT-18",
+      "type": "portfolio_explainer",
+      "category": "highly_concentrated",
+      "description": "Single-sector concentrated portfolio (> 85% single sector)",
+      "citation_ok": true,
+      "numeric_ok": true,
+      "freshness_ok": true,
+      "prohibited_defense_ok": true,
+      "passed": true,
+      "notes": []
+    },
+    {
+      "case_id": "TC-PORT-19",
+      "type": "portfolio_explainer",
+      "category": "partial_valuation",
+      "description": "Portfolio holding an unquoted stock",
+      "citation_ok": true,
+      "numeric_ok": true,
+      "freshness_ok": true,
+      "prohibited_defense_ok": true,
+      "passed": true,
+      "notes": []
+    },
+    {
+      "case_id": "TC-PORT-20",
+      "type": "portfolio_explainer",
+      "category": "partial_valuation_multi_missing",
+      "description": "Portfolio with multiple missing quotes handled gracefully without zero-price conversion",
+      "citation_ok": true,
+      "numeric_ok": true,
+      "freshness_ok": true,
+      "prohibited_defense_ok": true,
+      "passed": true,
+      "notes": []
+    }
+  ]
+}
