@@ -114,17 +114,17 @@
 | Task ID | Track | Title & Description | Status | Evidence / Notes |
 |---|---|---|---|---|
 | S5-PRD-01 | PRD | React paper-trading screens: account summary, order ticket, positions, history | Verified Working | `PracticeScreen.tsx`, `TransactionsScreen.tsx`, `QuickTradeModal.tsx` |
-| S5-PRD-02 | PRD | Flutter paper-trading account, order ticket, positions and history | Backlog | Mobile track |
-| S5-PRD-03 | PRD | Paper-trading E2E and reconciliation tests | Backlog | |
-| S5-API-01 | API | Paper account CRUD/reset, order submit/list/get, positions with idempotency | Backlog | |
-| S5-API-02 | API | Deterministic execution/ledger service for buy/sell (atomic transaction) | Backlog | |
-| S5-API-03 | API | Security, concurrency and failure tests (double submit, rollback) | Backlog | |
-| S5-DAT-01 | DAT | paper_accounts, orders, trades, positions, cash_ledger, snapshots tables | Backlog | |
-| S5-DAT-02 | DAT | Snapshot workflow and deterministic equity, cost basis, realized/unrealized P&L | Backlog | |
-| S5-DAT-03 | DAT | Reconciliation notebook comparing orders, trades, ledger and break report | Backlog | |
-| S5-AI-01 | AI | Paper-trading coach prompt (order outcome, portfolio impact, learning points) | Backlog | |
-| S5-AI-02 | AI | Performance narrative pipeline using deterministic paper metrics | Backlog | |
-| S5-AI-03 | AI | Safety and factuality evaluation for paper-trading coaching | Backlog | |
+| S5-PRD-02 | PRD | Flutter paper-trading account, order ticket, positions and history | Verified Working | `mobile/lib/screens/paper_trading_screen.dart`, `more_screen.dart` |
+| S5-PRD-03 | PRD | Paper-trading E2E and reconciliation tests | Verified Working | `mobile/test/widget_test.dart`, `backend/tests/test_paper_trading_api.py` |
+| S5-API-01 | API | Paper account CRUD/reset, order submit/list/get, positions with idempotency | Verified Working | `backend/app/routers/paper_trading.py`, `PaperTradingEngine` |
+| S5-API-02 | API | Deterministic execution/ledger service for buy/sell (atomic transaction) | Verified Working | `backend/app/domain/paper_trading_service.py` |
+| S5-API-03 | API | Security, concurrency and failure tests (double submit, rollback) | Verified Working | 6 passed tests in `backend/tests/test_paper_trading_api.py` |
+| S5-DAT-01 | DAT | paper_accounts, orders, trades, positions, cash_ledger, snapshots tables | Verified Working | `data/ddl/040_paper_trading.sql`, `backend/app/models/paper_trading.py` |
+| S5-DAT-02 | DAT | Snapshot workflow and deterministic equity, cost basis, realized/unrealized P&L | Verified Working | `backend/app/domain/paper_trading_service.py` |
+| S5-DAT-03 | DAT | Reconciliation notebook comparing orders, trades, ledger and break report | Verified Working | `data/quality/paper_trading_reconciliation.py`, 0 break tolerance |
+| S5-AI-01 | AI | Paper-trading coach prompt (order outcome, portfolio impact, learning points) | Verified Working | `backend/app/domain/paper_trading_coach.py` (`generate_trade_coaching`) |
+| S5-AI-02 | AI | Performance narrative pipeline using deterministic paper metrics | Verified Working | `backend/app/domain/paper_trading_coach.py` (`generate_performance_narrative`) |
+| S5-AI-03 | AI | Safety and factuality evaluation for paper-trading coaching | Verified Working | 15/15 (100%) passed in `ai/evaluation/evaluate_paper_trading.py` |
 
 ---
 

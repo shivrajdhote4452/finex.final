@@ -15,6 +15,7 @@ from backend.app.routers.auth import router as auth_router
 from backend.app.routers.auth import users_router
 from backend.app.routers.health import router as health_router
 from backend.app.routers.market import router as market_router
+from backend.app.routers.paper_trading import router as paper_trading_router
 from backend.app.routers.portfolio import router as portfolio_router
 from backend.app.routers.risk import router as risk_router
 from backend.app.routers.sample import router as sample_router
@@ -78,6 +79,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     app.include_router(market_router, prefix=v1_prefix)
     app.include_router(watchlists_router, prefix=v1_prefix)
     app.include_router(portfolio_router, prefix=v1_prefix)
+    app.include_router(paper_trading_router, prefix=v1_prefix)
     app.include_router(ai_portfolio_router, prefix=v1_prefix)
     app.include_router(ai_chat_router, prefix=v1_prefix)
     app.include_router(sample_router, prefix=v1_prefix)
