@@ -196,6 +196,7 @@ class RegulatoryDocumentRetriever(AbstractDocumentRetriever):
                     chunk_id=chunk.chunk_id,
                     document_id=chunk.document_id,
                     title=chunk.title,
+                    publisher=chunk.publisher,
                     source_url=chunk.source_url,
                     section=chunk.section,
                     page_number=chunk.page_number,

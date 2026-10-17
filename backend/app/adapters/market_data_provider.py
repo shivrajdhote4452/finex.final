@@ -5,9 +5,10 @@ Implements AbstractMarketDataProvider with real NSE instruments, caching,
 explicit freshness metadata, and fallback to cached records without inventing prices.
 """
 
+import hashlib
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from backend.app.ports.market_data import AbstractMarketDataProvider, HistoricalBar, Quote
 
@@ -576,23 +577,45 @@ class RealMarketDataProvider(AbstractMarketDataProvider):
             return s.split(".", 1)[0]
         return s
 
+    def _evaluate_freshness(self, observed_at: datetime) -> Tuple[bool, bool, str]:
+        now = datetime.now(timezone.utc)
+        age_seconds = max(0.0, (now - observed_at).total_seconds())
+        is_weekend = now.weekday() in (5, 6) or observed_at.weekday() in (5, 6)
+        stale_threshold = 72 * 3600 if is_weekend else 24 * 3600
+        is_stale = age_seconds > stale_threshold
+        is_delayed = age_seconds > 900
+        status = "stale" if is_stale else ("delayed" if is_delayed else "fresh")
+        return is_delayed, is_stale, status
+
+    def set_quote_override(self, symbol: str, quote: Quote) -> None:
+        """Inject an explicit quote into cache for testing or live provider update."""
+        norm = self._normalize_symbol(symbol)
+        self._cache[norm] = quote
+
     async def get_latest_quote(self, symbol: str) -> Optional[Quote]:
         norm = self._normalize_symbol(symbol)
-        if norm not in VERIFIED_OBSERVATIONS:
-            return None
 
-        # Check in-memory cache
+        # Check in-memory cache and RECALCULATE freshness dynamically
         if norm in self._cache and self.force_cache:
             cached = self._cache[norm]
-            return cached.model_copy(update={"served_from_cache": True})
+            is_delayed, is_stale, status = self._evaluate_freshness(cached.observed_at)
+            return cached.model_copy(
+                update={
+                    "served_from_cache": True,
+                    "is_delayed": is_delayed,
+                    "is_stale": is_stale,
+                    "data_status": status,
+                }
+            )
+
+        if norm not in VERIFIED_OBSERVATIONS:
+            return None
 
         obs = VERIFIED_OBSERVATIONS[norm]
         now = datetime.now(timezone.utc)
         obs_time = obs["observed_at"]
-        age_seconds = (now - obs_time).total_seconds()
-        is_delayed = age_seconds > 900
-        is_stale = age_seconds > 86400
-        status = "stale" if is_stale else ("delayed" if is_delayed else "fresh")
+        is_delayed, is_stale, status = self._evaluate_freshness(obs_time)
+        evidence = hashlib.sha256(f"{norm}:{obs_time.isoformat()}:{obs['price']}:INR".encode("utf-8")).hexdigest()
 
         quote = Quote(
             canonical_id=f"NSE:{norm}",
@@ -601,7 +624,9 @@ class RealMarketDataProvider(AbstractMarketDataProvider):
             currency="INR",
             observed_at=obs_time,
             ingested_at=now,
-            source="nse_official_report",
+            source=obs.get("source", "nse_official_report"),
+            source_uri=f"urn:market-data:nse:{norm}",
+            source_evidence=evidence,
             served_from_cache=False,
             is_delayed=is_delayed,
             is_stale=is_stale,

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode, useCallback } from 'react';
 import { apiClient } from '../api/client';
 
 export interface HoldingItem {
@@ -91,13 +91,14 @@ interface FinancialContextType {
     orderType?: OrderExecutionType,
     customPrice?: number
   ) => Promise<{ success: boolean; receipt?: LedgerEntry; error?: string }>;
-  depositFunds: (amount: number) => void;
-  resetAccount: () => void;
-  addSpendingItem: (merchant: string, category: string, amount: number) => void;
-  markAllNotificationsRead: () => void;
+  depositFunds: (amount: number) => Promise<void>;
+  resetAccount: () => Promise<void>;
+  addSpendingItem: (merchant: string, category: string, amount: number) => Promise<void>;
+  markAllNotificationsRead: () => Promise<void>;
   addNotification: (title: string, message: string, type: AlertNotification['type']) => void;
   refreshAccount: () => Promise<void>;
   refreshMarketData: () => Promise<void>;
+  clearPrivateState: () => void;
 }
 
 const FinancialContext = createContext<FinancialContextType | undefined>(undefined);
@@ -115,23 +116,19 @@ const INSTRUMENT_METADATA: Record<string, { name: string; sector: string; color:
 };
 
 export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [virtualCash, setVirtualCash] = useState<number>(35000);
+  const [virtualCash, setVirtualCash] = useState<number>(0);
   const [holdings, setHoldings] = useState<HoldingItem[]>([]);
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
   const [notifications, setNotifications] = useState<AlertNotification[]>([]);
   const [spendingItems, setSpendingItems] = useState<SpendingItem[]>([]);
 
-  // Sourced Market Quotes directly from NSE Official Reporting
-  const [marketQuotes, setMarketQuotes] = useState<Record<string, MarketQuote>>({
-    RELIANCE: { symbol: 'RELIANCE', name: 'Reliance Industries Ltd', price: 2500.0, changeVal: 30.0, changePct: 1.21, isPositive: true, high: 2515.0, low: 2468.0, volume: '8.4M', source: 'nse_official_report' },
-    TCS: { symbol: 'TCS', name: 'Tata Consultancy Services', price: 3600.0, changeVal: -29.0, changePct: -0.80, isPositive: false, high: 3645.0, low: 3590.0, volume: '3.1M', source: 'nse_official_report' },
-    INFY: { symbol: 'INFY', name: 'Infosys Ltd', price: 1450.0, changeVal: 7.9, changePct: 0.55, isPositive: true, high: 1458.0, low: 1438.0, volume: '5.2M', source: 'nse_official_report' },
-    HDFCBANK: { symbol: 'HDFCBANK', name: 'HDFC Bank Ltd', price: 1600.0, changeVal: 5.1, changePct: 0.32, isPositive: true, high: 1612.0, low: 1590.0, volume: '9.8M', source: 'nse_official_report' },
-    ICICIBANK: { symbol: 'ICICIBANK', name: 'ICICI Bank Ltd', price: 1240.0, changeVal: 18.6, changePct: 1.52, isPositive: true, high: 1248.0, low: 1222.0, volume: '11.5M', source: 'nse_official_report' },
-    TATAMOTORS: { symbol: 'TATAMOTORS', name: 'Tata Motors Ltd', price: 924.5, changeVal: 19.2, changePct: 2.12, isPositive: true, high: 930.0, low: 905.0, volume: '14.2M', source: 'nse_official_report' },
-    ITC: { symbol: 'ITC', name: 'ITC Ltd', price: 502.8, changeVal: 3.25, changePct: 0.65, isPositive: true, high: 505.0, low: 498.5, volume: '7.6M', source: 'nse_official_report' },
-    SBIN: { symbol: 'SBIN', name: 'State Bank of India', price: 815.2, changeVal: -3.7, changePct: -0.45, isPositive: false, high: 825.0, low: 811.0, volume: '12.8M', source: 'nse_official_report' },
-  });
+  // Sourced Market Quotes from verified backend
+  const [marketQuotes, setMarketQuotes] = useState<Record<string, MarketQuote>>({});
+
+  const marketQuotesRef = useRef(marketQuotes);
+  useEffect(() => {
+    marketQuotesRef.current = marketQuotes;
+  }, [marketQuotes]);
 
   // Global Quick Trade Drawer State
   const [isQuickTradeOpen, setIsQuickTradeOpen] = useState(false);
@@ -146,60 +143,92 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
     setIsQuickTradeOpen(false);
   };
 
+  // Clear private client state on logout or session expiration
+  const clearPrivateState = useCallback(() => {
+    setVirtualCash(0);
+    setHoldings([]);
+    setLedger([]);
+    setNotifications([]);
+    setSpendingItems([]);
+  }, []);
+
   // --- Real Backend Synchronization ---
+  // Decoupled from market quotes to prevent infinite request loops
   const refreshAccount = useCallback(async () => {
-    if (!apiClient.isAuthenticated()) return;
+    if (!apiClient.isAuthenticated()) {
+      clearPrivateState();
+      return;
+    }
     try {
       const acct = await apiClient.paperTrading.getAccount();
       if (acct) {
-        setVirtualCash(acct.current_cash);
-        if (acct.positions) {
+        // Normalize cash_balance and current_cash defensively
+        const rawCash = acct.cash_balance ?? acct.current_cash ?? 0;
+        const normalizedCash = Number(rawCash);
+        setVirtualCash(Number.isFinite(normalizedCash) ? normalizedCash : 0);
+
+        if (acct.positions && Array.isArray(acct.positions)) {
           const mappedHoldings: HoldingItem[] = acct.positions.map((p) => {
             const meta = INSTRUMENT_METADATA[p.symbol] || {
               name: p.symbol,
               sector: 'Equities',
               color: '#F29A60',
             };
-            const currentQuote = marketQuotes[p.symbol];
-            const livePrice = currentQuote ? currentQuote.price : p.current_price;
-            const dayPct = currentQuote ? currentQuote.changePct : 0.0;
+            const currentQuote = marketQuotesRef.current[p.symbol];
+            const livePrice = currentQuote && Number.isFinite(Number(currentQuote.price))
+              ? Number(currentQuote.price)
+              : (Number.isFinite(Number(p.current_price)) ? Number(p.current_price) : 0);
+            const dayPct = currentQuote && Number.isFinite(Number(currentQuote.changePct))
+              ? Number(currentQuote.changePct)
+              : 0.0;
+            // Map average_buy_price and avg_cost defensively
+            const avgCost = Number(p.average_buy_price ?? p.avg_cost ?? 0);
+            const shares = Number(p.quantity ?? 0);
             return {
               symbol: p.symbol,
               name: meta.name,
-              shares: p.quantity,
-              avgPrice: p.avg_cost,
-              currentPrice: livePrice,
-              dayChangePct: dayPct,
+              shares: Number.isFinite(shares) ? shares : 0,
+              avgPrice: Number.isFinite(avgCost) ? avgCost : 0,
+              currentPrice: Number.isFinite(livePrice) ? livePrice : 0,
+              dayChangePct: Number.isFinite(dayPct) ? dayPct : 0,
               assetClass: meta.sector,
               color: meta.color,
             };
           });
           setHoldings(mappedHoldings);
+        } else {
+          setHoldings([]);
         }
       }
 
       // Fetch persistent orders / ledger
       const ordersRes = await apiClient.paperTrading.getOrders(50);
       if (ordersRes && ordersRes.orders) {
-        const mappedOrders: LedgerEntry[] = ordersRes.orders.map((o) => ({
-          id: o.id,
-          timestamp: new Date(o.created_at).toLocaleString('en-IN', {
-            dateStyle: 'medium',
-            timeStyle: 'medium',
-          }),
-          type: (o.side as 'BUY' | 'SELL') || 'BUY',
-          orderType: (o.order_type as OrderExecutionType) || 'MARKET',
-          symbol: o.symbol,
-          name: INSTRUMENT_METADATA[o.symbol]?.name || o.symbol,
-          shares: o.quantity,
-          fillPrice: o.fill_price,
-          total: o.gross_value,
-          brokerageFee: 0,
-          regulatoryFees: 0,
-          cashAfter: o.cash_balance_after ?? 0,
-          status: o.status as 'FILLED' | 'SETTLED' | 'PENDING' | 'REJECTED',
-          notes: `Executed via FinEx Paper Matching Engine at ₹${o.fill_price.toLocaleString('en-IN')}`,
-        }));
+        const mappedOrders: LedgerEntry[] = ordersRes.orders.map((o) => {
+          const fill = Number(o.fill_price) || 0;
+          const gross = Number(o.gross_value) || 0;
+          const shares = Number(o.quantity) || 0;
+          const cashAfter = o.cash_balance_after !== undefined ? Number(o.cash_balance_after) : 0;
+          return {
+            id: o.id,
+            timestamp: new Date(o.created_at).toLocaleString('en-IN', {
+              dateStyle: 'medium',
+              timeStyle: 'medium',
+            }),
+            type: (o.side as 'BUY' | 'SELL') || 'BUY',
+            orderType: (o.order_type as OrderExecutionType) || 'MARKET',
+            symbol: o.symbol,
+            name: INSTRUMENT_METADATA[o.symbol]?.name || o.symbol,
+            shares,
+            fillPrice: fill,
+            total: gross,
+            brokerageFee: 0,
+            regulatoryFees: 0,
+            cashAfter,
+            status: (o.status as 'FILLED' | 'SETTLED' | 'PENDING' | 'REJECTED') || 'FILLED',
+            notes: `Executed via FinEx Paper Matching Engine at ₹${fill.toLocaleString('en-IN')}`,
+          };
+        });
         setLedger(mappedOrders);
       }
 
@@ -211,7 +240,7 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
           date: t.transaction_date,
           merchant: t.masked_description,
           category: t.category_id,
-          amount: t.amount,
+          amount: Number(t.amount) || 0,
           isMasked: true,
         }));
         setSpendingItems(mappedTx);
@@ -230,11 +259,14 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
         }));
         setNotifications(mappedNotifs);
       }
-    } catch (e) {
-      console.warn('Backend sync deferred (unauthenticated or offline):', e);
+    } catch (e: any) {
+      if (e?.status === 401) {
+        clearPrivateState();
+      }
     }
-  }, [marketQuotes]);
+  }, [clearPrivateState]);
 
+  // Market quotes fetcher (decoupled from account synchronization)
   const refreshMarketData = useCallback(async () => {
     try {
       const instRes = await apiClient.market.getInstruments();
@@ -278,26 +310,45 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
     }
   }, []);
 
-  // Fetch verified backend data on mount
+  // Mount effects: fetch independently without cascading loop
   useEffect(() => {
     refreshMarketData();
-    refreshAccount();
-  }, [refreshMarketData, refreshAccount]);
+  }, [refreshMarketData]);
 
-  // Derived Financial Metrics
-  const totalHoldingsValue = holdings.reduce((sum, h) => sum + h.shares * h.currentPrice, 0);
-  const totalCostBasis = holdings.reduce((sum, h) => sum + h.shares * h.avgPrice, 0);
-  const unrealizedPnL = totalHoldingsValue - totalCostBasis;
-  const totalPortfolioValue = totalHoldingsValue + virtualCash;
+  useEffect(() => {
+    if (apiClient.isAuthenticated()) {
+      refreshAccount();
+    } else {
+      clearPrivateState();
+    }
+  }, [refreshAccount, clearPrivateState]);
+
+  // Derived Financial Metrics normalized against NaN
+  const totalHoldingsValue = holdings.reduce((sum, h) => {
+    const val = (Number(h.shares) || 0) * (Number(h.currentPrice) || 0);
+    return sum + (Number.isFinite(val) ? val : 0);
+  }, 0);
+
+  const totalCostBasis = holdings.reduce((sum, h) => {
+    const val = (Number(h.shares) || 0) * (Number(h.avgPrice) || 0);
+    return sum + (Number.isFinite(val) ? val : 0);
+  }, 0);
+
+  const unrealizedPnL = Number.isFinite(totalHoldingsValue - totalCostBasis)
+    ? totalHoldingsValue - totalCostBasis
+    : 0;
+
+  const safeCash = Number.isFinite(Number(virtualCash)) ? Number(virtualCash) : 0;
+  const totalPortfolioValue = safeCash + totalHoldingsValue;
 
   const totalRealizedPnL = ledger
-    .filter((l) => l.realizedPnL !== undefined)
-    .reduce((sum, l) => sum + (l.realizedPnL || 0), 0);
+    .filter((l) => l.realizedPnL !== undefined && Number.isFinite(Number(l.realizedPnL)))
+    .reduce((sum, l) => sum + (Number(l.realizedPnL) || 0), 0);
 
   const totalTradesCount = ledger.filter((l) => l.type === 'BUY' || l.type === 'SELL' || l.type === 'SIP').length;
   const totalTradedVolume = ledger
     .filter((l) => l.type === 'BUY' || l.type === 'SELL' || l.type === 'SIP')
-    .reduce((sum, l) => sum + l.total, 0);
+    .reduce((sum, l) => sum + (Number(l.total) || 0), 0);
 
   const addNotification = (title: string, message: string, type: AlertNotification['type']) => {
     const newAlert: AlertNotification = {
@@ -312,83 +363,70 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
   };
 
   const markAllNotificationsRead = async () => {
+    if (!apiClient.isAuthenticated()) return;
     try {
-      if (apiClient.isAuthenticated()) {
-        await apiClient.alerts.markAllRead();
-      }
+      await apiClient.alerts.markAllRead();
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
     } catch {
-      // fallback local
+      // network failure
     }
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   };
 
   const depositFunds = async (amount: number) => {
-    const nextCash = virtualCash + amount;
-    setVirtualCash(nextCash);
-
-    const receipt: LedgerEntry = {
-      id: `DEP-${Date.now().toString().slice(-4)}`,
-      timestamp: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'medium' }),
-      type: 'DEPOSIT',
-      orderType: 'MARKET',
-      symbol: 'INR_CASH',
-      name: 'Virtual Sandbox Allocation',
-      shares: 1,
-      fillPrice: amount,
-      total: amount,
-      brokerageFee: 0,
-      regulatoryFees: 0,
-      cashAfter: nextCash,
-      status: 'SETTLED',
-      notes: `Injected ₹${amount.toLocaleString('en-IN')} simulated paper funds`,
-    };
-
-    setLedger((prev) => [receipt, ...prev]);
-    addNotification('Funds Deposited', `Credited ₹${amount.toLocaleString('en-IN')} virtual cash to your sandbox account`, 'execution');
+    if (!apiClient.isAuthenticated()) {
+      addNotification('Deposit Failed', 'Authentication required. Please sign in to deposit funds.', 'execution');
+      return;
+    }
+    if (!amount || amount <= 0) {
+      addNotification('Invalid Amount', 'Please specify a positive deposit amount.', 'execution');
+      return;
+    }
+    try {
+      await apiClient.paperTrading.deposit(amount);
+      await refreshAccount();
+      addNotification(
+        'Funds Deposited',
+        `Credited ₹${amount.toLocaleString('en-IN')} virtual cash to your sandbox account`,
+        'execution'
+      );
+    } catch (e: any) {
+      addNotification('Deposit Failed', e?.message || 'Failed to deposit virtual funds.', 'execution');
+    }
   };
 
   const resetAccount = async () => {
+    if (!apiClient.isAuthenticated()) {
+      addNotification('Reset Failed', 'Authentication required. Please sign in to reset account.', 'execution');
+      return;
+    }
     try {
-      if (apiClient.isAuthenticated()) {
-        await apiClient.paperTrading.resetAccount();
-        await refreshAccount();
-      } else {
-        setVirtualCash(50000);
-        setHoldings([]);
-      }
-      addNotification('Account Reset', 'Restored sandbox balance to ₹50,000 virtual cash and reset positions', 'execution');
+      await apiClient.paperTrading.resetAccount();
+      await refreshAccount();
+      addNotification('Account Reset', 'Restored sandbox balance to ₹1,00,000 virtual cash and reset positions', 'execution');
     } catch (e: any) {
       addNotification('Reset Failed', e?.message || 'Failed to reset account', 'execution');
     }
   };
 
   const addSpendingItem = async (merchant: string, category: string, amount: number) => {
-    try {
-      if (apiClient.isAuthenticated()) {
-        const todayStr = new Date().toISOString().split('T')[0];
-        await apiClient.spending.addManual({
-          transaction_date: todayStr,
-          amount,
-          description: merchant,
-          transaction_type: 'DEBIT',
-          category_id: category,
-        });
-        await refreshAccount();
-      }
-    } catch {
-      // local fallback
+    if (!apiClient.isAuthenticated()) {
+      addNotification('Expense Error', 'Authentication required. Please sign in to record spending.', 'execution');
+      return;
     }
-
-    const newItem: SpendingItem = {
-      id: `TX-${Date.now().toString().slice(-4)}`,
-      date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-      merchant,
-      category,
-      amount,
-      isMasked: true,
-    };
-    setSpendingItems((prev) => [newItem, ...prev]);
-    addNotification('Expense Logged', `Recorded ₹${amount.toLocaleString('en-IN')} for ${merchant} (${category})`, 'execution');
+    try {
+      const todayStr = new Date().toISOString().split('T')[0];
+      await apiClient.spending.addManual({
+        transaction_date: todayStr,
+        amount,
+        description: merchant,
+        transaction_type: 'DEBIT',
+        category_id: category,
+      });
+      await refreshAccount();
+      addNotification('Expense Logged', `Recorded ₹${amount.toLocaleString('en-IN')} for ${merchant} (${category})`, 'execution');
+    } catch (e: any) {
+      addNotification('Expense Failed', e?.message || 'Failed to record transaction on server.', 'execution');
+    }
   };
 
   // Authoritative Order Execution Engine connected directly to FastAPI Paper Trading Engine
@@ -399,113 +437,62 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
     orderType: OrderExecutionType = 'MARKET',
     customPrice?: number
   ): Promise<{ success: boolean; receipt?: LedgerEntry; error?: string }> => {
+    if (!apiClient.isAuthenticated()) {
+      return {
+        success: false,
+        error: 'Authentication required. Please sign in to execute paper trades.',
+      };
+    }
+
     const side = type === 'BUY' || type === 'SIP' ? 'BUY' : 'SELL';
     const idempotencyKey = `web-ord-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
     try {
-      if (apiClient.isAuthenticated()) {
-        const res = await apiClient.paperTrading.submitOrder(
-          {
-            symbol,
-            side,
-            order_type: orderType,
-            quantity: shares,
-            limit_price: customPrice,
-          },
-          idempotencyKey
+      const res = await apiClient.paperTrading.submitOrder(
+        {
+          symbol,
+          side,
+          order_type: orderType,
+          quantity: shares,
+          limit_price: customPrice,
+        },
+        idempotencyKey
+      );
+
+      if (res.status === 'FILLED' || res.status === 'ACCEPTED') {
+        const fill = Number(res.fill_price) || 0;
+        const gross = Number(res.gross_value) || 0;
+        const cashAfter = Number(res.cash_balance_after) || 0;
+        const receipt: LedgerEntry = {
+          id: res.order_id,
+          timestamp: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'medium' }),
+          type: side,
+          orderType,
+          symbol: res.symbol,
+          name: INSTRUMENT_METADATA[res.symbol]?.name || res.symbol,
+          shares: Number(res.quantity) || shares,
+          fillPrice: fill,
+          total: gross,
+          brokerageFee: 0,
+          regulatoryFees: 0,
+          cashAfter,
+          status: 'FILLED',
+          notes: `Executed via FinEx Paper Matching Engine at ₹${fill.toLocaleString('en-IN')}`,
+        };
+
+        await refreshAccount();
+
+        addNotification(
+          'Order Executed',
+          `${side === 'BUY' ? 'Bought' : 'Sold'} ${shares} shares of ${symbol} at ₹${fill.toLocaleString('en-IN')}`,
+          'execution'
         );
-
-        if (res.status === 'FILLED' || res.status === 'ACCEPTED') {
-          const receipt: LedgerEntry = {
-            id: res.order_id,
-            timestamp: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'medium' }),
-            type: side,
-            orderType,
-            symbol: res.symbol,
-            name: INSTRUMENT_METADATA[res.symbol]?.name || res.symbol,
-            shares: res.quantity,
-            fillPrice: res.fill_price,
-            total: res.gross_value,
-            brokerageFee: 0,
-            regulatoryFees: 0,
-            cashAfter: res.cash_balance_after,
-            status: 'FILLED',
-            notes: `Executed via FinEx Paper Matching Engine at ₹${res.fill_price.toLocaleString('en-IN')}`,
-          };
-
-          setLedger((prev) => [receipt, ...prev]);
-          setVirtualCash(res.cash_balance_after);
-          await refreshAccount();
-
-          addNotification(
-            'Order Executed',
-            `${side === 'BUY' ? 'Bought' : 'Sold'} ${shares} shares of ${symbol} at ₹${res.fill_price.toLocaleString('en-IN')}`,
-            'execution'
-          );
-          return { success: true, receipt };
-        } else {
-          return {
-            success: false,
-            error: `Order ${res.status}: Order could not be filled at the requested price.`,
-          };
-        }
+        return { success: true, receipt };
       } else {
-        // Unauthenticated demo fallback
-        const targetQuote = marketQuotes[symbol];
-        const unitPrice = customPrice && customPrice > 0 ? customPrice : (targetQuote ? targetQuote.price : 2500);
-        const orderCost = shares * unitPrice;
-
-        if (side === 'BUY') {
-          if (orderCost > virtualCash) {
-            return {
-              success: false,
-              error: `Insufficient virtual cash. Required ₹${orderCost.toLocaleString('en-IN')}, available ₹${virtualCash.toLocaleString('en-IN')}.`,
-            };
-          }
-          const nextCash = virtualCash - orderCost;
-          setVirtualCash(nextCash);
-          const receipt: LedgerEntry = {
-            id: `ORD-${Date.now().toString().slice(-4)}`,
-            timestamp: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'medium' }),
-            type: 'BUY',
-            orderType,
-            symbol,
-            name: targetQuote?.name || symbol,
-            shares,
-            fillPrice: unitPrice,
-            total: orderCost,
-            brokerageFee: 0,
-            regulatoryFees: 0,
-            cashAfter: nextCash,
-            status: 'FILLED',
-            notes: `Executed via FinEx Paper Matching Engine (NSE Reference)`,
-          };
-          setLedger((prev) => [receipt, ...prev]);
-          addNotification('Order Executed', `Bought ${shares} shares of ${symbol} at ₹${unitPrice.toLocaleString('en-IN')}`, 'execution');
-          return { success: true, receipt };
-        } else {
-          const nextCash = virtualCash + orderCost;
-          setVirtualCash(nextCash);
-          const receipt: LedgerEntry = {
-            id: `ORD-${Date.now().toString().slice(-4)}`,
-            timestamp: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'medium' }),
-            type: 'SELL',
-            orderType,
-            symbol,
-            name: targetQuote?.name || symbol,
-            shares,
-            fillPrice: unitPrice,
-            total: orderCost,
-            brokerageFee: 0,
-            regulatoryFees: 0,
-            cashAfter: nextCash,
-            status: 'FILLED',
-            notes: `Executed via FinEx Paper Matching Engine at ₹${unitPrice.toLocaleString('en-IN')}`,
-          };
-          setLedger((prev) => [receipt, ...prev]);
-          addNotification('Order Executed', `Sold ${shares} shares of ${symbol} at ₹${unitPrice.toLocaleString('en-IN')}`, 'execution');
-          return { success: true, receipt };
-        }
+        return {
+          success: false,
+          error: `Order ${res.status}: Order could not be filled at the requested price.`,
+        };
       }
     } catch (e: any) {
       return {
@@ -542,6 +529,7 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
         addNotification,
         refreshAccount,
         refreshMarketData,
+        clearPrivateState,
       }}
     >
       {children}
@@ -551,6 +539,8 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
 
 export const useFinancial = () => {
   const context = useContext(FinancialContext);
-  if (!context) throw new Error('useFinancial must be used within FinancialProvider');
+  if (!context) {
+    throw new Error('useFinancial must be used within a FinancialProvider');
+  }
   return context;
 };

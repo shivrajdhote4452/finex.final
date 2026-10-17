@@ -8,6 +8,7 @@ Persists evaluated score and band to user profile upon submission.
 from typing import Optional
 
 from backend.app.core.envelope import create_response_envelope
+from backend.app.database import get_db
 from backend.app.domain.risk import (
     RISK_QUESTIONNAIRE_V1,
     AssessmentSubmission,
@@ -16,6 +17,7 @@ from backend.app.domain.risk import (
 from backend.app.domain.user_store import user_store
 from backend.app.routers.auth import get_current_user_id
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/risk", tags=["Risk Profile & Assessment"])
 
@@ -32,10 +34,11 @@ async def submit_risk_assessment(
     request: Request,
     submission: AssessmentSubmission,
     authorization: Optional[str] = Header(None),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Deterministically score investor answers and generate explanation.
-    Persists risk assessment to user profile if session token is provided.
+    Persists risk assessment to user profile in PostgreSQL if session token is provided.
     """
     cid = getattr(request.state, "correlation_id", "none")
     result = evaluate_risk_profile(submission)
@@ -43,9 +46,9 @@ async def submit_risk_assessment(
     # If caller is authenticated, persist assessment against verified identity
     if authorization and authorization.startswith("Bearer "):
         try:
-            current_user = get_current_user_id(authorization)
+            current_user = await get_current_user_id(authorization, db=db)
             uid = current_user["sub"]
-            user_store.record_risk_assessment(uid, result.model_dump())
+            await user_store.record_risk_assessment_db(uid, result.model_dump(), db=db)
         except HTTPException:
             pass  # Allow unauthenticated demo evaluation if explicitly requested, but do not persist
 
@@ -56,13 +59,14 @@ async def submit_risk_assessment(
 async def get_my_risk_assessment(
     request: Request,
     current_user: dict = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Retrieve verified investor's latest saved risk assessment."""
+    """Retrieve verified investor's latest saved risk assessment from PostgreSQL."""
     cid = getattr(request.state, "correlation_id", "none")
     uid = current_user["sub"]
-    saved = user_store.get_risk_assessment(uid)
+    profile = await user_store.get_profile_db(uid, db=db)
+    saved = profile.risk_assessment or user_store.get_risk_assessment(uid)
     if not saved:
-        profile = user_store.get_profile(uid)
         return create_response_envelope(
             {
                 "has_assessment": False,

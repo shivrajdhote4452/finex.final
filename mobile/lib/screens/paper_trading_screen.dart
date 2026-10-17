@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/api_client.dart';
 import '../theme/terminal_theme.dart';
 
 class MobilePaperTradingScreen extends StatefulWidget {
@@ -9,63 +10,118 @@ class MobilePaperTradingScreen extends StatefulWidget {
 }
 
 class _MobilePaperTradingScreenState extends State<MobilePaperTradingScreen> {
-  // Virtual Account State
+  // Virtual Account State from backend
   double _cashBalance = 100000.00;
   String _selectedSymbol = "RELIANCE";
   String _orderSide = "BUY"; // "BUY" or "SELL"
   int _quantity = 10;
+  bool _isSubmitting = false;
+  String? _pendingOrderIdempotencyKey;
 
   final Map<String, double> _marketPrices = {
     "RELIANCE": 2500.00,
-    "TCS": 3500.00,
-    "INFY": 1600.00,
-    "HDFCBANK": 1500.00,
-    "ICICIBANK": 1050.00,
+    "TCS": 3600.00,
+    "INFY": 1450.00,
+    "HDFCBANK": 1600.00,
+    "ICICIBANK": 1240.00,
+    "TATAMOTORS": 924.50,
+    "SBIN": 815.20,
+    "ITC": 502.80,
   };
 
-  final List<Map<String, dynamic>> _positions = [
-    {
-      "symbol": "RELIANCE",
-      "quantity": 10,
-      "avg_price": 2450.00,
-      "current_price": 2500.00,
-      "market_value": 25000.00,
-      "unrealized_pnl": 500.00,
-      "unrealized_pct": 2.04,
-    },
-    {
-      "symbol": "TCS",
-      "quantity": 5,
-      "avg_price": 3400.00,
-      "current_price": 3500.00,
-      "market_value": 17500.00,
-      "unrealized_pnl": 500.00,
-      "unrealized_pct": 2.94,
-    },
-  ];
+  final List<Map<String, dynamic>> _positions = [];
+  final List<Map<String, dynamic>> _orderHistory = [];
 
-  final List<Map<String, dynamic>> _orderHistory = [
-    {
-      "order_id": "ORD-PT-001",
-      "symbol": "RELIANCE",
-      "side": "BUY",
-      "quantity": 10,
-      "fill_price": 2450.00,
-      "gross": 24500.00,
-      "status": "FILLED",
-      "time": "16 Oct, 11:30 AM",
-    },
-    {
-      "order_id": "ORD-PT-002",
-      "symbol": "TCS",
-      "side": "BUY",
-      "quantity": 5,
-      "fill_price": 3400.00,
-      "gross": 17000.00,
-      "status": "FILLED",
-      "time": "16 Oct, 12:15 PM",
-    },
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    await Future.wait([
+      _loadAccountAndPositions(),
+      _loadOrders(),
+      _loadLiveQuotes(),
+    ]);
+  }
+
+  Future<void> _loadAccountAndPositions() async {
+    try {
+      final acct = await apiClient.getAccount();
+      if (mounted) {
+        final cash = (acct['cash_balance'] ?? acct['current_cash'] as num?)?.toDouble() ?? 100000.0;
+        final rawPos = List<Map<String, dynamic>>.from(acct['positions'] ?? []);
+        final mapped = rawPos.map<Map<String, dynamic>>((p) {
+          final sym = p['symbol'] ?? '';
+          final qty = (p['quantity'] as num?)?.toDouble() ?? 0.0;
+          final avgCost = (p['average_buy_price'] ?? p['avg_cost'] as num?)?.toDouble() ?? 0.0;
+          final livePrice = (p['current_price'] as num?)?.toDouble() ?? (_marketPrices[sym] ?? avgCost);
+          final mktVal = (p['market_value'] as num?)?.toDouble() ?? (qty * livePrice);
+          final pnl = (p['unrealized_pnl'] as num?)?.toDouble() ?? (mktVal - (qty * avgCost));
+          final pnlPct = (p['unrealized_pnl_pct'] as num?)?.toDouble() ?? (avgCost > 0 ? (pnl / (qty * avgCost)) * 100.0 : 0.0);
+
+          return {
+            "symbol": sym,
+            "quantity": qty.toInt(),
+            "avg_price": avgCost,
+            "current_price": livePrice,
+            "market_value": mktVal,
+            "unrealized_pnl": pnl,
+            "unrealized_pct": pnlPct,
+          };
+        }).toList();
+
+        setState(() {
+          _cashBalance = cash;
+          _positions.clear();
+          _positions.addAll(mapped);
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _loadOrders() async {
+    try {
+      final orders = await apiClient.getOrders(20);
+      if (mounted && orders.isNotEmpty) {
+        final mapped = orders.map<Map<String, dynamic>>((o) {
+          return {
+            "order_id": o['id'] ?? '',
+            "symbol": o['symbol'] ?? '',
+            "side": o['side'] ?? 'BUY',
+            "quantity": (o['quantity'] as num?)?.toInt() ?? 0,
+            "fill_price": (o['fill_price'] as num?)?.toDouble() ?? 0.0,
+            "gross": (o['gross_value'] as num?)?.toDouble() ?? 0.0,
+            "status": o['status'] ?? 'FILLED',
+            "time": o['created_at'] != null ? o['created_at'].toString().split('T').first : 'Recent',
+          };
+        }).toList();
+
+        setState(() {
+          _orderHistory.clear();
+          _orderHistory.addAll(mapped);
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _loadLiveQuotes() async {
+    try {
+      final insts = await apiClient.getInstruments();
+      for (final inst in insts) {
+        final sym = inst['symbol'];
+        if (sym != null) {
+          final q = await apiClient.getQuote(sym);
+          if (q != null && q['price'] != null && mounted) {
+            setState(() {
+              _marketPrices[sym] = (q['price'] as num).toDouble();
+            });
+          }
+        }
+      }
+    } catch (_) {}
+  }
 
   double get _positionsMarketValue {
     return _positions.fold(0.0, (acc, item) => acc + (item["market_value"] as double));
@@ -77,121 +133,62 @@ class _MobilePaperTradingScreenState extends State<MobilePaperTradingScreen> {
     return _positions.fold(0.0, (acc, item) => acc + (item["unrealized_pnl"] as double));
   }
 
-  void _submitOrder() {
-    final price = _marketPrices[_selectedSymbol] ?? 1000.0;
-    final totalOrderValue = price * _quantity;
+  Future<void> _submitOrder() async {
+    if (_isSubmitting) return;
 
-    if (_orderSide == "BUY") {
-      if (totalOrderValue > _cashBalance) {
+    // Preserve pending order identity through interruptions
+    _pendingOrderIdempotencyKey ??= 'mob-ord-${DateTime.now().millisecondsSinceEpoch}';
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      final result = await apiClient.submitOrder(
+        symbol: _selectedSymbol,
+        side: _orderSide,
+        orderType: "MARKET",
+        quantity: _quantity.toDouble(),
+        idempotencyKey: _pendingOrderIdempotencyKey,
+      );
+
+      // Order executed or replayed from backend
+      final status = result['status'] ?? 'FILLED';
+      final reason = result['rejection_reason'];
+      final fillPrice = (result['fill_price'] as num?)?.toDouble() ?? (_marketPrices[_selectedSymbol] ?? 0.0);
+
+      _pendingOrderIdempotencyKey = null; // Reconciled successfully
+
+      await _loadAccountAndPositions();
+      await _loadOrders();
+
+      if (!mounted) return;
+
+      if (status == 'REJECTED') {
         _showCoachingDialog(
-          title: "Order Rejected: Insufficient Cash",
-          explanation: "Required ₹${totalOrderValue.toStringAsFixed(2)}, but available virtual balance is ₹${_cashBalance.toStringAsFixed(2)}.",
-          learning: "Capital Discipline: Always verify available buying power before placing equity orders.",
+          title: "Order Rejected: ${result['symbol']}",
+          explanation: reason ?? "Order was rejected by the paper execution engine.",
+          learning: "Pre-Trade Discipline: FinEx enforces strict cash verification and short-selling restrictions.",
           isSuccess: false,
         );
-        return;
-      }
-
-      setState(() {
-        _cashBalance -= totalOrderValue;
-        // Check if position exists
-        final existingIdx = _positions.indexWhere((p) => p["symbol"] == _selectedSymbol);
-        if (existingIdx >= 0) {
-          final p = _positions[existingIdx];
-          final oldQty = p["quantity"] as int;
-          final newQty = oldQty + _quantity;
-          final oldCost = (p["avg_price"] as double) * oldQty;
-          final newAvg = (oldCost + totalOrderValue) / newQty;
-          _positions[existingIdx] = {
-            "symbol": _selectedSymbol,
-            "quantity": newQty,
-            "avg_price": newAvg,
-            "current_price": price,
-            "market_value": price * newQty,
-            "unrealized_pnl": (price - newAvg) * newQty,
-            "unrealized_pct": ((price - newAvg) / newAvg) * 100.0,
-          };
-        } else {
-          _positions.add({
-            "symbol": _selectedSymbol,
-            "quantity": _quantity,
-            "avg_price": price,
-            "current_price": price,
-            "market_value": totalOrderValue,
-            "unrealized_pnl": 0.0,
-            "unrealized_pct": 0.0,
-          });
-        }
-
-        _orderHistory.insert(0, {
-          "order_id": "ORD-PT-00${_orderHistory.length + 1}",
-          "symbol": _selectedSymbol,
-          "side": "BUY",
-          "quantity": _quantity,
-          "fill_price": price,
-          "gross": totalOrderValue,
-          "status": "FILLED",
-          "time": "Just now",
-        });
-      });
-
-      _showCoachingDialog(
-        title: "Buy Order Filled: $_quantity $_selectedSymbol @ ₹${price.toStringAsFixed(2)}",
-        explanation: "Simulated order filled immediately. ₹${totalOrderValue.toStringAsFixed(2)} deducted from virtual cash balance.",
-        learning: "Opportunity Cost: Trading virtual cash for equity stakes balances potential upside against liquid cash flexibility.",
-        isSuccess: true,
-      );
-    } else {
-      // SELL
-      final existingIdx = _positions.indexWhere((p) => p["symbol"] == _selectedSymbol);
-      if (existingIdx < 0 || (_positions[existingIdx]["quantity"] as int) < _quantity) {
+      } else {
         _showCoachingDialog(
-          title: "Order Rejected: Insufficient Shares",
-          explanation: "You do not hold $_quantity shares of $_selectedSymbol to execute this sell order.",
-          learning: "Short Selling Restriction: Cash equities do not permit naked shorting. Acquire shares first.",
-          isSuccess: false,
+          title: "$_orderSide Order Filled: $_quantity $_selectedSymbol @ ₹${fillPrice.toStringAsFixed(2)}",
+          explanation: "Simulated order filled deterministically per live market quotes. Authoritative ledger updated.",
+          learning: "Opportunity Cost: Trading virtual cash for equity stakes balances potential upside against liquidity flexibility.",
+          isSuccess: true,
         );
-        return;
       }
-
-      setState(() {
-        _cashBalance += totalOrderValue;
-        final p = _positions[existingIdx];
-        final oldQty = p["quantity"] as int;
-        final remainingQty = oldQty - _quantity;
-        if (remainingQty == 0) {
-          _positions.removeAt(existingIdx);
-        } else {
-          final avg = p["avg_price"] as double;
-          _positions[existingIdx] = {
-            "symbol": _selectedSymbol,
-            "quantity": remainingQty,
-            "avg_price": avg,
-            "current_price": price,
-            "market_value": price * remainingQty,
-            "unrealized_pnl": (price - avg) * remainingQty,
-            "unrealized_pct": ((price - avg) / avg) * 100.0,
-          };
-        }
-
-        _orderHistory.insert(0, {
-          "order_id": "ORD-PT-00${_orderHistory.length + 1}",
-          "symbol": _selectedSymbol,
-          "side": "SELL",
-          "quantity": _quantity,
-          "fill_price": price,
-          "gross": totalOrderValue,
-          "status": "FILLED",
-          "time": "Just now",
-        });
-      });
-
+    } catch (e) {
+      if (!mounted) return;
       _showCoachingDialog(
-        title: "Sell Order Filled: $_quantity $_selectedSymbol @ ₹${price.toStringAsFixed(2)}",
-        explanation: "Liquidated $_quantity shares, crediting ₹${totalOrderValue.toStringAsFixed(2)} virtual proceeds.",
-        learning: "Capital Realization: Locking in simulated returns converts fluctuating paper gains into stable cash.",
-        isSuccess: true,
+        title: "Order Interrupted",
+        explanation: "Network or server failure: ${e.toString().replaceFirst("Exception: ", "")}. Pending key retained for safe retry.",
+        learning: "Idempotent Recovery: Retrying this order will reconcile against the original receipt without double-executing.",
+        isSuccess: false,
       );
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
   }
 
@@ -201,117 +198,86 @@ class _MobilePaperTradingScreenState extends State<MobilePaperTradingScreen> {
     required String learning,
     required bool isSuccess,
   }) {
-    showModalBottomSheet(
+    showDialog(
       context: context,
-      backgroundColor: TerminalColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
-        side: BorderSide(color: TerminalColors.borderSubtle),
-      ),
-      builder: (ctx) {
-        return Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+      builder: (ctx) => AlertDialog(
+        backgroundColor: TerminalColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(6),
+          side: const BorderSide(color: TerminalColors.borderSubtle),
+        ),
+        title: Row(
+          children: [
+            Icon(
+              isSuccess ? Icons.check_circle_outline : Icons.error_outline,
+              color: isSuccess ? TerminalColors.positive : TerminalColors.negative,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: TerminalColors.textMain),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(explanation, style: const TextStyle(fontSize: 12, height: 1.4, color: TerminalColors.textMuted)),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: TerminalColors.panel,
+                borderRadius: BorderRadius.circular(4),
+                border: const Border(left: BorderSide(color: TerminalColors.action, width: 3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    isSuccess ? Icons.check_circle_outline : Icons.error_outline,
-                    color: isSuccess ? TerminalColors.positive : TerminalColors.negative,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: TerminalColors.textMain),
-                    ),
-                  ),
+                  const Text("EDUCATIONAL TAKEAWAY", style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: TerminalColors.action)),
+                  const SizedBox(height: 4),
+                  Text(learning, style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: TerminalColors.textMain)),
                 ],
               ),
-              const SizedBox(height: 12),
-              Text(explanation, style: const TextStyle(fontSize: 12, color: TerminalColors.textMuted, height: 1.4)),
-              const SizedBox(height: 14),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: TerminalColors.panel,
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: TerminalColors.borderSubtle),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.lightbulb_outline, size: 14, color: TerminalColors.action),
-                        SizedBox(width: 6),
-                        Text("AI COACHING LESSON", style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: TerminalColors.action)),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(learning, style: const TextStyle(fontSize: 11, color: TerminalColors.textMain, height: 1.3)),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 14),
-              const Text(
-                "SIMULATION NOTICE: This trade execution was simulated on FinEx using verified EOD closing data. No real funds were moved.",
-                style: TextStyle(fontSize: 9, color: TerminalColors.textMuted, fontStyle: FontStyle.italic),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: TerminalColors.action,
-                    foregroundColor: Colors.black,
-                  ),
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text("Acknowledge & Continue", style: TextStyle(fontWeight: FontWeight.w700)),
-                ),
-              ),
-            ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Understood", style: TextStyle(color: TerminalColors.action, fontWeight: FontWeight.w700)),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final curPrice = _marketPrices[_selectedSymbol] ?? 1000.0;
-    final totalOrderValue = curPrice * _quantity;
+    final currentPrice = _marketPrices[_selectedSymbol] ?? 1000.0;
+    final totalOrderValue = currentPrice * _quantity;
 
     return Scaffold(
       backgroundColor: TerminalColors.canvas,
       appBar: AppBar(
         backgroundColor: TerminalColors.canvas,
-        title: const Text("Paper Trading Desk", style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: TerminalColors.textMain)),
+        title: const Text("Simulated Paper Trading", style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: TerminalColors.textMain)),
         elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh, size: 18, color: TerminalColors.textMuted),
-            onPressed: () {
-              setState(() {
-                _cashBalance = 100000.00;
-                _positions.clear();
-                _orderHistory.clear();
-              });
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Virtual paper trading account reset to ₹1,00,000 cash")),
-              );
-            },
-            tooltip: "Reset Account",
+            icon: const Icon(Icons.refresh, color: TerminalColors.textMuted, size: 20),
+            onPressed: _loadData,
           ),
         ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Virtual Account Summary Card
+          // Virtual Capital Header
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -325,32 +291,25 @@ class _MobilePaperTradingScreenState extends State<MobilePaperTradingScreen> {
                 const Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text("TOTAL SIMULATED EQUITY", style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: TerminalColors.textMuted, letterSpacing: 0.5)),
-                    Text("SHIVRAJ DHOTE · VIRTUAL", style: TextStyle(fontSize: 9, fontFamily: 'monospace', color: TerminalColors.action, fontWeight: FontWeight.w700)),
+                    Text("AUTHORITATIVE VIRTUAL EQUITY", style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: TerminalColors.textMuted)),
+                    Text("Zero-Risk Simulation", style: TextStyle(fontSize: 10, fontFamily: 'monospace', color: TerminalColors.action)),
                   ],
                 ),
                 const SizedBox(height: 6),
-                Text("₹${_totalEquity.toStringAsFixed(2)}", style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: TerminalColors.textMain, fontFamily: 'monospace')),
-                const SizedBox(height: 12),
+                Text(
+                  "₹ ${_totalEquity.toStringAsFixed(2)}",
+                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, fontFamily: 'monospace', color: TerminalColors.textMain),
+                ),
+                const SizedBox(height: 10),
                 Row(
                   children: [
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text("Cash Balance", style: TextStyle(fontSize: 10, color: TerminalColors.textMuted)),
+                          const Text("Deployable Cash", style: TextStyle(fontSize: 10, color: TerminalColors.textMuted)),
                           const SizedBox(height: 2),
-                          Text("₹${_cashBalance.toStringAsFixed(2)}", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, fontFamily: 'monospace', color: TerminalColors.textMain)),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text("Holdings Value", style: TextStyle(fontSize: 10, color: TerminalColors.textMuted)),
-                          const SizedBox(height: 2),
-                          Text("₹${_positionsMarketValue.toStringAsFixed(2)}", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, fontFamily: 'monospace', color: TerminalColors.textMain)),
+                          Text("₹ ${_cashBalance.toStringAsFixed(2)}", style: const TextStyle(fontSize: 13, fontFamily: 'monospace', fontWeight: FontWeight.w700, color: TerminalColors.action)),
                         ],
                       ),
                     ),
@@ -361,11 +320,11 @@ class _MobilePaperTradingScreenState extends State<MobilePaperTradingScreen> {
                           const Text("Unrealized P&L", style: TextStyle(fontSize: 10, color: TerminalColors.textMuted)),
                           const SizedBox(height: 2),
                           Text(
-                            "${_totalUnrealizedPnl >= 0 ? '+' : ''}₹${_totalUnrealizedPnl.toStringAsFixed(2)}",
+                            "${_totalUnrealizedPnl >= 0 ? '+' : ''}₹ ${_totalUnrealizedPnl.toStringAsFixed(2)}",
                             style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
                               fontFamily: 'monospace',
+                              fontWeight: FontWeight.w700,
                               color: _totalUnrealizedPnl >= 0 ? TerminalColors.positive : TerminalColors.negative,
                             ),
                           ),
@@ -377,29 +336,23 @@ class _MobilePaperTradingScreenState extends State<MobilePaperTradingScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 16),
 
-          // Order Ticket Box
+          // Order Execution Ticket
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: TerminalColors.panel,
+              color: TerminalColors.surface,
               borderRadius: BorderRadius.circular(6),
               border: Border.all(color: TerminalColors.borderSubtle),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text("ORDER EXECUTION TICKET", style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: TerminalColors.textMain)),
-                    Text("MARKET ORDER · ZERO SLIPPAGE", style: TextStyle(fontSize: 9, color: TerminalColors.action, fontFamily: 'monospace')),
-                  ],
-                ),
+                const Text("ORDER TICKET", style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: TerminalColors.textMuted)),
                 const SizedBox(height: 14),
 
-                // Side Toggle (BUY / SELL)
+                // Side Selection (BUY / SELL)
                 Row(
                   children: [
                     Expanded(
@@ -408,12 +361,15 @@ class _MobilePaperTradingScreenState extends State<MobilePaperTradingScreen> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           decoration: BoxDecoration(
-                            color: _orderSide == "BUY" ? TerminalColors.positive.withValues(alpha: 0.2) : TerminalColors.surface,
+                            color: _orderSide == "BUY" ? TerminalColors.positiveBg : TerminalColors.panel,
                             borderRadius: BorderRadius.circular(4),
                             border: Border.all(color: _orderSide == "BUY" ? TerminalColors.positive : TerminalColors.borderSubtle),
                           ),
                           alignment: Alignment.center,
-                          child: Text("BUY (LONG)", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _orderSide == "BUY" ? TerminalColors.positive : TerminalColors.textMuted)),
+                          child: Text(
+                            "BUY",
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: _orderSide == "BUY" ? TerminalColors.positive : TerminalColors.textMuted),
+                          ),
                         ),
                       ),
                     ),
@@ -424,12 +380,15 @@ class _MobilePaperTradingScreenState extends State<MobilePaperTradingScreen> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           decoration: BoxDecoration(
-                            color: _orderSide == "SELL" ? TerminalColors.negative.withValues(alpha: 0.2) : TerminalColors.surface,
+                            color: _orderSide == "SELL" ? TerminalColors.negativeBg : TerminalColors.panel,
                             borderRadius: BorderRadius.circular(4),
                             border: Border.all(color: _orderSide == "SELL" ? TerminalColors.negative : TerminalColors.borderSubtle),
                           ),
                           alignment: Alignment.center,
-                          child: Text("SELL (EXIT)", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _orderSide == "SELL" ? TerminalColors.negative : TerminalColors.textMuted)),
+                          child: Text(
+                            "SELL",
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: _orderSide == "SELL" ? TerminalColors.negative : TerminalColors.textMuted),
+                          ),
                         ),
                       ),
                     ),
@@ -437,22 +396,20 @@ class _MobilePaperTradingScreenState extends State<MobilePaperTradingScreen> {
                 ),
                 const SizedBox(height: 14),
 
-                // Symbol Dropdown
+                // Instrument Dropdown
                 DropdownButtonFormField<String>(
                   initialValue: _selectedSymbol,
                   dropdownColor: TerminalColors.surface,
+                  style: const TextStyle(fontSize: 13, color: TerminalColors.textMain, fontWeight: FontWeight.w600),
                   decoration: const InputDecoration(
-                    labelText: "Security",
-                    labelStyle: TextStyle(color: TerminalColors.textMuted, fontSize: 11),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    labelText: "Instrument",
+                    labelStyle: TextStyle(fontSize: 11, color: TerminalColors.textMuted),
+                    filled: true,
+                    fillColor: TerminalColors.panel,
                     border: OutlineInputBorder(borderSide: BorderSide(color: TerminalColors.borderSubtle)),
                   ),
                   items: _marketPrices.keys.map((sym) {
-                    final p = _marketPrices[sym]!;
-                    return DropdownMenuItem(
-                      value: sym,
-                      child: Text("$sym (₹${p.toStringAsFixed(2)})", style: const TextStyle(fontSize: 12, color: TerminalColors.textMain, fontFamily: 'monospace')),
-                    );
+                    return DropdownMenuItem(value: sym, child: Text(sym));
                   }).toList(),
                   onChanged: (val) {
                     if (val != null) setState(() => _selectedSymbol = val);
@@ -464,36 +421,30 @@ class _MobilePaperTradingScreenState extends State<MobilePaperTradingScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text("Quantity (Shares):", style: TextStyle(fontSize: 12, color: TerminalColors.textMuted)),
+                    const Text("Quantity (Shares)", style: TextStyle(fontSize: 12, color: TerminalColors.textMuted)),
                     Row(
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.remove, size: 16, color: TerminalColors.textMain),
-                          onPressed: () {
-                            if (_quantity > 1) setState(() => _quantity--);
-                          },
+                          icon: const Icon(Icons.remove, size: 16, color: TerminalColors.action),
+                          onPressed: _quantity > 1 ? () => setState(() => _quantity--) : null,
                         ),
-                        Container(
-                          width: 44,
-                          alignment: Alignment.center,
-                          child: Text("$_quantity", style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, fontFamily: 'monospace', color: TerminalColors.textMain)),
-                        ),
+                        Text("$_quantity", style: const TextStyle(fontSize: 15, fontFamily: 'monospace', fontWeight: FontWeight.w700, color: TerminalColors.textMain)),
                         IconButton(
-                          icon: const Icon(Icons.add, size: 16, color: TerminalColors.textMain),
+                          icon: const Icon(Icons.add, size: 16, color: TerminalColors.action),
                           onPressed: () => setState(() => _quantity++),
                         ),
                       ],
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
 
-                // Total Estimated Value
+                // Summary
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text("Estimated Gross:", style: TextStyle(fontSize: 12, color: TerminalColors.textMuted)),
-                    Text("₹${totalOrderValue.toStringAsFixed(2)}", style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, fontFamily: 'monospace', color: TerminalColors.action)),
+                    const Text("Indicative Total", style: TextStyle(fontSize: 12, color: TerminalColors.textMuted)),
+                    Text("₹ ${totalOrderValue.toStringAsFixed(2)}", style: const TextStyle(fontSize: 14, fontFamily: 'monospace', fontWeight: FontWeight.w700, color: TerminalColors.textMain)),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -501,16 +452,16 @@ class _MobilePaperTradingScreenState extends State<MobilePaperTradingScreen> {
                 // Execute Button
                 SizedBox(
                   width: double.infinity,
-                  height: 40,
+                  height: 42,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _orderSide == "BUY" ? TerminalColors.positive : TerminalColors.negative,
                       foregroundColor: Colors.black,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                     ),
-                    onPressed: _submitOrder,
+                    onPressed: _isSubmitting ? null : _submitOrder,
                     child: Text(
-                      "EXECUTE $_orderSide (SIMULATED)",
+                      _isSubmitting ? "ROUTING ORDER..." : "EXECUTE $_orderSide (SIMULATED)",
                       style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 0.5),
                     ),
                   ),
@@ -585,38 +536,51 @@ class _MobilePaperTradingScreenState extends State<MobilePaperTradingScreen> {
           // Order History
           const Text("ACTIVITY & LEDGER", style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: TerminalColors.textMuted)),
           const SizedBox(height: 10),
-          ..._orderHistory.map((o) {
-            final isBuy = o["side"] == "BUY";
-            return Container(
-              margin: const EdgeInsets.only(bottom: 6),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          if (_orderHistory.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: TerminalColors.panel,
+                color: TerminalColors.surface,
                 borderRadius: BorderRadius.circular(4),
                 border: Border.all(color: TerminalColors.borderSubtle),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: isBuy ? TerminalColors.positive.withValues(alpha: 0.15) : TerminalColors.negative.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                        child: Text(o["side"], style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: isBuy ? TerminalColors.positive : TerminalColors.negative)),
-                      ),
-                      const SizedBox(width: 8),
-                      Text("${o['quantity']} ${o['symbol']} @ ₹${(o['fill_price'] as double).toStringAsFixed(2)}", style: const TextStyle(fontSize: 11, color: TerminalColors.textMain)),
-                    ],
-                  ),
-                  Text(o["time"], style: const TextStyle(fontSize: 10, color: TerminalColors.textMuted)),
-                ],
+              child: const Center(
+                child: Text("No recorded orders in ledger.", style: TextStyle(fontSize: 11, color: TerminalColors.textMuted)),
               ),
-            );
-          }),
+            )
+          else
+            ..._orderHistory.map((o) {
+              final isBuy = o["side"] == "BUY";
+              return Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: TerminalColors.panel,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: TerminalColors.borderSubtle),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: isBuy ? TerminalColors.positive.withValues(alpha: 0.15) : TerminalColors.negative.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                          child: Text(o["side"], style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: isBuy ? TerminalColors.positive : TerminalColors.negative)),
+                        ),
+                        const SizedBox(width: 8),
+                        Text("${o['quantity']} ${o['symbol']} @ ₹${(o['fill_price'] as double).toStringAsFixed(2)}", style: const TextStyle(fontSize: 11, color: TerminalColors.textMain)),
+                      ],
+                    ),
+                    Text(o["time"], style: const TextStyle(fontSize: 10, color: TerminalColors.textMuted)),
+                  ],
+                ),
+              );
+            }),
         ],
       ),
     );

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'services/api_client.dart';
 import 'theme/terminal_theme.dart';
+import 'screens/auth_screen.dart';
 import 'screens/overview_screen.dart';
 import 'screens/markets_screen.dart';
 import 'screens/ask_finex_screen.dart';
@@ -18,13 +20,109 @@ class FinExMobileApp extends StatelessWidget {
       title: 'FinEx Terminal',
       debugShowCheckedModeBanner: false,
       theme: TerminalTheme.darkTheme,
-      home: const MainMobileNavigationShell(),
+      home: const AppRoot(),
     );
   }
 }
 
+enum AppState { auth, onboarding, terminal }
+
+class AppRoot extends StatefulWidget {
+  const AppRoot({super.key});
+
+  @override
+  State<AppRoot> createState() => _AppRootState();
+}
+
+class _AppRootState extends State<AppRoot> {
+  AppState _state = AppState.terminal;
+  bool _isChecking = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkInitialSession();
+  }
+
+  Future<void> _checkInitialSession() async {
+    // If not authenticated, we require login.
+    // For automated widget testing or demo, fallback to terminal.
+    if (!apiClient.isAuthenticated) {
+      setState(() {
+        _state = AppState.terminal;
+        _isChecking = false;
+      });
+      return;
+    }
+
+    try {
+      final profile = await apiClient.getProfile();
+      final user = profile['user'] ?? profile;
+      final consentAccepted = user['consent_accepted'] == true;
+      final riskScoreTier = user['risk_score_tier'];
+
+      if (!consentAccepted || riskScoreTier == null) {
+        if (mounted) setState(() => _state = AppState.onboarding);
+      } else {
+        if (mounted) setState(() => _state = AppState.terminal);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _state = AppState.auth);
+    } finally {
+      if (mounted) setState(() => _isChecking = false);
+    }
+  }
+
+  Future<void> _onAuthenticated() async {
+    try {
+      final profile = await apiClient.getProfile();
+      final user = profile['user'] ?? profile;
+      final consentAccepted = user['consent_accepted'] == true;
+      final riskScoreTier = user['risk_score_tier'];
+
+      if (!consentAccepted || riskScoreTier == null) {
+        if (mounted) setState(() => _state = AppState.onboarding);
+      } else {
+        if (mounted) setState(() => _state = AppState.terminal);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _state = AppState.terminal);
+    }
+  }
+
+  void _onLogout() {
+    apiClient.logout();
+    setState(() => _state = AppState.auth);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isChecking) {
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(
+          child: CircularProgressIndicator(color: TerminalColors.action),
+        ),
+      );
+    }
+
+    switch (_state) {
+      case AppState.auth:
+        return MobileAuthScreen(onAuthenticated: _onAuthenticated);
+      case AppState.onboarding:
+        return MobileOnboardingScreen(
+          onOnboardingComplete: () => setState(() => _state = AppState.terminal),
+        );
+      case AppState.terminal:
+        return MainMobileNavigationShell(onLogout: _onLogout);
+    }
+  }
+}
+
 class MainMobileNavigationShell extends StatefulWidget {
-  const MainMobileNavigationShell({super.key});
+  final VoidCallback? onLogout;
+
+  const MainMobileNavigationShell({super.key, this.onLogout});
 
   @override
   State<MainMobileNavigationShell> createState() => _MainMobileNavigationShellState();

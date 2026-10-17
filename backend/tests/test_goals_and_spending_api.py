@@ -245,3 +245,78 @@ def test_sprint7_ai_evaluations_suite():
     assert rep["metrics"]["goal_numeric_accuracy_pct"] == 100.0
     assert rep["metrics"]["privacy_masking_score_pct"] == 100.0
     assert rep["metrics"]["categorization_accuracy_pct"] == 100.0
+
+
+@pytest.mark.asyncio
+async def test_two_previews_same_file_commit_deduplication(app, auth_headers, other_user_headers):
+    """CH-09 / Review Defect: Two previews of the same file cannot double transactions."""
+    sample_csv = (
+        "Date,Amount,Description,Type\n"
+        "2026-10-18,1200.00,SWIGGY BANGALORE ORDER ****,DEBIT\n"
+        "2026-10-18,1200.00,SWIGGY BANGALORE ORDER ****,DEBIT\n"  # Intra-file duplicate!
+        "2026-10-19,3000.00,AIRTEL BROADBAND BILLPAY ****,DEBIT"
+    )
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Create Preview 1
+        p1_res = await client.post(
+            "/api/v1/spending/upload/preview",
+            json={"file_name": "multi_preview.csv", "csv_content": sample_csv},
+            headers=auth_headers,
+        )
+        assert p1_res.status_code == 200
+        p1 = p1_res.json()["data"]
+        # Notice: intra-file duplicate was caught: valid=2, duplicate=1
+        assert p1["valid_count"] == 2
+        assert p1["duplicate_count"] == 1
+
+        # Create Preview 2 for the exact same file
+        p2_res = await client.post(
+            "/api/v1/spending/upload/preview",
+            json={"file_name": "multi_preview.csv", "csv_content": sample_csv},
+            headers=auth_headers,
+        )
+        assert p2_res.status_code == 200
+        p2 = p2_res.json()["data"]
+        assert p2["preview_id"] != p1["preview_id"]
+
+        # Another user cannot commit user A's preview (HTTP 404/403)
+        unauth_commit = await client.post(
+            "/api/v1/spending/upload/commit",
+            json={"preview_id": p1["preview_id"]},
+            headers=other_user_headers,
+        )
+        assert unauth_commit.status_code in [403, 404]
+
+        # Commit Preview 1
+        c1_res = await client.post(
+            "/api/v1/spending/upload/commit",
+            json={"preview_id": p1["preview_id"]},
+            headers=auth_headers,
+        )
+        assert c1_res.status_code == 200
+        c1 = c1_res.json()["data"]
+        assert c1["accepted_count"] == 2
+        assert c1["replayed"] is False
+
+        # Commit Preview 2 of the exact same file
+        c2_res = await client.post(
+            "/api/v1/spending/upload/commit",
+            json={"preview_id": p2["preview_id"]},
+            headers=auth_headers,
+        )
+        assert c2_res.status_code == 200
+        c2 = c2_res.json()["data"]
+        assert c2["replayed"] is True
+        assert c2["duplicate_count"] >= 2
+
+        # Verify transactions total was not doubled
+        tx_res = await client.get("/api/v1/spending/transactions", headers=auth_headers)
+        txs = tx_res.json()["data"]["transactions"]
+        # Only 2 transactions from this batch should exist
+        matching = [
+            t
+            for t in txs
+            if "SWIGGY BANGALORE ORDER" in t["masked_description"] or "AIRTEL BROADBAND" in t["masked_description"]
+        ]
+        assert len(matching) == 2

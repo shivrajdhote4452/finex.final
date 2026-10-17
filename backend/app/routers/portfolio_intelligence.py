@@ -17,6 +17,7 @@ from backend.app.adapters.market_data_provider import (
     RealMarketDataProvider,
 )
 from backend.app.core.envelope import create_response_envelope
+from backend.app.database import get_db
 from backend.app.domain.paper_trading_service import PaperTradingEngine
 from backend.app.domain.portfolio_intelligence_service import (
     PortfolioIntelligenceService,
@@ -24,6 +25,7 @@ from backend.app.domain.portfolio_intelligence_service import (
 from backend.app.routers.auth import get_current_user_id
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/portfolio-intelligence", tags=["Portfolio Intelligence & Scenarios"])
 intelligence_service = PortfolioIntelligenceService()
@@ -42,13 +44,14 @@ class ScenarioRequest(BaseModel):
 async def get_portfolio_intelligence(
     request: Request,
     current_user: dict = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
 ):
     """Retrieve full deterministic intelligence report on current holdings."""
     cid = getattr(request.state, "correlation_id", None)
     user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
 
     # Get active holdings from paper trading engine or default baseline
-    summary = paper_engine.get_portfolio_summary(user_id)
+    summary = await paper_engine.get_portfolio_summary_db(user_id, db=db)
     holdings = summary.get("positions", [])
     cash = float(summary.get("cash_balance", 100000.00))
 
@@ -90,12 +93,13 @@ async def run_scenario_stress_test(
     request: Request,
     payload: ScenarioRequest,
     current_user: dict = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
 ):
     """Run a custom hypothetical sector stress test."""
     cid = getattr(request.state, "correlation_id", None)
     user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
 
-    summary = paper_engine.get_portfolio_summary(user_id)
+    summary = await paper_engine.get_portfolio_summary_db(user_id, db=db)
     holdings = summary.get("positions", [])
     cash = float(summary.get("cash_balance", 100000.00))
     if not holdings:

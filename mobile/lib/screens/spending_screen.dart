@@ -10,8 +10,54 @@ class MobileSpendingScreen extends StatefulWidget {
 }
 
 class _MobileSpendingScreenState extends State<MobileSpendingScreen> {
-  final double _totalDebit = 21649.00;
-  final double _totalCredit = 50000.00;
+  double _totalDebit = 21649.00;
+  double _totalCredit = 50000.00;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTransactions();
+  }
+
+  Future<void> _loadTransactions() async {
+    try {
+      final res = await apiClient.getTransactions();
+      if (res['transactions'] != null && mounted) {
+        final List txs = res['transactions'];
+        if (txs.isNotEmpty) {
+          double debits = 0.0;
+          double credits = 0.0;
+          final loaded = txs.map<Map<String, dynamic>>((t) {
+            final amt = (t['amount'] as num?)?.toDouble() ?? 0.0;
+            final typ = (t['transaction_type'] ?? 'DEBIT').toString().toUpperCase();
+            if (typ == 'DEBIT') {
+              debits += amt;
+            } else {
+              credits += amt;
+            }
+            return {
+              "id": t['id'] ?? '',
+              "date": t['transaction_date'] ?? '',
+              "amount": amt,
+              "type": typ,
+              "desc": t['masked_description'] ?? t['raw_description'] ?? '',
+              "category": t['category_id'] ?? 'OTHER',
+              "is_reviewed": true,
+            };
+          }).toList();
+
+          setState(() {
+            _transactions.clear();
+            _transactions.addAll(loaded);
+            _totalDebit = debits;
+            _totalCredit = credits;
+          });
+        }
+      }
+    } catch (_) {
+      // Keep baseline sample if unauthenticated/offline
+    }
+  }
 
   final List<Map<String, dynamic>> _transactions = [
     {
@@ -113,11 +159,12 @@ class _MobileSpendingScreenState extends State<MobileSpendingScreen> {
   }
 
   void _showCsvImportDialog() {
-    final sampleCsv = 
-        "Date,Amount,Description,Type\n"
-        "2026-10-14,1850.00,UPI/****/RESTAURANT KORAMANGALA,DEBIT\n"
-        "2026-10-15,3500.00,BESCOM ELECTRICITY BILLPAY ****,DEBIT\n"
-        "2026-10-16,2100.00,AMAZON INDIA RETAIL ORDER ****,DEBIT";
+    final csvController = TextEditingController(
+      text: "Date,Amount,Description,Type\n"
+          "2026-10-14,1850.00,UPI/****/RESTAURANT KORAMANGALA,DEBIT\n"
+          "2026-10-15,3500.00,BESCOM ELECTRICITY BILLPAY ****,DEBIT\n"
+          "2026-10-16,2100.00,AMAZON INDIA RETAIL ORDER ****,DEBIT",
+    );
 
     showModalBottomSheet(
       context: context,
@@ -133,13 +180,13 @@ class _MobileSpendingScreenState extends State<MobileSpendingScreen> {
         String? errorMessage;
 
         return StatefulBuilder(
-          builder: (context, setModalState) {
+          builder: (modalContext, setModalState) {
             return Padding(
               padding: EdgeInsets.only(
                 left: 20,
                 right: 20,
                 top: 20,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+                bottom: MediaQuery.of(modalContext).viewInsets.bottom + 20,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -160,7 +207,7 @@ class _MobileSpendingScreenState extends State<MobileSpendingScreen> {
                       padding: const EdgeInsets.all(10),
                       margin: const EdgeInsets.only(bottom: 12),
                       decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.1),
+                        color: Colors.red.withValues(alpha: 0.1),
                         border: Border.all(color: Colors.red),
                         borderRadius: BorderRadius.circular(4),
                       ),
@@ -171,6 +218,20 @@ class _MobileSpendingScreenState extends State<MobileSpendingScreen> {
                       "Raw bank descriptions are masked server-side to hide account and card numbers before classification.",
                       style: TextStyle(fontSize: 12, color: TerminalColors.textMuted, height: 1.4),
                     ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: csvController,
+                      maxLines: 5,
+                      style: const TextStyle(fontSize: 11, fontFamily: 'monospace', color: TerminalColors.textMain),
+                      decoration: const InputDecoration(
+                        labelText: "CSV Statement Content (Date, Amount, Description, Type)",
+                        labelStyle: TextStyle(fontSize: 11, color: TerminalColors.textMuted),
+                        filled: true,
+                        fillColor: TerminalColors.panel,
+                        border: OutlineInputBorder(borderSide: BorderSide(color: TerminalColors.borderSubtle)),
+                        focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: TerminalColors.action)),
+                      ),
+                    ),
                     const SizedBox(height: 16),
                     SizedBox(
                       width: double.infinity,
@@ -180,30 +241,32 @@ class _MobileSpendingScreenState extends State<MobileSpendingScreen> {
                           foregroundColor: TerminalColors.action,
                           side: const BorderSide(color: TerminalColors.action),
                         ),
-                        onPressed: isStaging ? null : () async {
-                          setModalState(() { isStaging = true; errorMessage = null; });
-                          try {
-                            // Run actual CSV preview against FastAPI backend
-                            final preview = await apiClient.previewCsv("statement_oct2026.csv", sampleCsv);
-                            setModalState(() {
-                              previewResult = preview;
-                              isStaging = false;
-                            });
-                          } catch (e) {
-                            setModalState(() {
-                              // Local preview fallback if offline
-                              previewResult = {
-                                "preview_id": "prev-local-01",
-                                "total_rows": 3,
-                                "valid_count": 3,
-                                "duplicate_count": 0,
-                                "invalid_count": 0,
-                              };
-                              isStaging = false;
-                            });
-                          }
-                        },
-                        child: Text(isStaging ? "Parsing & Masking PII..." : "Select & Stage CSV Statement"),
+                        onPressed: isStaging
+                            ? null
+                            : () async {
+                                final content = csvController.text.trim();
+                                if (content.isEmpty) {
+                                  setModalState(() => errorMessage = "Please provide valid CSV content.");
+                                  return;
+                                }
+                                setModalState(() {
+                                  isStaging = true;
+                                  errorMessage = null;
+                                });
+                                try {
+                                  final preview = await apiClient.previewCsv("statement_mobile.csv", content);
+                                  setModalState(() {
+                                    previewResult = preview;
+                                    isStaging = false;
+                                  });
+                                } catch (e) {
+                                  setModalState(() {
+                                    errorMessage = e.toString().replaceFirst("Exception: ", "");
+                                    isStaging = false;
+                                  });
+                                }
+                              },
+                        child: Text(isStaging ? "Parsing & Masking PII..." : "Stage & Preview CSV Statement"),
                       ),
                     ),
                   ] else ...[
@@ -219,7 +282,7 @@ class _MobileSpendingScreenState extends State<MobileSpendingScreen> {
                               children: [
                                 const Text("VALID ROWS", style: TextStyle(fontSize: 9, color: TerminalColors.positive)),
                                 const SizedBox(height: 4),
-                                Text("${previewResult!['valid_count'] ?? 3}", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: TerminalColors.positive)),
+                                Text("${previewResult!['valid_count'] ?? 0}", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: TerminalColors.positive)),
                               ],
                             ),
                           ),
@@ -282,19 +345,30 @@ class _MobileSpendingScreenState extends State<MobileSpendingScreen> {
                               foregroundColor: Colors.black,
                             ),
                             onPressed: () async {
-                              final previewId = previewResult!['preview_id'] ?? 'prev-01';
+                              final previewId = previewResult!['preview_id'];
+                              if (previewId == null) return;
+                              final navigator = Navigator.of(ctx);
+                              final messenger = ScaffoldMessenger.of(context);
                               try {
                                 final commitRes = await apiClient.commitCsv(previewId);
-                                Navigator.pop(ctx);
-                                final accepted = commitRes['accepted_count'] ?? 3;
+                                navigator.pop();
+                                final accepted = commitRes['accepted_count'] ?? 0;
+                                final duplicate = commitRes['duplicate_count'] ?? 0;
                                 final quarantined = commitRes['quarantined_count'] ?? 0;
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text("Ingestion Committed: $accepted rows saved, $quarantined quarantined.")),
+                                messenger.showSnackBar(
+                                  SnackBar(
+                                    content: Text("Ingestion Committed: $accepted rows saved, $duplicate duplicates skipped, $quarantined quarantined."),
+                                    backgroundColor: TerminalColors.positive,
+                                  ),
                                 );
-                              } catch (_) {
-                                Navigator.pop(ctx);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text("Ingestion Committed: 3 rows saved, 0 quarantined.")),
+                                _loadTransactions();
+                              } catch (e) {
+                                navigator.pop();
+                                messenger.showSnackBar(
+                                  SnackBar(
+                                    content: Text("CSV commit failed: ${e.toString().replaceFirst("Exception: ", "")}"),
+                                    backgroundColor: Colors.redAccent,
+                                  ),
                                 );
                               }
                             },

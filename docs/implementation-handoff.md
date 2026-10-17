@@ -93,7 +93,7 @@
 - **UI Contract Version:** `v1.0` (`docs/ui-contract-v1.md`)
 - **DDL Baseline:** `data/ddl/001_core.sql` (v1.0)
 - **AI Prompt Dataset:** `ai/evaluation/data/prompts_s1_30.csv` (v1.0, 30 prompts)
-- **Runtimes:** Python 3.13.15, Node.js v24.16.0, Flutter 3.47.0 (Dart 3.13.0)
+- **Runtimes:** Python 3.11+ (CI target: 3.11, tested on 3.11-3.13), Node.js 20+ (CI target: 20, tested on 20-24), Flutter 3.47+ (Dart 3.13+)
 
 ---
 

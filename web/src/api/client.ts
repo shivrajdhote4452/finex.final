@@ -285,17 +285,24 @@ class ApiClient {
     getAccount: async () => {
       return this.request<{
         account_id: string;
-        initial_balance: number;
+        currency: string;
+        cash_balance: number;
         current_cash: number;
-        reserved_cash: number;
+        positions_market_value: number;
+        total_cost_basis: number;
         total_equity: number;
         total_portfolio_value: number;
+        unrealized_pnl: number;
+        reset_count: number;
+        disclaimer: string;
         positions: Array<{
           symbol: string;
           quantity: number;
+          average_buy_price: number;
           avg_cost: number;
           current_price: number;
           market_value: number;
+          cost_basis: number;
           unrealized_pnl: number;
           unrealized_pnl_pct: number;
         }>;
@@ -349,6 +356,19 @@ class ApiClient {
           'X-Idempotency-Key': key,
         },
         body: JSON.stringify(payload),
+      });
+    },
+
+    deposit: async (amount: number) => {
+      return this.request<{
+        account_id: string;
+        deposited: number;
+        cash_balance: number;
+        current_cash: number;
+        entry: any;
+      }>('/paper-trading/deposit', {
+        method: 'POST',
+        body: JSON.stringify({ amount }),
       });
     },
 

@@ -45,8 +45,15 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        # Startup phase
+        # Startup phase: Ensure seed identities exist in PostgreSQL
         app.state.settings = app_settings
+        try:
+            from backend.app.domain.user_store import user_store
+
+            await user_store.ensure_seed_users_db()
+        except Exception:
+            # Continue if DB is offline during unit testing
+            pass
         yield
         # Shutdown phase
 

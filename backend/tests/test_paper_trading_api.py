@@ -14,33 +14,58 @@ Tests:
 """
 
 import pytest
-from backend.app.config import Settings
 from backend.app.domain.paper_trading_coach import generate_trade_coaching
 from backend.app.domain.paper_trading_service import (
+    _ACCOUNTS_STORE,
     _LEDGER_STORE,
     _ORDERS_STORE,
     _POSITIONS_STORE,
     PaperTradingEngine,
 )
-from backend.app.factory import create_app
-from backend.app.routers.auth import create_access_token
 from data.quality.paper_trading_reconciliation import PaperTradingReconciler
 from httpx import ASGITransport, AsyncClient
 
 
-@pytest.fixture
-def app():
-    settings = Settings(
-        ENVIRONMENT="testing",
-        SECRET_KEY="test_secret_key_minimum_32_characters_long_for_security",
-    )
-    return create_app(settings)
+@pytest.fixture(scope="module", autouse=True)
+def setup_paper_trading_module():
+    import asyncio
+    from decimal import Decimal
 
+    from backend.app.database import AsyncSessionLocal
+    from backend.app.models.paper_trading import PaperAccount, PaperCashLedger, PaperOrder, PaperPosition, PaperTrade
+    from sqlalchemy import delete, select
 
-@pytest.fixture
-def auth_headers():
-    token = create_access_token("usr-shivraj-001", "shivraj.dhote@finex.internal", "Shivraj Dhote")
-    return {"Authorization": f"Bearer {token}"}
+    async def _clean():
+        async with AsyncSessionLocal() as session:
+            stmt_acct = select(PaperAccount).where(PaperAccount.user_id == "usr-shivraj-001")
+            res = await session.execute(stmt_acct)
+            acct = res.scalar_one_or_none()
+            if acct:
+                acct_id = acct.id
+                await session.execute(delete(PaperTrade).where(PaperTrade.account_id == acct_id))
+                await session.execute(delete(PaperOrder).where(PaperOrder.account_id == acct_id))
+                await session.execute(delete(PaperPosition).where(PaperPosition.account_id == acct_id))
+                await session.execute(delete(PaperCashLedger).where(PaperCashLedger.account_id == acct_id))
+                acct.current_cash = Decimal("100000.00")
+                acct.reset_count = 0
+                led_init = PaperCashLedger(
+                    id=f"led-init-{acct_id[-6:]}",
+                    account_id=acct_id,
+                    entry_type="INITIAL_CREDIT",
+                    amount=Decimal("100000.00"),
+                    balance_after=Decimal("100000.00"),
+                    reference_id="INIT",
+                    description="Initial virtual paper cash deposit",
+                )
+                session.add(led_init)
+                await session.commit()
+
+    _ORDERS_STORE.clear()
+    _POSITIONS_STORE.clear()
+    _LEDGER_STORE.clear()
+    _ACCOUNTS_STORE.clear()
+    asyncio.run(_clean())
+    yield
 
 
 @pytest.mark.asyncio
@@ -372,3 +397,92 @@ async def test_idempotency_replay_preserves_historical_cash_after(app, auth_head
         )
         assert replay.status_code == 200
         assert replay.json()["data"]["cash_balance_after"] == cash_after1
+
+
+@pytest.mark.asyncio
+async def test_paper_trading_deposit_and_contract_fields(app, auth_headers):
+    """Test authorized deposit endpoint and verify both cash_balance and current_cash contract fields."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # 1. Check account before deposit
+        acct_before = await client.get("/api/v1/paper-trading/account", headers=auth_headers)
+        assert acct_before.status_code == 200
+        data_before = acct_before.json()["data"]
+        assert "cash_balance" in data_before
+        assert "current_cash" in data_before
+        assert data_before["cash_balance"] == data_before["current_cash"]
+        initial_cash = data_before["cash_balance"]
+
+        # 2. Deposit ₹25,000
+        deposit_res = await client.post(
+            "/api/v1/paper-trading/deposit",
+            json={"amount": 25000.0},
+            headers=auth_headers,
+        )
+        assert deposit_res.status_code == 200
+        deposit_data = deposit_res.json()["data"]
+        assert deposit_data["deposited"] == 25000.0
+        assert deposit_data["cash_balance"] == initial_cash + 25000.0
+
+        # 3. Check account after deposit
+        acct_after = await client.get("/api/v1/paper-trading/account", headers=auth_headers)
+        assert acct_after.status_code == 200
+        data_after = acct_after.json()["data"]
+        assert data_after["cash_balance"] == initial_cash + 25000.0
+        assert data_after["current_cash"] == initial_cash + 25000.0
+
+
+@pytest.mark.asyncio
+async def test_stale_quote_rejects_trade_execution(app, auth_headers):
+    """Verify that an ineligible stale market quote cannot execute a trade."""
+    from datetime import datetime, timedelta, timezone
+    from decimal import Decimal
+
+    from backend.app.ports.market_data import Quote
+    from backend.app.routers.paper_trading import engine
+
+    # Inject a quote that is 10 days old (severely stale)
+    stale_time = datetime.now(timezone.utc) - timedelta(days=10)
+    stale_quote = Quote(
+        canonical_id="NSE:STALECO",
+        symbol="STALECO.NS",
+        price=Decimal("500.00"),
+        currency="INR",
+        observed_at=stale_time,
+        ingested_at=datetime.now(timezone.utc),
+        source="stale_feed",
+        served_from_cache=False,
+        is_delayed=True,
+        is_stale=True,
+        data_status="stale",
+    )
+    engine.market_provider.set_quote_override("STALECO", stale_quote)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Check cash before
+        acct_before = await client.get("/api/v1/paper-trading/account", headers=auth_headers)
+        cash_before = acct_before.json()["data"]["cash_balance"]
+
+        # Attempt to buy STALECO
+        res = await client.post(
+            "/api/v1/paper-trading/orders",
+            json={
+                "symbol": "STALECO",
+                "side": "BUY",
+                "quantity": 5.0,
+                "order_type": "MARKET",
+                "idempotency_key": "idemp-stale-quote-order-01",
+            },
+            headers=auth_headers,
+        )
+        assert res.status_code == 200
+        data = res.json()["data"]
+        assert data["status"] == "REJECTED"
+        assert "stale" in data["rejection_reason"].lower()
+        assert float(data["fill_price"]) == 0.0
+
+        # Verify cash was untouched
+        acct_after = await client.get("/api/v1/paper-trading/account", headers=auth_headers)
+        cash_after = acct_after.json()["data"]["cash_balance"]
+        assert cash_after == cash_before

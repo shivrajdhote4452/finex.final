@@ -12,6 +12,27 @@ class MobileAskFinExScreen extends StatefulWidget {
 class _MobileAskFinExScreenState extends State<MobileAskFinExScreen> {
   final TextEditingController _controller = TextEditingController();
   bool _isLoading = false;
+  String? _conversationId;
+
+  @override
+  void initState() {
+    super.initState();
+    _initOwnedConversation();
+  }
+
+  Future<void> _initOwnedConversation() async {
+    try {
+      final convs = await apiClient.getConversations();
+      if (convs.isNotEmpty) {
+        if (mounted) setState(() => _conversationId = convs.first['id']);
+      } else {
+        final newConv = await apiClient.createConversation("FinEx Mobile Assistant");
+        if (mounted) setState(() => _conversationId = newConv['id']);
+      }
+    } catch (_) {
+      // Offline or unauthenticated fallback
+    }
+  }
 
   final List<Map<String, dynamic>> _messages = [
     {
@@ -34,7 +55,14 @@ class _MobileAskFinExScreenState extends State<MobileAskFinExScreen> {
     });
 
     try {
-      final res = await apiClient.sendAiMessage("conv-welcome-001", text);
+      if (_conversationId == null) {
+        try {
+          final newConv = await apiClient.createConversation("FinEx Mobile Assistant");
+          _conversationId = newConv['id'];
+        } catch (_) {}
+      }
+      final convId = _conversationId ?? "conv-welcome-001";
+      final res = await apiClient.sendAiMessage(convId, text);
       final asst = res['assistant_message'];
       if (asst != null) {
         final citations = (asst['citations'] as List?) ?? [];

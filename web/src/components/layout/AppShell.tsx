@@ -349,15 +349,15 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
                 </div>
                 <div>
                   <span style={{ color: 'var(--text-muted)' }}>Holdings: </span>
-                  <span style={{ color: '#FFFFFF', fontWeight: 600 }}>₹{totalHoldingsValue.toLocaleString('en-IN')}</span>
+                  <span style={{ color: '#FFFFFF', fontWeight: 600 }}>₹{(totalHoldingsValue ?? 0).toLocaleString('en-IN')}</span>
                 </div>
                 <div>
                   <span style={{ color: 'var(--text-muted)' }}>Virtual cash: </span>
-                  <span style={{ color: '#FFFFFF', fontWeight: 600 }}>₹{virtualCash.toLocaleString('en-IN')}</span>
+                  <span style={{ color: '#FFFFFF', fontWeight: 600 }}>₹{(virtualCash ?? 0).toLocaleString('en-IN')}</span>
                 </div>
                 <div>
                   <span style={{ color: 'var(--text-muted)' }}>Total: </span>
-                  <span style={{ color: 'var(--color-positive)', fontWeight: 700 }}>₹{totalPortfolioValue.toLocaleString('en-IN')}</span>
+                  <span style={{ color: 'var(--color-positive)', fontWeight: 700 }}>₹{(totalPortfolioValue ?? 0).toLocaleString('en-IN')}</span>
                 </div>
               </div>
 

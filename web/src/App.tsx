@@ -79,7 +79,8 @@ export const AppContent: React.FC = () => {
               setAuthState('onboarding');
             }
           } catch {
-            setAuthState('authenticated');
+            apiClient.setToken(null);
+            setAuthState('welcome');
           }
         }}
       />
