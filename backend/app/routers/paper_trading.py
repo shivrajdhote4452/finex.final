@@ -10,18 +10,19 @@ Exposes:
 - POST /paper-trading/reset: Reset virtual cash with audit entry
 """
 
+from decimal import Decimal
 from typing import Optional
 
 from backend.app.core.envelope import create_response_envelope
+from backend.app.database import get_db
 from backend.app.domain.paper_trading_service import (
-    _LEDGER_STORE,
-    _ORDERS_STORE,
     OrderSubmitRequest,
     PaperTradingEngine,
 )
 from backend.app.routers.auth import get_current_user_id
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/paper-trading", tags=["Paper Trading (Simulated)"])
 engine = PaperTradingEngine()
@@ -31,16 +32,26 @@ class ResetAccountRequest(BaseModel):
     confirm_reset: bool = Field(..., description="Must be true to authorize account reset")
 
 
+class DepositFundsRequest(BaseModel):
+    amount: Decimal = Field(
+        ...,
+        gt=Decimal("0.00"),
+        le=Decimal("10000000.00"),
+        description="Deposit amount between 1 and 1 Crore virtual INR",
+    )
+
+
 @router.get("/account")
 async def get_paper_account(
     request: Request,
     current_user: dict = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Fetch virtual account overview with equity, cash, and positions summary."""
+    """Fetch virtual account overview with equity, cash, and positions summary from PostgreSQL."""
     cid = getattr(request.state, "correlation_id", None)
     user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
 
-    summary = engine.get_portfolio_summary(user_id)
+    summary = await engine.get_portfolio_summary_db(user_id, db=db)
     return create_response_envelope(data=summary, correlation_id=cid)
 
 
@@ -50,8 +61,9 @@ async def submit_paper_order(
     payload: OrderSubmitRequest,
     x_idempotency_key: Optional[str] = Header(None, alias="X-Idempotency-Key"),
     current_user: dict = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Execute simulated market order atomically with idempotency protection."""
+    """Execute simulated market order atomically with idempotency protection in PostgreSQL."""
     cid = getattr(request.state, "correlation_id", None)
     user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
 
@@ -63,7 +75,7 @@ async def submit_paper_order(
         )
     payload.idempotency_key = key
 
-    result = engine.execute_order(user_id, payload)
+    result = await engine.execute_order_db(user_id, payload, db=db)
     return create_response_envelope(data=result.model_dump(mode="json"), correlation_id=cid)
 
 
@@ -72,28 +84,15 @@ async def list_paper_orders(
     request: Request,
     limit: int = Query(50, ge=1, le=100),
     current_user: dict = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Fetch order history for authenticated caller."""
+    """Fetch order history for authenticated caller from PostgreSQL."""
     cid = getattr(request.state, "correlation_id", None)
     user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
 
-    acct = engine.get_or_create_account(user_id)
-    acct_id = acct["id"]
-
-    orders = [o for o in _ORDERS_STORE.values() if o["account_id"] == acct_id]
-    orders.sort(key=lambda x: x["created_at"], reverse=True)
-
-    # Convert Decimals to float for clean JSON serialization
-    serialized = []
-    for o in orders[:limit]:
-        item = dict(o)
-        for k in ["quantity", "fill_price", "gross_value", "fee", "net_value", "realized_pnl"]:
-            if item.get(k) is not None:
-                item[k] = float(item[k])
-        serialized.append(item)
-
+    orders = await engine.get_orders_db(user_id, limit=limit, db=db)
     return create_response_envelope(
-        data={"orders": serialized, "total": len(orders)},
+        data={"orders": orders, "total": len(orders)},
         correlation_id=cid,
     )
 
@@ -102,14 +101,15 @@ async def list_paper_orders(
 async def list_paper_positions(
     request: Request,
     current_user: dict = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Fetch all open simulated positions for authenticated caller."""
+    """Fetch all open simulated positions for authenticated caller from PostgreSQL."""
     cid = getattr(request.state, "correlation_id", None)
     user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
 
-    summary = engine.get_portfolio_summary(user_id)
+    positions = await engine.get_positions_db(user_id, db=db)
     return create_response_envelope(
-        data={"positions": summary["positions"], "total": len(summary["positions"])},
+        data={"positions": positions, "total": len(positions)},
         correlation_id=cid,
     )
 
@@ -118,26 +118,15 @@ async def list_paper_positions(
 async def get_cash_ledger(
     request: Request,
     current_user: dict = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Fetch append-only cash ledger audit trail."""
+    """Fetch append-only cash ledger audit trail from PostgreSQL."""
     cid = getattr(request.state, "correlation_id", None)
     user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
 
-    acct = engine.get_or_create_account(user_id)
-    acct_id = acct["id"]
-
-    ledger = _LEDGER_STORE.get(acct_id, [])
-
-    # Format numbers
-    serialized = []
-    for entry in ledger:
-        item = dict(entry)
-        item["amount"] = float(item["amount"])
-        item["balance_after"] = float(item["balance_after"])
-        serialized.append(item)
-
+    ledger = await engine.get_ledger_db(user_id, db=db)
     return create_response_envelope(
-        data={"ledger": serialized, "total": len(serialized)},
+        data={"ledger": ledger, "total": len(ledger)},
         correlation_id=cid,
     )
 
@@ -147,8 +136,9 @@ async def reset_paper_account(
     request: Request,
     payload: ResetAccountRequest,
     current_user: dict = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Reset virtual cash balance back to ₹1,00,000 and clear simulated positions."""
+    """Reset virtual cash balance back to ₹1,00,000 and clear simulated positions in PostgreSQL."""
     cid = getattr(request.state, "correlation_id", None)
     user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
 
@@ -158,10 +148,25 @@ async def reset_paper_account(
             correlation_id=cid,
         )
 
-    acct = engine.reset_account(user_id)
-    summary = engine.get_portfolio_summary(user_id)
+    acct = await engine.reset_account_db(user_id, db=db)
+    summary = await engine.get_portfolio_summary_db(user_id, db=db)
 
     return create_response_envelope(
         data={"reset": True, "reset_count": acct["reset_count"], "summary": summary},
         correlation_id=cid,
     )
+
+
+@router.post("/deposit")
+async def deposit_virtual_cash(
+    request: Request,
+    payload: DepositFundsRequest,
+    current_user: dict = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Credit authorized virtual paper cash to account with immutable ledger audit record in PostgreSQL."""
+    cid = getattr(request.state, "correlation_id", None)
+    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+
+    result = await engine.deposit_funds_db(user_id, payload.amount, db=db)
+    return create_response_envelope(data=result, correlation_id=cid)

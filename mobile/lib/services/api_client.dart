@@ -6,12 +6,20 @@ class ApiClient {
   factory ApiClient() => _instance;
   ApiClient._internal();
 
-  // Android emulator maps 10.0.2.2 to host localhost:8000
-  String baseUrl = 'http://10.0.2.2:8000/api/v1';
+  // Environment-specific API configuration
+  static const String _defaultUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'http://10.0.2.2:8000/api/v1',
+  );
+  String baseUrl = _defaultUrl;
   String? _token;
 
   void setToken(String? token) {
     _token = token;
+  }
+
+  void logout() {
+    _token = null;
   }
 
   String? get token => _token;
@@ -31,7 +39,7 @@ class ApiClient {
     return headers;
   }
 
-  // --- Auth ---
+  // --- Auth & Onboarding ---
   Future<Map<String, dynamic>> devLogin({
     String email = 'shivraj.dhote@finex.internal',
     String name = 'Shivraj Dhote',
@@ -48,6 +56,71 @@ class ApiClient {
       return data['data'];
     }
     throw Exception(data['error']?['message'] ?? 'Login failed');
+  }
+
+  Future<Map<String, dynamic>> loginWithGoogle(String idToken) async {
+    final url = Uri.parse('$baseUrl/auth/google');
+    final response = await http.post(
+      url,
+      headers: _headers(),
+      body: jsonEncode({'id_token': idToken}),
+    );
+    final data = jsonDecode(response.body);
+    if (response.statusCode == 200 && data['data'] != null) {
+      _token = data['data']['access_token'];
+      return data['data'];
+    }
+    throw Exception(data['error']?['message'] ?? 'Google authentication failed');
+  }
+
+  Future<Map<String, dynamic>> getProfile() async {
+    final url = Uri.parse('$baseUrl/auth/me');
+    final response = await http.get(url, headers: _headers());
+    final data = jsonDecode(response.body);
+    if (response.statusCode == 200 && data['data'] != null) {
+      return Map<String, dynamic>.from(data['data']);
+    }
+    throw Exception(data['error']?['message'] ?? 'Failed to load profile');
+  }
+
+  Future<Map<String, dynamic>> recordConsent({
+    required String consentVersion,
+    required bool accepted,
+  }) async {
+    final url = Uri.parse('$baseUrl/auth/consent');
+    final response = await http.post(
+      url,
+      headers: _headers(),
+      body: jsonEncode({
+        'consent_version': consentVersion,
+        'accepted': accepted,
+      }),
+    );
+    final data = jsonDecode(response.body);
+    if (response.statusCode == 200 && data['data'] != null) {
+      return Map<String, dynamic>.from(data['data']);
+    }
+    throw Exception(data['error']?['message'] ?? 'Failed to record consent');
+  }
+
+  Future<Map<String, dynamic>> submitRiskProfile({
+    required String scoreTier,
+    required Map<String, dynamic> answers,
+  }) async {
+    final url = Uri.parse('$baseUrl/auth/risk-profile');
+    final response = await http.post(
+      url,
+      headers: _headers(),
+      body: jsonEncode({
+        'score_tier': scoreTier,
+        'answers': answers,
+      }),
+    );
+    final data = jsonDecode(response.body);
+    if (response.statusCode == 200 && data['data'] != null) {
+      return Map<String, dynamic>.from(data['data']);
+    }
+    throw Exception(data['error']?['message'] ?? 'Failed to submit risk profile');
   }
 
   // --- Market Data ---
@@ -101,6 +174,7 @@ class ApiClient {
         'order_type': orderType,
         'quantity': quantity,
         if (limitPrice != null) 'limit_price': limitPrice,
+        'idempotency_key': key,
       }),
     );
     final data = jsonDecode(response.body);
@@ -108,6 +182,26 @@ class ApiClient {
       return Map<String, dynamic>.from(data['data']);
     }
     throw Exception(data['error']?['message'] ?? 'Order submission failed');
+  }
+
+  Future<List<Map<String, dynamic>>> getOrders([int limit = 50]) async {
+    final url = Uri.parse('$baseUrl/paper-trading/orders?limit=$limit');
+    final response = await http.get(url, headers: _headers());
+    final data = jsonDecode(response.body);
+    if (response.statusCode == 200 && data['data'] != null) {
+      return List<Map<String, dynamic>>.from(data['data']['orders'] ?? []);
+    }
+    return [];
+  }
+
+  Future<Map<String, dynamic>> resetAccount() async {
+    final url = Uri.parse('$baseUrl/paper-trading/account/reset');
+    final response = await http.post(url, headers: _headers());
+    final data = jsonDecode(response.body);
+    if (response.statusCode == 200 && data['data'] != null) {
+      return Map<String, dynamic>.from(data['data']);
+    }
+    throw Exception(data['error']?['message'] ?? 'Account reset failed');
   }
 
   // --- Spending & CSV ---
@@ -149,7 +243,31 @@ class ApiClient {
     throw Exception(data['error']?['message'] ?? 'CSV commit failed');
   }
 
-  // --- AI RAG Chat ---
+  // --- AI RAG Conversations & Chat ---
+  Future<Map<String, dynamic>> createConversation([String title = 'Mobile Assistant']) async {
+    final url = Uri.parse('$baseUrl/ai/conversations');
+    final response = await http.post(
+      url,
+      headers: _headers(),
+      body: jsonEncode({'title': title}),
+    );
+    final data = jsonDecode(response.body);
+    if (response.statusCode == 200 && data['data'] != null) {
+      return Map<String, dynamic>.from(data['data']);
+    }
+    throw Exception(data['error']?['message'] ?? 'Failed to create conversation');
+  }
+
+  Future<List<Map<String, dynamic>>> getConversations() async {
+    final url = Uri.parse('$baseUrl/ai/conversations');
+    final response = await http.get(url, headers: _headers());
+    final data = jsonDecode(response.body);
+    if (response.statusCode == 200 && data['data'] != null) {
+      return List<Map<String, dynamic>>.from(data['data']['conversations'] ?? []);
+    }
+    return [];
+  }
+
   Future<Map<String, dynamic>> sendAiMessage(String conversationId, String content) async {
     final url = Uri.parse('$baseUrl/ai/conversations/$conversationId/messages');
     final response = await http.post(

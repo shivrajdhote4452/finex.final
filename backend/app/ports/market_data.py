@@ -14,6 +14,8 @@ class Quote(BaseModel):
     observed_at: datetime = Field(..., description="UTC timestamp of market observation")
     ingested_at: datetime = Field(..., description="UTC timestamp when data was ingested")
     source: str = Field(..., description="Data provider name (e.g. yfinance, nse_report)")
+    source_uri: Optional[str] = Field(None, description="Source URI or reference endpoint")
+    source_evidence: Optional[str] = Field(None, description="Cryptographic SHA-256 hash of observation trace")
     served_from_cache: bool = Field(False, description="Whether returned from cached storage")
     is_delayed: bool = Field(False, description="Whether the quote is delayed")
     is_stale: bool = Field(False, description="Whether the quote is stale")

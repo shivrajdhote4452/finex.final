@@ -336,6 +336,7 @@ class SpendingService:
         user_txs = _TRANSACTIONS_STORE.get(user_id, [])
         now = datetime.now(timezone.utc)
 
+        seen_in_file = set()
         for row_idx, row in enumerate(reader, start=1):
             raw_d = row.get(date_key, "").strip()
             raw_amt = row.get(amt_key, "").strip().replace(",", "")
@@ -363,11 +364,19 @@ class SpendingService:
                 cat, conf, method = categorize_transaction(masked_desc, tx_type)
                 tx_hash = hashlib.sha256(f"{parsed_d}:{amt}:{masked_desc}".encode("utf-8")).hexdigest()
 
+                if tx_hash in seen_in_file:
+                    duplicate_rows.append(
+                        {"row_number": row_idx, "reason": "Duplicate row within file", "raw_row": row}
+                    )
+                    continue
+
                 if any(t["dedupe_hash"] == tx_hash for t in user_txs):
                     duplicate_rows.append(
                         {"row_number": row_idx, "reason": "Already exists in transactions", "raw_row": row}
                     )
                     continue
+
+                seen_in_file.add(tx_hash)
 
                 valid_rows.append(
                     {
@@ -434,7 +443,26 @@ class SpendingService:
             return {
                 "upload_id": prior_upload_id,
                 "accepted_count": prior_upload.get("accepted_rows", len(preview["valid_rows"])),
-                "quarantined_count": prior_upload.get("quarantined_rows", 0),
+                "duplicate_count": len(preview.get("duplicate_rows", [])),
+                "quarantined_count": prior_upload.get("quarantined_rows", len(preview.get("invalid_rows", []))),
+                "status": "COMMITTED",
+                "replayed": True,
+            }
+
+        # Check if another preview of the exact same file was already committed for this user
+        file_hash = preview["file_hash_sha256"]
+        prior_committed = next(
+            (u for u in _UPLOADS_STORE.values() if u["user_id"] == user_id and u["file_hash_sha256"] == file_hash),
+            None,
+        )
+        if prior_committed:
+            preview["status"] = "COMMITTED"
+            preview["committed_upload_id"] = prior_committed["id"]
+            return {
+                "upload_id": prior_committed["id"],
+                "accepted_count": prior_committed.get("accepted_rows", 0),
+                "duplicate_count": len(preview.get("valid_rows", [])),
+                "quarantined_count": prior_committed.get("quarantined_rows", 0),
                 "status": "COMMITTED",
                 "replayed": True,
             }
@@ -448,8 +476,20 @@ class SpendingService:
             idx_set = set(accepted_indices)
             rows_to_commit = [r for r in rows_to_commit if r["row_index"] in idx_set]
 
+        # Re-check duplicates inside commit transaction
+        existing_hashes = {t["dedupe_hash"] for t in user_txs}
+        seen_commit_hashes = set()
         committed_txs = []
+        commit_skipped_duplicates = 0
+
         for r in rows_to_commit:
+            h = r["dedupe_hash"]
+            if h in existing_hashes or h in seen_commit_hashes:
+                commit_skipped_duplicates += 1
+                continue
+            seen_commit_hashes.add(h)
+            existing_hashes.add(h)
+
             tx_id = f"tx-{uuid.uuid4().hex[:12]}"
             tx_record = {
                 "id": tx_id,
@@ -463,19 +503,21 @@ class SpendingService:
                 "categorization_method": r["method"],
                 "confidence_score": Decimal(str(r["confidence"])),
                 "is_reviewed": r["confidence"] >= 0.90,
-                "dedupe_hash": r["dedupe_hash"],
+                "dedupe_hash": h,
                 "created_at": now.isoformat(),
             }
             committed_txs.append(tx_record)
             user_txs.append(tx_record)
 
+        total_duplicates = len(preview.get("duplicate_rows", [])) + commit_skipped_duplicates
         upload_meta = {
             "id": upload_id,
             "user_id": user_id,
             "file_name": preview["file_name"],
-            "file_hash_sha256": preview["file_hash_sha256"],
+            "file_hash_sha256": file_hash,
             "total_rows": preview["total_rows"],
             "accepted_rows": len(committed_txs),
+            "duplicate_rows": total_duplicates,
             "quarantined_rows": len(preview["invalid_rows"]),
             "status": "COMMITTED",
             "created_at": now.isoformat(),
@@ -488,6 +530,7 @@ class SpendingService:
         return {
             "upload_id": upload_id,
             "accepted_count": len(committed_txs),
+            "duplicate_count": total_duplicates,
             "quarantined_count": len(preview["invalid_rows"]),
             "status": "COMMITTED",
             "replayed": False,

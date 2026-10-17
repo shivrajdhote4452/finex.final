@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 
 from backend.app.models.core import Base
 from sqlalchemy import (
+    JSON,
     Column,
     DateTime,
     ForeignKey,
@@ -55,6 +56,7 @@ class PaperOrder(Base):
     status = Column(String(20), nullable=False, default="PENDING")
     rejection_reason = Column(String(255), nullable=True)
     idempotency_key = Column(String(128), nullable=False)
+    execution_receipt = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 

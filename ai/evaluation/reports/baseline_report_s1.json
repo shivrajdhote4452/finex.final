@@ -24,7 +24,7 @@
       "disclaimer_present": true,
       "citation_present": false,
       "passed": true,
-      "latency_ms": 0.0,
+      "latency_ms": 0.01,
       "notes": "Passed all criteria"
     },
     {

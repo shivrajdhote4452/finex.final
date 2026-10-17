@@ -24,6 +24,45 @@ from backend.app.routers.auth import create_access_token
 from httpx import ASGITransport, AsyncClient
 
 
+@pytest.fixture(scope="module", autouse=True)
+def setup_matrix_module():
+    import asyncio
+    from decimal import Decimal
+
+    from backend.app.database import AsyncSessionLocal
+    from backend.app.models.paper_trading import PaperAccount, PaperCashLedger, PaperOrder, PaperPosition, PaperTrade
+    from sqlalchemy import delete, select
+
+    async def _clean():
+        async with AsyncSessionLocal() as session:
+            for uid in ["usr-matrix-a", "usr-matrix-b"]:
+                stmt_acct = select(PaperAccount).where(PaperAccount.user_id == uid)
+                res = await session.execute(stmt_acct)
+                acct = res.scalar_one_or_none()
+                if acct:
+                    acct_id = acct.id
+                    await session.execute(delete(PaperTrade).where(PaperTrade.account_id == acct_id))
+                    await session.execute(delete(PaperOrder).where(PaperOrder.account_id == acct_id))
+                    await session.execute(delete(PaperPosition).where(PaperPosition.account_id == acct_id))
+                    await session.execute(delete(PaperCashLedger).where(PaperCashLedger.account_id == acct_id))
+                    acct.current_cash = Decimal("100000.00")
+                    acct.reset_count = 0
+                    led_init = PaperCashLedger(
+                        id=f"led-init-{acct_id[-6:]}",
+                        account_id=acct_id,
+                        entry_type="INITIAL_CREDIT",
+                        amount=Decimal("100000.00"),
+                        balance_after=Decimal("100000.00"),
+                        reference_id="INIT",
+                        description="Initial virtual paper cash deposit",
+                    )
+                    session.add(led_init)
+            await session.commit()
+
+    asyncio.run(_clean())
+    yield
+
+
 @pytest.fixture
 def app():
     return create_app()

@@ -19,6 +19,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -40,6 +41,8 @@ class TransactionUpload(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
 
     transactions: Mapped[List["Transaction"]] = relationship("Transaction", back_populates="upload")
+
+    __table_args__ = (UniqueConstraint("user_id", "file_hash_sha256", name="uq_upload_user_file_hash"),)
 
 
 class TransactionCategory(Base):
@@ -81,6 +84,8 @@ class Transaction(Base):
 
     upload: Mapped[Optional["TransactionUpload"]] = relationship("TransactionUpload", back_populates="transactions")
     category: Mapped["TransactionCategory"] = relationship("TransactionCategory", back_populates="transactions")
+
+    __table_args__ = (UniqueConstraint("user_id", "dedupe_hash", name="uq_transaction_user_dedupe"),)
 
 
 class MonthlySpendingSummary(Base):

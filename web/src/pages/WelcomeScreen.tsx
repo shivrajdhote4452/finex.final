@@ -5,10 +5,48 @@ interface WelcomeScreenProps {
   onLoginSuccess: () => void;
 }
 
+declare global {
+  interface Window {
+    google?: any;
+  }
+}
+
 export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onLoginSuccess }) => {
   const [consentChecked, setConsentChecked] = useState(true);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const googleClientId = (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID || 'finex-dev-client-id';
+  const isDev = (import.meta as any).env?.DEV;
+
+  React.useEffect(() => {
+    if (window.google?.accounts?.id) {
+      window.google.accounts.id.initialize({
+        client_id: googleClientId,
+        callback: async (response: { credential?: string }) => {
+          if (!response?.credential) {
+            setErrorMessage('Google Sign-In did not return an identity token.');
+            return;
+          }
+          if (!consentChecked) {
+            setErrorMessage('You must accept the Terms and Privacy Policy to proceed.');
+            return;
+          }
+          setLoading(true);
+          setErrorMessage(null);
+          try {
+            await apiClient.auth.googleLogin(response.credential);
+            await apiClient.auth.recordConsent('v1.0');
+            onLoginSuccess();
+          } catch (err: any) {
+            setErrorMessage(err?.message || 'Google token verification failed.');
+          } finally {
+            setLoading(false);
+          }
+        },
+      });
+    }
+  }, [consentChecked, googleClientId]);
 
   const handleGoogleSignIn = async () => {
     if (!consentChecked) {
@@ -19,12 +57,34 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onLoginSuccess }) 
     setErrorMessage(null);
 
     try {
-      // Connect to verified identity endpoint
+      if (window.google?.accounts?.id) {
+        window.google.accounts.id.prompt((notification: any) => {
+          if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+            setLoading(false);
+          }
+        });
+      } else {
+        throw new Error('Google Identity Services script is loading. Please try again.');
+      }
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Google sign-in initialization failed.');
+      setLoading(false);
+    }
+  };
+
+  const handleDevLogin = async () => {
+    if (!consentChecked) {
+      setErrorMessage('You must accept the Terms and Privacy Policy to proceed.');
+      return;
+    }
+    setLoading(true);
+    setErrorMessage(null);
+    try {
       await apiClient.auth.devLogin('shivraj.dhote@finex.internal', 'Shivraj Dhote');
       await apiClient.auth.recordConsent('v1.0');
       onLoginSuccess();
     } catch (err: any) {
-      setErrorMessage(err?.message || 'Authentication failed. Please verify the backend service is running.');
+      setErrorMessage(err?.message || 'Development login failed.');
     } finally {
       setLoading(false);
     }
@@ -200,6 +260,31 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onLoginSuccess }) 
           <div style={{ fontSize: '11px', color: '#71717A', lineHeight: 1.5, marginTop: '16px', textAlign: 'center' }}>
             Your consent is recorded with its policy version. Risk and portfolio information remain private to your account.
           </div>
+
+          {isDev && (
+            <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px dashed #27272A', textAlign: 'center' }}>
+              <div style={{ fontSize: '10px', color: '#71717A', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px' }}>
+                Development Environment Only
+              </div>
+              <button
+                type="button"
+                onClick={handleDevLogin}
+                disabled={loading}
+                style={{
+                  background: 'none',
+                  border: '1px solid #3F3F46',
+                  color: '#A1A1AA',
+                  padding: '8px 14px',
+                  borderRadius: 'var(--radius-xs)',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  width: '100%',
+                }}
+              >
+                Local Dev Sandbox Login (Bypasses Google OAuth)
+              </button>
+            </div>
+          )}
 
           <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginTop: '24px', fontSize: '11px', color: '#A1A1AA' }}>
             <span style={{ cursor: 'pointer', textDecoration: 'underline' }}>Privacy policy</span>

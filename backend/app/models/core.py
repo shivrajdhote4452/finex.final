@@ -20,7 +20,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -35,7 +35,7 @@ class User(Base):
 
     __tablename__ = "users"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: str(uuid.uuid4()))
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
     provider: Mapped[str] = mapped_column(String(50), nullable=False, default="google")
     provider_subject: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -66,15 +66,18 @@ class UserProfile(Base):
 
     __tablename__ = "user_profiles"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True
     )
     full_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     display_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     country: Mapped[str] = mapped_column(String(3), nullable=False, default="IND")
     experience_level: Mapped[str] = mapped_column(String(50), nullable=False, default="BEGINNER")
     onboarding_completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    risk_band: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    composite_score: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2), nullable=True)
+    risk_assessment: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
@@ -88,9 +91,9 @@ class UserConsent(Base):
 
     __tablename__ = "user_consents"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     consent_version: Mapped[str] = mapped_column(String(50), nullable=False)
     terms_accepted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -110,9 +113,9 @@ class Portfolio(Base):
 
     __tablename__ = "portfolios"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     name: Mapped[str] = mapped_column(String(100), nullable=False, default="My Primary Portfolio")
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -134,9 +137,9 @@ class PortfolioHolding(Base):
 
     __tablename__ = "portfolio_holdings"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    portfolio_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("portfolios.id", ondelete="CASCADE"), nullable=False, index=True
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: str(uuid.uuid4()))
+    portfolio_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("portfolios.id", ondelete="CASCADE"), nullable=False, index=True
     )
     symbol: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     asset_class: Mapped[str] = mapped_column(String(50), nullable=False, default="EQUITY")
@@ -164,9 +167,9 @@ class ApplicationEvent(Base):
 
     __tablename__ = "application_events"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
     event_type: Mapped[str] = mapped_column(String(100), nullable=False)
     correlation_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
@@ -175,3 +178,16 @@ class ApplicationEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
 
     user: Mapped[Optional["User"]] = relationship("User", back_populates="events")
+
+
+class RevokedToken(Base):
+    """Revoked / blacklisted JWT tokens for durable revocation across restarts and workers."""
+
+    __tablename__ = "revoked_tokens"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: str(uuid.uuid4()))
+    token: Mapped[str] = mapped_column(String(512), nullable=False, unique=True, index=True)
+    user_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    revoked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
