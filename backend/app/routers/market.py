@@ -135,9 +135,10 @@ async def get_instrument_quote(request: Request, symbol: str):
 async def get_instrument_history(
     request: Request,
     symbol: str,
-    start_date: str = Query("2026-08-01", description="Start date YYYY-MM-DD"),
-    end_date: str = Query("2026-10-16", description="End date YYYY-MM-DD"),
+    start_date: str = Query("2025-10-18", description="Start date YYYY-MM-DD"),
+    end_date: str = Query("2026-10-18", description="End date YYYY-MM-DD"),
     interval: str = Query("1D", description="Candle interval e.g. 1m, 5m, 15m, 1h, 1D, 1W, 1M"),
+    range: Optional[str] = Query(None, description="Preset range: 1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, max"),
     as_of: Optional[str] = Query(None, description="Simulated replay clock ISO timestamp"),
 ):
     """Fetch historical price bars, constrained by date range, resolution, and optional as_of replay clock."""
@@ -162,7 +163,12 @@ async def get_instrument_history(
         )
     else:
         bars = await provider.get_historical_bars(
-            clean_sym, start_date=start_date, end_date=end_date, interval=interval, as_of=as_of_dt
+            clean_sym,
+            start_date=start_date,
+            end_date=end_date,
+            interval=interval,
+            range_param=range,
+            as_of=as_of_dt,
         )
 
     if not bars:
@@ -174,6 +180,7 @@ async def get_instrument_history(
         data={
             "symbol": clean_sym,
             "interval": interval,
+            "range": range,
             "start_date": start_date,
             "end_date": end_date,
             "as_of": as_of_dt.isoformat() if as_of_dt else None,
@@ -190,9 +197,10 @@ async def get_instrument_indicators(
     symbol: str,
     indicator: str = Query(..., description="Indicator type: SMA, EMA, BB, RSI, MACD, VWAP"),
     period: int = Query(20, ge=2, le=200, description="Window period for SMA, EMA, BB, RSI"),
-    start_date: str = Query("2026-08-01", description="Start date YYYY-MM-DD"),
-    end_date: str = Query("2026-10-16", description="End date YYYY-MM-DD"),
+    start_date: str = Query("2025-10-18", description="Start date YYYY-MM-DD"),
+    end_date: str = Query("2026-10-18", description="End date YYYY-MM-DD"),
     interval: str = Query("1D", description="Candle interval"),
+    range: Optional[str] = Query(None, description="Preset range: 1mo, 6mo, 1y, 5y"),
     as_of: Optional[str] = Query(None, description="Simulated replay clock ISO timestamp"),
 ):
     """Compute verified deterministic technical indicators over genuine historical price bars."""
@@ -208,7 +216,12 @@ async def get_instrument_indicators(
             pass
 
     bars: List[HistoricalBar] = await provider.get_historical_bars(
-        clean_sym, start_date=start_date, end_date=end_date, interval=interval, as_of=as_of_dt
+        clean_sym,
+        start_date=start_date,
+        end_date=end_date,
+        interval=interval,
+        range_param=range,
+        as_of=as_of_dt,
     )
 
     if not bars:
