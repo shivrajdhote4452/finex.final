@@ -391,10 +391,12 @@ class ApiClient {
   Future<Map<String, dynamic>> getMarketHistory(
     String symbol, {
     String? interval,
+    String? range,
     String? asOf,
   }) async {
     final queryParams = <String, String>{};
     if (interval != null) queryParams['interval'] = interval;
+    if (range != null) queryParams['range'] = range;
     if (asOf != null) queryParams['as_of'] = asOf;
     final uri = Uri.parse('$baseUrl/market/history/$symbol').replace(queryParameters: queryParams);
     final response = await http.get(uri, headers: _headers());
@@ -403,6 +405,18 @@ class ApiClient {
       return Map<String, dynamic>.from(data['data']);
     }
     return {'symbol': symbol, 'bars': []};
+  }
+
+  Future<List<Map<String, dynamic>>> getInstruments({String? market}) async {
+    final queryParams = <String, String>{};
+    if (market != null) queryParams['market'] = market;
+    final uri = Uri.parse('$baseUrl/market/instruments').replace(queryParameters: queryParams);
+    final response = await http.get(uri, headers: _headers());
+    final data = jsonDecode(response.body);
+    if (response.statusCode == 200 && data['data'] != null && data['data']['instruments'] != null) {
+      return List<Map<String, dynamic>>.from(data['data']['instruments']);
+    }
+    return [];
   }
 
   Future<Map<String, dynamic>> getIndicators(

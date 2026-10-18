@@ -280,7 +280,7 @@ class ApiClient {
 
     getHistory: async (
       symbol: string,
-      optionsOrStartDate?: string | { interval?: string; start_date?: string; end_date?: string; as_of?: string },
+      optionsOrStartDate?: string | { interval?: string; start_date?: string; end_date?: string; range?: string; as_of?: string },
       endDate?: string
     ) => {
       const q = new URLSearchParams();
@@ -291,6 +291,7 @@ class ApiClient {
         if (optionsOrStartDate.interval) q.set('interval', optionsOrStartDate.interval);
         if (optionsOrStartDate.start_date) q.set('start_date', optionsOrStartDate.start_date);
         if (optionsOrStartDate.end_date) q.set('end_date', optionsOrStartDate.end_date);
+        if (optionsOrStartDate.range) q.set('range', optionsOrStartDate.range);
         if (optionsOrStartDate.as_of) q.set('as_of', optionsOrStartDate.as_of);
       }
       const queryStr = q.toString() ? `?${q.toString()}` : '';

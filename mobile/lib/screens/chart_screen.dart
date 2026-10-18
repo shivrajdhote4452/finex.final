@@ -14,6 +14,7 @@ class MobileChartScreen extends StatefulWidget {
 class _MobileChartScreenState extends State<MobileChartScreen> {
   late String _symbol;
   String _timeframe = '1D';
+  String _range = '1Y';
   bool _showCandlesticks = true;
   bool _showSma20 = true;
   final bool _showVolume = true;
@@ -31,6 +32,37 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
   double? _limitPrice;
   bool _orderSubmitting = false;
   String? _orderFeedback;
+
+  static const List<Map<String, String>> _popularSymbols = [
+    {'symbol': 'RELIANCE', 'name': 'Reliance Industries', 'sector': 'Energy'},
+    {'symbol': 'TCS', 'name': 'Tata Consultancy Services', 'sector': 'Technology'},
+    {'symbol': 'INFY', 'name': 'Infosys Limited', 'sector': 'Technology'},
+    {'symbol': 'HDFCBANK', 'name': 'HDFC Bank', 'sector': 'Banking'},
+    {'symbol': 'ICICIBANK', 'name': 'ICICI Bank', 'sector': 'Banking'},
+    {'symbol': 'SBIN', 'name': 'State Bank of India', 'sector': 'Banking'},
+    {'symbol': 'KOTAKBANK', 'name': 'Kotak Mahindra Bank', 'sector': 'Banking'},
+    {'symbol': 'AXISBANK', 'name': 'Axis Bank', 'sector': 'Banking'},
+    {'symbol': 'TATAMOTORS', 'name': 'Tata Motors', 'sector': 'Automobile'},
+    {'symbol': 'MARUTI', 'name': 'Maruti Suzuki', 'sector': 'Automobile'},
+    {'symbol': 'BAJFINANCE', 'name': 'Bajaj Finance', 'sector': 'Financial'},
+    {'symbol': 'BHARTIARTL', 'name': 'Bharti Airtel', 'sector': 'Telecom'},
+    {'symbol': 'ITC', 'name': 'ITC Limited', 'sector': 'Consumer'},
+    {'symbol': 'HINDUNILVR', 'name': 'Hindustan Unilever', 'sector': 'Consumer'},
+    {'symbol': 'LT', 'name': 'Larsen & Toubro', 'sector': 'Infrastructure'},
+    {'symbol': 'SUNPHARMA', 'name': 'Sun Pharma', 'sector': 'Pharma'},
+    {'symbol': 'TITAN', 'name': 'Titan Company', 'sector': 'Consumer'},
+    {'symbol': 'TATASTEEL', 'name': 'Tata Steel', 'sector': 'Metals'},
+    {'symbol': 'JSWSTEEL', 'name': 'JSW Steel', 'sector': 'Metals'},
+    {'symbol': 'ADANIENT', 'name': 'Adani Enterprises', 'sector': 'Energy'},
+    {'symbol': 'NTPC', 'name': 'NTPC Limited', 'sector': 'Power'},
+    {'symbol': 'ONGC', 'name': 'Oil & Natural Gas Corp', 'sector': 'Energy'},
+    {'symbol': 'POWERGRID', 'name': 'Power Grid Corp', 'sector': 'Power'},
+    {'symbol': 'COALINDIA', 'name': 'Coal India', 'sector': 'Mining'},
+    {'symbol': 'HAL', 'name': 'Hindustan Aeronautics', 'sector': 'Defense'},
+    {'symbol': 'BEL', 'name': 'Bharat Electronics', 'sector': 'Defense'},
+    {'symbol': 'ZOMATO', 'name': 'Zomato Limited', 'sector': 'Consumer'},
+    {'symbol': 'PAYTM', 'name': 'One97 Communications', 'sector': 'Fintech'},
+  ];
 
   @override
   void initState() {
@@ -50,6 +82,7 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
       final historyRes = await apiClient.getMarketHistory(
         _symbol,
         interval: _timeframe,
+        range: _range,
       );
 
       final rawBars = List<Map<String, dynamic>>.from(historyRes['bars'] ?? []);
@@ -67,6 +100,158 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
         _loading = false;
       });
     }
+  }
+
+  void _openStockSearchModal() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: TerminalColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        String filterQuery = '';
+        String selectedSector = 'All';
+        final sectors = ['All', 'Banking', 'Technology', 'Energy', 'Automobile', 'Consumer', 'Metals', 'Defense'];
+
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final filtered = _popularSymbols.where((s) {
+              final matchQuery = s['symbol']!.toLowerCase().contains(filterQuery.toLowerCase()) ||
+                  s['name']!.toLowerCase().contains(filterQuery.toLowerCase());
+              final matchSector = selectedSector == 'All' || s['sector'] == selectedSector;
+              return matchQuery && matchSector;
+            }).toList();
+
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+                top: 16,
+                left: 16,
+                right: 16,
+              ),
+              child: SizedBox(
+                height: 520,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          "Select Stock",
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: TerminalColors.textMain),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 20, color: TerminalColors.textMuted),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      autofocus: true,
+                      style: const TextStyle(fontSize: 14, color: Colors.white),
+                      decoration: InputDecoration(
+                        hintText: "Search 40+ stocks (e.g. TATASTEEL, INFY)...",
+                        hintStyle: const TextStyle(fontSize: 13, color: TerminalColors.textMuted),
+                        prefixIcon: const Icon(Icons.search, color: TerminalColors.action, size: 20),
+                        filled: true,
+                        fillColor: TerminalColors.panel,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: TerminalColors.borderSubtle),
+                        ),
+                      ),
+                      onChanged: (val) => setModalState(() => filterQuery = val),
+                    ),
+                    const SizedBox(height: 10),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          for (final sec in sectors)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 6),
+                              child: ChoiceChip(
+                                label: Text(sec, style: const TextStyle(fontSize: 11)),
+                                selected: selectedSector == sec,
+                                selectedColor: TerminalColors.action.withOpacity(0.2),
+                                labelStyle: TextStyle(
+                                  color: selectedSector == sec ? TerminalColors.action : TerminalColors.textMuted,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                backgroundColor: TerminalColors.panel,
+                                onSelected: (sel) {
+                                  if (sel) setModalState(() => selectedSector = sec);
+                                },
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: ListView.separated(
+                        itemCount: filtered.length,
+                        separatorBuilder: (_, __) => const Divider(color: TerminalColors.borderSubtle, height: 1),
+                        itemBuilder: (context, idx) {
+                          final item = filtered[idx];
+                          final isSelected = item['symbol'] == _symbol;
+                          return ListTile(
+                            dense: true,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            leading: CircleAvatar(
+                              radius: 16,
+                              backgroundColor: isSelected ? TerminalColors.action : TerminalColors.panel,
+                              child: Text(
+                                item['symbol']!.substring(0, 2),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: isSelected ? Colors.black : Colors.white,
+                                ),
+                              ),
+                            ),
+                            title: Text(
+                              item['symbol']!,
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
+                            ),
+                            subtitle: Text(
+                              item['name']!,
+                              style: const TextStyle(fontSize: 11, color: TerminalColors.textMuted),
+                            ),
+                            trailing: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: TerminalColors.panel,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                item['sector']!,
+                                style: const TextStyle(fontSize: 10, color: TerminalColors.textMuted),
+                              ),
+                            ),
+                            onTap: () {
+                              Navigator.pop(ctx);
+                              setState(() {
+                                _symbol = item['symbol']!;
+                              });
+                              _fetchChartData();
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   void _openOrderSheet() {
@@ -452,31 +637,28 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
     return Scaffold(
       backgroundColor: TerminalColors.canvas,
       appBar: AppBar(
-        title: DropdownButton<String>(
-          value: _symbol,
-          dropdownColor: TerminalColors.surface,
-          underline: const SizedBox(),
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-            fontFamily: 'monospace',
+        title: InkWell(
+          onTap: _openStockSearchModal,
+          borderRadius: BorderRadius.circular(6),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _symbol,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+                const SizedBox(width: 4),
+                const Icon(Icons.arrow_drop_down, color: TerminalColors.action, size: 20),
+              ],
+            ),
           ),
-          items: const [
-            DropdownMenuItem(value: 'RELIANCE', child: Text("RELIANCE")),
-            DropdownMenuItem(value: 'TCS', child: Text("TCS")),
-            DropdownMenuItem(value: 'INFY', child: Text("INFY")),
-            DropdownMenuItem(value: 'HDFCBANK', child: Text("HDFCBANK")),
-            DropdownMenuItem(value: 'TATAMOTORS', child: Text("TATAMOTORS")),
-            DropdownMenuItem(value: 'AAPL', child: Text("AAPL (US)")),
-            DropdownMenuItem(value: 'MSFT', child: Text("MSFT (US)")),
-          ],
-          onChanged: (val) {
-            if (val != null) {
-              setState(() => _symbol = val);
-              _fetchChartData();
-            }
-          },
         ),
         actions: [
           IconButton(
@@ -536,9 +718,60 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
               ),
             ),
 
+            // Groww-style Range Bar
+            Container(
+              height: 34,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              color: const Color(0xFF14171F),
+              child: Row(
+                children: [
+                  for (final rng in ['1D', '1W', '1M', '3M', '6M', '1Y', '5Y', 'ALL'])
+                    Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _range = rng;
+                            if (rng == '1D') {
+                              _timeframe = '5m';
+                            } else if (rng == '1W') {
+                              _timeframe = '15m';
+                            } else if (rng == '1M') {
+                              _timeframe = '1h';
+                            } else {
+                              _timeframe = '1D';
+                            }
+                          });
+                          _fetchChartData();
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: _range == rng ? TerminalColors.action.withOpacity(0.2) : Colors.transparent,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: _range == rng ? TerminalColors.action : Colors.transparent,
+                              width: 1,
+                            ),
+                          ),
+                          child: Text(
+                            rng,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: _range == rng ? FontWeight.bold : FontWeight.w500,
+                              color: _range == rng ? TerminalColors.action : TerminalColors.textMuted,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+
             // Timeframe Selector & Indicators bar
             Container(
-              height: 36,
+              height: 34,
               padding: const EdgeInsets.symmetric(horizontal: 12),
               color: Colors.black,
               child: Row(
@@ -552,7 +785,7 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
                           _fetchChartData();
                         },
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                           decoration: BoxDecoration(
                             color: _timeframe == tf ? TerminalColors.borderMedium : Colors.transparent,
                             borderRadius: BorderRadius.circular(3),
@@ -560,7 +793,7 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
                           child: Text(
                             tf,
                             style: TextStyle(
-                              fontSize: 11,
+                              fontSize: 10,
                               fontWeight: FontWeight.w600,
                               color: _timeframe == tf ? TerminalColors.action : TerminalColors.textMuted,
                             ),

@@ -13,7 +13,6 @@ Exposes:
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from backend.app.adapters.alpaca_paper_adapter import US_INSTRUMENT_REGISTRY, AlpacaPaperAdapter
 from backend.app.adapters.market_data_provider import INSTRUMENT_REGISTRY, RealMarketDataProvider
 from backend.app.config import get_settings
 from backend.app.core.envelope import create_response_envelope
@@ -33,12 +32,6 @@ router = APIRouter(prefix="/market", tags=["Market Data"])
 settings = get_settings()
 
 provider = RealMarketDataProvider(force_cache=False, allow_fixture_fallback=settings.MARKET_ALLOW_FIXTURES)
-alpaca_adapter = AlpacaPaperAdapter(
-    api_key=settings.ALPACA_API_KEY,
-    secret_key=settings.ALPACA_SECRET_KEY,
-    base_url=settings.ALPACA_BASE_URL,
-    data_url=settings.ALPACA_DATA_URL,
-)
 
 
 @router.get("/mode")
@@ -48,20 +41,17 @@ async def get_market_data_mode(request: Request):
     mode = settings.MARKET_DATA_MODE
 
     feed_label = "NSE Historical Replay"
-    if mode == "US_ALPACA_PAPER":
-        feed_label = "Live IEX"
-    elif mode == "INDIAN_LIVE_DATA":
+    if mode == "INDIAN_LIVE_DATA":
         feed_label = "NSE / Upstox (Awaiting Regulatory Authorization)"
 
     return create_response_envelope(
         data={
             "mode": mode,
             "feed_label": feed_label,
-            "currency": "USD" if mode == "US_ALPACA_PAPER" else "INR",
+            "currency": "INR",
             "is_simulated": True,
             "sebi_educational_lag_days": settings.SEBI_EDUCATIONAL_LAG_DAYS,
-            "sebi_lag_enforced": mode == "INDIA_HISTORICAL_REPLAY",
-            "alpaca_configured": alpaca_adapter.is_configured,
+            "sebi_lag_enforced": True,
             "current_server_utc": datetime.now(timezone.utc).isoformat(),
         },
         correlation_id=cid,
@@ -70,19 +60,9 @@ async def get_market_data_mode(request: Request):
 
 @router.get("/instruments")
 async def list_all_instruments(request: Request, market: Optional[str] = Query(None)):
-    """List all supported instruments with sectors, exchange, and canonical IDs."""
+    """List all supported Indian instruments with sectors, exchange, and canonical IDs."""
     cid = getattr(request.state, "correlation_id", None)
     all_instruments = list(INSTRUMENT_REGISTRY)
-
-    if settings.MARKET_DATA_MODE == "US_ALPACA_PAPER" or market == "US":
-        all_instruments.extend(US_INSTRUMENT_REGISTRY)
-
-    if market:
-        all_instruments = [
-            i
-            for i in all_instruments
-            if i.get("exchange") == market.upper() or (market.upper() == "US" and i.get("currency") == "USD")
-        ]
 
     return create_response_envelope(
         data={"instruments": all_instruments, "total": len(all_instruments)},
@@ -95,14 +75,9 @@ async def search_market_instruments(
     request: Request,
     query: str = Query(..., min_length=1, description="Symbol, company name, or sector"),
 ):
-    """Search supported market instruments across NSE and US paper universe."""
+    """Search supported Indian market instruments across NSE universe."""
     cid = getattr(request.state, "correlation_id", None)
     results = await provider.search_instruments(query)
-
-    # If US instruments match, append
-    if settings.MARKET_DATA_MODE == "US_ALPACA_PAPER":
-        us_matches = await alpaca_adapter.search_instruments(query)
-        results.extend(us_matches)
 
     return create_response_envelope(
         data={"query": query, "results": results, "count": len(results)},
@@ -114,14 +89,9 @@ async def search_market_instruments(
 async def get_instrument_quote(request: Request, symbol: str):
     """Fetch verified quote for symbol with explicit observation timestamp and freshness status."""
     cid = getattr(request.state, "correlation_id", None)
-    clean_sym = symbol.upper()
+    clean_sym = symbol.upper().replace(".NS", "").replace("NSE:", "").strip()
 
-    # Route US instruments to Alpaca if configured
-    quote: Optional[Quote] = None
-    if any(inst["symbol"] == clean_sym for inst in US_INSTRUMENT_REGISTRY):
-        quote = await alpaca_adapter.get_latest_quote(clean_sym)
-    else:
-        quote = await provider.get_latest_quote(clean_sym)
+    quote = await provider.get_latest_quote(clean_sym)
 
     if not quote:
         raise NotFoundException(
@@ -135,14 +105,15 @@ async def get_instrument_quote(request: Request, symbol: str):
 async def get_instrument_history(
     request: Request,
     symbol: str,
-    start_date: str = Query("2026-08-01", description="Start date YYYY-MM-DD"),
-    end_date: str = Query("2026-10-16", description="End date YYYY-MM-DD"),
+    start_date: str = Query("2025-10-18", description="Start date YYYY-MM-DD"),
+    end_date: str = Query("2026-10-18", description="End date YYYY-MM-DD"),
     interval: str = Query("1D", description="Candle interval e.g. 1m, 5m, 15m, 1h, 1D, 1W, 1M"),
+    range: Optional[str] = Query(None, description="Preset range: 1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, max"),
     as_of: Optional[str] = Query(None, description="Simulated replay clock ISO timestamp"),
 ):
     """Fetch historical price bars, constrained by date range, resolution, and optional as_of replay clock."""
     cid = getattr(request.state, "correlation_id", None)
-    clean_sym = symbol.upper()
+    clean_sym = symbol.upper().replace(".NS", "").replace("NSE:", "").strip()
 
     as_of_dt: Optional[datetime] = None
     if as_of:
@@ -154,16 +125,14 @@ async def get_instrument_history(
                 detail=f"Invalid as_of timestamp format: '{as_of}'. Expected ISO 8601 string.",
             )
 
-    # Route US instruments to Alpaca adapter if appropriate
-    bars: List[HistoricalBar] = []
-    if any(inst["symbol"] == clean_sym for inst in US_INSTRUMENT_REGISTRY):
-        bars = await alpaca_adapter.get_historical_bars(
-            clean_sym, start_date=start_date, end_date=end_date, interval=interval, as_of=as_of_dt
-        )
-    else:
-        bars = await provider.get_historical_bars(
-            clean_sym, start_date=start_date, end_date=end_date, interval=interval, as_of=as_of_dt
-        )
+    bars = await provider.get_historical_bars(
+        clean_sym,
+        start_date=start_date,
+        end_date=end_date,
+        interval=interval,
+        range_param=range,
+        as_of=as_of_dt,
+    )
 
     if not bars:
         raise NotFoundException(
@@ -174,6 +143,7 @@ async def get_instrument_history(
         data={
             "symbol": clean_sym,
             "interval": interval,
+            "range": range,
             "start_date": start_date,
             "end_date": end_date,
             "as_of": as_of_dt.isoformat() if as_of_dt else None,
@@ -190,9 +160,10 @@ async def get_instrument_indicators(
     symbol: str,
     indicator: str = Query(..., description="Indicator type: SMA, EMA, BB, RSI, MACD, VWAP"),
     period: int = Query(20, ge=2, le=200, description="Window period for SMA, EMA, BB, RSI"),
-    start_date: str = Query("2026-08-01", description="Start date YYYY-MM-DD"),
-    end_date: str = Query("2026-10-16", description="End date YYYY-MM-DD"),
+    start_date: str = Query("2025-10-18", description="Start date YYYY-MM-DD"),
+    end_date: str = Query("2026-10-18", description="End date YYYY-MM-DD"),
     interval: str = Query("1D", description="Candle interval"),
+    range: Optional[str] = Query(None, description="Preset range: 1mo, 6mo, 1y, 5y"),
     as_of: Optional[str] = Query(None, description="Simulated replay clock ISO timestamp"),
 ):
     """Compute verified deterministic technical indicators over genuine historical price bars."""
@@ -208,7 +179,12 @@ async def get_instrument_indicators(
             pass
 
     bars: List[HistoricalBar] = await provider.get_historical_bars(
-        clean_sym, start_date=start_date, end_date=end_date, interval=interval, as_of=as_of_dt
+        clean_sym,
+        start_date=start_date,
+        end_date=end_date,
+        interval=interval,
+        range_param=range,
+        as_of=as_of_dt,
     )
 
     if not bars:
