@@ -19,6 +19,7 @@ from backend.app.domain.ai_orchestration import AIIntent, AIOrchestrator
 from backend.app.ports.market_data import Quote
 
 
+@pytest.mark.live
 @pytest.mark.asyncio
 async def test_live_external_market_ingestion_with_source_evidence():
     """Demonstrate external market ingestion with real source evidence and hash verification."""

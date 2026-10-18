@@ -17,11 +17,16 @@ from backend.app.database import AsyncSessionLocal
 from backend.app.domain.goal_engine import _CONTRIBUTIONS_STORE, _GOALS_STORE, _PROJECTIONS_STORE
 from backend.app.domain.spending_service import _PREVIEWS_STORE, _TRANSACTIONS_STORE, _UPLOADS_STORE
 from backend.app.factory import create_app
+from backend.app.models.core import User
 from backend.app.models.goals import FinancialGoal, GoalContribution
-from backend.app.models.spending import Transaction, TransactionUpload
+from backend.app.models.market import Watchlist
+from backend.app.models.rag import AIConversation
+from backend.app.models.spending import Transaction, TransactionPreview, TransactionUpload
+from backend.app.routers.ai_chat import _CONVERSATION_STORE, _MESSAGE_STORE
 from backend.app.routers.auth import create_access_token
+from backend.app.routers.watchlists import _WATCHLIST_STORE
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 
 
 @pytest.fixture
@@ -47,12 +52,27 @@ def clean_test_tenants():
     async def _cleanup():
         async with AsyncSessionLocal() as session:
             for u in ["usr-tenant-a", "usr-tenant-b", "usr-concurrent-test"]:
-                # Clean transactions & uploads
+                # Clean transactions & uploads & previews
                 await session.execute(delete(Transaction).where(Transaction.user_id == u))
                 await session.execute(delete(TransactionUpload).where(TransactionUpload.user_id == u))
+                await session.execute(delete(TransactionPreview).where(TransactionPreview.user_id == u))
                 # Clean contributions & goals
                 await session.execute(delete(GoalContribution).where(GoalContribution.user_id == u))
                 await session.execute(delete(FinancialGoal).where(FinancialGoal.user_id == u))
+                # Clean watchlists
+                await session.execute(delete(Watchlist).where(Watchlist.user_id == u))
+                # Clean AI conversations
+                await session.execute(delete(AIConversation).where(AIConversation.user_id == u))
+
+            test_users = [
+                ("usr-tenant-a", "user_a@finex.internal", "User Alpha"),
+                ("usr-tenant-b", "user_b@finex.internal", "User Beta"),
+                ("usr-concurrent-test", "concurrent@finex.internal", "Concurrent Tester"),
+            ]
+            for uid, uemail, _uname in test_users:
+                u_res = await session.execute(select(User).where(User.id == uid))
+                if not u_res.scalars().first():
+                    session.add(User(id=uid, email=uemail, provider="local", provider_subject=uid))
             await session.commit()
 
     _GOALS_STORE.clear()
@@ -61,6 +81,9 @@ def clean_test_tenants():
     _UPLOADS_STORE.clear()
     _TRANSACTIONS_STORE.clear()
     _PREVIEWS_STORE.clear()
+    _WATCHLIST_STORE.clear()
+    _CONVERSATION_STORE.clear()
+    _MESSAGE_STORE.clear()
 
     asyncio.run(_cleanup())
     yield
@@ -361,3 +384,196 @@ async def test_multi_tenant_user_isolation(auth_headers_user_a, auth_headers_use
         assert user_b_sum.status_code == 200
         assert user_b_sum.json()["data"]["total_debit"] == 0.0
         assert user_b_sum.json()["data"]["total_credit"] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_uncommitted_preview_survives_process_restart(auth_headers_user_a):
+    """Confirm an uncommitted CSV preview survives process restart and can be committed by worker 2."""
+    app_worker_1 = create_app()
+    sample_csv = (
+        "Date,Amount,Description,Type\n"
+        "2026-10-14,3500.00,Flight Ticket to Mumbai,DEBIT\n"
+        "2026-10-15,1200.00,Airport Hotel Booking,DEBIT\n"
+    )
+
+    preview_id = None
+    async with AsyncClient(transport=ASGITransport(app=app_worker_1), base_url="http://test") as client_1:
+        prev_res = await client_1.post(
+            "/api/v1/spending/upload/preview",
+            json={"file_name": "travel_expenses.csv", "csv_content": sample_csv},
+            headers=auth_headers_user_a,
+        )
+        assert prev_res.status_code == 200
+        preview_data = prev_res.json()["data"]
+        assert preview_data["status"] in ("PENDING", "PENDING_REVIEW")
+        preview_id = preview_data["preview_id"]
+
+    # --- SIMULATE BACKEND RESTART ---
+    _PREVIEWS_STORE.clear()
+    _UPLOADS_STORE.clear()
+    _TRANSACTIONS_STORE.clear()
+
+    # Worker 2: Brand new backend instance connected to the same operational DB
+    app_worker_2 = create_app()
+    async with AsyncClient(transport=ASGITransport(app=app_worker_2), base_url="http://test") as client_2:
+        commit_res = await client_2.post(
+            "/api/v1/spending/upload/commit",
+            json={"preview_id": preview_id},
+            headers=auth_headers_user_a,
+        )
+        assert commit_res.status_code == 200
+        commit_data = commit_res.json()["data"]
+        assert commit_data["status"] == "COMMITTED"
+        assert commit_data["accepted_count"] == 2
+
+        # Verify transactions were persisted into database
+        tx_res = await client_2.get("/api/v1/spending/transactions", headers=auth_headers_user_a)
+        assert tx_res.status_code == 200
+        txs = tx_res.json()["data"]["transactions"]
+        assert len(txs) == 2
+
+
+@pytest.mark.asyncio
+async def test_concurrent_commit_attempts_with_asyncio_gather():
+    """Exercise genuine concurrent commit attempts against the same preview via asyncio.gather."""
+    app = create_app()
+    token = create_access_token("usr-concurrent-test", "concurrent@finex.internal", "Concurrent Tester")
+    headers = {"Authorization": f"Bearer {token}", "X-Correlation-ID": "corr-gather-concurrent"}
+
+    sample_csv = (
+        "Date,Amount,Description,Type\n"
+        "2026-10-01,750.00,Electricity Bill,DEBIT\n"
+        "2026-10-02,300.00,Water Utility,DEBIT\n"
+    )
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # Create preview
+        prev_res = await client.post(
+            "/api/v1/spending/upload/preview",
+            json={"file_name": "utilities.csv", "csv_content": sample_csv},
+            headers=headers,
+        )
+        assert prev_res.status_code == 200
+        preview_id = prev_res.json()["data"]["preview_id"]
+
+        # Concurrently submit two commit requests for the same preview
+        task1 = client.post("/api/v1/spending/upload/commit", json={"preview_id": preview_id}, headers=headers)
+        task2 = client.post("/api/v1/spending/upload/commit", json={"preview_id": preview_id}, headers=headers)
+
+        res1, res2 = await asyncio.gather(task1, task2)
+
+        assert res1.status_code == 200
+        assert res2.status_code == 200
+        assert res1.json()["data"]["status"] == "COMMITTED"
+        assert res2.json()["data"]["status"] == "COMMITTED"
+
+        # Exactly one was the primary commit and the second was safely detected as already committed / replayed
+        replayed_count = sum([res1.json()["data"].get("replayed", False), res2.json()["data"].get("replayed", False)])
+        assert replayed_count >= 1
+
+        # Confirm exactly 2 transactions exist in DB (no duplication race conditions)
+        tx_res = await client.get("/api/v1/spending/transactions", headers=headers)
+        assert tx_res.status_code == 200
+        assert tx_res.json()["data"]["total"] == 2
+
+
+@pytest.mark.asyncio
+async def test_user_b_cannot_commit_user_a_preview(auth_headers_user_a, auth_headers_user_b):
+    """Verify that User B cannot commit or access an uncommitted preview owned by User A."""
+    app = create_app()
+    sample_csv = "Date,Amount,Description,Type\n2026-10-05,999.00,Confidential A,DEBIT\n"
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # User A creates preview
+        prev_res = await client.post(
+            "/api/v1/spending/upload/preview",
+            json={"file_name": "confidential_a.csv", "csv_content": sample_csv},
+            headers=auth_headers_user_a,
+        )
+        assert prev_res.status_code == 200
+        preview_id_a = prev_res.json()["data"]["preview_id"]
+
+        # User B attempts to commit User A's preview
+        b_commit = await client.post(
+            "/api/v1/spending/upload/commit",
+            json={"preview_id": preview_id_a},
+            headers=auth_headers_user_b,
+        )
+        assert b_commit.status_code == 404, "User B must not be permitted to commit User A's preview"
+
+
+@pytest.mark.asyncio
+async def test_watchlists_and_chat_survive_process_restart(auth_headers_user_a):
+    """Verify that watchlists, pinned items, and AI chat sessions survive backend process restart."""
+    # Worker 1
+    app_worker_1 = create_app()
+    wl_id = None
+    conv_id = None
+
+    async with AsyncClient(transport=ASGITransport(app=app_worker_1), base_url="http://test") as client_1:
+        # Create custom watchlist
+        wl_res = await client_1.post(
+            "/api/v1/watchlists",
+            json={"name": "Energy & Infra Growth"},
+            headers=auth_headers_user_a,
+        )
+        assert wl_res.status_code == 200
+        wl_id = wl_res.json()["data"]["id"]
+
+        # Add symbol to watchlist
+        add_res = await client_1.post(
+            f"/api/v1/watchlists/{wl_id}/items",
+            json={"symbol": "TATAMOTORS"},
+            headers=auth_headers_user_a,
+        )
+        assert add_res.status_code == 200
+        assert "TATAMOTORS" in add_res.json()["data"]["items"]
+
+        # Create AI Conversation
+        conv_res = await client_1.post(
+            "/api/v1/ai/conversations",
+            json={"title": "SIP vs Lump Sum Research"},
+            headers=auth_headers_user_a,
+        )
+        assert conv_res.status_code == 200
+        conv_id = conv_res.json()["data"]["id"]
+
+        # Post message to conversation
+        msg_res = await client_1.post(
+            f"/api/v1/ai/conversations/{conv_id}/messages",
+            json={"content": "What is the compounding benefit of a monthly SIP over 10 years?"},
+            headers=auth_headers_user_a,
+        )
+        assert msg_res.status_code == 200
+        assert msg_res.json()["data"]["user_message"]["content"] is not None
+
+    # --- SIMULATE PROCESS RESTART ---
+    _WATCHLIST_STORE.clear()
+    _CONVERSATION_STORE.clear()
+    _MESSAGE_STORE.clear()
+
+    # Worker 2: Connected to the same operational database
+    app_worker_2 = create_app()
+    async with AsyncClient(transport=ASGITransport(app=app_worker_2), base_url="http://test") as client_2:
+        # Verify Watchlist survived
+        get_wl_res = await client_2.get("/api/v1/watchlists", headers=auth_headers_user_a)
+        assert get_wl_res.status_code == 200
+        wls = get_wl_res.json()["data"]["watchlists"]
+        custom_wl = next((w for w in wls if w["id"] == wl_id or w["name"] == "Energy & Infra Growth"), None)
+        assert custom_wl is not None
+        assert "TATAMOTORS" in custom_wl["items"]
+
+        # Verify AI Conversation and Messages survived
+        conv_list_res = await client_2.get("/api/v1/ai/conversations", headers=auth_headers_user_a)
+        assert conv_list_res.status_code == 200
+        convs = conv_list_res.json()["data"]["conversations"]
+        saved_conv = next((c for c in convs if c["id"] == conv_id), None)
+        assert saved_conv is not None
+        assert saved_conv["title"] == "SIP vs Lump Sum Research"
+
+        # Verify messages in conversation
+        msg_list_res = await client_2.get(f"/api/v1/ai/conversations/{conv_id}/messages", headers=auth_headers_user_a)
+        assert msg_list_res.status_code == 200
+        msgs = msg_list_res.json()["data"]["messages"]
+        assert len(msgs) >= 2  # User message and assistant response
+

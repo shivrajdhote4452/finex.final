@@ -569,7 +569,7 @@ class RealMarketDataProvider(AbstractMarketDataProvider):
     def __init__(
         self,
         force_cache: bool = False,
-        allow_fixture_fallback: bool = True,
+        allow_fixture_fallback: bool = False,
         request_timeout_sec: float = 4.0,
     ) -> None:
         self.force_cache = force_cache

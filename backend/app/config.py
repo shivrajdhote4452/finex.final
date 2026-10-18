@@ -48,6 +48,9 @@ class Settings(BaseSettings):
 
     # Provider Toggles
     MARKET_DATA_PROVIDER: str = "yfinance"
+    MARKET_ALLOW_FIXTURES: bool = Field(
+        default=False, description="Allow fallback to static fixtures only in test/demo environments"
+    )
     LLM_PROVIDER: str = "mock"
     OPENAI_API_KEY: Optional[str] = None
 

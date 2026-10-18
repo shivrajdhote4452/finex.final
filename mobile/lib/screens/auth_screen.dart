@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import '../services/api_client.dart';
 import '../theme/terminal_theme.dart';
 
@@ -15,7 +17,24 @@ class _MobileAuthScreenState extends State<MobileAuthScreen> {
   bool _isLoading = false;
   String? _errorMessage;
 
+  static const String _googleServerClientId = String.fromEnvironment(
+    'GOOGLE_SERVER_CLIENT_ID',
+    defaultValue: '',
+  );
+
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    scopes: ['email', 'profile'],
+    serverClientId: _googleServerClientId.isNotEmpty ? _googleServerClientId : null,
+  );
+
   Future<void> _handleDevLogin() async {
+    if (!kDebugMode) {
+      setState(() {
+        _errorMessage = "Developer sandbox sign-in is disabled in production builds.";
+      });
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -43,21 +62,27 @@ class _MobileAuthScreenState extends State<MobileAuthScreen> {
     });
 
     try {
-      // Check for Google OAuth ID token from native environment
-      const nativeGoogleIdToken = String.fromEnvironment('GOOGLE_ID_TOKEN', defaultValue: '');
-      if (nativeGoogleIdToken.isNotEmpty) {
-        await apiClient.loginWithGoogle(nativeGoogleIdToken);
-        if (mounted) {
-          widget.onAuthenticated();
-        }
+      // Trigger native Google Account selection flow
+      final GoogleSignInAccount? account = await _googleSignIn.signIn();
+      if (account == null) {
+        // User aborted the account chooser dialog
+        if (mounted) setState(() => _isLoading = false);
         return;
       }
 
-      // If native Google Play Services credentials are not configured, guide the user
-      throw Exception(
-        "Google Sign-In requires native platform credentials (google-services.json on Android / GoogleService-Info.plist on iOS). "
-        "For simulated sandbox evaluation, please use 'DEVELOPER SANDBOX SIGN-IN'.",
-      );
+      final GoogleSignInAuthentication auth = await account.authentication;
+      final String? idToken = auth.idToken;
+
+      if (idToken == null || idToken.isEmpty) {
+        throw Exception(
+          "Google authentication succeeded but no ID token was returned. Verify client configuration.",
+        );
+      }
+
+      await apiClient.loginWithGoogle(idToken);
+      if (mounted) {
+        widget.onAuthenticated();
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -148,23 +173,25 @@ class _MobileAuthScreenState extends State<MobileAuthScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 44,
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: TerminalColors.textMain,
-                        side: const BorderSide(color: TerminalColors.borderSubtle),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                      ),
-                      onPressed: _isLoading ? null : _handleDevLogin,
-                      child: const Text(
-                        "DEVELOPER SANDBOX SIGN-IN",
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.5),
+                  if (kDebugMode) ...[
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 44,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: TerminalColors.textMain,
+                          side: const BorderSide(color: TerminalColors.borderSubtle),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                        ),
+                        onPressed: _isLoading ? null : _handleDevLogin,
+                        child: const Text(
+                          "DEVELOPER SANDBOX SIGN-IN",
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.5),
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ],
@@ -186,8 +213,14 @@ class MobileOnboardingScreen extends StatefulWidget {
 
 class _MobileOnboardingScreenState extends State<MobileOnboardingScreen> {
   bool _consentAccepted = false;
-  String _riskAppetite = "MODERATE";
-  String _investmentHorizon = "3-5_YEARS";
+  String _investmentHorizon = "3-5";
+
+  // Server-authoritative questionnaire selections (Q1-Q4)
+  String _q1Option = "Q1_C";
+  String _q2Option = "Q2_C";
+  String _q3Option = "Q3_B";
+  String _q4Option = "Q4_D";
+
   bool _isSubmitting = false;
   String? _errorMessage;
 
@@ -211,56 +244,16 @@ class _MobileOnboardingScreenState extends State<MobileOnboardingScreen> {
         educationalDisclaimerAccepted: true,
       );
 
-      // 2. Submit risk assessment questionnaire with approved schema
-      final horizonCategory = _investmentHorizon == "LESS_THAN_1_YEAR"
-          ? "<1"
-          : _investmentHorizon == "1-3_YEARS"
-              ? "1-3"
-              : _investmentHorizon == "3-5_YEARS"
-                  ? "3-5"
-                  : ">5";
-
+      // 2. Submit server-authoritative risk answers (no fabricated client scores)
       final qAnswers = [
-        {
-          "question_id": "Q1",
-          "option_id": _riskAppetite == "CONSERVATIVE"
-              ? "Q1_A"
-              : _riskAppetite == "MODERATE"
-                  ? "Q1_C"
-                  : "Q1_D",
-          "score": _riskAppetite == "CONSERVATIVE"
-              ? 10
-              : _riskAppetite == "MODERATE"
-                  ? 70
-                  : 100,
-        },
-        {
-          "question_id": "Q2",
-          "option_id": "Q2_C",
-          "score": 75,
-        },
-        {
-          "question_id": "Q3",
-          "option_id": _riskAppetite == "CONSERVATIVE"
-              ? "Q3_A"
-              : _riskAppetite == "MODERATE"
-                  ? "Q3_B"
-                  : "Q3_C",
-          "score": _riskAppetite == "CONSERVATIVE"
-              ? 20
-              : _riskAppetite == "MODERATE"
-                  ? 60
-                  : 95,
-        },
-        {
-          "question_id": "Q4",
-          "option_id": "Q4_C",
-          "score": 70,
-        },
+        {"question_id": "Q1", "option_id": _q1Option},
+        {"question_id": "Q2", "option_id": _q2Option},
+        {"question_id": "Q3", "option_id": _q3Option},
+        {"question_id": "Q4", "option_id": _q4Option},
       ];
 
       await apiClient.submitRiskAssessment(
-        horizonCategory: horizonCategory,
+        horizonCategory: _investmentHorizon,
         answers: qAnswers,
         questionnaireVersion: "v1.0",
       );
@@ -284,7 +277,10 @@ class _MobileOnboardingScreenState extends State<MobileOnboardingScreen> {
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black,
-        title: const Text("Investor Onboarding & Consent", style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: TerminalColors.textMain)),
+        title: const Text(
+          "Investor Onboarding & Consent",
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: TerminalColors.textMain),
+        ),
         elevation: 0,
       ),
       body: SafeArea(
@@ -313,9 +309,10 @@ class _MobileOnboardingScreenState extends State<MobileOnboardingScreen> {
                 child: Text(_errorMessage!, style: const TextStyle(fontSize: 11, color: Colors.redAccent)),
               ),
 
-            // Step 1: Risk Assessment
+            // Step 1: Investment Horizon
             Container(
               padding: const EdgeInsets.all(16),
+              margin: const EdgeInsets.only(bottom: 16),
               decoration: BoxDecoration(
                 color: TerminalColors.surface,
                 borderRadius: BorderRadius.circular(6),
@@ -324,22 +321,10 @@ class _MobileOnboardingScreenState extends State<MobileOnboardingScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text("1. RISK APPETITE QUESTIONNAIRE", style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: TerminalColors.action)),
+                  const Text("INVESTMENT HORIZON", style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: TerminalColors.action)),
                   const SizedBox(height: 8),
-                  const Text("What is your virtual investment risk profile?", style: TextStyle(fontSize: 12, color: TerminalColors.textMuted)),
+                  const Text("What is your expected investment timeframe?", style: TextStyle(fontSize: 12, color: TerminalColors.textMuted)),
                   const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      _buildChoiceChip("CONSERVATIVE", "Conservative"),
-                      const SizedBox(width: 8),
-                      _buildChoiceChip("MODERATE", "Moderate"),
-                      const SizedBox(width: 8),
-                      _buildChoiceChip("AGGRESSIVE", "Aggressive"),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  const Text("Investment Horizon", style: TextStyle(fontSize: 12, color: TerminalColors.textMuted)),
-                  const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
                     initialValue: _investmentHorizon,
                     dropdownColor: TerminalColors.panel,
@@ -350,10 +335,10 @@ class _MobileOnboardingScreenState extends State<MobileOnboardingScreen> {
                       border: OutlineInputBorder(borderSide: BorderSide(color: TerminalColors.borderSubtle)),
                     ),
                     items: const [
-                      DropdownMenuItem(value: "LESS_THAN_1_YEAR", child: Text("< 1 Year")),
-                      DropdownMenuItem(value: "1-3_YEARS", child: Text("1 to 3 Years")),
-                      DropdownMenuItem(value: "3-5_YEARS", child: Text("3 to 5 Years")),
-                      DropdownMenuItem(value: "5+_YEARS", child: Text("5+ Years")),
+                      DropdownMenuItem(value: "<1", child: Text("< 1 Year (Constrained capacity)")),
+                      DropdownMenuItem(value: "1-3", child: Text("1 to 3 Years (Near-term capital protection)")),
+                      DropdownMenuItem(value: "3-5", child: Text("3 to 5 Years (Balanced market cycle window)")),
+                      DropdownMenuItem(value: ">5", child: Text("> 5 Years (Long-term compounding timeframe)")),
                     ],
                     onChanged: (val) {
                       if (val != null) setState(() => _investmentHorizon = val);
@@ -362,11 +347,70 @@ class _MobileOnboardingScreenState extends State<MobileOnboardingScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 16),
+
+            // Question 1: Willingness
+            _buildQuestionCard(
+              number: "1",
+              title: "MARKET CORRECTION BEHAVIOR",
+              prompt: "If your portfolio dropped by 15% in a broad market correction over 3 months, what would you do?",
+              options: const [
+                {"id": "Q1_A", "label": "Panic & sell all holdings"},
+                {"id": "Q1_B", "label": "Sell a portion to hold cash"},
+                {"id": "Q1_C", "label": "Do nothing & wait for recovery"},
+                {"id": "Q1_D", "label": "Buy more shares at discount"},
+              ],
+              selectedId: _q1Option,
+              onSelected: (id) => setState(() => _q1Option = id),
+            ),
+
+            // Question 2: Capacity (Emergency Reserves)
+            _buildQuestionCard(
+              number: "2",
+              title: "EMERGENCY RESERVES",
+              prompt: "How many months of basic living expenses do you hold in liquid cash/emergency reserves?",
+              options: const [
+                {"id": "Q2_A", "label": "Less than 1 month"},
+                {"id": "Q2_B", "label": "1 to 3 months"},
+                {"id": "Q2_C", "label": "3 to 6 months reserves"},
+                {"id": "Q2_D", "label": "Over 6 months secure reserves"},
+              ],
+              selectedId: _q2Option,
+              onSelected: (id) => setState(() => _q2Option = id),
+            ),
+
+            // Question 3: Willingness (Return Profile)
+            _buildQuestionCard(
+              number: "3",
+              title: "TARGET RETURN PROFILE",
+              prompt: "Which asset return profile best aligns with your primary investment goal?",
+              options: const [
+                {"id": "Q3_A", "label": "Capital preservation (5-7%)"},
+                {"id": "Q3_B", "label": "Balanced growth (9-11%)"},
+                {"id": "Q3_C", "label": "Wealth maximization (13-16%)"},
+              ],
+              selectedId: _q3Option,
+              onSelected: (id) => setState(() => _q3Option = id),
+            ),
+
+            // Question 4: Capacity (Fixed Debt Payments)
+            _buildQuestionCard(
+              number: "4",
+              title: "DEBT OBLIGATIONS (EMIs)",
+              prompt: "What proportion of your monthly take-home income is committed to fixed debt payments?",
+              options: const [
+                {"id": "Q4_A", "label": "Over 50% committed to EMIs"},
+                {"id": "Q4_B", "label": "30% to 50% committed"},
+                {"id": "Q4_C", "label": "10% to 30% committed"},
+                {"id": "Q4_D", "label": "Zero / negligible loan debt"},
+              ],
+              selectedId: _q4Option,
+              onSelected: (id) => setState(() => _q4Option = id),
+            ),
 
             // Step 2: Educational Consent Agreement
             Container(
               padding: const EdgeInsets.all(16),
+              margin: const EdgeInsets.only(bottom: 20),
               decoration: BoxDecoration(
                 color: TerminalColors.surface,
                 borderRadius: BorderRadius.circular(6),
@@ -375,7 +419,10 @@ class _MobileOnboardingScreenState extends State<MobileOnboardingScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text("2. SEBI SIMULATED TRADING CONSENT (v1.0)", style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: TerminalColors.action)),
+                  const Text(
+                    "SEBI SIMULATED TRADING CONSENT (v1.0)",
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: TerminalColors.action),
+                  ),
                   const SizedBox(height: 8),
                   const Text(
                     "FinEx is purely an educational paper-trading terminal. All cash and trades are simulated in an isolated virtual ledger without real financial routing or exchange connectivity. PII descriptions are masked server-side.",
@@ -396,7 +443,6 @@ class _MobileOnboardingScreenState extends State<MobileOnboardingScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 24),
 
             // Submit Button
             SizedBox(
@@ -421,28 +467,93 @@ class _MobileOnboardingScreenState extends State<MobileOnboardingScreen> {
     );
   }
 
-  Widget _buildChoiceChip(String value, String label) {
-    final isSelected = _riskAppetite == value;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _riskAppetite = value),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: isSelected ? TerminalColors.action : TerminalColors.panel,
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: isSelected ? TerminalColors.action : TerminalColors.borderSubtle),
+  Widget _buildQuestionCard({
+    required String number,
+    required String title,
+    required String prompt,
+    required List<Map<String, String>> options,
+    required String selectedId,
+    required ValueChanged<String> onSelected,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: TerminalColors.surface,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: TerminalColors.borderSubtle),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: TerminalColors.panel,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+                child: Text(
+                  "Q$number",
+                  style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: TerminalColors.action),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: TerminalColors.textMain),
+              ),
+            ],
           ),
-          alignment: Alignment.center,
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: isSelected ? Colors.black : TerminalColors.textMain,
-            ),
+          const SizedBox(height: 8),
+          Text(
+            prompt,
+            style: const TextStyle(fontSize: 12, color: TerminalColors.textMuted, height: 1.3),
           ),
-        ),
+          const SizedBox(height: 12),
+          Column(
+            children: options.map((opt) {
+              final isSelected = selectedId == opt["id"];
+              return GestureDetector(
+                onTap: () => onSelected(opt["id"]!),
+                child: Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: isSelected ? TerminalColors.action.withValues(alpha: 0.15) : TerminalColors.panel,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: isSelected ? TerminalColors.action : TerminalColors.borderSubtle,
+                      width: isSelected ? 1.5 : 1.0,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
+                        size: 16,
+                        color: isSelected ? TerminalColors.action : TerminalColors.textMuted,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          opt["label"]!,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                            color: isSelected ? TerminalColors.action : TerminalColors.textMain,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
       ),
     );
   }

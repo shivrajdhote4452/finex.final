@@ -20,7 +20,7 @@ class RiskBand(str, Enum):
 class RiskAnswer(BaseModel):
     question_id: str
     option_id: str
-    score: int = Field(..., ge=0, le=100)
+    score: Optional[int] = Field(None, ge=0, le=100, description="Optional client score; server catalog is authoritative")
 
 
 class AssessmentSubmission(BaseModel):
@@ -95,29 +95,55 @@ RISK_QUESTIONNAIRE_V1 = [
 
 
 def evaluate_risk_profile(submission: AssessmentSubmission) -> RiskAssessmentResult:
-    """Deterministic evaluation of investor risk profile."""
-    # Horizon multiplier
+    """Deterministic evaluation of investor risk profile with server-authoritative scoring."""
+    # 1. Validate questionnaire version
+    if submission.questionnaire_version != "v1.0":
+        raise ValueError(f"Unsupported questionnaire version '{submission.questionnaire_version}'. Expected 'v1.0'.")
+
+    # 2. Horizon multiplier
     horizon_multipliers = {
         "<1": 0.50,  # Very short: limits equity risk capacity heavily
         "1-3": 0.75,  # Short: modest equity capacity
         "3-5": 1.00,  # Medium: balanced standard baseline
         ">5": 1.15,  # Long: high compounding absorption capacity
     }
-    horizon_factor = horizon_multipliers.get(submission.horizon_category, 1.00)
+    if submission.horizon_category not in horizon_multipliers:
+        raise ValueError(
+            f"Invalid horizon_category '{submission.horizon_category}'. Must be one of {list(horizon_multipliers.keys())}."
+        )
+    horizon_factor = horizon_multipliers[submission.horizon_category]
 
-    # Separate willingness vs capacity
+    # 3. Build server option catalog mapping (question_id, option_id) -> (score, dimension)
+    option_catalog = {
+        (q["id"], opt["id"]): (opt["score"], q["dimension"])
+        for q in RISK_QUESTIONNAIRE_V1
+        for opt in q["options"]
+    }
+    required_questions = {q["id"] for q in RISK_QUESTIONNAIRE_V1}
+
+    # 4. Validate completeness and uniqueness of submitted answers
+    submitted_q_ids = [ans.question_id for ans in submission.answers]
+    if len(submitted_q_ids) != len(set(submitted_q_ids)):
+        raise ValueError("Duplicate answers detected for the same question.")
+
+    missing_questions = required_questions - set(submitted_q_ids)
+    if missing_questions:
+        raise ValueError(f"Incomplete submission. Missing answers for required questions: {sorted(missing_questions)}.")
+
+    # 5. Derive scores strictly from server catalog, ignoring or overriding client score
     willingness_scores: List[int] = []
     capacity_scores: List[int] = []
 
-    question_map = {q["id"]: q for q in RISK_QUESTIONNAIRE_V1}
-
     for ans in submission.answers:
-        q_meta = question_map.get(ans.question_id)
-        if q_meta:
-            if q_meta["dimension"] == "willingness":
-                willingness_scores.append(ans.score)
-            elif q_meta["dimension"] == "capacity":
-                capacity_scores.append(ans.score)
+        catalog_key = (ans.question_id, ans.option_id)
+        if catalog_key not in option_catalog:
+            raise ValueError(f"Invalid option '{ans.option_id}' for question '{ans.question_id}'.")
+
+        server_score, dimension = option_catalog[catalog_key]
+        if dimension == "willingness":
+            willingness_scores.append(server_score)
+        elif dimension == "capacity":
+            capacity_scores.append(server_score)
 
     avg_willingness = sum(willingness_scores) / len(willingness_scores) if willingness_scores else 50
     avg_capacity = sum(capacity_scores) / len(capacity_scores) if capacity_scores else 50

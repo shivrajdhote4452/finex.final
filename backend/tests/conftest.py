@@ -6,8 +6,16 @@ runtime mock-token backdoors.
 """
 
 import pytest
+from backend.app.config import get_settings
 from backend.app.factory import create_app
 from backend.app.routers.auth import create_access_token
+
+
+@pytest.fixture(autouse=True)
+def reset_settings_cache():
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 @pytest.fixture

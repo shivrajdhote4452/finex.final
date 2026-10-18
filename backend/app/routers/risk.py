@@ -41,7 +41,10 @@ async def submit_risk_assessment(
     Persists risk assessment to user profile in PostgreSQL if session token is provided.
     """
     cid = getattr(request.state, "correlation_id", "none")
-    result = evaluate_risk_profile(submission)
+    try:
+        result = evaluate_risk_profile(submission)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
     # If caller is authenticated, persist assessment against verified identity
     if authorization and authorization.startswith("Bearer "):

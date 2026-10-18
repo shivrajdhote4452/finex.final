@@ -2,6 +2,9 @@
 testpaths = ["backend/tests"]
 asyncio_mode = "auto"
 pythonpath = ["."]
+markers = [
+    "live: marks tests as requiring external live network access",
+]
 
 [tool.ruff]
 line-length = 120

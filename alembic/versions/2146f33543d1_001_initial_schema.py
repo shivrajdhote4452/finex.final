@@ -7,9 +7,10 @@ Create Date: 2026-10-16 22:02:37.969925
 
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "2146f33543d1"
@@ -122,6 +123,7 @@ def upgrade() -> None:
         "securities",
         sa.Column("id", uuid_type, primary_key=True),
         sa.Column("symbol", sa.String(20), nullable=False, unique=True),
+        sa.Column("canonical_id", sa.String(70), nullable=True, unique=True),
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column("isin", sa.String(12), nullable=True, unique=True),
         sa.Column("exchange", sa.String(10), nullable=False, server_default="NSE"),
@@ -139,38 +141,55 @@ def upgrade() -> None:
         "market_price_history",
         sa.Column("id", uuid_type, primary_key=True),
         sa.Column("security_id", uuid_type, sa.ForeignKey("securities.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("price_date", sa.Date(), nullable=False),
-        sa.Column("open_price", sa.Numeric(14, 2), nullable=False),
-        sa.Column("high_price", sa.Numeric(14, 2), nullable=False),
-        sa.Column("low_price", sa.Numeric(14, 2), nullable=False),
-        sa.Column("close_price", sa.Numeric(14, 2), nullable=False),
-        sa.Column("adjusted_close", sa.Numeric(14, 2), nullable=False),
-        sa.Column("volume", sa.Numeric(18, 0), nullable=False),
-        sa.Column("data_source", sa.String(50), nullable=False, server_default="nse"),
+        sa.Column("price_date", sa.Date(), nullable=True),
+        sa.Column("trade_date", sa.Date(), nullable=False),
+        sa.Column("open_price", sa.Numeric(14, 4), nullable=False),
+        sa.Column("high_price", sa.Numeric(14, 4), nullable=False),
+        sa.Column("low_price", sa.Numeric(14, 4), nullable=False),
+        sa.Column("close_price", sa.Numeric(14, 4), nullable=False),
+        sa.Column("adjusted_close", sa.Numeric(14, 4), nullable=True),
+        sa.Column("adj_close_price", sa.Numeric(14, 4), nullable=False),
+        sa.Column("volume", sa.BigInteger(), nullable=False),
+        sa.Column("data_source", sa.String(50), nullable=True, server_default="nse"),
+        sa.Column("source", sa.String(50), nullable=False, server_default="NSE_EOD"),
+        sa.Column("currency", sa.String(3), nullable=False, server_default="INR"),
         sa.Column("is_interpolated", sa.Boolean(), nullable=False, server_default=sa.false()),
+        sa.Column("ingested_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.UniqueConstraint("security_id", "price_date", name="uq_security_price_date"),
+        sa.UniqueConstraint("security_id", "trade_date", "source", name="uq_price_history_natural_key"),
     )
     op.create_index("ix_market_price_history_security_id", "market_price_history", ["security_id"])
-    op.create_index("ix_market_price_history_price_date", "market_price_history", ["price_date"])
+    op.create_index("ix_market_price_history_trade_date", "market_price_history", ["trade_date"])
 
     # 9. market_quotes
     op.create_table(
         "market_quotes",
         sa.Column("id", uuid_type, primary_key=True),
-        sa.Column("symbol", sa.String(20), nullable=False, unique=True),
-        sa.Column("last_price", sa.Numeric(14, 2), nullable=False),
-        sa.Column("change_amount", sa.Numeric(14, 2), nullable=True),
-        sa.Column("change_percentage", sa.Numeric(6, 2), nullable=True),
-        sa.Column("open_price", sa.Numeric(14, 2), nullable=True),
-        sa.Column("high_price", sa.Numeric(14, 2), nullable=True),
-        sa.Column("low_price", sa.Numeric(14, 2), nullable=True),
-        sa.Column("volume", sa.Numeric(18, 0), nullable=True),
-        sa.Column("quote_timestamp", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("security_id", uuid_type, sa.ForeignKey("securities.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("symbol", sa.String(20), nullable=True),
+        sa.Column("price", sa.Numeric(14, 4), nullable=False),
+        sa.Column("last_price", sa.Numeric(14, 4), nullable=True),
+        sa.Column("change", sa.Numeric(14, 4), nullable=False, server_default="0.0000"),
+        sa.Column("change_amount", sa.Numeric(14, 4), nullable=True),
+        sa.Column("change_pct", sa.Numeric(8, 4), nullable=False, server_default="0.0000"),
+        sa.Column("change_percentage", sa.Numeric(8, 4), nullable=True),
+        sa.Column("previous_close", sa.Numeric(14, 4), nullable=False),
+        sa.Column("open_price", sa.Numeric(14, 4), nullable=True),
+        sa.Column("high_price", sa.Numeric(14, 4), nullable=True),
+        sa.Column("low_price", sa.Numeric(14, 4), nullable=True),
+        sa.Column("volume", sa.BigInteger(), nullable=True),
+        sa.Column("currency", sa.String(3), nullable=False, server_default="INR"),
+        sa.Column("observed_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("quote_timestamp", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("freshness_status", sa.String(20), nullable=False, server_default="LIVE"),
+        sa.Column("served_from_cache", sa.Boolean(), nullable=False, server_default=sa.false()),
+        sa.Column("is_delayed", sa.Boolean(), nullable=False, server_default=sa.false()),
+        sa.Column("ingested_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("source", sa.String(50), nullable=False, server_default="nse_realtime"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     )
-    op.create_index("ix_market_quotes_symbol", "market_quotes", ["symbol"])
+    op.create_index("ix_market_quotes_security_id", "market_quotes", ["security_id"])
+    op.create_index("ix_market_quotes_observed_at", "market_quotes", ["observed_at"])
 
     # 10. watchlists
     op.create_table(
@@ -220,12 +239,20 @@ def upgrade() -> None:
         sa.Column("id", uuid_type, primary_key=True),
         sa.Column("rule_id", uuid_type, sa.ForeignKey("alert_rules.id", ondelete="CASCADE"), nullable=False),
         sa.Column("user_id", sa.String(64), nullable=False),
-        sa.Column("event_payload", json_type, nullable=False),
-        sa.Column("triggered_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("event_type", sa.String(32), nullable=False, server_default="PRICE_ALERT"),
+        sa.Column("symbol", sa.String(20), nullable=True),
+        sa.Column("triggered_value", sa.Numeric(14, 4), nullable=False, server_default="0.0000"),
+        sa.Column("threshold_value", sa.Numeric(14, 4), nullable=False, server_default="0.0000"),
+        sa.Column("title", sa.String(255), nullable=False, server_default="Alert Triggered"),
+        sa.Column("message", sa.Text(), nullable=False, server_default=""),
+        sa.Column("dedupe_key", sa.String(128), nullable=True, unique=True),
+        sa.Column("event_payload", json_type, nullable=True),
+        sa.Column("triggered_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     )
     op.create_index("ix_alert_events_user_id", "alert_events", ["user_id"])
     op.create_index("ix_alert_events_rule_id", "alert_events", ["rule_id"])
+    op.create_index("ix_alert_events_dedupe_key", "alert_events", ["dedupe_key"])
 
     # 14. notifications
     op.create_table(
@@ -282,12 +309,14 @@ def upgrade() -> None:
         "goal_contributions",
         sa.Column("id", uuid_type, primary_key=True),
         sa.Column("goal_id", uuid_type, sa.ForeignKey("financial_goals.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("user_id", sa.String(64), nullable=False),
         sa.Column("amount", sa.Numeric(14, 2), nullable=False),
         sa.Column("contribution_date", sa.Date(), nullable=False),
         sa.Column("notes", sa.String(255), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     )
     op.create_index("ix_goal_contributions_goal_id", "goal_contributions", ["goal_id"])
+    op.create_index("ix_goal_contributions_user_id", "goal_contributions", ["user_id"])
     op.create_index("ix_goal_contributions_contribution_date", "goal_contributions", ["contribution_date"])
 
     # 18. goal_projections
@@ -295,14 +324,23 @@ def upgrade() -> None:
         "goal_projections",
         sa.Column("id", uuid_type, primary_key=True),
         sa.Column("goal_id", uuid_type, sa.ForeignKey("financial_goals.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("user_id", sa.String(64), nullable=False, server_default="usr-shivraj-001"),
         sa.Column("projection_date", sa.Date(), nullable=False),
-        sa.Column("projected_future_value", sa.Numeric(14, 2), nullable=False),
-        sa.Column("required_monthly_savings", sa.Numeric(14, 2), nullable=False),
-        sa.Column("months_remaining", sa.Integer(), nullable=False),
-        sa.Column("assumptions_version", sa.String(32), nullable=False),
-        sa.Column("calculated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("projected_amount", sa.Numeric(14, 2), nullable=False, server_default="0.00"),
+        sa.Column("projected_future_value", sa.Numeric(14, 2), nullable=True),
+        sa.Column("shortfall_surplus", sa.Numeric(14, 2), nullable=False, server_default="0.00"),
+        sa.Column("confidence_interval_low", sa.Numeric(14, 2), nullable=False, server_default="0.00"),
+        sa.Column("confidence_interval_high", sa.Numeric(14, 2), nullable=False, server_default="0.00"),
+        sa.Column("required_monthly_savings", sa.Numeric(14, 2), nullable=True),
+        sa.Column("months_remaining", sa.Integer(), nullable=True),
+        sa.Column("formula_version", sa.String(16), nullable=False, server_default="v1.0"),
+        sa.Column("assumptions_version", sa.String(32), nullable=True),
+        sa.Column("assumptions_payload", json_type, nullable=False, server_default="{}"),
+        sa.Column("calculated_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     )
     op.create_index("ix_goal_projections_goal_id", "goal_projections", ["goal_id"])
+    op.create_index("ix_goal_projections_user_id", "goal_projections", ["user_id"])
 
     # 19. transaction_uploads (initial baseline without unique constraint added in 002)
     op.create_table(
@@ -375,8 +413,9 @@ def upgrade() -> None:
         "paper_accounts",
         sa.Column("id", sa.String(64), primary_key=True),
         sa.Column("user_id", sa.String(64), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True),
-        sa.Column("account_number", sa.String(32), nullable=False, unique=True),
+        sa.Column("account_number", sa.String(32), nullable=False, server_default="ACC-DEFAULT", unique=True),
         sa.Column("currency", sa.String(3), nullable=False, server_default="INR"),
+        sa.Column("status", sa.String(20), nullable=False, server_default="ACTIVE"),
         sa.Column("cash_balance", sa.Numeric(14, 2), nullable=False, server_default="100000.00"),
         sa.Column("current_cash", sa.Numeric(14, 2), nullable=False, server_default="100000.00"),
         sa.Column("initial_balance", sa.Numeric(14, 2), nullable=False, server_default="100000.00"),
@@ -456,6 +495,7 @@ def upgrade() -> None:
         sa.Column("id", sa.String(64), primary_key=True),
         sa.Column("user_id", sa.String(64), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
         sa.Column("title", sa.String(255), nullable=False),
+        sa.Column("is_deleted", sa.Boolean(), nullable=True, server_default=sa.false()),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
     )
@@ -494,39 +534,66 @@ def upgrade() -> None:
     # 31. document_registry
     op.create_table(
         "document_registry",
-        sa.Column("id", uuid_type, primary_key=True),
-        sa.Column("document_id", sa.String(64), nullable=False, unique=True),
+        sa.Column("id", sa.String(64), primary_key=True),
+        sa.Column("document_id", sa.String(64), nullable=True),
         sa.Column("title", sa.String(255), nullable=False),
+        sa.Column("doc_type", sa.String(50), nullable=False, server_default="REGULATION"),
         sa.Column("publisher", sa.String(128), nullable=False),
-        sa.Column("source_url", sa.String(512), nullable=False),
+        sa.Column("publishing_date", sa.Date(), nullable=False, server_default=sa.func.current_date()),
         sa.Column("published_date", sa.Date(), nullable=True),
-        sa.Column("retrieval_timestamp", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("content_hash_sha256", sa.String(64), nullable=False),
+        sa.Column("reporting_period", sa.String(50), nullable=True),
+        sa.Column("security_symbol", sa.String(20), nullable=True),
+        sa.Column("isin", sa.String(20), nullable=True),
+        sa.Column("source_url", sa.String(512), nullable=True),
+        sa.Column("content_hash", sa.String(64), nullable=False, server_default="sha256-pending"),
+        sa.Column("content_hash_sha256", sa.String(64), nullable=True),
+        sa.Column("retrieval_timestamp", sa.DateTime(timezone=True), nullable=True),
         sa.Column("chunk_count", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column("status", sa.String(20), nullable=False, server_default="ACTIVE"),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     )
-    op.create_index("ix_document_registry_document_id", "document_registry", ["document_id"])
+    op.create_index("ix_document_registry_title", "document_registry", ["title"])
 
     # 32. document_chunks
     op.create_table(
         "document_chunks",
-        sa.Column("id", uuid_type, primary_key=True),
-        sa.Column("document_id", uuid_type, sa.ForeignKey("document_registry.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("id", sa.String(64), primary_key=True),
+        sa.Column("document_id", sa.String(64), sa.ForeignKey("document_registry.id", ondelete="CASCADE"), nullable=False),
         sa.Column("chunk_index", sa.Integer(), nullable=False),
-        sa.Column("page_number", sa.Integer(), nullable=True),
+        sa.Column("content", sa.Text(), nullable=False, server_default=""),
+        sa.Column("chunk_text", sa.Text(), nullable=True),
         sa.Column("section_title", sa.String(255), nullable=True),
-        sa.Column("chunk_text", sa.Text(), nullable=False),
-        sa.Column("token_count", sa.Integer(), nullable=False),
+        sa.Column("page_number", sa.Integer(), nullable=True),
+        sa.Column("word_count", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column("token_count", sa.Integer(), nullable=True),
+        sa.Column("embedding_vector", json_type, nullable=True),
         sa.Column("embedding_vector_id", sa.String(128), nullable=True),
         sa.Column("metadata", json_type, nullable=True),
+        sa.Column("status", sa.String(20), nullable=False, server_default="ACTIVE"),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.UniqueConstraint("document_id", "chunk_index", name="uq_doc_chunk"),
     )
     op.create_index("ix_document_chunks_document_id", "document_chunks", ["document_id"])
+
+    # 33. retrieval_events
+    op.create_table(
+        "retrieval_events",
+        sa.Column("id", sa.String(64), primary_key=True),
+        sa.Column("correlation_id", sa.String(64), nullable=False),
+        sa.Column("conversation_id", sa.String(64), nullable=True),
+        sa.Column("query_text", sa.Text(), nullable=False),
+        sa.Column("filter_metadata", json_type, nullable=True),
+        sa.Column("top_k", sa.Integer(), nullable=False),
+        sa.Column("retrieved_chunk_ids", json_type, nullable=True),
+        sa.Column("latency_ms", sa.Float(), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
+    )
 
 
 def downgrade() -> None:
     for tbl in [
+        "retrieval_events",
         "document_chunks",
         "document_registry",
         "ai_feedback",

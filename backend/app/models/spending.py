@@ -102,3 +102,22 @@ class MonthlySpendingSummary(Base):
     savings_rate_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False, default=Decimal("0.00"))
     category_breakdown: Mapped[Dict[str, Any]] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+
+
+class TransactionPreview(Base):
+    """Durable preview storage for uncommitted CSV uploads across restarts and workers."""
+
+    __tablename__ = "transaction_previews"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_hash_sha256: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    total_rows: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    valid_rows: Mapped[List[Dict[str, Any]]] = mapped_column(JSONB, nullable=False)
+    duplicate_rows: Mapped[List[Dict[str, Any]]] = mapped_column(JSONB, nullable=False)
+    invalid_rows: Mapped[List[Dict[str, Any]]] = mapped_column(JSONB, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="PENDING")
+    committed_upload_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

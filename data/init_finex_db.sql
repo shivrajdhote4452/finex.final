@@ -74,12 +74,11 @@ CREATE INDEX IF NOT EXISTS ix_user_audit_logs_user_id ON user_audit_logs(user_id
 
 CREATE TABLE IF NOT EXISTS revoked_tokens (
     id VARCHAR(64) PRIMARY KEY,
-    jti VARCHAR(255) NOT NULL UNIQUE,
-    user_id VARCHAR(64) NOT NULL,
-    expires_at TIMESTAMPTZ NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+    token VARCHAR(512) NOT NULL UNIQUE,
+    user_id VARCHAR(64) REFERENCES users(id) ON DELETE CASCADE,
+    revoked_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
 );
-CREATE INDEX IF NOT EXISTS ix_revoked_tokens_jti ON revoked_tokens(jti);
+CREATE INDEX IF NOT EXISTS ix_revoked_tokens_token ON revoked_tokens(token);
 CREATE INDEX IF NOT EXISTS ix_revoked_tokens_user_id ON revoked_tokens(user_id);
 
 -- ============================================================================
@@ -292,24 +291,35 @@ CREATE INDEX IF NOT EXISTS ix_financial_goals_user_id ON financial_goals(user_id
 CREATE TABLE IF NOT EXISTS goal_contributions (
     id VARCHAR(64) PRIMARY KEY,
     goal_id VARCHAR(64) NOT NULL REFERENCES financial_goals(id) ON DELETE CASCADE,
+    user_id VARCHAR(64) NOT NULL,
     amount NUMERIC(14, 2) NOT NULL,
     contribution_date DATE NOT NULL,
     notes VARCHAR(255),
     created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
 );
 CREATE INDEX IF NOT EXISTS ix_goal_contributions_goal_id ON goal_contributions(goal_id);
+CREATE INDEX IF NOT EXISTS ix_goal_contributions_user_id ON goal_contributions(user_id);
 
 CREATE TABLE IF NOT EXISTS goal_projections (
     id VARCHAR(64) PRIMARY KEY,
     goal_id VARCHAR(64) NOT NULL REFERENCES financial_goals(id) ON DELETE CASCADE,
+    user_id VARCHAR(64) NOT NULL DEFAULT 'usr-shivraj-001',
     projection_date DATE NOT NULL,
-    projected_future_value NUMERIC(14, 2) NOT NULL,
-    required_monthly_savings NUMERIC(14, 2) NOT NULL,
-    months_remaining INTEGER NOT NULL,
-    assumptions_version VARCHAR(32) NOT NULL,
-    calculated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+    projected_amount NUMERIC(14, 2) NOT NULL DEFAULT 0.00,
+    projected_future_value NUMERIC(14, 2),
+    shortfall_surplus NUMERIC(14, 2) NOT NULL DEFAULT 0.00,
+    confidence_interval_low NUMERIC(14, 2) NOT NULL DEFAULT 0.00,
+    confidence_interval_high NUMERIC(14, 2) NOT NULL DEFAULT 0.00,
+    required_monthly_savings NUMERIC(14, 2),
+    months_remaining INTEGER,
+    formula_version VARCHAR(16) NOT NULL DEFAULT 'v1.0',
+    assumptions_version VARCHAR(32),
+    assumptions_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    calculated_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
 );
 CREATE INDEX IF NOT EXISTS ix_goal_projections_goal_id ON goal_projections(goal_id);
+CREATE INDEX IF NOT EXISTS ix_goal_projections_user_id ON goal_projections(user_id);
 
 -- ============================================================================
 -- 6. SPENDING, TRANSACTIONS & CATEGORIES
@@ -372,6 +382,23 @@ CREATE TABLE IF NOT EXISTS monthly_spending_summaries (
 );
 CREATE INDEX IF NOT EXISTS ix_monthly_spending_summaries_user_id ON monthly_spending_summaries(user_id);
 
+CREATE TABLE IF NOT EXISTS transaction_previews (
+    id VARCHAR(64) PRIMARY KEY,
+    user_id VARCHAR(64) NOT NULL,
+    file_name VARCHAR(255) NOT NULL,
+    file_hash_sha256 VARCHAR(64) NOT NULL,
+    total_rows INTEGER NOT NULL DEFAULT 0,
+    valid_rows JSONB NOT NULL,
+    duplicate_rows JSONB NOT NULL,
+    invalid_rows JSONB NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    committed_upload_id VARCHAR(64),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+    expires_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_transaction_previews_user_id ON transaction_previews(user_id);
+CREATE INDEX IF NOT EXISTS ix_transaction_previews_file_hash ON transaction_previews(file_hash_sha256);
+
 -- ============================================================================
 -- 7. PAPER TRADING & VIRTUAL LEDGER
 -- ============================================================================
@@ -381,6 +408,7 @@ CREATE TABLE IF NOT EXISTS paper_accounts (
     user_id VARCHAR(64) NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
     account_number VARCHAR(32) NOT NULL UNIQUE,
     currency VARCHAR(3) NOT NULL DEFAULT 'INR',
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
     cash_balance NUMERIC(14, 2) NOT NULL DEFAULT 1000000.00,
     current_cash NUMERIC(14, 2) NOT NULL DEFAULT 1000000.00,
     initial_balance NUMERIC(14, 2) NOT NULL DEFAULT 1000000.00,
@@ -412,6 +440,22 @@ CREATE TABLE IF NOT EXISTS paper_orders (
 );
 CREATE INDEX IF NOT EXISTS ix_paper_orders_account_id ON paper_orders(account_id);
 CREATE INDEX IF NOT EXISTS ix_paper_orders_user_id ON paper_orders(user_id);
+
+CREATE TABLE IF NOT EXISTS paper_trades (
+    id VARCHAR(64) PRIMARY KEY,
+    order_id VARCHAR(64) NOT NULL UNIQUE REFERENCES paper_orders(id) ON DELETE CASCADE,
+    account_id VARCHAR(64) NOT NULL REFERENCES paper_accounts(id) ON DELETE CASCADE,
+    symbol VARCHAR(20) NOT NULL,
+    side VARCHAR(10) NOT NULL,
+    quantity NUMERIC(14, 4) NOT NULL,
+    price NUMERIC(14, 2) NOT NULL,
+    gross_value NUMERIC(14, 2) NOT NULL,
+    fee NUMERIC(14, 2) NOT NULL DEFAULT 0.00,
+    net_value NUMERIC(14, 2) NOT NULL,
+    execution_time TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+);
+CREATE INDEX IF NOT EXISTS ix_paper_trades_account_id ON paper_trades(account_id);
+CREATE INDEX IF NOT EXISTS ix_paper_trades_order_id ON paper_trades(order_id);
 
 CREATE TABLE IF NOT EXISTS paper_execution_receipts (
     id VARCHAR(64) PRIMARY KEY,
@@ -452,9 +496,103 @@ CREATE TABLE IF NOT EXISTS paper_cash_ledger (
 CREATE INDEX IF NOT EXISTS ix_paper_cash_ledger_account_id ON paper_cash_ledger(account_id);
 
 -- ============================================================================
--- 8. AI RAG KNOWLEDGE BASE & CHAT SESSIONS
+-- 8. AI RAG KNOWLEDGE BASE, CONVERSATIONS & RETRIEVAL LINEAGE
 -- ============================================================================
 
+CREATE TABLE IF NOT EXISTS document_registry (
+    id VARCHAR(64) PRIMARY KEY,
+    document_id VARCHAR(64),
+    title VARCHAR(255) NOT NULL,
+    doc_type VARCHAR(50) NOT NULL DEFAULT 'REGULATION',
+    publisher VARCHAR(128) NOT NULL,
+    publishing_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    published_date DATE,
+    reporting_period VARCHAR(50),
+    security_symbol VARCHAR(20),
+    isin VARCHAR(20),
+    source_url VARCHAR(512),
+    content_hash VARCHAR(64) NOT NULL DEFAULT 'sha256-pending',
+    content_hash_sha256 VARCHAR(64),
+    retrieval_timestamp TIMESTAMPTZ,
+    chunk_count INTEGER NOT NULL DEFAULT 0,
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+);
+CREATE INDEX IF NOT EXISTS ix_document_registry_title ON document_registry(title);
+
+CREATE TABLE IF NOT EXISTS document_chunks (
+    id VARCHAR(64) PRIMARY KEY,
+    document_id VARCHAR(64) NOT NULL REFERENCES document_registry(id) ON DELETE CASCADE,
+    chunk_index INTEGER NOT NULL,
+    content TEXT NOT NULL DEFAULT '',
+    chunk_text TEXT,
+    section_title VARCHAR(255),
+    page_number INTEGER,
+    word_count INTEGER NOT NULL DEFAULT 0,
+    token_count INTEGER,
+    embedding_vector JSONB,
+    embedding_vector_id VARCHAR(128),
+    metadata JSONB,
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+    CONSTRAINT uq_doc_chunk UNIQUE (document_id, chunk_index)
+);
+CREATE INDEX IF NOT EXISTS ix_document_chunks_document_id ON document_chunks(document_id);
+
+CREATE TABLE IF NOT EXISTS ai_conversations (
+    id VARCHAR(64) PRIMARY KEY,
+    user_id VARCHAR(64) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL DEFAULT 'Financial Research Session',
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+);
+CREATE INDEX IF NOT EXISTS ix_ai_conversations_user_id ON ai_conversations(user_id);
+
+CREATE TABLE IF NOT EXISTS ai_messages (
+    id VARCHAR(64) PRIMARY KEY,
+    conversation_id VARCHAR(64) NOT NULL REFERENCES ai_conversations(id) ON DELETE CASCADE,
+    user_id VARCHAR(64) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role VARCHAR(20) NOT NULL,
+    content TEXT NOT NULL,
+    intent_detected VARCHAR(50),
+    correlation_id VARCHAR(64) NOT NULL,
+    latency_ms DOUBLE PRECISION,
+    model_version VARCHAR(50),
+    is_fallback BOOLEAN DEFAULT FALSE,
+    citation_chunk_ids JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+);
+CREATE INDEX IF NOT EXISTS ix_ai_messages_conversation_id ON ai_messages(conversation_id);
+CREATE INDEX IF NOT EXISTS ix_ai_messages_user_id ON ai_messages(user_id);
+
+CREATE TABLE IF NOT EXISTS ai_feedback (
+    id VARCHAR(64) PRIMARY KEY,
+    message_id VARCHAR(64) NOT NULL REFERENCES ai_messages(id) ON DELETE CASCADE,
+    user_id VARCHAR(64) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    rating INTEGER NOT NULL,
+    feedback_type VARCHAR(50),
+    comments TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+    CONSTRAINT uq_user_message_feedback UNIQUE (user_id, message_id)
+);
+CREATE INDEX IF NOT EXISTS ix_ai_feedback_message_id ON ai_feedback(message_id);
+
+CREATE TABLE IF NOT EXISTS retrieval_events (
+    id VARCHAR(64) PRIMARY KEY,
+    correlation_id VARCHAR(64) NOT NULL,
+    conversation_id VARCHAR(64),
+    query_text TEXT NOT NULL,
+    filter_metadata JSONB,
+    top_k INTEGER NOT NULL,
+    retrieved_chunk_ids JSONB,
+    latency_ms DOUBLE PRECISION,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+);
+CREATE INDEX IF NOT EXISTS ix_retrieval_events_correlation_id ON retrieval_events(correlation_id);
+
+-- Legacy aliases for backwards compatibility
 CREATE TABLE IF NOT EXISTS rag_documents (
     id VARCHAR(64) PRIMARY KEY,
     title VARCHAR(255) NOT NULL,
@@ -530,7 +668,7 @@ VALUES (
 )
 ON CONFLICT (id) DO NOTHING;
 
--- User Profile
+-- User Profile (Initialized cleanly without fabricated risk assessment or consent)
 INSERT INTO user_profiles (id, user_id, full_name, display_name, country, experience_level, onboarding_completed, risk_band, composite_score, risk_assessment, created_at, updated_at)
 VALUES (
     'prof-shivraj-001',
@@ -538,36 +676,24 @@ VALUES (
     'Shivraj Dhote',
     'Shivraj',
     'IND',
-    'INTERMEDIATE',
-    TRUE,
+    'BEGINNER',
+    FALSE,
     'MODERATE',
-    62.50,
-    '{"risk_band": "MODERATE", "composite_score": 62.5, "asset_allocation": {"equity": 60, "debt": 30, "gold_cash": 10}}'::jsonb,
+    50.00,
+    NULL,
     NOW(),
     NOW()
 )
 ON CONFLICT (id) DO NOTHING;
 
--- User Consent
-INSERT INTO user_consents (id, user_id, consent_version, terms_accepted, privacy_accepted, educational_disclaimer_accepted, accepted_at)
-VALUES (
-    'cns-shivraj-001',
-    'usr-shivraj-001',
-    'v1.0-production',
-    TRUE,
-    TRUE,
-    TRUE,
-    NOW()
-)
-ON CONFLICT (user_id, consent_version) DO NOTHING;
-
 -- Virtual Paper Trading Account (₹10,00,000 cash balance)
-INSERT INTO paper_accounts (id, user_id, account_number, currency, cash_balance, current_cash, initial_balance, total_realized_pnl, total_trades_count, reset_count, created_at, updated_at)
+INSERT INTO paper_accounts (id, user_id, account_number, currency, status, cash_balance, current_cash, initial_balance, total_realized_pnl, total_trades_count, reset_count, created_at, updated_at)
 VALUES (
     'acc-shivraj-001',
     'usr-shivraj-001',
     'FINEX-VIRT-7001',
     'INR',
+    'ACTIVE',
     1000000.00,
     1000000.00,
     1000000.00,
@@ -611,8 +737,18 @@ INSERT INTO securities (id, symbol, name, exchange, currency, asset_class, secto
 ON CONFLICT (symbol) DO NOTHING;
 
 -- Core Regulatory Documents for Grounded AI RAG
-INSERT INTO rag_documents (id, title, source_url, publisher, document_type, version, publication_date, content_hash, created_at) VALUES
-    ('rag-doc-sebi-ria', 'SEBI Investment Advisers Regulations 2013 and Amendments', 'https://www.sebi.gov.in/legal/regulations/jan-2021/securities-and-exchange-board-of-india-investment-advisers-regulations-2013-last-amended-on-january-11-2021-_48711.html', 'SEBI', 'REGULATION', '2021-Consolidated', '2021-01-11', 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', NOW()),
-    ('rag-doc-rbi-kyc', 'Reserve Bank of India Master Direction - Know Your Customer (KYC) Direction 2016', 'https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=11566', 'RBI', 'MASTER_DIRECTION', '2023-Update', '2023-05-04', 'a591a6d40bf420404a011733cfb7b190d62c65bf0bcda32b57b277d9ad9f146e', NOW()),
-    ('rag-doc-nse-margin', 'NSE Consolidated Circular on Margin Trading Facility (MTF) & Risk Containment', 'https://www.nseindia.com/regulations/member-circulars', 'NSE', 'CIRCULAR', '2024-V1', '2024-01-15', '5be3b6a988185c8846c8273612807f6e026b484501a91e3e7855b4fd8c3f4e3c', NOW())
+INSERT INTO document_registry (id, title, source_url, publisher, doc_type, publishing_date, content_hash, status, created_at) VALUES
+    ('rag-doc-sebi-ria', 'SEBI Investment Advisers Regulations 2013 and Amendments', 'https://www.sebi.gov.in/legal/regulations/jan-2021/securities-and-exchange-board-of-india-investment-advisers-regulations-2013-last-amended-on-january-11-2021-_48711.html', 'SEBI', 'REGULATION', '2021-01-11', 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', 'ACTIVE', NOW()),
+    ('rag-doc-rbi-kyc', 'Reserve Bank of India Master Direction - Know Your Customer (KYC) Direction 2016', 'https://www.rbi.org.in/Scripts/BS_ViewMasDirections.aspx?id=11566', 'RBI', 'MASTER_DIRECTION', '2023-05-04', 'a591a6d40bf420404a011733cfb7b190d62c65bf0bcda32b57b277d9ad9f146e', 'ACTIVE', NOW()),
+    ('rag-doc-nse-margin', 'NSE Consolidated Circular on Margin Trading Facility (MTF) & Risk Containment', 'https://www.nseindia.com/regulations/member-circulars', 'NSE', 'CIRCULAR', '2024-01-15', '5be3b6a988185c8846c8273612807f6e026b484501a91e3e7855b4fd8c3f4e3c', 'ACTIVE', NOW())
 ON CONFLICT (id) DO NOTHING;
+
+-- ============================================================================
+-- 10. ALEMBIC MIGRATION BASELINE STAMP
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS alembic_version (
+    version_num VARCHAR(32) NOT NULL,
+    CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
+);
+INSERT INTO alembic_version (version_num) VALUES ('5c7e81d9f012')
+ON CONFLICT DO NOTHING;

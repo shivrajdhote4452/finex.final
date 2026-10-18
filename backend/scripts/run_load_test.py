@@ -68,10 +68,14 @@ def run_benchmark(concurrency: int = 10, iterations_per_worker: int = 5) -> Dict
         "/api/v1/spending/summary",
     ]
 
+    from backend.app.routers.auth import create_access_token
+
+    # Warmup pass to eliminate initial lazy-import / connection establishment cold start
+    warmup_token = create_access_token("usr-warmup-000", "warmup@finex.internal", "Warmup User")
+    execute_request_batch(client, {"Authorization": f"Bearer {warmup_token}"}, endpoints)
+
     all_records: List[Dict[str, Any]] = []
     start_total = time.perf_counter()
-
-    from backend.app.routers.auth import create_access_token
 
     def worker_job(worker_id: int) -> List[Dict[str, Any]]:
         token = create_access_token(

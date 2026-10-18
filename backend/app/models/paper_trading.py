@@ -5,6 +5,7 @@ Author: Shivraj Dhote
 Date: 16 October 2026
 """
 
+import uuid
 from datetime import datetime, timezone
 
 from backend.app.models.core import Base
@@ -26,6 +27,7 @@ class PaperAccount(Base):
 
     id = Column(String(64), primary_key=True)
     user_id = Column(String(64), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
+    account_number = Column(String(32), nullable=False, default=lambda: f"ACC-{uuid.uuid4().hex[:8].upper()}")
     initial_balance = Column(Numeric(14, 2), nullable=False, default=100000.00)
     current_cash = Column(Numeric(14, 2), nullable=False, default=100000.00)
     currency = Column(String(10), nullable=False, default="INR")

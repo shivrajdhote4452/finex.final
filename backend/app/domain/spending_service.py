@@ -17,7 +17,7 @@ import hashlib
 import io
 import re
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -25,6 +25,7 @@ from backend.app.database import AsyncSessionLocal
 from backend.app.models.spending import (
     Transaction,
     TransactionCategory,
+    TransactionPreview,
     TransactionUpload,
 )
 from pydantic import BaseModel
@@ -35,6 +36,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 _UPLOADS_STORE: Dict[str, Dict[str, Any]] = {}  # upload_id -> upload_dict
 _TRANSACTIONS_STORE: Dict[str, List[Dict[str, Any]]] = {}  # user_id -> list of transactions
 _PREVIEWS_STORE: Dict[str, Dict[str, Any]] = {}  # preview_id -> preview_dict
+
+
+def _parse_year_month_bounds(year_month: str) -> Tuple[date, date]:
+    """Parse YYYY-MM into start_date (inclusive) and next_month_date (exclusive) for portable filtering."""
+    try:
+        parts = year_month.strip().split("-")
+        year = int(parts[0])
+        month = int(parts[1])
+        start_date = date(year, month, 1)
+        if month == 12:
+            next_month_date = date(year + 1, 1, 1)
+        else:
+            next_month_date = date(year, month + 1, 1)
+        return start_date, next_month_date
+    except Exception:
+        now = datetime.now(timezone.utc).date()
+        start_date = date(now.year, now.month, 1)
+        next_month = date(now.year + 1, 1, 1) if now.month == 12 else date(now.year, now.month + 1, 1)
+        return start_date, next_month
 
 
 def _parse_uuid(val: Any) -> Optional[uuid.UUID]:
@@ -818,6 +838,27 @@ class SpendingService:
                     invalid_rows.append({"row_number": row_idx, "error": str(e), "raw_row": row})
 
             preview_id = f"prev-{uuid.uuid4().hex[:12]}"
+            expires_at = now + timedelta(hours=24)
+            db_preview = TransactionPreview(
+                id=preview_id,
+                user_id=user_id,
+                file_name=file_name,
+                file_hash_sha256=file_hash,
+                total_rows=len(valid_rows) + len(duplicate_rows) + len(invalid_rows),
+                valid_rows=valid_rows,
+                duplicate_rows=duplicate_rows,
+                invalid_rows=invalid_rows,
+                status="PENDING_REVIEW",
+                committed_upload_id=None,
+                created_at=now,
+                expires_at=expires_at,
+            )
+            session.add(db_preview)
+            if owns_session:
+                await session.commit()
+            else:
+                await session.flush()
+
             preview_meta = {
                 "id": preview_id,
                 "user_id": user_id,
@@ -829,6 +870,7 @@ class SpendingService:
                 "invalid_rows": invalid_rows,
                 "status": "PENDING_REVIEW",
                 "created_at": now.isoformat(),
+                "expires_at": expires_at.isoformat(),
                 "committed_upload_id": None,
             }
             _PREVIEWS_STORE[preview_id] = preview_meta
@@ -856,28 +898,61 @@ class SpendingService:
         db: Optional[AsyncSession] = None,
     ) -> Dict[str, Any]:
         """Atomically commit accepted preview rows to PostgreSQL ledger."""
-        if preview_id not in _PREVIEWS_STORE:
-            raise KeyError(f"Preview session '{preview_id}' not found or expired.")
-
-        preview = _PREVIEWS_STORE[preview_id]
-        if preview["user_id"] != user_id:
-            raise KeyError("Access denied to this preview session.")
-
-        if preview["status"] == "COMMITTED":
-            prior_upload_id = preview["committed_upload_id"]
-            return {
-                "upload_id": prior_upload_id,
-                "accepted_count": len(preview.get("valid_rows", [])),
-                "duplicate_count": len(preview.get("duplicate_rows", [])),
-                "quarantined_count": len(preview.get("invalid_rows", [])),
-                "status": "COMMITTED",
-                "replayed": True,
-            }
-
-        file_hash = preview["file_hash_sha256"]
         owns_session = db is None
         session = db if db is not None else AsyncSessionLocal()
         try:
+            now = datetime.now(timezone.utc)
+            # 1. Fetch preview from DB with row lock or fallback to store
+            stmt_prev = select(TransactionPreview).where(TransactionPreview.id == preview_id).with_for_update()
+            res_prev = await session.execute(stmt_prev)
+            db_preview = res_prev.scalar_one_or_none()
+
+            preview: Dict[str, Any]
+            if db_preview is not None:
+                if db_preview.user_id != user_id:
+                    raise KeyError("Access denied to this preview session.")
+                if db_preview.expires_at and db_preview.expires_at < now:
+                    raise KeyError(f"Preview session '{preview_id}' not found or expired.")
+                if db_preview.status == "COMMITTED":
+                    prior_upload_id = db_preview.committed_upload_id
+                    return {
+                        "upload_id": prior_upload_id,
+                        "accepted_count": len(db_preview.valid_rows or []),
+                        "duplicate_count": len(db_preview.duplicate_rows or []),
+                        "quarantined_count": len(db_preview.invalid_rows or []),
+                        "status": "COMMITTED",
+                        "replayed": True,
+                    }
+                preview = {
+                    "id": db_preview.id,
+                    "user_id": db_preview.user_id,
+                    "file_name": db_preview.file_name,
+                    "file_hash_sha256": db_preview.file_hash_sha256,
+                    "total_rows": db_preview.total_rows,
+                    "valid_rows": db_preview.valid_rows or [],
+                    "duplicate_rows": db_preview.duplicate_rows or [],
+                    "invalid_rows": db_preview.invalid_rows or [],
+                    "status": db_preview.status,
+                    "committed_upload_id": db_preview.committed_upload_id,
+                }
+            elif preview_id in _PREVIEWS_STORE:
+                preview = _PREVIEWS_STORE[preview_id]
+                if preview["user_id"] != user_id:
+                    raise KeyError("Access denied to this preview session.")
+                if preview["status"] == "COMMITTED":
+                    prior_upload_id = preview["committed_upload_id"]
+                    return {
+                        "upload_id": prior_upload_id,
+                        "accepted_count": len(preview.get("valid_rows", [])),
+                        "duplicate_count": len(preview.get("duplicate_rows", [])),
+                        "quarantined_count": len(preview.get("invalid_rows", [])),
+                        "status": "COMMITTED",
+                        "replayed": True,
+                    }
+            else:
+                raise KeyError(f"Preview session '{preview_id}' not found or expired.")
+
+            file_hash = preview["file_hash_sha256"]
             # Check if another preview of the exact same file was already committed in PostgreSQL
             stmt_prior = select(TransactionUpload).where(
                 TransactionUpload.user_id == user_id,
@@ -887,8 +962,16 @@ class SpendingService:
             res_prior = await session.execute(stmt_prior)
             prior_committed = res_prior.scalar_one_or_none()
             if prior_committed:
-                preview["status"] = "COMMITTED"
-                preview["committed_upload_id"] = str(prior_committed.id)
+                if db_preview is not None:
+                    db_preview.status = "COMMITTED"
+                    db_preview.committed_upload_id = str(prior_committed.id)
+                if preview_id in _PREVIEWS_STORE:
+                    _PREVIEWS_STORE[preview_id]["status"] = "COMMITTED"
+                    _PREVIEWS_STORE[preview_id]["committed_upload_id"] = str(prior_committed.id)
+                if owns_session:
+                    await session.commit()
+                else:
+                    await session.flush()
                 return {
                     "upload_id": str(prior_committed.id),
                     "accepted_count": prior_committed.accepted_rows,
@@ -901,9 +984,7 @@ class SpendingService:
             # Seed core master categories
             await ensure_transaction_categories(session)
 
-            now = datetime.now(timezone.utc)
             upload_uuid = uuid.uuid4()
-
             rows_to_commit = preview["valid_rows"]
             if accepted_indices is not None:
                 idx_set = set(accepted_indices)
@@ -982,6 +1063,10 @@ class SpendingService:
             )
             session.add(upload_entity)
 
+            if db_preview is not None:
+                db_preview.status = "COMMITTED"
+                db_preview.committed_upload_id = str(upload_uuid)
+
             if owns_session:
                 await session.commit()
             else:
@@ -1002,8 +1087,9 @@ class SpendingService:
             _UPLOADS_STORE[str(upload_uuid)] = upload_meta
             _TRANSACTIONS_STORE.setdefault(user_id, []).extend(committed_tx_records)
 
-            preview["status"] = "COMMITTED"
-            preview["committed_upload_id"] = str(upload_uuid)
+            if preview_id in _PREVIEWS_STORE:
+                _PREVIEWS_STORE[preview_id]["status"] = "COMMITTED"
+                _PREVIEWS_STORE[preview_id]["committed_upload_id"] = str(upload_uuid)
 
             return {
                 "upload_id": str(upload_uuid),
@@ -1056,8 +1142,9 @@ class SpendingService:
             if category:
                 filters.append(Transaction.category_id == category)
             if year_month:
-                # Filter by month prefix on date string
-                filters.append(func.to_char(Transaction.transaction_date, "YYYY-MM") == year_month)
+                start_date, next_month_date = _parse_year_month_bounds(year_month)
+                filters.append(Transaction.transaction_date >= start_date)
+                filters.append(Transaction.transaction_date < next_month_date)
 
             stmt_count = select(func.count(Transaction.id)).where(and_(*filters))
             res_count = await session.execute(stmt_count)
@@ -1183,9 +1270,11 @@ class SpendingService:
         owns_session = db is None
         session = db if db is not None else AsyncSessionLocal()
         try:
+            start_date, next_month_date = _parse_year_month_bounds(year_month)
             stmt = select(Transaction).where(
                 Transaction.user_id == user_id,
-                func.to_char(Transaction.transaction_date, "YYYY-MM") == year_month,
+                Transaction.transaction_date >= start_date,
+                Transaction.transaction_date < next_month_date,
             )
             res = await session.execute(stmt)
             month_txs = res.scalars().all()

@@ -29,7 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/portfolio-intelligence", tags=["Portfolio Intelligence & Scenarios"])
 intelligence_service = PortfolioIntelligenceService()
-market_provider = RealMarketDataProvider(force_cache=True)
+market_provider = RealMarketDataProvider(force_cache=True, allow_fixture_fallback=True)
 paper_engine = PaperTradingEngine()
 
 

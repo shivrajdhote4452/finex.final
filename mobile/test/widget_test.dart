@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:finex_mobile/main.dart';
 import 'package:finex_mobile/services/api_client.dart';
 import 'package:finex_mobile/theme/terminal_theme.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  FlutterSecureStorage.setMockInitialValues({});
+
   testWidgets('FinEx mobile unauthenticated launches auth screen', (WidgetTester tester) async {
-    apiClient.setToken(null);
+    await apiClient.setToken(null);
     await tester.pumpWidget(const FinExMobileApp());
     await tester.pumpAndSettle();
 

@@ -3,8 +3,9 @@ from backend.app.config import Environment, Settings
 from pydantic import ValidationError
 
 
-def test_default_development_settings():
-    settings = Settings()
+def test_default_development_settings(monkeypatch):
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    settings = Settings(_env_file=None)
     assert settings.ENVIRONMENT == Environment.DEVELOPMENT
     assert settings.API_V1_PREFIX == "/api/v1"
     assert "localhost" in settings.ALLOWED_ORIGINS[0]

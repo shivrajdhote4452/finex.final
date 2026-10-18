@@ -1,10 +1,15 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
 class ApiClient {
   static final ApiClient _instance = ApiClient._internal();
   factory ApiClient() => _instance;
   ApiClient._internal();
+
+  static const FlutterSecureStorage _storage = FlutterSecureStorage();
+  static const String _tokenStorageKey = 'finex_auth_token';
 
   static String normalizeBaseUrl(String url) {
     var trimmed = url.trim();
@@ -33,8 +38,31 @@ class ApiClient {
     baseUrl = normalizeBaseUrl(url);
   }
 
-  void setToken(String? token) {
+  static final Map<String, String> _testStorage = {};
+
+  /// Initialize and restore stored session from secure storage
+  Future<void> initSession() async {
+    try {
+      _token = await _storage.read(key: _tokenStorageKey).timeout(const Duration(milliseconds: 300));
+    } catch (_) {
+      _token = _testStorage[_tokenStorageKey];
+    }
+  }
+
+  Future<void> setToken(String? token) async {
     _token = token;
+    if (token != null) {
+      _testStorage[_tokenStorageKey] = token;
+    } else {
+      _testStorage.remove(_tokenStorageKey);
+    }
+    try {
+      if (token != null && token.isNotEmpty) {
+        await _storage.write(key: _tokenStorageKey, value: token).timeout(const Duration(milliseconds: 300));
+      } else {
+        await _storage.delete(key: _tokenStorageKey).timeout(const Duration(milliseconds: 300));
+      }
+    } catch (_) {}
   }
 
   Future<void> logout() async {
@@ -50,7 +78,7 @@ class ApiClient {
     } catch (_) {
       // Safe fallback on network failure
     } finally {
-      _token = null;
+      await setToken(null);
     }
   }
 
@@ -76,6 +104,9 @@ class ApiClient {
     String email = 'shivraj.dhote@finex.internal',
     String name = 'Shivraj Dhote',
   }) async {
+    if (!kDebugMode) {
+      throw Exception('Developer sandbox sign-in is disabled in production builds.');
+    }
     final url = Uri.parse('$baseUrl/auth/dev-login');
     final response = await http.post(
       url,
@@ -84,7 +115,8 @@ class ApiClient {
     );
     final data = jsonDecode(response.body);
     if (response.statusCode == 200 && data['data'] != null) {
-      _token = data['data']['access_token'];
+      final token = data['data']['access_token'] as String?;
+      await setToken(token);
       return data['data'];
     }
     throw Exception(data['error']?['message'] ?? 'Login failed');
@@ -99,7 +131,8 @@ class ApiClient {
     );
     final data = jsonDecode(response.body);
     if (response.statusCode == 200 && data['data'] != null) {
-      _token = data['data']['access_token'];
+      final token = data['data']['access_token'] as String?;
+      await setToken(token);
       return data['data'];
     }
     throw Exception(data['error']?['message'] ?? 'Google authentication failed');

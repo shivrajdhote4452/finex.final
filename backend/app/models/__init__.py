@@ -50,6 +50,7 @@ from backend.app.models.rag import (
 from backend.app.models.spending import (
     Transaction,
     TransactionCategory,
+    TransactionPreview,
     TransactionUpload,
 )
 
@@ -78,6 +79,7 @@ __all__ = [
     "TransactionUpload",
     "TransactionCategory",
     "Transaction",
+    "TransactionPreview",
     "AlertRule",
     "AlertEvent",
     "Notification",

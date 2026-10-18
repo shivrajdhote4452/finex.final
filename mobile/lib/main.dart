@@ -45,6 +45,7 @@ class _AppRootState extends State<AppRoot> {
   }
 
   Future<void> _checkInitialSession() async {
+    await apiClient.initSession();
     // If not authenticated, require login immediately
     if (!apiClient.isAuthenticated) {
       if (mounted) {

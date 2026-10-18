@@ -8,13 +8,15 @@ with canonical IDs, freshness metadata, caching indicators, and strict error map
 from typing import List, Optional
 
 from backend.app.adapters.market_data_provider import INSTRUMENT_REGISTRY, RealMarketDataProvider
+from backend.app.config import get_settings
 from backend.app.core.envelope import create_response_envelope
 from backend.app.core.errors import NotFoundException
 from backend.app.ports.market_data import HistoricalBar, Quote
 from fastapi import APIRouter, Query, Request
 
 router = APIRouter(prefix="/market", tags=["Market Data"])
-provider = RealMarketDataProvider(force_cache=False, allow_fixture_fallback=True)
+settings = get_settings()
+provider = RealMarketDataProvider(force_cache=False, allow_fixture_fallback=settings.MARKET_ALLOW_FIXTURES)
 
 
 @router.get("/instruments")

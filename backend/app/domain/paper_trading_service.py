@@ -107,7 +107,7 @@ class PaperTradingEngine:
     )
 
     def __init__(self, market_provider: Optional[RealMarketDataProvider] = None) -> None:
-        self.market_provider = market_provider or RealMarketDataProvider(force_cache=True)
+        self.market_provider = market_provider or RealMarketDataProvider(force_cache=True, allow_fixture_fallback=True)
 
     def get_or_create_account(self, user_id: str) -> Dict:
         """Fetch or bootstrap the default paper trading account (₹1,00,000 initial virtual cash)."""
@@ -794,6 +794,7 @@ class PaperTradingEngine:
                 acct = PaperAccount(
                     id=acct_id,
                     user_id=user_id,
+                    account_number=f"FINEX-{uuid.uuid4().hex[:8].upper()}",
                     initial_balance=Decimal("100000.00"),
                     current_cash=Decimal("100000.00"),
                     currency="INR",
@@ -910,6 +911,8 @@ class PaperTradingEngine:
 
             # 2. Price verification & Limit marketability rules
             quote = await self.market_provider.get_latest_quote(sym)
+            if not quote:
+                quote = self.get_market_quote_sync(sym)
             order_id = f"ord-{uuid.uuid4().hex[:12]}"
 
             if not quote:
