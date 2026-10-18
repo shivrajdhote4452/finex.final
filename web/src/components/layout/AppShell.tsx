@@ -5,6 +5,7 @@ import { QuickTradeModal } from '../trading/QuickTradeModal';
 export type NavigationTab =
   | 'overview'
   | 'markets'
+  | 'charts'
   | 'portfolio'
   | 'transactions'
   | 'ask-finex'
@@ -40,6 +41,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
   const navItems: { id: NavigationTab; label: string; badge?: string | number }[] = [
     { id: 'overview', label: 'Overview' },
     { id: 'markets', label: 'Markets' },
+    { id: 'charts', label: 'Charts' },
     { id: 'portfolio', label: 'Portfolio' },
     { id: 'ask-finex', label: 'Ask FinEx' },
     { id: 'practice', label: 'Paper trading' },

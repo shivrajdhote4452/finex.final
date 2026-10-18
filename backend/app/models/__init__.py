@@ -10,6 +10,12 @@ from backend.app.models.alerts import (
     Notification,
     NotificationDeliveryAttempt,
 )
+from backend.app.models.charts import (
+    ChartDrawing,
+    ChartIndicatorTemplate,
+    ChartLayout,
+    ReplaySession,
+)
 from backend.app.models.core import (
     ApplicationEvent,
     Base,
@@ -37,6 +43,7 @@ from backend.app.models.paper_trading import (
     PaperCashLedger,
     PaperOrder,
     PaperPosition,
+    PaperProposal,
     PaperTrade,
 )
 from backend.app.models.rag import (
@@ -73,6 +80,11 @@ __all__ = [
     "PaperTrade",
     "PaperPosition",
     "PaperCashLedger",
+    "PaperProposal",
+    "ChartLayout",
+    "ChartDrawing",
+    "ChartIndicatorTemplate",
+    "ReplaySession",
     "FinancialGoal",
     "GoalContribution",
     "GoalProjection",

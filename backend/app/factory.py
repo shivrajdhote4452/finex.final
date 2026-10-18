@@ -19,6 +19,8 @@ from backend.app.routers.ai_portfolio import router as ai_portfolio_router
 from backend.app.routers.alerts import router as alerts_router
 from backend.app.routers.auth import router as auth_router
 from backend.app.routers.auth import users_router
+from backend.app.routers.charts import router as charts_router
+from backend.app.routers.gemini_assistant import router as gemini_assistant_router
 from backend.app.routers.goals import router as goals_router
 from backend.app.routers.health import router as health_router
 from backend.app.routers.market import router as market_router
@@ -120,10 +122,12 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     app.include_router(paper_trading_router, prefix=v1_prefix)
     app.include_router(ai_portfolio_router, prefix=v1_prefix)
     app.include_router(ai_chat_router, prefix=v1_prefix)
+    app.include_router(gemini_assistant_router, prefix=v1_prefix)
     app.include_router(alerts_router, prefix=v1_prefix)
     app.include_router(notifications_router, prefix=v1_prefix)
     app.include_router(portfolio_intelligence_router, prefix=v1_prefix)
     app.include_router(goals_router, prefix=v1_prefix)
+    app.include_router(charts_router, prefix=v1_prefix)
     app.include_router(spending_router, prefix=v1_prefix)
     app.include_router(sample_router, prefix=v1_prefix)
 

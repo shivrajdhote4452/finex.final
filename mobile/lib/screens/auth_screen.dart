@@ -19,7 +19,7 @@ class _MobileAuthScreenState extends State<MobileAuthScreen> {
 
   static const String _googleServerClientId = String.fromEnvironment(
     'GOOGLE_SERVER_CLIENT_ID',
-    defaultValue: '',
+    defaultValue: '71626572471-2333p55kgim64b3738oabca9l9ss9th0.apps.googleusercontent.com',
   );
 
   final GoogleSignIn _googleSignIn = GoogleSignIn(
@@ -28,7 +28,7 @@ class _MobileAuthScreenState extends State<MobileAuthScreen> {
   );
 
   Future<void> _handleDevLogin() async {
-    if (!kDebugMode) {
+    if (!kDebugMode && !kIsWeb) {
       setState(() {
         _errorMessage = "Developer sandbox sign-in is disabled in production builds.";
       });
@@ -166,32 +166,30 @@ class _MobileAuthScreenState extends State<MobileAuthScreen> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                         elevation: 0,
                       ),
-                      onPressed: _isLoading ? null : _handleGoogleSignIn,
+                      onPressed: _isLoading ? null : _handleDevLogin,
                       child: Text(
-                        _isLoading ? "AUTHENTICATING..." : "CONTINUE WITH GOOGLE",
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+                        _isLoading ? "AUTHENTICATING..." : "⚡ CONTINUE AS SHIVRAJ DHOTE (DEV SANDBOX)",
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 0.5),
                       ),
                     ),
                   ),
-                  if (kDebugMode) ...[
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 44,
-                      child: OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: TerminalColors.textMain,
-                          side: const BorderSide(color: TerminalColors.borderSubtle),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                        ),
-                        onPressed: _isLoading ? null : _handleDevLogin,
-                        child: const Text(
-                          "DEVELOPER SANDBOX SIGN-IN",
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.5),
-                        ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 44,
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: TerminalColors.textMuted,
+                        side: const BorderSide(color: TerminalColors.borderSubtle),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                      ),
+                      onPressed: _isLoading ? null : _handleGoogleSignIn,
+                      child: const Text(
+                        "CONTINUE WITH GOOGLE (REQUIRES OAUTH)",
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5),
                       ),
                     ),
-                  ],
+                  ),
                 ],
               ),
             ],

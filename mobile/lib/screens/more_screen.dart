@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/terminal_theme.dart';
+import 'chart_screen.dart';
 import 'paper_trading_screen.dart';
 import 'alerts_screen.dart';
 import 'goals_screen.dart';
@@ -58,6 +59,19 @@ class MobileMoreScreen extends StatelessWidget {
         ),
         const SizedBox(height: 10),
 
+        _buildModuleItem(
+          icon: Icons.show_chart,
+          title: "TradingView Chart Workspace",
+          subtitle: "Interactive candlesticks, technical indicators & paper orders",
+          badge: "Charts",
+          badgeColor: TerminalColors.action,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const MobileChartScreen()),
+            );
+          },
+        ),
         _buildModuleItem(
           icon: Icons.candlestick_chart_outlined,
           title: "Paper Trading: Order Ticket",

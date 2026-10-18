@@ -1,0 +1,1557 @@
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  createChart,
+  IChartApi,
+  ISeriesApi,
+  ColorType,
+  CrosshairMode,
+  LineStyle,
+} from 'lightweight-charts';
+import { apiClient } from '../api/client';
+import { useFinancial, MarketQuote, OrderExecutionType } from '../context/FinancialContext';
+
+export interface ChartWorkspaceProps {
+  onNavigate?: (tab: any) => void;
+}
+
+export type ChartType = 'candlestick' | 'bar' | 'line' | 'area';
+export type WorkspaceLayout = 'single' | 'dual_h' | 'dual_v' | 'quad';
+export type DrawingTool = 'crosshair' | 'trend_line' | 'horizontal_line' | 'vertical_line' | 'rectangle' | 'fibonacci' | 'text' | 'ruler';
+
+export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
+  const { virtualCash, holdings, ledger, marketQuotes, executeOrder } = useFinancial();
+
+  // Active Symbol & Timeframe
+  const [selectedSymbol, setSelectedSymbol] = useState<string>('RELIANCE');
+  const [timeframe, setTimeframe] = useState<string>('1D');
+  const [chartType, setChartType] = useState<ChartType>('candlestick');
+  const [layout, setLayout] = useState<WorkspaceLayout>('single');
+
+  // Indicators
+  const [activeIndicators, setActiveIndicators] = useState<{
+    sma20: boolean;
+    sma50: boolean;
+    ema20: boolean;
+    bollinger: boolean;
+    rsi: boolean;
+    macd: boolean;
+    vwap: boolean;
+  }>({
+    sma20: true,
+    sma50: false,
+    ema20: false,
+    bollinger: false,
+    rsi: true,
+    macd: false,
+    vwap: false,
+  });
+
+  // Replay & Market Mode
+  const [marketMode, setMarketMode] = useState<{
+    mode: string;
+    alpaca_configured: boolean;
+    alpaca_feed: string;
+    replay_active: boolean;
+    simulated_clock: string | null;
+    lag_days: number;
+    currency: string;
+  }>({
+    mode: 'INDIA_HISTORICAL_REPLAY',
+    alpaca_configured: false,
+    alpaca_feed: 'IEX',
+    replay_active: true,
+    simulated_clock: '2026-10-16T15:30:00Z',
+    lag_days: 30,
+    currency: 'INR',
+  });
+  const [isReplaying, setIsReplaying] = useState<boolean>(false);
+  const [replaySpeed, setReplaySpeed] = useState<number>(1.0);
+
+  // Drawing Toolbar
+  const [activeTool, setActiveTool] = useState<DrawingTool>('crosshair');
+  const [savedDrawings, setSavedDrawings] = useState<any[]>([]);
+
+  // Right Panel & Bottom Dock
+  const [rightPanelTab, setRightPanelTab] = useState<'ai' | 'watchlist' | 'details'>('ai');
+  const [bottomTab, setBottomTab] = useState<'order' | 'positions' | 'orders' | 'history' | 'alerts'>('order');
+  const [isRightCollapsed, setIsRightCollapsed] = useState<boolean>(false);
+  const [isBottomCollapsed, setIsBottomCollapsed] = useState<boolean>(false);
+
+  // Order Ticket State
+  const [orderSide, setOrderSide] = useState<'BUY' | 'SELL'>('BUY');
+  const [orderType, setOrderType] = useState<OrderExecutionType>('MARKET');
+  const [orderShares, setOrderShares] = useState<number>(5);
+  const [orderLimitPrice, setOrderLimitPrice] = useState<number>(0);
+  const [orderExecuting, setOrderExecuting] = useState<boolean>(false);
+  const [orderFeedback, setOrderFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Gemini AI Assistant State
+  const [aiMessages, setAiMessages] = useState<Array<{
+    id: string;
+    role: 'user' | 'assistant';
+    text: string;
+    proposal?: any;
+    receipt?: any;
+    disclaimer?: string;
+  }>>([
+    {
+      id: 'welcome-ai',
+      role: 'assistant',
+      text: 'Namaste! I am your FinEx Gemini Paper Investment Assistant. Ask me to analyze the active chart in Hindi, English, or Hinglish, or allocate paper trades within your virtual budget.',
+      disclaimer: 'Paper trading only. Educational simulation grounded in historical observations.',
+    },
+  ]);
+  const [aiInput, setAiInput] = useState<string>('');
+  const [aiLoading, setAiLoading] = useState<boolean>(false);
+  const [aiExecutingProposal, setAiExecutingProposal] = useState<string | null>(null);
+
+  // Chart Container References
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const chartInstanceRef = useRef<IChartApi | null>(null);
+  const mainSeriesRef = useRef<ISeriesApi<any> | null>(null);
+  const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
+  const indicatorSeriesRefs = useRef<{ [key: string]: ISeriesApi<any> }>({});
+
+  // Active Quote
+  const currentQuote: MarketQuote = marketQuotes[selectedSymbol] || {
+    symbol: selectedSymbol,
+    name: selectedSymbol,
+    price: 2500.0,
+    changeVal: 15.0,
+    changePct: 0.6,
+    isPositive: true,
+    high: 2525.0,
+    low: 2480.0,
+    volume: '3.4M',
+  };
+
+  // 1. Fetch Mode & Drawings on Mount or Symbol Change
+  useEffect(() => {
+    const fetchModeAndDrawings = async () => {
+      try {
+        const modeData = await apiClient.market.getMode();
+        setMarketMode(modeData);
+      } catch (err) {
+        console.warn('Could not fetch market mode:', err);
+      }
+
+      try {
+        const drawData = await apiClient.charts.getDrawings(selectedSymbol);
+        setSavedDrawings(drawData.drawings || []);
+      } catch (err) {
+        console.warn('Could not fetch drawings:', err);
+      }
+    };
+
+    fetchModeAndDrawings();
+  }, [selectedSymbol]);
+
+  // 2. Initialize Lightweight Chart
+  useEffect(() => {
+    if (!chartContainerRef.current) return;
+
+    // Clean up previous instance
+    if (chartInstanceRef.current) {
+      chartInstanceRef.current.remove();
+      chartInstanceRef.current = null;
+    }
+
+    const container = chartContainerRef.current;
+    const chart = createChart(container, {
+      width: container.clientWidth,
+      height: container.clientHeight,
+      layout: {
+        background: { type: ColorType.Solid, color: '#000000' },
+        textColor: '#8E8E93',
+        fontSize: 11,
+        fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+      },
+      grid: {
+        vertLines: { color: 'rgba(255, 255, 255, 0.05)' },
+        horzLines: { color: 'rgba(255, 255, 255, 0.05)' },
+      },
+      crosshair: {
+        mode: CrosshairMode.Normal,
+        vertLine: {
+          color: '#F29A60',
+          width: 1,
+          style: LineStyle.Dashed,
+          labelBackgroundColor: '#1C1C1E',
+        },
+        horzLine: {
+          color: '#F29A60',
+          width: 1,
+          style: LineStyle.Dashed,
+          labelBackgroundColor: '#1C1C1E',
+        },
+      },
+      timeScale: {
+        borderColor: '#2C2C2E',
+        timeVisible: true,
+        secondsVisible: false,
+      },
+      rightPriceScale: {
+        borderColor: '#2C2C2E',
+        scaleMargins: {
+          top: 0.1,
+          bottom: 0.25,
+        },
+      },
+    });
+
+    chartInstanceRef.current = chart;
+
+    // Handle Window Resize
+    const handleResize = () => {
+      if (chartContainerRef.current && chartInstanceRef.current) {
+        chartInstanceRef.current.applyOptions({
+          width: chartContainerRef.current.clientWidth,
+          height: chartContainerRef.current.clientHeight,
+        });
+      }
+    };
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (chartInstanceRef.current) {
+        chartInstanceRef.current.remove();
+        chartInstanceRef.current = null;
+      }
+    };
+  }, []);
+
+  // 3. Load & Render Bars when symbol, timeframe, or chartType changes
+  const loadChartData = useCallback(async () => {
+    if (!chartInstanceRef.current) return;
+    const chart = chartInstanceRef.current;
+
+    try {
+      // Remove previous main & volume series
+      if (mainSeriesRef.current) {
+        chart.removeSeries(mainSeriesRef.current);
+        mainSeriesRef.current = null;
+      }
+      if (volumeSeriesRef.current) {
+        chart.removeSeries(volumeSeriesRef.current);
+        volumeSeriesRef.current = null;
+      }
+      // Remove previous indicator series
+      Object.values(indicatorSeriesRefs.current).forEach((series) => {
+        try {
+          chart.removeSeries(series);
+        } catch {}
+      });
+      indicatorSeriesRefs.current = {};
+
+      // Fetch Bars
+      const historyRes = await apiClient.market.getHistory(selectedSymbol, {
+        interval: timeframe,
+        start_date: '2026-08-01',
+        end_date: '2026-10-16',
+      });
+      const rawBars = historyRes.bars || [];
+
+      // Format for Lightweight Charts (requires sorted timestamps)
+      const formattedBars = rawBars
+        .map((b: any) => {
+          let timeVal: any = b.date;
+          if (b.time) {
+            timeVal = b.time;
+          }
+          return {
+            time: timeVal,
+            open: typeof b.open === 'string' ? parseFloat(b.open) : b.open,
+            high: typeof b.high === 'string' ? parseFloat(b.high) : b.high,
+            low: typeof b.low === 'string' ? parseFloat(b.low) : b.low,
+            close: typeof b.close === 'string' ? parseFloat(b.close) : b.close,
+            volume: typeof b.volume === 'string' ? parseFloat(b.volume) : b.volume,
+          };
+        })
+        .sort((a, b) => (a.time > b.time ? 1 : -1));
+
+      // Add Main Series
+      if (chartType === 'candlestick') {
+        const candleSeries = chart.addCandlestickSeries({
+          upColor: '#26A69A',
+          downColor: '#EF5350',
+          borderVisible: false,
+          wickUpColor: '#26A69A',
+          wickDownColor: '#EF5350',
+        });
+        candleSeries.setData(formattedBars);
+        mainSeriesRef.current = candleSeries;
+      } else if (chartType === 'bar') {
+        const barSeries = chart.addBarSeries({
+          upColor: '#26A69A',
+          downColor: '#EF5350',
+        });
+        barSeries.setData(formattedBars);
+        mainSeriesRef.current = barSeries;
+      } else if (chartType === 'area') {
+        const areaSeries = chart.addAreaSeries({
+          topColor: 'rgba(242, 154, 96, 0.4)',
+          bottomColor: 'rgba(242, 154, 96, 0.0)',
+          lineColor: '#F29A60',
+          lineWidth: 2,
+        });
+        areaSeries.setData(formattedBars.map((b) => ({ time: b.time, value: b.close })));
+        mainSeriesRef.current = areaSeries;
+      } else {
+        const lineSeries = chart.addLineSeries({
+          color: '#F29A60',
+          lineWidth: 2,
+        });
+        lineSeries.setData(formattedBars.map((b) => ({ time: b.time, value: b.close })));
+        mainSeriesRef.current = lineSeries;
+      }
+
+      // Add Volume Histogram
+      const volSeries = chart.addHistogramSeries({
+        color: '#26A69A',
+        priceFormat: { type: 'volume' },
+        priceScaleId: '', // overlay
+      });
+      volSeries.priceScale().applyOptions({
+        scaleMargins: {
+          top: 0.8,
+          bottom: 0,
+        },
+      });
+      volSeries.setData(
+        formattedBars.map((b) => ({
+          time: b.time,
+          value: b.volume,
+          color: b.close >= b.open ? 'rgba(38, 166, 154, 0.4)' : 'rgba(239, 83, 80, 0.4)',
+        }))
+      );
+      volumeSeriesRef.current = volSeries;
+
+      // Add Active Technical Indicators
+      if (activeIndicators.sma20) {
+        try {
+          const smaData = await apiClient.market.getIndicators(selectedSymbol, 'SMA', { period: 20 });
+          const smaSeries = chart.addLineSeries({
+            color: '#FFD700',
+            lineWidth: 1,
+            title: 'SMA 20',
+          });
+          const validSma = smaData.series
+            .filter((p: any) => p.value !== null && p.value !== undefined)
+            .map((p: any) => ({ time: p.date, value: p.value }));
+          smaSeries.setData(validSma);
+          indicatorSeriesRefs.current['sma20'] = smaSeries;
+        } catch (e) {
+          console.warn('SMA 20 fetch error:', e);
+        }
+      }
+
+      if (activeIndicators.ema20) {
+        try {
+          const emaData = await apiClient.market.getIndicators(selectedSymbol, 'EMA', { period: 20 });
+          const emaSeries = chart.addLineSeries({
+            color: '#00E5FF',
+            lineWidth: 1,
+            title: 'EMA 20',
+          });
+          const validEma = emaData.series
+            .filter((p: any) => p.value !== null && p.value !== undefined)
+            .map((p: any) => ({ time: p.date, value: p.value }));
+          emaSeries.setData(validEma);
+          indicatorSeriesRefs.current['ema20'] = emaSeries;
+        } catch (e) {
+          console.warn('EMA 20 fetch error:', e);
+        }
+      }
+
+      if (activeIndicators.bollinger) {
+        try {
+          const bbData = await apiClient.market.getIndicators(selectedSymbol, 'BB', { period: 20, num_std: 2.0 });
+          const upperSeries = chart.addLineSeries({ color: 'rgba(255, 255, 255, 0.4)', lineWidth: 1, lineStyle: LineStyle.Dashed });
+          const lowerSeries = chart.addLineSeries({ color: 'rgba(255, 255, 255, 0.4)', lineWidth: 1, lineStyle: LineStyle.Dashed });
+          const validUpper = bbData.series.filter((p: any) => p.upper !== null).map((p: any) => ({ time: p.date, value: p.upper }));
+          const validLower = bbData.series.filter((p: any) => p.lower !== null).map((p: any) => ({ time: p.date, value: p.lower }));
+          upperSeries.setData(validUpper);
+          lowerSeries.setData(validLower);
+          indicatorSeriesRefs.current['bb_upper'] = upperSeries;
+          indicatorSeriesRefs.current['bb_lower'] = lowerSeries;
+        } catch (e) {
+          console.warn('BB fetch error:', e);
+        }
+      }
+
+      // Add Paper Order Markers on Chart for Selected Symbol
+      const symbolTrades = ledger.filter((l) => l.symbol === selectedSymbol && l.status === 'FILLED');
+      if (mainSeriesRef.current && symbolTrades.length > 0) {
+        const markers = symbolTrades.map((t) => ({
+          time: t.timestamp.split('T')[0],
+          position: (t.type === 'BUY' ? 'belowBar' : 'aboveBar') as any,
+          color: t.type === 'BUY' ? '#26A69A' : '#EF5350',
+          shape: (t.type === 'BUY' ? 'arrowUp' : 'arrowDown') as any,
+          text: `Paper ${t.type} @ ₹${t.fillPrice.toFixed(0)}`,
+        }));
+        try {
+          (mainSeriesRef.current as any).setMarkers(markers);
+        } catch (err) {
+          // setMarkers fallback
+        }
+      }
+
+      chart.timeScale().fitContent();
+    } catch (err) {
+      console.error('Failed to load chart bars:', err);
+    }
+  }, [selectedSymbol, timeframe, chartType, activeIndicators, ledger]);
+
+  useEffect(() => {
+    loadChartData();
+  }, [loadChartData]);
+
+  // 4. Handle Paper Order Placement from Chart Ticket
+  const handlePlaceOrder = async () => {
+    setOrderFeedback(null);
+    setOrderExecuting(true);
+    try {
+      const res = await executeOrder(
+        selectedSymbol,
+        orderSide,
+        orderShares,
+        orderType,
+        orderType === 'LIMIT' && orderLimitPrice > 0 ? orderLimitPrice : undefined
+      );
+
+      if (res.success && res.receipt) {
+        setOrderFeedback({
+          type: 'success',
+          message: `Paper ${orderSide} filled for ${orderShares} ${selectedSymbol} @ ₹${res.receipt.fillPrice.toFixed(2)}`,
+        });
+        loadChartData();
+      } else {
+        setOrderFeedback({
+          type: 'error',
+          message: res.error || 'Paper execution rejected by risk rules.',
+        });
+      }
+    } catch (err: any) {
+      setOrderFeedback({
+        type: 'error',
+        message: err?.message || 'Order failed to execute.',
+      });
+    } finally {
+      setOrderExecuting(false);
+    }
+  };
+
+  // 5. Handle AI Chat Message
+  const handleSendAiMessage = async () => {
+    if (!aiInput.trim() || aiLoading) return;
+    const userText = aiInput.trim();
+    setAiInput('');
+    setAiLoading(true);
+
+    const tempUser = {
+      id: `usr-${Date.now()}`,
+      role: 'user' as const,
+      text: userText,
+    };
+    setAiMessages((prev) => [...prev, tempUser]);
+
+    try {
+      // Gather active chart context to supply to Gemini assistant
+      const chartContext = {
+        symbol: selectedSymbol,
+        timeframe: timeframe,
+        current_price: currentQuote.price,
+        data_mode: marketMode.mode,
+        simulated_clock: marketMode.simulated_clock,
+        active_indicators: Object.keys(activeIndicators).filter((k) => (activeIndicators as any)[k]),
+      };
+
+      const res = await apiClient.geminiAssistant.chat(userText, chartContext);
+      const asstMsg = {
+        id: `asst-${Date.now()}`,
+        role: 'assistant' as const,
+        text: res.reply,
+        proposal: res.proposal,
+        receipt: res.execution_receipt,
+        disclaimer: res.disclaimer,
+      };
+      setAiMessages((prev) => [...prev, asstMsg]);
+    } catch (err: any) {
+      setAiMessages((prev) => [
+        ...prev,
+        {
+          id: `err-${Date.now()}`,
+          role: 'assistant' as const,
+          text: 'Unable to reach the Gemini Assistant. Please ensure your backend GEMINI_API_KEY is configured in your .env configuration file.',
+          disclaimer: 'Connection error.',
+        },
+      ]);
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  // 6. Execute AI Proposal
+  const handleExecuteAiProposal = async (proposalId: string) => {
+    setAiExecutingProposal(proposalId);
+    try {
+      const res = await apiClient.geminiAssistant.executeProposal(proposalId);
+      setAiMessages((prev) => [
+        ...prev,
+        {
+          id: `exec-${Date.now()}`,
+          role: 'assistant' as const,
+          text: `Paper proposal ${proposalId} executed successfully! Virtual orders filled across allocation.`,
+          receipt: res,
+          disclaimer: 'Simulated paper transaction recorded in local PostgreSQL ledger.',
+        },
+      ]);
+      loadChartData();
+    } catch (err: any) {
+      setAiMessages((prev) => [
+        ...prev,
+        {
+          id: `exec-err-${Date.now()}`,
+          role: 'assistant' as const,
+          text: `Execution failed: ${err?.message || 'Proposal expired or invalid.'}`,
+        },
+      ]);
+    } finally {
+      setAiExecutingProposal(null);
+    }
+  };
+
+  // 7. Save / Clear Drawings
+  const handleClearDrawings = async () => {
+    try {
+      await apiClient.charts.clearDrawings(selectedSymbol);
+      setSavedDrawings([]);
+    } catch (err) {
+      console.warn('Failed to clear drawings:', err);
+    }
+  };
+
+  const handleAddDrawing = async (tool: DrawingTool) => {
+    setActiveTool(tool);
+    if (tool === 'crosshair') return;
+    try {
+      const dummyCoord = [
+        { time: Math.floor(Date.now() / 1000) - 86400 * 5, price: currentQuote.price * 0.98 },
+        { time: Math.floor(Date.now() / 1000), price: currentQuote.price * 1.02 },
+      ];
+      const res = await apiClient.charts.saveDrawing({
+        symbol: selectedSymbol,
+        drawing_type: tool,
+        coordinates: dummyCoord,
+        properties: { color: '#F29A60', lineWidth: 2 },
+        market: marketMode.mode.includes('US') ? 'IEX' : 'NSE',
+      });
+      if (res.drawing_id) {
+        setSavedDrawings((prev) => [
+          ...prev,
+          {
+            id: res.drawing_id,
+            drawing_type: tool,
+            coordinates: dummyCoord,
+            properties: { color: '#F29A60' },
+          },
+        ]);
+      }
+    } catch (err) {
+      console.warn('Save drawing error:', err);
+    }
+  };
+
+  // Owned quantity for active symbol
+  const activeHolding = holdings.find((h) => h.symbol === selectedSymbol);
+  const ownedShares = activeHolding?.shares || 0;
+  const targetPrice = orderType === 'LIMIT' && orderLimitPrice > 0 ? orderLimitPrice : currentQuote.price;
+  const orderEstTotal = orderShares * targetPrice;
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: 'calc(100vh - 84px)',
+        backgroundColor: '#000000',
+        color: '#FFFFFF',
+        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
+        overflow: 'hidden',
+      }}
+    >
+      {/* --- TOP CONTROL BAR (Section 8B) --- */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '6px 14px',
+          backgroundColor: '#080808',
+          borderBottom: '1px solid #1C1C1E',
+          gap: '12px',
+          flexWrap: 'nowrap',
+          overflowX: 'auto',
+          fontSize: '12px',
+        }}
+      >
+        {/* Left: Symbol Search, Exchange & Live Price */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <select
+            value={selectedSymbol}
+            onChange={(e) => setSelectedSymbol(e.target.value)}
+            style={{
+              backgroundColor: '#121214',
+              color: '#FFFFFF',
+              border: '1px solid #2C2C2E',
+              borderRadius: '4px',
+              padding: '4px 8px',
+              fontWeight: 700,
+              fontSize: '13px',
+              fontFamily: "'JetBrains Mono', monospace",
+              cursor: 'pointer',
+            }}
+          >
+            <option value="RELIANCE">RELIANCE (NSE)</option>
+            <option value="TCS">TCS (NSE)</option>
+            <option value="INFY">INFY (NSE)</option>
+            <option value="HDFCBANK">HDFCBANK (NSE)</option>
+            <option value="TATAMOTORS">TATAMOTORS (NSE)</option>
+            <option value="AAPL">AAPL (IEX • US)</option>
+            <option value="MSFT">MSFT (IEX • US)</option>
+            <option value="NVDA">NVDA (IEX • US)</option>
+          </select>
+
+          <span
+            style={{
+              fontSize: '11px',
+              padding: '2px 6px',
+              backgroundColor: '#1A1A1E',
+              color: '#8E8E93',
+              borderRadius: '3px',
+              fontWeight: 600,
+            }}
+          >
+            {marketMode.mode.includes('US') ? 'IEX • USD' : 'NSE • INR'}
+          </span>
+
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+            <span style={{ fontSize: '15px', fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>
+              {marketMode.currency === 'USD' ? '$' : '₹'}
+              {currentQuote.price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+            <span
+              style={{
+                fontSize: '12px',
+                fontWeight: 600,
+                color: currentQuote.isPositive ? '#26A69A' : '#EF5350',
+              }}
+            >
+              {currentQuote.isPositive ? '+' : ''}
+              {currentQuote.changeVal.toFixed(2)} ({currentQuote.isPositive ? '+' : ''}
+              {currentQuote.changePct.toFixed(2)}%)
+            </span>
+          </div>
+        </div>
+
+        {/* Center: Timeframe & Chart Style Selectors */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          {['1m', '5m', '15m', '1h', '1D', '1W', '1M'].map((tf) => (
+            <button
+              key={tf}
+              onClick={() => setTimeframe(tf)}
+              style={{
+                backgroundColor: timeframe === tf ? '#2C2C2E' : 'transparent',
+                color: timeframe === tf ? '#F29A60' : '#8E8E93',
+                border: 'none',
+                borderRadius: '3px',
+                padding: '4px 7px',
+                fontSize: '11px',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              {tf}
+            </button>
+          ))}
+
+          <div style={{ width: '1px', height: '16px', backgroundColor: '#2C2C2E', margin: '0 4px' }} />
+
+          {/* Chart Style */}
+          {(['candlestick', 'line', 'bar', 'area'] as ChartType[]).map((type) => (
+            <button
+              key={type}
+              onClick={() => setChartType(type)}
+              style={{
+                backgroundColor: chartType === type ? '#2C2C2E' : 'transparent',
+                color: chartType === type ? '#F29A60' : '#8E8E93',
+                border: 'none',
+                borderRadius: '3px',
+                padding: '4px 6px',
+                fontSize: '11px',
+                textTransform: 'capitalize',
+                cursor: 'pointer',
+              }}
+            >
+              {type}
+            </button>
+          ))}
+
+          <div style={{ width: '1px', height: '16px', backgroundColor: '#2C2C2E', margin: '0 4px' }} />
+
+          {/* Indicators Dropdown Toggles */}
+          <button
+            onClick={() => setActiveIndicators((prev) => ({ ...prev, sma20: !prev.sma20 }))}
+            style={{
+              backgroundColor: activeIndicators.sma20 ? '#3A2E1E' : 'transparent',
+              color: activeIndicators.sma20 ? '#FFD700' : '#8E8E93',
+              border: '1px solid #2C2C2E',
+              borderRadius: '3px',
+              padding: '3px 6px',
+              fontSize: '11px',
+              cursor: 'pointer',
+            }}
+          >
+            SMA 20
+          </button>
+          <button
+            onClick={() => setActiveIndicators((prev) => ({ ...prev, ema20: !prev.ema20 }))}
+            style={{
+              backgroundColor: activeIndicators.ema20 ? '#1E2E3A' : 'transparent',
+              color: activeIndicators.ema20 ? '#00E5FF' : '#8E8E93',
+              border: '1px solid #2C2C2E',
+              borderRadius: '3px',
+              padding: '3px 6px',
+              fontSize: '11px',
+              cursor: 'pointer',
+            }}
+          >
+            EMA 20
+          </button>
+          <button
+            onClick={() => setActiveIndicators((prev) => ({ ...prev, bollinger: !prev.bollinger }))}
+            style={{
+              backgroundColor: activeIndicators.bollinger ? '#2C2C2E' : 'transparent',
+              color: activeIndicators.bollinger ? '#FFFFFF' : '#8E8E93',
+              border: '1px solid #2C2C2E',
+              borderRadius: '3px',
+              padding: '3px 6px',
+              fontSize: '11px',
+              cursor: 'pointer',
+            }}
+          >
+            BB (20,2)
+          </button>
+
+          {/* Layout Selector (Section 8B) */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '2px', backgroundColor: '#121214', padding: '2px', borderRadius: '4px', border: '1px solid #2C2C2E' }}>
+            {(['single', 'dual_h', 'dual_v', 'quad'] as WorkspaceLayout[]).map((lay) => (
+              <button
+                key={lay}
+                title={`Layout: ${lay}`}
+                onClick={() => setLayout(lay)}
+                style={{
+                  backgroundColor: layout === lay ? '#2C2C2E' : 'transparent',
+                  color: layout === lay ? '#F29A60' : '#8E8E93',
+                  border: 'none',
+                  borderRadius: '3px',
+                  padding: '2px 5px',
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                {lay === 'single' ? '▢' : lay === 'dual_h' ? '⬒' : lay === 'dual_v' ? '◧' : '⊞'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Right: Replay Clock & Feed Status Badge */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {/* Feed Status Badge */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '3px 8px',
+              backgroundColor: '#121214',
+              borderRadius: '4px',
+              border: '1px solid #2C2C2E',
+            }}
+          >
+            <div
+              style={{
+                width: '7px',
+                height: '7px',
+                borderRadius: '50%',
+                backgroundColor: marketMode.mode.includes('US') ? '#26A69A' : '#F29A60',
+              }}
+            />
+            <span style={{ fontSize: '10px', color: '#8E8E93', fontWeight: 600 }}>
+              {marketMode.mode.includes('US')
+                ? 'Live IEX (USD Paper)'
+                : `NSE Historical Replay (${marketMode.lag_days}D Lag)`}
+            </span>
+          </div>
+
+          {/* Replay Speed & Session Button */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+            {[1.0, 2.0, 5.0].map((spd) => (
+              <button
+                key={spd}
+                onClick={() => setReplaySpeed(spd)}
+                style={{
+                  backgroundColor: replaySpeed === spd ? '#2C2C2E' : 'transparent',
+                  color: replaySpeed === spd ? '#F29A60' : '#8E8E93',
+                  border: 'none',
+                  borderRadius: '3px',
+                  padding: '2px 5px',
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                {spd}x
+              </button>
+            ))}
+          </div>
+
+          <button
+            onClick={() => setIsReplaying(!isReplaying)}
+            style={{
+              backgroundColor: isReplaying ? '#F29A60' : '#1C1C1E',
+              color: isReplaying ? '#000000' : '#F29A60',
+              border: '1px solid #2C2C2E',
+              borderRadius: '4px',
+              padding: '3px 8px',
+              fontSize: '11px',
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            {isReplaying ? '⏸ Replaying' : '▶ Play Replay'}
+          </button>
+        </div>
+      </div>
+
+      {/* --- MAIN WORKSPACE BODY (Toolbar + Chart Canvas + Collapsible Panels) --- */}
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        {/* 1. Left Drawing Toolbar (Section 8F) */}
+        <div
+          style={{
+            width: '42px',
+            backgroundColor: '#080808',
+            borderRight: '1px solid #1C1C1E',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            padding: '8px 0',
+            gap: '6px',
+          }}
+        >
+          <button
+            title="Crosshair"
+            onClick={() => setActiveTool('crosshair')}
+            style={{
+              width: '30px',
+              height: '30px',
+              backgroundColor: activeTool === 'crosshair' ? '#2C2C2E' : 'transparent',
+              color: activeTool === 'crosshair' ? '#F29A60' : '#8E8E93',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '14px',
+            }}
+          >
+            ✛
+          </button>
+          <button
+            title="Trend Line"
+            onClick={() => handleAddDrawing('trend_line')}
+            style={{
+              width: '30px',
+              height: '30px',
+              backgroundColor: activeTool === 'trend_line' ? '#2C2C2E' : 'transparent',
+              color: activeTool === 'trend_line' ? '#F29A60' : '#8E8E93',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '14px',
+            }}
+          >
+            ╱
+          </button>
+          <button
+            title="Horizontal Line"
+            onClick={() => handleAddDrawing('horizontal_line')}
+            style={{
+              width: '30px',
+              height: '30px',
+              backgroundColor: activeTool === 'horizontal_line' ? '#2C2C2E' : 'transparent',
+              color: activeTool === 'horizontal_line' ? '#F29A60' : '#8E8E93',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '14px',
+            }}
+          >
+            ―
+          </button>
+          <button
+            title="Rectangle"
+            onClick={() => handleAddDrawing('rectangle')}
+            style={{
+              width: '30px',
+              height: '30px',
+              backgroundColor: activeTool === 'rectangle' ? '#2C2C2E' : 'transparent',
+              color: activeTool === 'rectangle' ? '#F29A60' : '#8E8E93',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '14px',
+            }}
+          >
+            ▭
+          </button>
+          <button
+            title="Fibonacci Retracement"
+            onClick={() => handleAddDrawing('fibonacci')}
+            style={{
+              width: '30px',
+              height: '30px',
+              backgroundColor: activeTool === 'fibonacci' ? '#2C2C2E' : 'transparent',
+              color: activeTool === 'fibonacci' ? '#F29A60' : '#8E8E93',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '12px',
+            }}
+          >
+            %
+          </button>
+
+          <div style={{ width: '24px', height: '1px', backgroundColor: '#2C2C2E', margin: '4px 0' }} />
+
+          <button
+            title="Clear Drawings"
+            onClick={handleClearDrawings}
+            style={{
+              width: '30px',
+              height: '30px',
+              backgroundColor: 'transparent',
+              color: '#8E8E93',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '12px',
+            }}
+          >
+            🗑
+          </button>
+          {savedDrawings.length > 0 && (
+            <span style={{ fontSize: '9px', color: '#8E8E93', fontFamily: 'monospace' }}>
+              {savedDrawings.length}
+            </span>
+          )}
+        </div>
+
+        {/* 2. Center Chart Area */}
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, position: 'relative' }}>
+          {/* Lightweight Charts Canvas Container */}
+          <div
+            ref={chartContainerRef}
+            style={{
+              flex: 1,
+              width: '100%',
+              backgroundColor: '#000000',
+              position: 'relative',
+            }}
+          />
+
+          {/* Required TradingView Attribution Notice (Section 8A) */}
+          <div
+            style={{
+              position: 'absolute',
+              bottom: isBottomCollapsed ? '8px' : '228px',
+              left: '12px',
+              zIndex: 10,
+              fontSize: '10px',
+              color: 'rgba(142, 142, 147, 0.6)',
+              pointerEvents: 'none',
+            }}
+          >
+            TradingView Lightweight Charts™ • Genuine Market Data Engine
+          </div>
+
+          {/* 3. Bottom Collapsible Panel (Order Ticket, Positions, Fills) */}
+          <div
+            style={{
+              height: isBottomCollapsed ? '28px' : '220px',
+              backgroundColor: '#0A0A0C',
+              borderTop: '1px solid #1C1C1E',
+              display: 'flex',
+              flexDirection: 'column',
+              transition: 'height 0.2s ease',
+            }}
+          >
+            {/* Bottom Panel Tabs */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '0 12px',
+                height: '28px',
+                backgroundColor: '#121214',
+                borderBottom: isBottomCollapsed ? 'none' : '1px solid #1C1C1E',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {(['order', 'positions', 'history', 'alerts'] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => {
+                      setBottomTab(tab);
+                      setIsBottomCollapsed(false);
+                    }}
+                    style={{
+                      backgroundColor: 'transparent',
+                      color: bottomTab === tab && !isBottomCollapsed ? '#F29A60' : '#8E8E93',
+                      border: 'none',
+                      borderBottom: bottomTab === tab && !isBottomCollapsed ? '2px solid #F29A60' : 'none',
+                      height: '28px',
+                      padding: '0 8px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      textTransform: 'uppercase',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {tab === 'order' ? 'Paper Order Ticket' : tab}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={() => setIsBottomCollapsed(!isBottomCollapsed)}
+                style={{
+                  backgroundColor: 'transparent',
+                  color: '#8E8E93',
+                  border: 'none',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                }}
+              >
+                {isBottomCollapsed ? '▲ Expand' : '▼ Collapse'}
+              </button>
+            </div>
+
+            {/* Bottom Panel Content */}
+            {!isBottomCollapsed && (
+              <div style={{ flex: 1, padding: '10px 14px', overflowY: 'auto' }}>
+                {bottomTab === 'order' && (
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '24px' }}>
+                    {/* Action Side Selector */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        <button
+                          onClick={() => setOrderSide('BUY')}
+                          style={{
+                            padding: '6px 16px',
+                            backgroundColor: orderSide === 'BUY' ? '#26A69A' : '#1C1C1E',
+                            color: '#FFFFFF',
+                            border: 'none',
+                            borderRadius: '4px',
+                            fontWeight: 700,
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Paper BUY
+                        </button>
+                        <button
+                          onClick={() => setOrderSide('SELL')}
+                          style={{
+                            padding: '6px 16px',
+                            backgroundColor: orderSide === 'SELL' ? '#EF5350' : '#1C1C1E',
+                            color: '#FFFFFF',
+                            border: 'none',
+                            borderRadius: '4px',
+                            fontWeight: 700,
+                            fontSize: '12px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Paper SELL
+                        </button>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <label style={{ fontSize: '11px', color: '#8E8E93' }}>Type:</label>
+                        <select
+                          value={orderType}
+                          onChange={(e) => setOrderType(e.target.value as OrderExecutionType)}
+                          style={{
+                            backgroundColor: '#1C1C1E',
+                            color: '#FFFFFF',
+                            border: '1px solid #2C2C2E',
+                            borderRadius: '3px',
+                            padding: '3px 6px',
+                            fontSize: '11px',
+                          }}
+                        >
+                          <option value="MARKET">Market</option>
+                          <option value="LIMIT">Limit</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Quantity & Price */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <label style={{ fontSize: '11px', color: '#8E8E93', width: '60px' }}>Shares:</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="1000"
+                          value={orderShares}
+                          onChange={(e) => setOrderShares(Math.max(1, parseInt(e.target.value) || 1))}
+                          style={{
+                            width: '80px',
+                            backgroundColor: '#1C1C1E',
+                            color: '#FFFFFF',
+                            border: '1px solid #2C2C2E',
+                            borderRadius: '3px',
+                            padding: '4px 6px',
+                            fontSize: '12px',
+                            fontFamily: "'JetBrains Mono', monospace",
+                          }}
+                        />
+                      </div>
+
+                      {orderType === 'LIMIT' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <label style={{ fontSize: '11px', color: '#8E8E93', width: '60px' }}>Limit Price:</label>
+                          <input
+                            type="number"
+                            step="0.05"
+                            value={orderLimitPrice || currentQuote.price}
+                            onChange={(e) => setOrderLimitPrice(parseFloat(e.target.value) || 0)}
+                            style={{
+                              width: '80px',
+                              backgroundColor: '#1C1C1E',
+                              color: '#FFFFFF',
+                              border: '1px solid #2C2C2E',
+                              borderRadius: '3px',
+                              padding: '4px 6px',
+                              fontSize: '12px',
+                              fontFamily: "'JetBrains Mono', monospace",
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Calculations & Submit */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '180px' }}>
+                      <div style={{ fontSize: '11px', color: '#8E8E93' }}>
+                        Estimated Total: <strong style={{ color: '#FFFFFF' }}>₹{orderEstTotal.toFixed(2)}</strong>
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#8E8E93' }}>
+                        Virtual Cash: <span style={{ color: '#26A69A' }}>₹{virtualCash.toLocaleString('en-IN')}</span>
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#8E8E93' }}>
+                        Holding: <span style={{ color: '#FFFFFF' }}>{ownedShares} shares</span>
+                      </div>
+
+                      <button
+                        onClick={handlePlaceOrder}
+                        disabled={orderExecuting}
+                        style={{
+                          marginTop: '6px',
+                          backgroundColor: orderSide === 'BUY' ? '#26A69A' : '#EF5350',
+                          color: '#FFFFFF',
+                          border: 'none',
+                          borderRadius: '4px',
+                          padding: '6px 12px',
+                          fontWeight: 700,
+                          fontSize: '12px',
+                          cursor: orderExecuting ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        {orderExecuting ? 'Simulating Fill...' : `Submit Paper ${orderSide}`}
+                      </button>
+
+                      {orderFeedback && (
+                        <div
+                          style={{
+                            fontSize: '11px',
+                            color: orderFeedback.type === 'success' ? '#26A69A' : '#EF5350',
+                            marginTop: '4px',
+                          }}
+                        >
+                          {orderFeedback.message}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {bottomTab === 'positions' && (
+                  <div>
+                    <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ color: '#8E8E93', borderBottom: '1px solid #1C1C1E', textAlign: 'left' }}>
+                          <th style={{ padding: '4px' }}>Symbol</th>
+                          <th style={{ padding: '4px' }}>Shares</th>
+                          <th style={{ padding: '4px' }}>Avg Price</th>
+                          <th style={{ padding: '4px' }}>Current Price</th>
+                          <th style={{ padding: '4px' }}>Market Value</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {holdings.map((h) => (
+                          <tr key={h.symbol} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                            <td style={{ padding: '6px 4px', fontWeight: 600 }}>{h.symbol}</td>
+                            <td style={{ padding: '6px 4px' }}>{h.shares}</td>
+                            <td style={{ padding: '6px 4px' }}>₹{h.avgPrice.toFixed(2)}</td>
+                            <td style={{ padding: '6px 4px' }}>₹{h.currentPrice.toFixed(2)}</td>
+                            <td style={{ padding: '6px 4px', color: '#26A69A' }}>
+                              ₹{(h.shares * h.currentPrice).toFixed(2)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {bottomTab === 'history' && (
+                  <div>
+                    <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ color: '#8E8E93', borderBottom: '1px solid #1C1C1E', textAlign: 'left' }}>
+                          <th style={{ padding: '4px' }}>Time</th>
+                          <th style={{ padding: '4px' }}>Action</th>
+                          <th style={{ padding: '4px' }}>Symbol</th>
+                          <th style={{ padding: '4px' }}>Shares</th>
+                          <th style={{ padding: '4px' }}>Fill Price</th>
+                          <th style={{ padding: '4px' }}>Total</th>
+                          <th style={{ padding: '4px' }}>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ledger.slice(0, 5).map((l) => (
+                          <tr key={l.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                            <td style={{ padding: '6px 4px', color: '#8E8E93' }}>{l.timestamp.split('T')[1]?.slice(0, 8)}</td>
+                            <td
+                              style={{
+                                padding: '6px 4px',
+                                color: l.type === 'BUY' ? '#26A69A' : '#EF5350',
+                                fontWeight: 600,
+                              }}
+                            >
+                              {l.type}
+                            </td>
+                            <td style={{ padding: '6px 4px', fontWeight: 600 }}>{l.symbol}</td>
+                            <td style={{ padding: '6px 4px' }}>{l.shares}</td>
+                            <td style={{ padding: '6px 4px' }}>₹{l.fillPrice.toFixed(2)}</td>
+                            <td style={{ padding: '6px 4px' }}>₹{l.total.toFixed(2)}</td>
+                            <td style={{ padding: '6px 4px', color: '#26A69A' }}>{l.status}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 4. Right Collapsible Panel (Ask FinEx AI, Watchlist, Details) */}
+        <div
+          style={{
+            width: isRightCollapsed ? '28px' : '340px',
+            backgroundColor: '#080808',
+            borderLeft: '1px solid #1C1C1E',
+            display: 'flex',
+            flexDirection: 'column',
+            transition: 'width 0.2s ease',
+          }}
+        >
+          {/* Right Header */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '6px 8px',
+              backgroundColor: '#121214',
+              borderBottom: '1px solid #1C1C1E',
+            }}
+          >
+            {!isRightCollapsed ? (
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <button
+                  onClick={() => setRightPanelTab('ai')}
+                  style={{
+                    backgroundColor: rightPanelTab === 'ai' ? '#2C2C2E' : 'transparent',
+                    color: rightPanelTab === 'ai' ? '#F29A60' : '#8E8E93',
+                    border: 'none',
+                    borderRadius: '3px',
+                    padding: '3px 6px',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  ✨ Ask FinEx AI
+                </button>
+                <button
+                  onClick={() => setRightPanelTab('watchlist')}
+                  style={{
+                    backgroundColor: rightPanelTab === 'watchlist' ? '#2C2C2E' : 'transparent',
+                    color: rightPanelTab === 'watchlist' ? '#F29A60' : '#8E8E93',
+                    border: 'none',
+                    borderRadius: '3px',
+                    padding: '3px 6px',
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Watchlist
+                </button>
+              </div>
+            ) : (
+              <div style={{ width: '100%' }} />
+            )}
+
+            <button
+              onClick={() => setIsRightCollapsed(!isRightCollapsed)}
+              style={{
+                backgroundColor: 'transparent',
+                color: '#8E8E93',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: '11px',
+              }}
+            >
+              {isRightCollapsed ? '◀' : '▶'}
+            </button>
+          </div>
+
+          {/* Right Body */}
+          {!isRightCollapsed && (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, padding: '8px' }}>
+              {rightPanelTab === 'ai' && (
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+                  {/* Messages Feed */}
+                  <div
+                    style={{
+                      flex: 1,
+                      overflowY: 'auto',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '10px',
+                      paddingRight: '4px',
+                    }}
+                  >
+                    {aiMessages.map((m) => (
+                      <div
+                        key={m.id}
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
+                          maxWidth: '92%',
+                          backgroundColor: m.role === 'user' ? '#1C1C1E' : '#121214',
+                          border: m.role === 'user' ? '1px solid #2C2C2E' : '1px solid #1C1C1E',
+                          borderRadius: '6px',
+                          padding: '8px 10px',
+                          fontSize: '12px',
+                          lineHeight: '1.4',
+                        }}
+                      >
+                        <div style={{ color: m.role === 'user' ? '#FFFFFF' : '#E5E5EA', whiteSpace: 'pre-wrap' }}>
+                          {m.text}
+                        </div>
+
+                        {/* Proposal Card if Gemini created bounded proposal */}
+                        {m.proposal && (
+                          <div
+                            style={{
+                              marginTop: '8px',
+                              padding: '8px',
+                              backgroundColor: '#0A0A0C',
+                              border: '1px solid #F29A60',
+                              borderRadius: '4px',
+                            }}
+                          >
+                            <div style={{ fontSize: '11px', fontWeight: 700, color: '#F29A60', marginBottom: '4px' }}>
+                              📋 Paper Investment Proposal
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#8E8E93' }}>
+                              Budget: {m.proposal.currency} {m.proposal.total_budget} • Expires in{' '}
+                              {m.proposal.expires_in_minutes}m
+                            </div>
+                            <div style={{ marginTop: '4px' }}>
+                              {m.proposal.allocations?.map((alloc: any, idx: number) => (
+                                <div
+                                  key={idx}
+                                  style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    fontSize: '11px',
+                                    padding: '2px 0',
+                                  }}
+                                >
+                                  <span>
+                                    {alloc.side} {alloc.quantity}x {alloc.symbol}
+                                  </span>
+                                  <span style={{ color: '#26A69A' }}>
+                                    ₹{alloc.estimated_subtotal?.toFixed(0)}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                            <button
+                              onClick={() => handleExecuteAiProposal(m.proposal.proposal_id)}
+                              disabled={aiExecutingProposal === m.proposal.proposal_id}
+                              style={{
+                                marginTop: '8px',
+                                width: '100%',
+                                backgroundColor: '#F29A60',
+                                color: '#000000',
+                                border: 'none',
+                                borderRadius: '3px',
+                                padding: '6px',
+                                fontWeight: 700,
+                                fontSize: '11px',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              {aiExecutingProposal === m.proposal.proposal_id
+                                ? 'Executing Paper Fills...'
+                                : 'Execute Paper Proposal'}
+                            </button>
+                          </div>
+                        )}
+
+                        {m.disclaimer && (
+                          <div style={{ marginTop: '4px', fontSize: '10px', color: '#8E8E93' }}>
+                            {m.disclaimer}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* AI Input Area */}
+                  <div style={{ marginTop: '8px', display: 'flex', gap: '6px' }}>
+                    <input
+                      type="text"
+                      placeholder="Ask chart or say 'Invest INR 10,000'..."
+                      value={aiInput}
+                      onChange={(e) => setAiInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSendAiMessage();
+                      }}
+                      style={{
+                        flex: 1,
+                        backgroundColor: '#121214',
+                        color: '#FFFFFF',
+                        border: '1px solid #2C2C2E',
+                        borderRadius: '4px',
+                        padding: '6px 8px',
+                        fontSize: '11px',
+                      }}
+                    />
+                    <button
+                      onClick={handleSendAiMessage}
+                      disabled={aiLoading}
+                      style={{
+                        backgroundColor: '#F29A60',
+                        color: '#000000',
+                        border: 'none',
+                        borderRadius: '4px',
+                        padding: '6px 10px',
+                        fontWeight: 700,
+                        fontSize: '11px',
+                        cursor: aiLoading ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      {aiLoading ? '...' : 'Send'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {rightPanelTab === 'watchlist' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', overflowY: 'auto' }}>
+                  {Object.values(marketQuotes).map((quote) => (
+                    <div
+                      key={quote.symbol}
+                      onClick={() => setSelectedSymbol(quote.symbol)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '6px 8px',
+                        backgroundColor: selectedSymbol === quote.symbol ? '#1C1C1E' : 'transparent',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: '12px', fontWeight: 700 }}>{quote.symbol}</div>
+                        <div style={{ fontSize: '10px', color: '#8E8E93' }}>{quote.name}</div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '12px', fontFamily: "'JetBrains Mono', monospace" }}>
+                          ₹{quote.price.toFixed(2)}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: '10px',
+                            color: quote.isPositive ? '#26A69A' : '#EF5350',
+                            fontWeight: 600,
+                          }}
+                        >
+                          {quote.isPositive ? '+' : ''}
+                          {quote.changePct.toFixed(2)}%
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};

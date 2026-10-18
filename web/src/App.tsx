@@ -9,6 +9,7 @@ import { PortfolioScreen } from './pages/PortfolioScreen';
 import { TransactionsScreen } from './pages/TransactionsScreen';
 import { AskFinExScreen } from './pages/AskFinExScreen';
 import { PracticeScreen } from './pages/PracticeScreen';
+import { ChartWorkspaceScreen } from './pages/ChartWorkspaceScreen';
 import { AlertsScreen } from './pages/AlertsScreen';
 import { GoalsScreen } from './pages/GoalsScreen';
 import { SpendingScreen } from './pages/SpendingScreen';
@@ -95,6 +96,7 @@ export const AppContent: React.FC = () => {
     <AppShell currentTab={currentTab} onNavigate={(tab) => setCurrentTab(tab)}>
       {currentTab === 'overview' && <OverviewScreen onNavigate={(t) => setCurrentTab(t)} />}
       {currentTab === 'markets' && <MarketsScreen onNavigate={(t) => setCurrentTab(t)} />}
+      {currentTab === 'charts' && <ChartWorkspaceScreen onNavigate={(t) => setCurrentTab(t)} />}
       {currentTab === 'portfolio' && <PortfolioScreen onNavigate={(t) => setCurrentTab(t)} />}
       {currentTab === 'transactions' && <TransactionsScreen />}
       {currentTab === 'practice' && <PracticeScreen />}
