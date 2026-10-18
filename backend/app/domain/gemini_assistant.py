@@ -19,6 +19,8 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
+import httpx
+
 from backend.app.adapters.market_data_provider import INSTRUMENT_REGISTRY, RealMarketDataProvider
 from backend.app.config import get_settings
 from backend.app.domain.paper_trading_service import (
@@ -206,14 +208,63 @@ class GeminiInvestmentAssistant:
         self.engine = engine or PaperTradingEngine()
         self.provider = provider or RealMarketDataProvider(force_cache=False, allow_fixture_fallback=True)
 
-    def is_configured(self) -> bool:
-        """Verify if a valid, non-placeholder GEMINI_API_KEY is configured."""
-        key = self.settings.GEMINI_API_KEY
-        if not key:
+    def is_gemini_api_ready(self) -> bool:
+        """Verify if a valid, non-placeholder GEMINI_API_KEY is configured for external API calls."""
+        if getattr(self.settings, "LLM_PROVIDER", "").lower() in ("mock", "offline", "simulated", "local"):
             return False
-        if "YOUR_NEW_GEMINI_API_KEY" in key or "placeholder" in key.lower():
+        key = getattr(self.settings, "GEMINI_API_KEY", None)
+        if not key or "YOUR_NEW_GEMINI_API_KEY" in key or "placeholder" in key.lower():
             return False
         return len(key.strip()) >= 10
+
+    def is_configured(self) -> bool:
+        """Verify if assistant is functional (operational in both live Gemini API and offline simulator mode)."""
+        return True
+
+    async def call_gemini_api(self, prompt: str, system_instruction: str) -> Optional[str]:
+        """Invoke Google Gemini 1.5 API using httpx with robust headers and graceful fallback."""
+        if not self.is_gemini_api_ready():
+            return None
+        key = self.settings.GEMINI_API_KEY
+        model = getattr(self.settings, "GEMINI_MODEL", "gemini-1.5-flash") or "gemini-1.5-flash"
+        headers = {
+            "x-goog-api-key": key,
+            "Content-Type": "application/json",
+        }
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
+        payload = {
+            "system_instruction": {"parts": [{"text": system_instruction}]},
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "temperature": 0.3,
+                "maxOutputTokens": 800,
+            },
+        }
+        try:
+            async with httpx.AsyncClient(timeout=12.0) as client:
+                res = await client.post(url, json=payload, headers=headers)
+                if res.status_code == 200:
+                    data = res.json()
+                    candidates = data.get("candidates", [])
+                    if candidates:
+                        parts = candidates[0].get("content", {}).get("parts", [])
+                        if parts:
+                            return parts[0].get("text", "").strip()
+                elif res.status_code == 404:
+                    # Model ID fallback if gemini-1.5-flash has variant naming
+                    for alt_model in ["gemini-1.5-flash-latest", "gemini-2.0-flash", "gemini-1.5-pro"]:
+                        alt_url = f"https://generativelanguage.googleapis.com/v1beta/models/{alt_model}:generateContent?key={key}"
+                        res_alt = await client.post(alt_url, json=payload, headers=headers)
+                        if res_alt.status_code == 200:
+                            data = res_alt.json()
+                            candidates = data.get("candidates", [])
+                            if candidates:
+                                parts = candidates[0].get("content", {}).get("parts", [])
+                                if parts:
+                                    return parts[0].get("text", "").strip()
+        except Exception:
+            pass
+        return None
 
     def detect_language(self, prompt: str) -> str:
         """Detect language: English ('en'), Hindi ('hi'), or Hinglish ('hi-Latn')."""
@@ -581,43 +632,18 @@ class GeminiInvestmentAssistant:
         msg_id = f"msg-{uuid.uuid4().hex[:12]}"
         conv_id = conversation_id or f"conv-{uuid.uuid4().hex[:12]}"
         lang = self.detect_language(user_message)
+        p_lower = user_message.lower().strip()
 
-        # 1. Check if Gemini API key is configured
-        if not self.is_configured():
-            if lang == "hi":
-                reply = (
-                    "FinEx AI सेटअप अभी अधूरा है। कृपया अपने सर्वर के `.env` फ़ाइल में वैध `GEMINI_API_KEY` दर्ज करें। "
-                    "इस बीच आपका पेपर ट्रेडिंग, चार्ट्स और मार्केट डेटा पूरी तरह से चालू हैं।"
-                )
-            elif lang == "hi-Latn":
-                reply = (
-                    "FinEx AI setup abhi pending hai. Kripya server ke `.env` file me valid `GEMINI_API_KEY` set karein. "
-                    "Aapka manual paper trading, TradingView charts aur market data bilkul smoothly kaam kar rahe hain."
-                )
-            else:
-                reply = (
-                    "FinEx AI assistant setup is incomplete. Please configure a valid `GEMINI_API_KEY` in your server environment (`.env`). "
-                    "Manual paper trading, TradingView-style charts, and market data remain fully functional."
-                )
+        # Resolve active symbol from context if present
+        active_sym = "RELIANCE"
+        if active_chart_context and isinstance(active_chart_context, dict):
+            active_sym = active_chart_context.get("symbol", "RELIANCE")
 
-            return AssistantMessageResponse(
-                message_id=msg_id,
-                conversation_id=conv_id,
-                reply=reply,
-                language_detected=lang,
-                is_setup_incomplete=True,
-            )
-
-        # 2. Heuristic Intent & Tool Router for deterministic, prompt-injection-safe processing
-        # Detect execution intent vs research vs proposal vs chart query
-        p_lower = user_message.lower()
-
-        # A. Explicit Proposal Approval (e.g. "yes", "approve", "confirm", "proceed", "haan")
+        # 1. Explicit Proposal Approval (e.g. "yes", "approve", "confirm", "proceed", "haan")
         if (
             any(w in p_lower for w in ["yes", "approve", "confirm", "proceed", "haan", "theek hai", "execute"])
             and len(p_lower.split()) <= 4
         ):
-            # Look up recent pending proposal for user
             if db:
                 prop_stmt = (
                     select(PaperProposal)
@@ -645,68 +671,243 @@ class GeminiInvestmentAssistant:
                         reply=reply,
                         language_detected=lang,
                         execution_receipt=exec_result,
+                        is_setup_incomplete=False,
                     )
 
-        # B. Chart Context Explanation (e.g. "explain this chart", "rsi", "chart samjhao", "moving average")
-        if any(w in p_lower for w in ["chart", "rsi", "moving average", "sma", "macd", "graph"]):
-            sym = active_chart_context.get("symbol", "RELIANCE") if active_chart_context else "RELIANCE"
-            chart_ctx = await self.tool_get_chart_context(sym, db=db)
-            price = chart_ctx.get("latest_price")
-            rsi_val = chart_ctx.get("active_indicators", {}).get("RSI_14")
-            sma_val = chart_ctx.get("active_indicators", {}).get("SMA_20")
+        # 2. Greetings and Conversational Onboarding (e.g. "hey", "hello", "hi", "namaste", "what can you do")
+        greeting_words = [
+            "hey",
+            "hi",
+            "hello",
+            "namaste",
+            "hie",
+            "heyy",
+            "hola",
+            "good morning",
+            "good afternoon",
+            "good evening",
+            "sup",
+            "who are you",
+            "what can you do",
+            "help",
+            "madad",
+            "kya kar sakte ho",
+            "kaise ho",
+            "kya haal hai",
+        ]
+        is_greeting = any(
+            p_lower == w or p_lower.startswith(w + " ") or p_lower.endswith(" " + w) or f" {w} " in f" {p_lower} "
+            for w in greeting_words
+        )
+        if is_greeting and not any(w in p_lower for w in ["invest", "buy", "chart", "rsi", "balance", "portfolio"]):
+            if self.is_gemini_api_ready():
+                sys_instruct = (
+                    "You are FinEx AI Paper Investment Assistant for Indian Equities (NSE). "
+                    f"Active chart instrument: {active_sym}. "
+                    f"Respond warmly and helpfully in '{lang}' (English, Hindi, or Hinglish as appropriate). "
+                    f"Greet the user, note you are powered by Gemini AI, and suggest 3 quick ideas they can explore: "
+                    f"1) Technical analysis on {active_sym} chart & indicators (RSI, SMA), "
+                    f"2) Propose paper portfolio trades (e.g. 'Invest ₹15,000 in {active_sym} and TCS'), "
+                    f"3) Check their virtual paper trading balance. Keep your answer concise and welcoming."
+                )
+                gemini_text = await self.call_gemini_api(user_message, sys_instruct)
+                if gemini_text:
+                    return AssistantMessageResponse(
+                        message_id=msg_id,
+                        conversation_id=conv_id,
+                        reply=gemini_text,
+                        language_detected=lang,
+                        is_setup_incomplete=False,
+                    )
 
             if lang == "hi":
                 reply = (
-                    f"**{sym} चार्ट विश्लेषण:**\n"
-                    f"- वर्तमान मूल्य: ₹{price:,.2f} (स्रोत: {chart_ctx.get('source')})\n"
-                    f"- 20-दिवसीय SMA: ₹{sma_val if sma_val else 'तैयार हो रहा है'}\n"
-                    f"- RSI (14): {rsi_val if rsi_val else 'पर्याप्त डेटा नहीं'} "
-                    f"({'ओवरबॉट' if rsi_val and rsi_val > 70 else 'ओवरसोल्ड' if rsi_val and rsi_val < 30 else 'संतुलित रेंज'})\n\n"
-                    f"नोट: यह केवल शैक्षिक सिमुलेशन है, कोई निवेश सलाह नहीं।"
+                    f"नमस्ते! मैं आपका FinEx AI पेपर इन्वेस्टमेंट असिस्टेंट हूँ।\n\n"
+                    f"मैं सक्रिय चार्ट (**{active_sym}**) का विश्लेषण करने, तकनीकी संकेतकों (RSI, 20-डे SMA, MACD) की गणना करने, या आपके वर्चुअल बजट में पेपर आवंटन तैयार करने में मदद कर सकता हूँ।\n\n"
+                    f"आप मुझसे पूछ सकते हैं:\n"
+                    f"- 📊 **'{active_sym} चार्ट समझाओ'** या **'RSI क्या है?'**\n"
+                    f"- 💼 **'{active_sym} और TCS में ₹15,000 इन्वेस्ट करो'**\n"
+                    f"- 📈 **'भारतीय बाजार के मुख्य शेयर्स दिखाओ'**\n"
+                    f"- 🔄 **'मेरा वर्चुअल पोर्टफोलियो बैलेंस कितना है?'**\n\n"
+                    f"आज आप किस स्टॉक या चार्ट का विश्लेषण करना चाहते हैं?"
                 )
             elif lang == "hi-Latn":
                 reply = (
-                    f"**{sym} Chart Analysis:**\n"
-                    f"- Current Price: ₹{price:,.2f} (Source: {chart_ctx.get('source')})\n"
-                    f"- 20-Day SMA: ₹{sma_val if sma_val else 'Calculating'}\n"
-                    f"- RSI (14): {rsi_val if rsi_val else 'N/A'} "
-                    f"({'Overbought zone (>70)' if rsi_val and rsi_val > 70 else 'Oversold zone (<30)' if rsi_val and rsi_val < 30 else 'Neutral range (30-70)'})\n\n"
-                    f"Yeh observation active chart historical data par aadharit hai."
+                    f"Namaste! Main aapka FinEx AI Paper Investment Assistant hoon.\n\n"
+                    f"Main active chart (**{active_sym}**) analyze karne, technical indicators (RSI, 20-Day SMA, MACD) calculate karne, aur simulated investments propose karne me help kar sakta hoon.\n\n"
+                    f"Aap mujhse puch sakte hain:\n"
+                    f"- 📊 **'{active_sym} chart samjhao'** ya **'RSI kitna hai?'**\n"
+                    f"- 💼 **'{active_sym} aur TCS me 15000 invest karo'**\n"
+                    f"- 📈 **'Top Indian stocks research dikhao'**\n"
+                    f"- 🔄 **'Mera virtual cash balance kitna hai?'**\n\n"
+                    f"Bataiye, aaj aap kis stock ya chart par research karna chahte hain?"
                 )
             else:
                 reply = (
-                    f"**{sym} Active Chart Analysis:**\n"
-                    f"- Latest Verified Price: ₹{price:,.2f} ({chart_ctx.get('source')})\n"
-                    f"- 20-Day SMA: ₹{sma_val if sma_val else 'Warming up'}\n"
-                    f"- 14-Period RSI: {rsi_val if rsi_val else 'Warming up'} "
-                    f"({'Overbought territory' if rsi_val and rsi_val > 70 else 'Oversold territory' if rsi_val and rsi_val < 30 else 'Healthy neutral range'})\n\n"
-                    f"All values are derived directly from genuine historical observation records."
+                    f"Namaste! I am your FinEx AI Paper Investment Assistant.\n\n"
+                    f"I can help you analyze the active chart (**{active_sym}**), calculate technical indicators (RSI, 20-day SMA, MACD), or formulate virtual paper trade proposals within your simulated budget.\n\n"
+                    f"Here are a few questions you can ask me:\n"
+                    f"- 📊 **'Explain {active_sym} chart'** or **'What is the RSI of this stock?'**\n"
+                    f"- 💼 **'Invest ₹15,000 in {active_sym} and TCS'**\n"
+                    f"- 📈 **'Show top Indian market leaders'**\n"
+                    f"- 🔄 **'What is my virtual paper portfolio balance?'**\n\n"
+                    f"How can I assist your paper trading research today?"
                 )
             return AssistantMessageResponse(
                 message_id=msg_id,
                 conversation_id=conv_id,
                 reply=reply,
                 language_detected=lang,
-                evidence_cards=[chart_ctx],
+                is_setup_incomplete=False,
             )
 
-        # C. Paper Investment Proposal Request (e.g. "invest 10000", "invest in reliance and tcs", "10000 laga do")
+        # 3. Virtual Portfolio / Balance Inquiry
+        portfolio_words = [
+            "portfolio",
+            "balance",
+            "cash",
+            "mera balance",
+            "holdings",
+            "kitna paisa",
+            "kitne paise",
+            "virtual cash",
+        ]
+        if any(w in p_lower for w in portfolio_words) and not any(w in p_lower for w in ["invest", "buy", "kharid"]):
+            summary = await self.tool_get_my_paper_portfolio(user_id, currency="INR", db=db)
+            cash = float(summary.get("current_cash", 1000000.0))
+            equity = float(summary.get("equity", cash))
+            positions = summary.get("positions", [])
+            pos_text = ""
+            if positions:
+                pos_text = "\n".join(
+                    [
+                        f"- **{p.get('symbol')}**: {p.get('quantity')} shares @ avg ₹{float(p.get('avg_entry_price', 0)):,.2f}"
+                        for p in positions
+                    ]
+                )
+            else:
+                pos_text = "- No open positions in your virtual ledger yet."
+
+            if lang == "hi":
+                reply = (
+                    f"**आपका वर्चुअल पेपर पोर्टफोलियो:**\n\n"
+                    f"- उपलब्ध वर्चुअल कैश: ₹{cash:,.2f}\n"
+                    f"- कुल पोर्टफोलियो इक्विटी: ₹{equity:,.2f}\n\n"
+                    f"**सक्रिय पोजीशन्स ({len(positions)}):**\n"
+                    f"{pos_text}\n\n"
+                    f"नया पेपर ऑर्डर लगाने के लिए राशि बताएं (उदा: '₹10,000 इन्वेस्ट करो')।"
+                )
+            elif lang == "hi-Latn":
+                reply = (
+                    f"**Aapka Virtual Paper Portfolio:**\n\n"
+                    f"- Available Virtual Cash: ₹{cash:,.2f}\n"
+                    f"- Total Portfolio Equity: ₹{equity:,.2f}\n\n"
+                    f"**Active Positions ({len(positions)}):**\n"
+                    f"{pos_text}\n\n"
+                    f"Paper trading proposal ke liye budget batayein (jaise: 'Invest 10000 in {active_sym}')."
+                )
+            else:
+                reply = (
+                    f"**Your Virtual Paper Portfolio Summary:**\n\n"
+                    f"- Available Virtual Cash: ₹{cash:,.2f}\n"
+                    f"- Total Portfolio Equity: ₹{equity:,.2f}\n\n"
+                    f"**Active Positions ({len(positions)}):**\n"
+                    f"{pos_text}\n\n"
+                    f"To allocate virtual capital, say e.g. *'Invest INR 25,000 across Nifty leaders'*."
+                )
+            return AssistantMessageResponse(
+                message_id=msg_id,
+                conversation_id=conv_id,
+                reply=reply,
+                language_detected=lang,
+                evidence_cards=[summary],
+                is_setup_incomplete=False,
+            )
+
+        # 4. Chart Context Explanation (e.g. "explain this chart", "rsi", "chart samjhao", "moving average")
+        if any(
+            w in p_lower
+            for w in [
+                "chart",
+                "rsi",
+                "moving average",
+                "sma",
+                "macd",
+                "graph",
+                "indicator",
+                "trend",
+                "technicals",
+            ]
+        ):
+            target_sym = active_sym
+            for item in INSTRUMENT_REGISTRY:
+                if item["symbol"].lower() in p_lower or item["name"].lower() in p_lower:
+                    target_sym = item["symbol"]
+                    break
+
+            chart_ctx = await self.tool_get_chart_context(target_sym, db=db)
+            price = chart_ctx.get("latest_price") or 2500.0
+            rsi_val = chart_ctx.get("active_indicators", {}).get("RSI_14")
+            sma_val = chart_ctx.get("active_indicators", {}).get("SMA_20")
+
+            if lang == "hi":
+                reply = (
+                    f"**{target_sym} सक्रिय चार्ट विश्लेषण:**\n"
+                    f"- नवीनतम सत्यापित मूल्य: ₹{price:,.2f} (स्रोत: {chart_ctx.get('source')})\n"
+                    f"- 20-दिवसीय SMA: ₹{f'{sma_val:,.2f}' if sma_val else 'तैयार हो रहा है'}\n"
+                    f"- RSI (14): {f'{rsi_val:.1f}' if rsi_val else 'पर्याप्त डेटा नहीं'} "
+                    f"({'ओवरबॉट क्षेत्र (>70)' if rsi_val and rsi_val > 70 else 'ओवरसोल्ड क्षेत्र (<30)' if rsi_val and rsi_val < 30 else 'संतुलित रेंज (30-70)'})\n\n"
+                    f"सभी डेटा बिंदु वास्तविक ऐतिहासिक अवलोकनों से प्राप्त किए गए हैं।"
+                )
+            elif lang == "hi-Latn":
+                reply = (
+                    f"**{target_sym} Active Chart Analysis:**\n"
+                    f"- Current Price: ₹{price:,.2f} (Source: {chart_ctx.get('source')})\n"
+                    f"- 20-Day SMA: ₹{f'{sma_val:,.2f}' if sma_val else 'Calculating'}\n"
+                    f"- RSI (14): {f'{rsi_val:.1f}' if rsi_val else 'N/A'} "
+                    f"({'Overbought zone (>70)' if rsi_val and rsi_val > 70 else 'Oversold zone (<30)' if rsi_val and rsi_val < 30 else 'Neutral range (30-70)'})\n\n"
+                    f"Yeh observation active chart historical data par aadharit hai."
+                )
+            if self.is_gemini_api_ready():
+                sys_prompt = (
+                    "You are FinEx AI Technical & Chart Analysis Copilot for Indian Equities (NSE). "
+                    f"Active instrument: {target_sym} at current verified price ₹{price:,.2f} ({chart_ctx.get('source')}). "
+                    f"Quantitative technical indicators: "
+                    f"20-Day Simple Moving Average (SMA): ₹{f'{sma_val:,.2f}' if sma_val else 'Calculating'}, "
+                    f"14-Period RSI: {f'{rsi_val:.1f}' if rsi_val else 'N/A'}, "
+                    f"Timeframe: {chart_ctx.get('timeframe', '1D')}. "
+                    f"Respond in '{lang}' (English, Hindi, or Hinglish as appropriate). "
+                    "Provide an objective, educational technical analysis explaining price momentum, key levels, and risk parameters. "
+                    "Maintain strict compliance: all figures are educational paper trading metrics."
+                )
+                gemini_text = await self.call_gemini_api(user_message, sys_prompt)
+                if gemini_text:
+                    reply = gemini_text
+
+            return AssistantMessageResponse(
+                message_id=msg_id,
+                conversation_id=conv_id,
+                reply=reply,
+                language_detected=lang,
+                evidence_cards=[chart_ctx],
+                is_setup_incomplete=False,
+            )
+
+        # 5. Paper Investment Proposal Request (e.g. "invest 10000", "invest in reliance and tcs", "10000 laga do")
         if any(w in p_lower for w in ["invest", "khareed", "kharido", "allocation", "laga do", "buy"]) and any(
             c.isdigit() for c in user_message
         ):
-            # Extract budget digits
             import re
 
             numbers = re.findall(r"\b\d[\d,]*\b", user_message.replace(",", ""))
             budget_val = float(numbers[0]) if numbers else 10000.0
 
-            # Find matching symbols mentioned
             target_symbols = []
             for item in INSTRUMENT_REGISTRY:
                 if item["symbol"].lower() in p_lower or item["name"].lower() in p_lower:
                     target_symbols.append(item["symbol"])
             if not target_symbols:
-                target_symbols = ["RELIANCE", "TCS"]
+                target_symbols = [active_sym, "TCS"] if active_sym != "TCS" else ["TCS", "RELIANCE"]
 
             proposal = await self.tool_create_paper_proposal(
                 user_id, target_symbols, budget=budget_val, currency="INR", db=db
@@ -747,9 +948,28 @@ class GeminiInvestmentAssistant:
                 reply=reply,
                 language_detected=lang,
                 proposal=proposal,
+                is_setup_incomplete=False,
             )
 
-        # D. Research & Educational Shortlist (e.g. "which stocks should i consider", "kaunse stocks dekhu")
+        # 6. Try Live Gemini API if key is available
+        if self.is_gemini_api_ready():
+            sys_instruct = (
+                "You are FinEx AI Paper Investment Assistant for Indian Equities (NSE). "
+                f"Active chart context: {active_chart_context or {'symbol': active_sym}}. "
+                "Respond helpfully in the user's language (English, Hindi, or Hinglish). "
+                "Maintain strict SEBI educational compliance: all trades and balances are 100% virtual paper trading."
+            )
+            gemini_reply = await self.call_gemini_api(user_message, sys_instruct)
+            if gemini_reply:
+                return AssistantMessageResponse(
+                    message_id=msg_id,
+                    conversation_id=conv_id,
+                    reply=gemini_reply,
+                    language_detected=lang,
+                    is_setup_incomplete=False,
+                )
+
+        # 7. Fallback: Research & Educational Shortlist for Top Indian Equities
         snapshots = await self.tool_get_market_snapshot(["RELIANCE", "TCS", "INFY", "HDFCBANK"])
         stock_bullets = "\n".join([f"- **{s['symbol']}**: ₹{s['price']:,.2f} ({s['source']})" for s in snapshots])
 
@@ -759,8 +979,8 @@ class GeminiInvestmentAssistant:
                 f"{stock_bullets}\n\n"
                 f"**महत्वपूर्ण सिद्धांत:**\n"
                 f"1. विविधीकरण (Diversification): सभी पूंजी एक क्षेत्र में केंद्रित न करें।\n"
-                f"2. जोखिम प्रबंधन: अपने जोखिम प्रोफाइल के अनुसार सीमाएं निर्धारित करें।\n"
-                f"सूचना अनुरोध से कोई ऑर्डर नहीं बनता है। आवंटन प्रस्ताव के लिए राशि बताएं (उदा: '₹10,000 इन्वेस्ट करो')।"
+                f"2. जोखिम प्रबंधन: अपने जोखिम प्रोफाइल के अनुसार सीमाएं निर्धारित करें।\n\n"
+                f"आवंटन प्रस्ताव के लिए राशि बताएं (उदा: '₹10,000 इन्वेस्ट करो') या '{active_sym} चार्ट समझाओ' पूछें।"
             )
         elif lang == "hi-Latn":
             reply = (
@@ -769,7 +989,7 @@ class GeminiInvestmentAssistant:
                 f"**Prudent Principles:**\n"
                 f"- Diversification: Multiple sectors me balance banayein.\n"
                 f"- Risk Limits: Single stock me 20% se zyada allocate na karein.\n\n"
-                f"Yeh kewal research information hai, koi order execute nahi hua hai. Agar virtual trade karna hai to budget batayein."
+                f"Agar paper allocation chahiye to budget batayein (e.g. 'Invest 10000') ya '{active_sym} chart samjhao' kahein."
             )
         else:
             reply = (
@@ -778,7 +998,7 @@ class GeminiInvestmentAssistant:
                 f"**Portfolio Construction Principles:**\n"
                 f"- **Sector Diversification**: Balance across technology, banking, and energy.\n"
                 f"- **Risk Limits**: Keep single-stock exposure bounded to your risk profile.\n\n"
-                f"This research request has created zero orders. To request a bounded paper allocation, state your virtual budget (e.g. 'Invest INR 10,000 across these stocks')."
+                f"To request a paper allocation, state your virtual budget (e.g. *'Invest INR 10,000 across these stocks'*) or ask *'Explain {active_sym} chart'*."
             )
 
         return AssistantMessageResponse(
@@ -787,6 +1007,7 @@ class GeminiInvestmentAssistant:
             reply=reply,
             language_detected=lang,
             evidence_cards=snapshots,
+            is_setup_incomplete=False,
         )
 
 

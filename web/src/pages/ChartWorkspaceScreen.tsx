@@ -18,6 +18,73 @@ export type ChartType = 'candlestick' | 'bar' | 'line' | 'area';
 export type WorkspaceLayout = 'single' | 'dual_h' | 'dual_v' | 'quad';
 export type DrawingTool = 'crosshair' | 'trend_line' | 'horizontal_line' | 'vertical_line' | 'rectangle' | 'fibonacci' | 'text' | 'ruler';
 
+// Official TradingView Advanced Widget Component with script embed
+const TradingViewProWidget: React.FC<{ symbol: string; timeframe: string }> = ({ symbol, timeframe }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const currentContainer = containerRef.current;
+    if (!currentContainer) return;
+
+    currentContainer.innerHTML = '';
+
+    const cleanSymbol = symbol.replace('.NS', '').replace('NSE:', '').trim();
+    const intervalMap: Record<string, string> = {
+      '1m': '1',
+      '5m': '5',
+      '15m': '15',
+      '1h': '60',
+      '1D': 'D',
+      '1W': 'W',
+      '1M': 'M',
+    };
+    const tvInterval = intervalMap[timeframe] || 'D';
+
+    const widgetDiv = document.createElement('div');
+    widgetDiv.className = 'tradingview-widget-container__widget';
+    widgetDiv.style.height = '100%';
+    widgetDiv.style.width = '100%';
+
+    const script = document.createElement('script');
+    script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
+    script.type = 'text/javascript';
+    script.async = true;
+    script.innerHTML = JSON.stringify({
+      autosize: true,
+      symbol: `BSE:${cleanSymbol}`,
+      interval: tvInterval,
+      timezone: 'Asia/Kolkata',
+      theme: 'dark',
+      style: '1',
+      locale: 'en',
+      enable_publishing: false,
+      allow_symbol_change: true,
+      calendar: false,
+      support_host: 'https://www.tradingview.com',
+      hide_top_toolbar: false,
+      hide_legend: false,
+      save_image: false,
+    });
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'tradingview-widget-container';
+    wrapper.style.height = '100%';
+    wrapper.style.width = '100%';
+    wrapper.appendChild(widgetDiv);
+    wrapper.appendChild(script);
+
+    currentContainer.appendChild(wrapper);
+
+    return () => {
+      if (currentContainer) {
+        currentContainer.innerHTML = '';
+      }
+    };
+  }, [symbol, timeframe]);
+
+  return <div ref={containerRef} style={{ height: '100%', width: '100%', position: 'relative' }} />;
+};
+
 export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
   const { virtualCash, holdings, ledger, marketQuotes, executeOrder } = useFinancial();
 
@@ -64,7 +131,6 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
     lag_days: 30,
     currency: 'INR',
   });
-  const [isReplaying, setIsReplaying] = useState<boolean>(false);
   const [replaySpeed, setReplaySpeed] = useState<number>(1.0);
 
   // Drawing Toolbar
@@ -76,9 +142,6 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
   const [bottomTab, setBottomTab] = useState<'order' | 'positions' | 'orders' | 'history' | 'fundamentals' | 'alerts'>('order');
   const [isRightCollapsed, setIsRightCollapsed] = useState<boolean>(false);
   const [isBottomCollapsed, setIsBottomCollapsed] = useState<boolean>(false);
-
-  // Groww & TradingView System States (Default to TradingView Pro like Groww)
-  const [chartEngine, setChartEngine] = useState<'finex' | 'tradingview'>('tradingview');
   const [rangePreset, setRangePreset] = useState<'1D' | '1W' | '1M' | '3M' | '6M' | '1Y' | '5Y' | 'ALL'>('1Y');
   const [isSearchModalOpen, setIsSearchModalOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -338,9 +401,6 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
       });
       indicatorSeriesRefs.current = {};
 
-      // If not in FinEx Paper mode, skip canvas updates
-      if (chartEngine !== 'finex') return;
-
       // Fetch Bars with deep range
       const historyRes = await apiClient.market.getHistory(selectedSymbol, {
         interval: timeframe,
@@ -372,11 +432,11 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
 
         formattedBars.push({
           time: timeVal,
-          open: typeof b.open === 'string' ? parseFloat(b.open) : b.open,
-          high: typeof b.high === 'string' ? parseFloat(b.high) : b.high,
-          low: typeof b.low === 'string' ? parseFloat(b.low) : b.low,
-          close: typeof b.close === 'string' ? parseFloat(b.close) : b.close,
-          volume: typeof b.volume === 'string' ? parseFloat(b.volume) : (b.volume || 0),
+          open: Number(b.open),
+          high: Number(b.high),
+          low: Number(b.low),
+          close: Number(b.close),
+          volume: Number(b.volume || 0),
         });
       }
 
@@ -1011,55 +1071,24 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
             ))}
           </div>
 
-          {/* Dual Chart Engine Switcher (FinEx Paper vs TradingView Pro) */}
+          {/* TradingView Pro Chart Indicator */}
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
-              backgroundColor: '#141416',
-              padding: '2px',
+              backgroundColor: '#0F172A',
+              padding: '4px 10px',
               borderRadius: '6px',
-              border: '1px solid #2C2C2E',
+              border: '1px solid #1E293B',
+              gap: '6px',
             }}
           >
-            <button
-              onClick={() => setChartEngine('finex')}
-              style={{
-                backgroundColor: chartEngine === 'finex' ? '#F29A60' : 'transparent',
-                color: chartEngine === 'finex' ? '#000000' : '#8E8E93',
-                border: 'none',
-                borderRadius: '4px',
-                padding: '4px 10px',
-                fontSize: '11px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-              }}
-              title="FinEx Paper Trading Canvas with local indicators, drawings & Gemini proposals"
-            >
-              <span>📊 FinEx Paper</span>
-            </button>
-            <button
-              onClick={() => setChartEngine('tradingview')}
-              style={{
-                backgroundColor: chartEngine === 'tradingview' ? '#2962FF' : 'transparent',
-                color: chartEngine === 'tradingview' ? '#FFFFFF' : '#8E8E93',
-                border: 'none',
-                borderRadius: '4px',
-                padding: '4px 10px',
-                fontSize: '11px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-              }}
-              title="Official TradingView Advanced Chart Widget with 100+ indicators & live streaming"
-            >
-              <span>📈 TradingView Pro</span>
-            </button>
+            <span style={{ fontSize: '12px', fontWeight: 700, color: '#38BDF8', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              📈 TradingView Pro Chart
+            </span>
+            <span style={{ fontSize: '10px', backgroundColor: '#0284C7', color: '#FFFFFF', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
+              ACTIVE
+            </span>
           </div>
         </div>
       </div>
@@ -1117,13 +1146,13 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
             style={{
               fontSize: '10px',
               padding: '2px 6px',
-              backgroundColor: chartEngine === 'finex' ? '#3A2E1E' : '#1A2A4E',
-              color: chartEngine === 'finex' ? '#F29A60' : '#64B5F6',
+              backgroundColor: '#1A2A4E',
+              color: '#64B5F6',
               borderRadius: '4px',
               fontWeight: 700,
             }}
           >
-            {chartEngine === 'finex' ? 'FinEx Canvas (Paper Active)' : 'TradingView Full Widget'}
+            TradingView Pro Active
           </span>
         </div>
       </div>
@@ -1269,47 +1298,12 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
 
         {/* 2. Center Chart Area */}
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, position: 'relative' }}>
-          {/* Lightweight Charts Canvas Container */}
-          <div
-            ref={chartContainerRef}
-            style={{
-              flex: 1,
-              width: '100%',
-              backgroundColor: '#000000',
-              position: 'relative',
-              display: chartEngine === 'finex' ? 'block' : 'none',
-            }}
-          />
+          {/* Official TradingView Advanced Widget (Full TradingView Experience) */}
+          <div style={{ flex: 1, width: '100%', height: '100%', backgroundColor: '#000000', position: 'relative' }}>
+            <TradingViewProWidget key={`${selectedSymbol}-${timeframe}`} symbol={selectedSymbol} timeframe={timeframe} />
+          </div>
 
-          {/* Official TradingView Advanced Widget when tradingview engine is selected (Groww Experience) */}
-          {chartEngine === 'tradingview' && (
-            <div style={{ flex: 1, width: '100%', backgroundColor: '#000000', position: 'relative' }}>
-              <iframe
-                key={`${selectedSymbol}-${timeframe}`}
-                title="TradingView Pro Chart"
-                src={`https://s3.tradingview.com/embed-widget/advanced-chart/?symbol=NSE%3A${encodeURIComponent(
-                  selectedSymbol.replace('.NS', '').replace('NSE:', '')
-                )}&interval=${
-                  timeframe === '1D'
-                    ? 'D'
-                    : timeframe === '1W'
-                    ? 'W'
-                    : timeframe === '1M'
-                    ? 'M'
-                    : timeframe === '1m'
-                    ? '1'
-                    : timeframe === '5m'
-                    ? '5'
-                    : timeframe === '15m'
-                    ? '15'
-                    : '60'
-                }&theme=dark&style=1&locale=en&enable_publishing=false&hide_top_toolbar=false&allow_symbol_change=true&withdateranges=true&save_image=false&timezone=Asia%2FKolkata`}
-                style={{ width: '100%', height: '100%', border: 'none' }}
-              />
-            </div>
-          )}
-
-          {/* Required TradingView Attribution Notice (Section 8A) */}
+          {/* Required TradingView Attribution Notice */}
           <div
             style={{
               position: 'absolute',
@@ -1321,9 +1315,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
               pointerEvents: 'none',
             }}
           >
-            {chartEngine === 'finex'
-              ? 'TradingView Lightweight Charts™ • Genuine Market Data Engine'
-              : 'TradingView Advanced Interactive Charting Platform'}
+            TradingView Advanced Interactive Charting Platform • Official NSE/BSE Feed
           </div>
 
           {/* 3. Bottom Collapsible Panel (Order Ticket, Positions, Fundamentals) */}
@@ -1726,9 +1718,13 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                     fontSize: '11px',
                     fontWeight: 600,
                     cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
                   }}
                 >
-                  ✨ Ask FinEx AI
+                  <span>✨ Ask FinEx AI</span>
+                  <span style={{ fontSize: '9px', backgroundColor: 'rgba(38, 166, 154, 0.2)', color: '#26A69A', padding: '1px 5px', borderRadius: '4px' }}>Gemini</span>
                 </button>
                 <button
                   onClick={() => setRightPanelTab('watchlist')}
@@ -1870,8 +1866,45 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                     ))}
                   </div>
 
+                  {/* Quick Action Suggestion Chips */}
+                  <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                    {[
+                      `Explain ${selectedSymbol} Chart`,
+                      `RSI & Indicators`,
+                      `Invest INR 10,000 in ${selectedSymbol}`,
+                      `My Portfolio Balance`,
+                    ].map((btnText, bIdx) => (
+                      <button
+                        key={bIdx}
+                        type="button"
+                        onClick={() => {
+                          setAiInput(btnText);
+                        }}
+                        style={{
+                          fontSize: '10px',
+                          backgroundColor: '#161618',
+                          color: '#A1A1AA',
+                          border: '1px solid #27272A',
+                          borderRadius: '12px',
+                          padding: '3px 8px',
+                          cursor: 'pointer',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.color = '#F29A60';
+                          e.currentTarget.style.borderColor = '#F29A60';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.color = '#A1A1AA';
+                          e.currentTarget.style.borderColor = '#27272A';
+                        }}
+                      >
+                        {btnText}
+                      </button>
+                    ))}
+                  </div>
+
                   {/* AI Input Area */}
-                  <div style={{ marginTop: '8px', display: 'flex', gap: '6px' }}>
+                  <div style={{ marginTop: '6px', display: 'flex', gap: '6px' }}>
                     <input
                       type="text"
                       placeholder="Ask chart or say 'Invest INR 10,000'..."

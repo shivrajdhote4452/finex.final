@@ -121,10 +121,25 @@ export const AskFinExScreen: React.FC = () => {
     <div style={{ maxWidth: '1440px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '28px' }}>
       {/* Header */}
       <div>
-        <span style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-accent-cyan)', fontWeight: 600 }}>
-          AI Research & Educational Assistant
-        </span>
-        <h1 style={{ fontSize: '36px', fontWeight: 700, color: '#FFFFFF', marginTop: '4px', letterSpacing: '-0.02em' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-accent-cyan)', fontWeight: 600 }}>
+            AI Research & Educational Assistant
+          </span>
+          <span
+            style={{
+              fontSize: '11px',
+              padding: '2px 8px',
+              borderRadius: '12px',
+              backgroundColor: 'rgba(38, 166, 154, 0.15)',
+              border: '1px solid rgba(38, 166, 154, 0.4)',
+              color: '#26A69A',
+              fontWeight: 600,
+            }}
+          >
+            ✨ Powered by Gemini 1.5 Flash
+          </span>
+        </div>
+        <h1 style={{ fontSize: '36px', fontWeight: 700, color: '#FFFFFF', marginTop: '6px', letterSpacing: '-0.02em' }}>
           Document-Grounded Financial Intelligence
         </h1>
         <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginTop: '4px' }}>
@@ -241,8 +256,47 @@ export const AskFinExScreen: React.FC = () => {
             )}
           </div>
 
+          {/* Quick Starter Suggestions */}
+          <div style={{ marginTop: '16px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+            {[
+              "What is SEBI's rule on emergency funds?",
+              'Compare TCS vs INFY fundamentals',
+              'How does SIP compounding work?',
+              'Explain asset allocation for Indian investors',
+              'What is P/E Ratio and Dividend Yield?',
+            ].map((promptText, pIdx) => (
+              <button
+                key={pIdx}
+                type="button"
+                onClick={() => {
+                  setInputVal(promptText);
+                }}
+                style={{
+                  fontSize: '11px',
+                  backgroundColor: '#161618',
+                  color: '#A1A1AA',
+                  border: '1px solid #27272A',
+                  borderRadius: '20px',
+                  padding: '5px 12px',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.color = '#F29A60';
+                  e.currentTarget.style.borderColor = '#F29A60';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.color = '#A1A1AA';
+                  e.currentTarget.style.borderColor = '#27272A';
+                }}
+              >
+                💡 {promptText}
+              </button>
+            ))}
+          </div>
+
           {/* Prompt Input Box */}
-          <div style={{ marginTop: '24px', display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <div style={{ marginTop: '12px', display: 'flex', gap: '12px', alignItems: 'center' }}>
             <input
               type="text"
               value={inputVal}

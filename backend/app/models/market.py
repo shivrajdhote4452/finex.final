@@ -37,6 +37,7 @@ class Security(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     sector: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="INR")
+    provider_token: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -66,10 +67,12 @@ class MarketQuote(Base):
     security_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("securities.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    symbol: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, index=True)
     price: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
     open_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 4), nullable=True)
     high_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 4), nullable=True)
     low_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 4), nullable=True)
+    close_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 4), nullable=True)
     previous_close: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 4), nullable=True)
     change: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 4), nullable=True)
     change_pct: Mapped[Optional[Decimal]] = mapped_column(Numeric(8, 4), nullable=True)
@@ -82,6 +85,14 @@ class MarketQuote(Base):
     freshness_status: Mapped[str] = mapped_column(String(50), nullable=False, default="END_OF_DAY")
 
     security: Mapped["Security"] = relationship("Security", back_populates="quotes")
+
+    @property
+    def ltp(self) -> Decimal:
+        return self.price
+
+    @property
+    def freshness(self) -> str:
+        return self.freshness_status
 
     __table_args__ = (
         CheckConstraint("price > 0", name="chk_quote_price_positive"),
@@ -98,7 +109,10 @@ class MarketPriceHistory(Base):
     security_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("securities.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    symbol: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, index=True)
+    interval: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, default="1D")
     trade_date: Mapped[date] = mapped_column(Date, nullable=False)
+    observed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     open_price: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
     high_price: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
     low_price: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
