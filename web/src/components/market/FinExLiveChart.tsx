@@ -58,6 +58,8 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
         borderColor: 'rgba(255, 255, 255, 0.1)',
         timeVisible: true,
         secondsVisible: false,
+        barSpacing: 8,
+        minBarSpacing: 4,
       },
       rightPriceScale: {
         borderColor: 'rgba(255, 255, 255, 0.1)',
@@ -91,7 +93,7 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
     // 2. Fetch Historical Candles
     const fetchHistory = async () => {
       try {
-        const response = await fetch(`/api/v1/market/history/${cleanSymbol}?interval=${interval}&days=5`);
+        const response = await fetch(`/api/v1/market/history/${cleanSymbol}?interval=${interval}&days=180`);
         if (!response.ok) return;
 
         const resJson = await response.json();
