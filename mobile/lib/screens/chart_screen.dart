@@ -62,12 +62,6 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
     {'symbol': 'BEL', 'name': 'Bharat Electronics', 'sector': 'Defense'},
     {'symbol': 'ZOMATO', 'name': 'Zomato Limited', 'sector': 'Consumer'},
     {'symbol': 'PAYTM', 'name': 'One97 Communications', 'sector': 'Fintech'},
-    {'symbol': 'AAPL', 'name': 'Apple Inc.', 'sector': 'US Tech'},
-    {'symbol': 'MSFT', 'name': 'Microsoft Corp.', 'sector': 'US Tech'},
-    {'symbol': 'GOOGL', 'name': 'Alphabet Inc.', 'sector': 'US Tech'},
-    {'symbol': 'NVDA', 'name': 'NVIDIA Corp.', 'sector': 'US Tech'},
-    {'symbol': 'AMZN', 'name': 'Amazon.com', 'sector': 'US Tech'},
-    {'symbol': 'TSLA', 'name': 'Tesla Inc.', 'sector': 'US Auto'},
   ];
 
   @override
@@ -119,7 +113,7 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
       builder: (ctx) {
         String filterQuery = '';
         String selectedSector = 'All';
-        final sectors = ['All', 'Banking', 'Technology', 'Energy', 'Automobile', 'Consumer', 'US Tech'];
+        final sectors = ['All', 'Banking', 'Technology', 'Energy', 'Automobile', 'Consumer', 'Metals', 'Defense'];
 
         return StatefulBuilder(
           builder: (context, setModalState) {

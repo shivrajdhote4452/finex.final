@@ -77,8 +77,8 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
   const [isRightCollapsed, setIsRightCollapsed] = useState<boolean>(false);
   const [isBottomCollapsed, setIsBottomCollapsed] = useState<boolean>(false);
 
-  // Groww & TradingView System States
-  const [chartEngine, setChartEngine] = useState<'finex' | 'tradingview'>('finex');
+  // Groww & TradingView System States (Default to TradingView Pro like Groww)
+  const [chartEngine, setChartEngine] = useState<'finex' | 'tradingview'>('tradingview');
   const [rangePreset, setRangePreset] = useState<'1D' | '1W' | '1M' | '3M' | '6M' | '1Y' | '5Y' | 'ALL'>('1Y');
   const [isSearchModalOpen, setIsSearchModalOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -182,6 +182,38 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
     fetchModeAndDrawings();
     return () => {
       isMounted = false;
+    };
+  }, [selectedSymbol]);
+
+  // Real-time quote polling (every 3.5 seconds) for active Indian stock
+  useEffect(() => {
+    let isMounted = true;
+    const interval = setInterval(async () => {
+      try {
+        const q = await apiClient.market.getQuote(selectedSymbol);
+        if (isMounted && q) {
+          const p = typeof q.price === 'string' ? parseFloat(q.price) : q.price;
+          setActiveQuote((prev) => {
+            const prevPrice = prev?.price || p;
+            const diff = p - prevPrice;
+            return {
+              symbol: q.symbol.replace('.NS', ''),
+              name: q.canonical_id || q.symbol,
+              price: p,
+              changeVal: prev?.changeVal !== undefined ? prev.changeVal + diff : p * 0.0075,
+              changePct: prev?.changePct !== undefined ? prev.changePct : 0.75,
+              isPositive: p >= (prev?.price || p),
+              high: Math.max(prev?.high || p, p),
+              low: Math.min(prev?.low || p, p),
+              volume: prev?.volume || '5.2M',
+            };
+          });
+        }
+      } catch {}
+    }, 3500);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
     };
   }, [selectedSymbol]);
 
@@ -306,6 +338,9 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
       });
       indicatorSeriesRefs.current = {};
 
+      // If not in FinEx Paper mode, skip canvas updates
+      if (chartEngine !== 'finex') return;
+
       // Fetch Bars with deep range
       const historyRes = await apiClient.market.getHistory(selectedSymbol, {
         interval: timeframe,
@@ -313,23 +348,37 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
       });
       const rawBars = historyRes.bars || [];
 
-      // Format for Lightweight Charts (requires sorted timestamps)
-      const formattedBars = rawBars
-        .map((b: any) => {
-          let timeVal: any = b.date;
-          if (b.time) {
-            timeVal = b.time;
-          }
-          return {
-            time: timeVal,
-            open: typeof b.open === 'string' ? parseFloat(b.open) : b.open,
-            high: typeof b.high === 'string' ? parseFloat(b.high) : b.high,
-            low: typeof b.low === 'string' ? parseFloat(b.low) : b.low,
-            close: typeof b.close === 'string' ? parseFloat(b.close) : b.close,
-            volume: typeof b.volume === 'string' ? parseFloat(b.volume) : b.volume,
-          };
-        })
-        .sort((a, b) => (a.time > b.time ? 1 : -1));
+      // Format for Lightweight Charts (strictly ascending unique timestamps)
+      const isIntraday = ['1m', '5m', '15m', '30m', '1h', '60m'].includes(timeframe);
+      const seenTimes = new Set<string | number>();
+      const formattedBars: any[] = [];
+
+      // Sort rawBars chronologically
+      const sortedBars = [...rawBars].sort((a: any, b: any) => {
+        const timeA = typeof a.time === 'number' ? a.time : new Date(a.date).getTime() / 1000;
+        const timeB = typeof b.time === 'number' ? b.time : new Date(b.date).getTime() / 1000;
+        return timeA - timeB;
+      });
+
+      for (const b of sortedBars) {
+        let timeVal: string | number;
+        if (isIntraday) {
+          timeVal = typeof b.time === 'number' ? b.time : Math.floor(new Date(b.date).getTime() / 1000);
+        } else {
+          timeVal = (b.date || '').slice(0, 10);
+        }
+        if (!timeVal || seenTimes.has(timeVal)) continue;
+        seenTimes.add(timeVal);
+
+        formattedBars.push({
+          time: timeVal,
+          open: typeof b.open === 'string' ? parseFloat(b.open) : b.open,
+          high: typeof b.high === 'string' ? parseFloat(b.high) : b.high,
+          low: typeof b.low === 'string' ? parseFloat(b.low) : b.low,
+          close: typeof b.close === 'string' ? parseFloat(b.close) : b.close,
+          volume: typeof b.volume === 'string' ? parseFloat(b.volume) : (b.volume || 0),
+        });
+      }
 
       // Add Main Series
       if (chartType === 'candlestick') {
@@ -400,9 +449,18 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
             lineWidth: 1,
             title: 'SMA 20',
           });
+          const seenSma = new Set();
           const validSma = smaData.series
             .filter((p: any) => p.value !== null && p.value !== undefined)
-            .map((p: any) => ({ time: p.date, value: p.value }));
+            .map((p: any) => ({
+              time: isIntraday ? Math.floor(new Date(p.date).getTime() / 1000) : (p.date || '').slice(0, 10),
+              value: p.value,
+            }))
+            .filter((p: any) => {
+              if (seenSma.has(p.time)) return false;
+              seenSma.add(p.time);
+              return true;
+            });
           smaSeries.setData(validSma);
           indicatorSeriesRefs.current['sma20'] = smaSeries;
         } catch (e) {
@@ -421,9 +479,18 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
             lineWidth: 1,
             title: 'EMA 20',
           });
+          const seenEma = new Set();
           const validEma = emaData.series
             .filter((p: any) => p.value !== null && p.value !== undefined)
-            .map((p: any) => ({ time: p.date, value: p.value }));
+            .map((p: any) => ({
+              time: isIntraday ? Math.floor(new Date(p.date).getTime() / 1000) : (p.date || '').slice(0, 10),
+              value: p.value,
+            }))
+            .filter((p: any) => {
+              if (seenEma.has(p.time)) return false;
+              seenEma.add(p.time);
+              return true;
+            });
           emaSeries.setData(validEma);
           indicatorSeriesRefs.current['ema20'] = emaSeries;
         } catch (e) {
@@ -440,8 +507,30 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
           });
           const upperSeries = chart.addLineSeries({ color: 'rgba(255, 255, 255, 0.4)', lineWidth: 1, lineStyle: LineStyle.Dashed });
           const lowerSeries = chart.addLineSeries({ color: 'rgba(255, 255, 255, 0.4)', lineWidth: 1, lineStyle: LineStyle.Dashed });
-          const validUpper = bbData.series.filter((p: any) => p.upper !== null).map((p: any) => ({ time: p.date, value: p.upper }));
-          const validLower = bbData.series.filter((p: any) => p.lower !== null).map((p: any) => ({ time: p.date, value: p.lower }));
+          const seenUpper = new Set();
+          const seenLower = new Set();
+          const validUpper = bbData.series
+            .filter((p: any) => p.upper !== null)
+            .map((p: any) => ({
+              time: isIntraday ? Math.floor(new Date(p.date).getTime() / 1000) : (p.date || '').slice(0, 10),
+              value: p.upper,
+            }))
+            .filter((p: any) => {
+              if (seenUpper.has(p.time)) return false;
+              seenUpper.add(p.time);
+              return true;
+            });
+          const validLower = bbData.series
+            .filter((p: any) => p.lower !== null)
+            .map((p: any) => ({
+              time: isIntraday ? Math.floor(new Date(p.date).getTime() / 1000) : (p.date || '').slice(0, 10),
+              value: p.lower,
+            }))
+            .filter((p: any) => {
+              if (seenLower.has(p.time)) return false;
+              seenLower.add(p.time);
+              return true;
+            });
           upperSeries.setData(validUpper);
           lowerSeries.setData(validLower);
           indicatorSeriesRefs.current['bb_upper'] = upperSeries;
@@ -455,7 +544,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
       const symbolTrades = ledger.filter((l) => l.symbol === selectedSymbol && l.status === 'FILLED');
       if (mainSeriesRef.current && symbolTrades.length > 0) {
         const markers = symbolTrades.map((t) => ({
-          time: t.timestamp.split('T')[0],
+          time: isIntraday ? Math.floor(new Date(t.timestamp).getTime() / 1000) : t.timestamp.split('T')[0],
           position: (t.type === 'BUY' ? 'belowBar' : 'aboveBar') as any,
           color: t.type === 'BUY' ? '#26A69A' : '#EF5350',
           shape: (t.type === 'BUY' ? 'arrowUp' : 'arrowDown') as any,
@@ -1192,17 +1281,29 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
             }}
           />
 
-          {/* Official TradingView Advanced Widget when tradingview engine is selected */}
+          {/* Official TradingView Advanced Widget when tradingview engine is selected (Groww Experience) */}
           {chartEngine === 'tradingview' && (
             <div style={{ flex: 1, width: '100%', backgroundColor: '#000000', position: 'relative' }}>
               <iframe
                 key={`${selectedSymbol}-${timeframe}`}
                 title="TradingView Pro Chart"
-                src={`https://s3.tradingview.com/embed-widget/advanced-chart/?symbol=${
-                  marketMode.mode.includes('US')
-                    ? `NASDAQ%3A${selectedSymbol}`
-                    : `NSE%3A${selectedSymbol}`
-                }&interval=${timeframe === '1D' ? 'D' : timeframe === '1W' ? 'W' : timeframe === '1M' ? 'M' : '60'}&theme=dark&style=1&locale=en&enable_publishing=false&hide_top_toolbar=false&allow_symbol_change=true&withdateranges=true&save_image=false`}
+                src={`https://s3.tradingview.com/embed-widget/advanced-chart/?symbol=NSE%3A${encodeURIComponent(
+                  selectedSymbol.replace('.NS', '').replace('NSE:', '')
+                )}&interval=${
+                  timeframe === '1D'
+                    ? 'D'
+                    : timeframe === '1W'
+                    ? 'W'
+                    : timeframe === '1M'
+                    ? 'M'
+                    : timeframe === '1m'
+                    ? '1'
+                    : timeframe === '5m'
+                    ? '5'
+                    : timeframe === '15m'
+                    ? '15'
+                    : '60'
+                }&theme=dark&style=1&locale=en&enable_publishing=false&hide_top_toolbar=false&allow_symbol_change=true&withdateranges=true&save_image=false&timezone=Asia%2FKolkata`}
                 style={{ width: '100%', height: '100%', border: 'none' }}
               />
             </div>
@@ -1950,7 +2051,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                 overflowX: 'auto',
               }}
             >
-              {(['All', 'Nifty 50', 'Banking', 'Technology', 'Automobile', 'Energy', 'Consumer', 'US Stocks'] as const).map(
+              {(['All', 'Nifty 50', 'Banking', 'Technology', 'Automobile', 'Energy', 'Metals', 'Consumer', 'Pharma', 'Defense'] as const).map(
                 (cat) => (
                   <button
                     key={cat}
@@ -1995,15 +2096,16 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                   { symbol: 'MARUTI', name: 'Maruti Suzuki India Limited', sector: 'Automobile', exchange: 'NSE' },
                   { symbol: 'TITAN', name: 'Titan Company Limited', sector: 'Consumer Goods', exchange: 'NSE' },
                   { symbol: 'TATASTEEL', name: 'Tata Steel Limited', sector: 'Metals & Mining', exchange: 'NSE' },
+                  { symbol: 'JSWSTEEL', name: 'JSW Steel Limited', sector: 'Metals & Mining', exchange: 'NSE' },
                   { symbol: 'ZOMATO', name: 'Zomato Limited', sector: 'Consumer Tech & Services', exchange: 'NSE' },
                   { symbol: 'SUNPHARMA', name: 'Sun Pharmaceutical Industries', sector: 'Healthcare & Pharma', exchange: 'NSE' },
                   { symbol: 'NTPC', name: 'NTPC Limited', sector: 'Energy & Power', exchange: 'NSE' },
                   { symbol: 'ONGC', name: 'Oil and Natural Gas Corporation', sector: 'Energy & Oil', exchange: 'NSE' },
+                  { symbol: 'POWERGRID', name: 'Power Grid Corporation of India', sector: 'Energy & Power', exchange: 'NSE' },
+                  { symbol: 'COALINDIA', name: 'Coal India Limited', sector: 'Energy & Mining', exchange: 'NSE' },
+                  { symbol: 'ADANIENT', name: 'Adani Enterprises Limited', sector: 'Energy & Infrastructure', exchange: 'NSE' },
                   { symbol: 'BEL', name: 'Bharat Electronics Limited', sector: 'Aerospace & Defense', exchange: 'NSE' },
                   { symbol: 'HAL', name: 'Hindustan Aeronautics Limited', sector: 'Aerospace & Defense', exchange: 'NSE' },
-                  { symbol: 'AAPL', name: 'Apple Inc.', sector: 'Consumer Electronics', exchange: 'NASDAQ' },
-                  { symbol: 'MSFT', name: 'Microsoft Corporation', sector: 'Cloud & Software', exchange: 'NASDAQ' },
-                  { symbol: 'NVDA', name: 'NVIDIA Corporation', sector: 'Semiconductors & AI', exchange: 'NASDAQ' },
                 ];
 
                 const q = searchQuery.toLowerCase().trim();
@@ -2012,13 +2114,15 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                   if (!matchQuery) return false;
 
                   if (selectedCategory === 'All') return true;
-                  if (selectedCategory === 'US Stocks') return item.exchange === 'NASDAQ' || item.exchange === 'IEX' || item.currency === 'USD';
                   if (selectedCategory === 'Banking') return item.sector?.includes('Bank') || item.sector?.includes('Financial');
                   if (selectedCategory === 'Technology') return item.sector?.includes('Tech');
                   if (selectedCategory === 'Automobile') return item.sector?.includes('Auto');
                   if (selectedCategory === 'Energy') return item.sector?.includes('Energy') || item.sector?.includes('Power') || item.sector?.includes('Oil');
+                  if (selectedCategory === 'Metals') return item.sector?.includes('Metal') || item.sector?.includes('Mining');
                   if (selectedCategory === 'Consumer') return item.sector?.includes('Consumer') || item.sector?.includes('FMCG');
-                  if (selectedCategory === 'Nifty 50') return item.exchange === 'NSE';
+                  if (selectedCategory === 'Pharma') return item.sector?.includes('Pharma') || item.sector?.includes('Health');
+                  if (selectedCategory === 'Defense') return item.sector?.includes('Defense') || item.sector?.includes('Aero');
+                  if (selectedCategory === 'Nifty 50') return true;
                   return true;
                 });
 
