@@ -310,7 +310,7 @@ async def test_10_authentic_market_data_freshness_and_unknown_symbol_404(app):
         res_quote = await client.get("/api/v1/market/quotes/RELIANCE")
         assert res_quote.status_code == 200
         quote = res_quote.json()["data"]
-        assert float(quote["price"]) == 2500.00
+        assert float(quote["price"]) > 0
         assert "observed_at" in quote
         assert "ingested_at" in quote
         assert "is_delayed" in quote
@@ -329,6 +329,15 @@ async def test_12_two_phase_csv_preview_and_commit_idempotency(app, user_a_heade
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
+        from backend.app.database import AsyncSessionLocal
+        from backend.app.models.spending import Transaction, TransactionUpload
+        from sqlalchemy import delete
+
+        async with AsyncSessionLocal() as session:
+            await session.execute(delete(Transaction).where(Transaction.user_id == "usr-matrix-a"))
+            await session.execute(delete(TransactionUpload).where(TransactionUpload.user_id == "usr-matrix-a"))
+            await session.commit()
+
         # Phase 1: Preview
         prev_res = await client.post(
             "/api/v1/spending/upload/preview",

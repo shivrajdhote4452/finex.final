@@ -11,6 +11,25 @@ jobs:
     name: Backend Quality Gates & Acceptance Matrix
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: finex_ci_db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres_ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres_ci_password@localhost:5432/finex_ci_db
+      ENVIRONMENT: testing
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -39,9 +58,13 @@ jobs:
         run: |
           ruff format --check backend ai data
 
-      - name: Validate Alembic Schema Generation
+      - name: Validate Alembic Schema Generation (Offline SQL)
         run: |
           python -m alembic upgrade head --sql
+
+      - name: Apply Alembic Migrations to CI PostgreSQL
+        run: |
+          python -m alembic upgrade head
 
       - name: Run Backend Pytest Suite with Coverage
         run: |

@@ -40,12 +40,37 @@ class ApiClient {
     this.token = localStorage.getItem('finex_access_token');
   }
 
+  private authStateListeners: Set<(isAuthenticated: boolean) => void> = new Set();
+
+  public onAuthStateChange(listener: (isAuthenticated: boolean) => void): () => void {
+    this.authStateListeners.add(listener);
+    listener(this.isAuthenticated());
+    return () => {
+      this.authStateListeners.delete(listener);
+    };
+  }
+
+  private notifyAuthStateListeners(): void {
+    const isAuth = this.isAuthenticated();
+    for (const listener of this.authStateListeners) {
+      try {
+        listener(isAuth);
+      } catch (err) {
+        console.error('Error in auth state listener', err);
+      }
+    }
+  }
+
   public setToken(token: string | null): void {
+    const prev = this.token;
     this.token = token;
     if (token) {
       localStorage.setItem('finex_access_token', token);
     } else {
       localStorage.removeItem('finex_access_token');
+    }
+    if (prev !== token) {
+      this.notifyAuthStateListeners();
     }
   }
 
@@ -139,6 +164,7 @@ class ApiClient {
       this.setToken(res.access_token);
       return res;
     },
+
 
     getMe: async () => {
       return this.request<{

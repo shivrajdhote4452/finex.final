@@ -15,6 +15,7 @@ class DocumentChunk(BaseModel):
     content: str
     score: float = 0.0
     document_date: Optional[str] = None
+    content_hash: Optional[str] = None
 
 
 class AbstractDocumentRetriever(ABC):

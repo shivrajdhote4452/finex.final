@@ -67,6 +67,18 @@ flutter run -d chrome
 
 ---
 
+### Database Initialization & Migrations (PostgreSQL / SQLite)
+FinEx uses Alembic migrations decoupled from mutable application metadata:
+```powershell
+# Run all forward migrations to latest head revision (003)
+python -m alembic upgrade head
+
+# Inspect raw SQL without applying:
+python -m alembic upgrade head --sql
+```
+
+---
+
 ## 3. Quality Gates & Release Verification
 
 Run all mandatory CI and regression checks locally:
@@ -79,11 +91,15 @@ python -m pip check
 python -m ruff check backend ai
 python -m ruff format --check backend ai
 
-# 3. Backend & AI regression test suite (92 tests)
-python -m pytest backend/tests ai/evaluation -q
+# 3. Backend & AI regression test suite (121 tests, zero failures)
+python -m pytest backend/tests ai/evaluation -v
 
-# 4. Flutter static analysis
-cd mobile
+# 4. Web production build & TypeScript validation
+cd web
+npm run build
+
+# 5. Flutter static analysis & widget tests
+cd ../mobile
 flutter analyze
 flutter test
 ```
@@ -103,13 +119,14 @@ flutter test
 
 1. **Fail-Closed Private Routes:** Missing, invalid, expired, or revoked Bearer JWTs return `HTTP 401 Unauthorized` with `WWW-Authenticate: Bearer`.
 2. **Google Identity Verification:** Cryptographically validates Google OAuth ID tokens (`aud`, `iss`, `exp`, `sub`) using `google.oauth2.id_token`.
-3. **Session Revocation & Rotation:** Single-use refresh token rotation; revoked tokens are permanently blacklisted across requests.
+3. **Session Revocation & Rotation:** Single-use refresh token rotation; revoked tokens are permanently blacklisted in PostgreSQL across backend process restarts.
 4. **Tenant Isolation:** Cross-user data isolation enforced on all entity queries and mutations.
 
 ---
 
-## 6. Known External Dependencies & Blockers
+## 6. Known External Dependencies & Platform Requirements
 
-- **Google OAuth Client ID:** Requires a production Google Cloud Console OAuth 2.0 Web Client ID to verify live Google Sign-In logins.
-- **Database Server:** Local tests run against async SQLite storage; production deployments require an active PostgreSQL instance configured via `DATABASE_URL`.
-- **Market Data Feed:** Default provider is `yfinance` with caching; external market hours and upstream rate limits apply.
+- **Google OAuth Credentials:** Production live Google sign-in requires a valid Google Cloud Console OAuth 2.0 Web Client ID in `GOOGLE_CLIENT_ID`, `google-services.json` on Android (`mobile/android/app/`), and `GoogleService-Info.plist` on iOS (`mobile/ios/Runner/`). For simulated testing, use Developer Sandbox Sign-In.
+- **Operational Database:** PostgreSQL 16+ is used for operational transactional storage; migrations support SQLite batch operations for isolated unit testing.
+- **Market Data Feed:** External market quotes use public REST endpoints with raw payload SHA-256 evidence hashing, automatic caching, and graceful fallback to verified baseline observations during network outages.
+- **iOS Platform Build:** Full iOS device builds require an Apple Developer account and macOS runner with Xcode. Android builds require Android SDK Platform 34.

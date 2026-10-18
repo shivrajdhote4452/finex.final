@@ -227,8 +227,25 @@ class PaperTradingEngine:
             None,
         )
         if existing_order:
-            # Check for conflict: same key with different payload
-            if existing_order.get("fingerprint") and existing_order["fingerprint"] != fingerprint:
+            # Check for conflict: compare all execution fields exactly
+            limit_price_mismatch = False
+            if order_type == "LIMIT":
+                if existing_order.get("limit_price") is None or payload.limit_price is None:
+                    limit_price_mismatch = existing_order.get("limit_price") != payload.limit_price
+                else:
+                    limit_price_mismatch = Decimal(str(existing_order["limit_price"])) != Decimal(
+                        str(payload.limit_price)
+                    )
+            elif existing_order.get("limit_price") is not None:
+                limit_price_mismatch = True
+
+            if (
+                existing_order["symbol"] != sym
+                or existing_order["side"] != side
+                or Decimal(str(existing_order["quantity"])) != Decimal(str(qty))
+                or existing_order["order_type"] != order_type
+                or limit_price_mismatch
+            ):
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail="Idempotency conflict (payload collision): Key was previously submitted with a different order payload.",
@@ -859,12 +876,24 @@ class PaperTradingEngine:
             res_order = await session.execute(stmt_order)
             existing_order = res_order.scalar_one_or_none()
             if existing_order:
-                # Check conflict
+                # Compare all execution fields exactly
+                limit_price_mismatch = False
+                if order_type == "LIMIT":
+                    if existing_order.limit_price is None or payload.limit_price is None:
+                        limit_price_mismatch = existing_order.limit_price != payload.limit_price
+                    else:
+                        limit_price_mismatch = Decimal(str(existing_order.limit_price)) != Decimal(
+                            str(payload.limit_price)
+                        )
+                elif existing_order.limit_price is not None:
+                    limit_price_mismatch = True
+
                 if (
                     existing_order.symbol != sym
                     or existing_order.side != side
-                    or abs(Decimal(str(existing_order.quantity)) - Decimal(str(qty))) > Decimal("0.0001")
+                    or Decimal(str(existing_order.quantity)) != Decimal(str(qty))
                     or existing_order.order_type != order_type
+                    or limit_price_mismatch
                 ):
                     raise HTTPException(
                         status_code=status.HTTP_409_CONFLICT,

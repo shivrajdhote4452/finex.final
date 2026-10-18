@@ -6,7 +6,9 @@ import 'goals_screen.dart';
 import 'spending_screen.dart';
 
 class MobileMoreScreen extends StatelessWidget {
-  const MobileMoreScreen({super.key});
+  final VoidCallback? onLogout;
+
+  const MobileMoreScreen({super.key, this.onLogout});
 
   @override
   Widget build(BuildContext context) {
@@ -119,6 +121,16 @@ class MobileMoreScreen extends StatelessWidget {
           icon: Icons.settings_outlined,
           title: "Settings & Risk Profile",
           subtitle: "Account, consent version & notifications",
+        ),
+        _buildModuleItem(
+          icon: Icons.logout,
+          title: "Sign Out",
+          subtitle: "Revoke session token and return to authentication",
+          onTap: () {
+            if (onLogout != null) {
+              onLogout!();
+            }
+          },
         ),
 
         const SizedBox(height: 20),

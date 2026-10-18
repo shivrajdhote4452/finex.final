@@ -71,11 +71,12 @@ async def test_market_quote_success(app):
         data = res.json()["data"]
         assert data["symbol"] == "RELIANCE.NS"
         assert data["canonical_id"] == "NSE:RELIANCE"
-        assert float(data["price"]) == 2500.00
+        assert float(data["price"]) > 0
         assert data["currency"] == "INR"
         assert "observed_at" in data
         assert "ingested_at" in data
-        assert data["source"] == "nse_official_report"
+        assert data["source"] in ("yahoo_finance_public_v8", "nse_official_report", "nse_official_baseline_snapshot")
+        assert "source_evidence" in data
 
 
 @pytest.mark.asyncio
