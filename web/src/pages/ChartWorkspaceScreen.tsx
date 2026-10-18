@@ -52,7 +52,7 @@ const TradingViewProWidget: React.FC<{ symbol: string; timeframe: string }> = ({
     script.async = true;
     script.innerHTML = JSON.stringify({
       autosize: true,
-      symbol: `NSE:${cleanSymbol}`,
+      symbol: `BSE:${cleanSymbol}`,
       interval: tvInterval,
       timezone: 'Asia/Kolkata',
       theme: 'dark',
@@ -144,8 +144,8 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
   const [isRightCollapsed, setIsRightCollapsed] = useState<boolean>(false);
   const [isBottomCollapsed, setIsBottomCollapsed] = useState<boolean>(false);
 
-  // Groww & TradingView & Angel One System States (Default to TradingView Pro like Groww)
-  const [chartEngine, setChartEngine] = useState<'finex' | 'tradingview' | 'smartapi'>('tradingview');
+  // Groww & TradingView & Angel One System States (Default to SmartAPI Live like Groww)
+  const [chartEngine, setChartEngine] = useState<'finex' | 'tradingview' | 'smartapi'>('smartapi');
   const [rangePreset, setRangePreset] = useState<'1D' | '1W' | '1M' | '3M' | '6M' | '1Y' | '5Y' | 'ALL'>('1Y');
   const [isSearchModalOpen, setIsSearchModalOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -1091,25 +1091,6 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
             }}
           >
             <button
-              onClick={() => setChartEngine('tradingview')}
-              style={{
-                backgroundColor: chartEngine === 'tradingview' ? '#2962FF' : 'transparent',
-                color: chartEngine === 'tradingview' ? '#FFFFFF' : '#8E8E93',
-                border: 'none',
-                borderRadius: '4px',
-                padding: '4px 8px',
-                fontSize: '11px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-              }}
-              title="Official TradingView Advanced Chart Widget with real-time NSE data (Groww style)"
-            >
-              <span>📈 TradingView Pro</span>
-            </button>
-            <button
               onClick={() => setChartEngine('smartapi')}
               style={{
                 backgroundColor: chartEngine === 'smartapi' ? '#10B981' : 'transparent',
@@ -1124,9 +1105,28 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                 alignItems: 'center',
                 gap: '4px',
               }}
-              title="Angel One SmartAPI Real-Time WebSocket Streaming & Historical Candles"
+              title="Angel One SmartAPI Real-Time WebSocket Streaming & Historical Candles (Groww style)"
             >
               <span>⚡ SmartAPI Live</span>
+            </button>
+            <button
+              onClick={() => setChartEngine('tradingview')}
+              style={{
+                backgroundColor: chartEngine === 'tradingview' ? '#2962FF' : 'transparent',
+                color: chartEngine === 'tradingview' ? '#FFFFFF' : '#8E8E93',
+                border: 'none',
+                borderRadius: '4px',
+                padding: '4px 8px',
+                fontSize: '11px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+              title="TradingView Embedded Chart Widget (BSE Data Feed)"
+            >
+              <span>📈 TradingView Pro</span>
             </button>
             <button
               onClick={() => setChartEngine('finex')}
