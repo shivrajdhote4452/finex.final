@@ -18,6 +18,7 @@ Exposes:
 """
 
 import uuid
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from backend.app.adapters.market_data_provider import (
@@ -68,22 +69,27 @@ async def create_alert_rule(
         rule = alerts_service.create_rule(user_id, payload)
         rule_uuid = _to_uuid(rule["id"])
 
+        db_rule = AlertRule(
+            id=rule_uuid,
+            user_id=user_id,
+            rule_type=payload.rule_type,
+            symbol=payload.symbol.upper() if payload.symbol else None,
+            comparison_operator=payload.comparison_operator,
+            threshold_value=payload.threshold_value,
+            threshold_unit=payload.threshold_unit,
+            cooldown_minutes=payload.cooldown_minutes,
+            is_active=True,
+        )
+        db.add(db_rule)
         try:
-            db_rule = AlertRule(
-                id=rule_uuid,
-                user_id=user_id,
-                rule_type=payload.rule_type,
-                symbol=payload.symbol.upper() if payload.symbol else None,
-                comparison_operator=payload.comparison_operator,
-                threshold_value=payload.threshold_value,
-                threshold_unit=payload.threshold_unit,
-                cooldown_minutes=payload.cooldown_minutes,
-                is_active=True,
-            )
-            db.add(db_rule)
             await db.commit()
-        except Exception:
-            pass
+            await db.refresh(db_rule)
+        except Exception as e:
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to persist alert rule: {str(e)}",
+            )
 
         return create_response_envelope(data=rule, correlation_id=cid)
     except ValueError as e:
@@ -117,7 +123,7 @@ async def list_alert_rules(
                     "rule_type": r.rule_type,
                     "symbol": r.symbol,
                     "comparison_operator": r.comparison_operator,
-                    "threshold_value": r.threshold_value,
+                    "threshold_value": float(r.threshold_value) if r.threshold_value is not None else 0.0,
                     "threshold_unit": r.threshold_unit,
                     "cooldown_minutes": r.cooldown_minutes,
                     "is_active": r.is_active,
@@ -150,17 +156,21 @@ async def get_alert_rule(
 
     try:
         rule_uuid = _to_uuid(rule_id)
-        stmt = select(AlertRule).where(AlertRule.id == rule_uuid, AlertRule.user_id == user_id)
+        stmt = select(AlertRule).where(AlertRule.id == rule_uuid)
         res = await db.execute(stmt)
         r = res.scalars().first()
         if r:
+            if r.user_id != user_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Cannot view another user's alert rule."
+                )
             rule_data = {
-                "id": str(r.id),
+                "id": rule_id,
                 "user_id": r.user_id,
                 "rule_type": r.rule_type,
                 "symbol": r.symbol,
                 "comparison_operator": r.comparison_operator,
-                "threshold_value": r.threshold_value,
+                "threshold_value": float(r.threshold_value) if r.threshold_value is not None else 0.0,
                 "threshold_unit": r.threshold_unit,
                 "cooldown_minutes": r.cooldown_minutes,
                 "is_active": r.is_active,
@@ -170,6 +180,8 @@ async def get_alert_rule(
             }
             _ALERT_RULES_STORE[rule_id] = rule_data
             return create_response_envelope(data=rule_data, correlation_id=cid)
+    except HTTPException:
+        raise
     except Exception:
         pass
 
@@ -187,34 +199,79 @@ async def update_alert_rule(
     current_user: dict = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """Update threshold, cooldown, or active status of rule with database persistence."""
+    """Update threshold, cooldown, or active status of rule with database persistence first."""
     cid = getattr(request.state, "correlation_id", None)
     user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
 
+    # 1. Query database first
     try:
-        updated = alerts_service.update_rule(user_id, rule_id, payload)
+        rule_uuid = _to_uuid(rule_id)
+        stmt = select(AlertRule).where(AlertRule.id == rule_uuid)
+        res = await db.execute(stmt)
+        existing_rule = res.scalars().first()
+    except Exception:
+        existing_rule = None
+
+    if existing_rule is not None:
+        if existing_rule.user_id != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Cannot modify another user's alert rule."
+            )
+
+        if payload.threshold_value is not None:
+            existing_rule.threshold_value = payload.threshold_value
+        if payload.comparison_operator is not None:
+            existing_rule.comparison_operator = payload.comparison_operator
+        if payload.cooldown_minutes is not None:
+            existing_rule.cooldown_minutes = payload.cooldown_minutes
+        if payload.is_active is not None:
+            existing_rule.is_active = payload.is_active
+        existing_rule.updated_at = datetime.now(timezone.utc)
+
         try:
-            rule_uuid = _to_uuid(rule_id)
-            stmt = select(AlertRule).where(AlertRule.id == rule_uuid, AlertRule.user_id == user_id)
-            res = await db.execute(stmt)
-            r = res.scalars().first()
-            if r:
-                if payload.threshold_value is not None:
-                    r.threshold_value = payload.threshold_value
-                if payload.comparison_operator is not None:
-                    r.comparison_operator = payload.comparison_operator
-                if payload.cooldown_minutes is not None:
-                    r.cooldown_minutes = payload.cooldown_minutes
-                if payload.is_active is not None:
-                    r.is_active = payload.is_active
-                await db.commit()
-        except Exception:
-            pass
-        return create_response_envelope(data=updated, correlation_id=cid)
-    except KeyError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Rule {rule_id} not found.")
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+            await db.commit()
+            await db.refresh(existing_rule)
+        except Exception as e:
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to persist alert rule update: {str(e)}",
+            )
+
+        formatted = {
+            "id": rule_id,
+            "user_id": existing_rule.user_id,
+            "rule_type": existing_rule.rule_type,
+            "symbol": existing_rule.symbol,
+            "comparison_operator": existing_rule.comparison_operator,
+            "threshold_value": float(existing_rule.threshold_value)
+            if existing_rule.threshold_value is not None
+            else 0.0,
+            "threshold_unit": existing_rule.threshold_unit,
+            "cooldown_minutes": existing_rule.cooldown_minutes,
+            "is_active": existing_rule.is_active,
+            "last_triggered_at": existing_rule.last_triggered_at.isoformat()
+            if existing_rule.last_triggered_at
+            else None,
+            "created_at": existing_rule.created_at.isoformat() if existing_rule.created_at else None,
+            "updated_at": existing_rule.updated_at.isoformat() if existing_rule.updated_at else None,
+        }
+        _ALERT_RULES_STORE[rule_id] = formatted
+        return create_response_envelope(data=formatted, correlation_id=cid)
+
+    # 2. In-memory fallback if not in database
+    if rule_id in _ALERT_RULES_STORE:
+        if _ALERT_RULES_STORE[rule_id]["user_id"] != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Cannot modify another user's alert rule."
+            )
+        try:
+            updated = alerts_service.update_rule(user_id, rule_id, payload)
+            return create_response_envelope(data=updated, correlation_id=cid)
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
+
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Rule {rule_id} not found.")
 
 
 @router.post("/rules/{rule_id}/deactivate")
@@ -224,25 +281,67 @@ async def deactivate_alert_rule(
     current_user: dict = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """Deactivate an active alert rule with database persistence."""
+    """Deactivate an active alert rule with database persistence first."""
     cid = getattr(request.state, "correlation_id", None)
     user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
 
+    # 1. Query database first
     try:
-        deactivated = alerts_service.deactivate_rule(user_id, rule_id)
+        rule_uuid = _to_uuid(rule_id)
+        stmt = select(AlertRule).where(AlertRule.id == rule_uuid)
+        res = await db.execute(stmt)
+        existing_rule = res.scalars().first()
+    except Exception:
+        existing_rule = None
+
+    if existing_rule is not None:
+        if existing_rule.user_id != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Cannot deactivate another user's alert rule."
+            )
+
+        existing_rule.is_active = False
+        existing_rule.updated_at = datetime.now(timezone.utc)
         try:
-            rule_uuid = _to_uuid(rule_id)
-            stmt = select(AlertRule).where(AlertRule.id == rule_uuid, AlertRule.user_id == user_id)
-            res = await db.execute(stmt)
-            r = res.scalars().first()
-            if r:
-                r.is_active = False
-                await db.commit()
-        except Exception:
-            pass
+            await db.commit()
+            await db.refresh(existing_rule)
+        except Exception as e:
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to persist alert rule deactivation: {str(e)}",
+            )
+
+        formatted = {
+            "id": rule_id,
+            "user_id": existing_rule.user_id,
+            "rule_type": existing_rule.rule_type,
+            "symbol": existing_rule.symbol,
+            "comparison_operator": existing_rule.comparison_operator,
+            "threshold_value": float(existing_rule.threshold_value)
+            if existing_rule.threshold_value is not None
+            else 0.0,
+            "threshold_unit": existing_rule.threshold_unit,
+            "cooldown_minutes": existing_rule.cooldown_minutes,
+            "is_active": existing_rule.is_active,
+            "last_triggered_at": existing_rule.last_triggered_at.isoformat()
+            if existing_rule.last_triggered_at
+            else None,
+            "created_at": existing_rule.created_at.isoformat() if existing_rule.created_at else None,
+            "updated_at": existing_rule.updated_at.isoformat() if existing_rule.updated_at else None,
+        }
+        _ALERT_RULES_STORE[rule_id] = formatted
+        return create_response_envelope(data=formatted, correlation_id=cid)
+
+    if rule_id in _ALERT_RULES_STORE:
+        if _ALERT_RULES_STORE[rule_id]["user_id"] != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Cannot deactivate another user's alert rule."
+            )
+        deactivated = alerts_service.deactivate_rule(user_id, rule_id)
         return create_response_envelope(data=deactivated, correlation_id=cid)
-    except KeyError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Rule {rule_id} not found.")
+
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Rule {rule_id} not found.")
 
 
 @router.delete("/rules/{rule_id}")
@@ -252,26 +351,45 @@ async def delete_alert_rule(
     current_user: dict = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """Delete an alert rule permanently with database persistence."""
+    """Delete an alert rule permanently with database persistence first."""
     cid = getattr(request.state, "correlation_id", None)
     user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
 
-    success = alerts_service.delete_rule(user_id, rule_id)
-    if not success:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Rule {rule_id} not found.")
-
+    # 1. Query database first
     try:
         rule_uuid = _to_uuid(rule_id)
-        stmt = select(AlertRule).where(AlertRule.id == rule_uuid, AlertRule.user_id == user_id)
+        stmt = select(AlertRule).where(AlertRule.id == rule_uuid)
         res = await db.execute(stmt)
-        r = res.scalars().first()
-        if r:
-            await db.delete(r)
-            await db.commit()
+        existing_rule = res.scalars().first()
     except Exception:
-        pass
+        existing_rule = None
 
-    return create_response_envelope(data={"deleted": True, "rule_id": rule_id}, correlation_id=cid)
+    if existing_rule is not None:
+        if existing_rule.user_id != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Cannot delete another user's alert rule."
+            )
+        try:
+            await db.delete(existing_rule)
+            await db.commit()
+        except Exception as e:
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to persist alert rule deletion: {str(e)}",
+            )
+        _ALERT_RULES_STORE.pop(str(rule_uuid), None)
+        return create_response_envelope(data={"deleted": True, "rule_id": rule_id}, correlation_id=cid)
+
+    if rule_id in _ALERT_RULES_STORE:
+        if _ALERT_RULES_STORE[rule_id]["user_id"] != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Cannot delete another user's alert rule."
+            )
+        alerts_service.delete_rule(user_id, rule_id)
+        return create_response_envelope(data={"deleted": True, "rule_id": rule_id}, correlation_id=cid)
+
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Rule {rule_id} not found.")
 
 
 @router.post("/evaluate")
@@ -385,7 +503,9 @@ async def list_user_notifications(
             ]
             for n_data in formatted:
                 _NOTIFICATIONS_STORE[n_data["id"]] = n_data
-            return create_response_envelope(data={"notifications": formatted, "count": len(formatted)}, correlation_id=cid)
+            return create_response_envelope(
+                data={"notifications": formatted, "count": len(formatted)}, correlation_id=cid
+            )
     except Exception:
         pass
 

@@ -911,8 +911,14 @@ class SpendingService:
             if db_preview is not None:
                 if db_preview.user_id != user_id:
                     raise KeyError("Access denied to this preview session.")
-                if db_preview.expires_at and db_preview.expires_at < now:
-                    raise KeyError(f"Preview session '{preview_id}' not found or expired.")
+                exp_at = db_preview.expires_at
+                if exp_at is not None:
+                    if exp_at.tzinfo is None:
+                        exp_at = exp_at.replace(tzinfo=timezone.utc)
+                    else:
+                        exp_at = exp_at.astimezone(timezone.utc)
+                    if exp_at < now:
+                        raise ValueError(f"Preview session '{preview_id}' not found or expired.")
                 if db_preview.status == "COMMITTED":
                     prior_upload_id = db_preview.committed_upload_id
                     return {
@@ -939,6 +945,14 @@ class SpendingService:
                 preview = _PREVIEWS_STORE[preview_id]
                 if preview["user_id"] != user_id:
                     raise KeyError("Access denied to this preview session.")
+                if "expires_at" in preview and preview["expires_at"]:
+                    exp_dt = datetime.fromisoformat(preview["expires_at"])
+                    if exp_dt.tzinfo is None:
+                        exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+                    else:
+                        exp_dt = exp_dt.astimezone(timezone.utc)
+                    if exp_dt < now:
+                        raise ValueError(f"Preview session '{preview_id}' not found or expired.")
                 if preview["status"] == "COMMITTED":
                     prior_upload_id = preview["committed_upload_id"]
                     return {

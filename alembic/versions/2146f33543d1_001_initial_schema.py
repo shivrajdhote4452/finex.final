@@ -123,7 +123,6 @@ def upgrade() -> None:
         "securities",
         sa.Column("id", uuid_type, primary_key=True),
         sa.Column("symbol", sa.String(20), nullable=False, unique=True),
-        sa.Column("canonical_id", sa.String(70), nullable=True, unique=True),
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column("isin", sa.String(12), nullable=True, unique=True),
         sa.Column("exchange", sa.String(10), nullable=False, server_default="NSE"),
@@ -283,7 +282,9 @@ def upgrade() -> None:
         sa.Column("error_message", sa.Text(), nullable=True),
         sa.Column("attempted_at", sa.DateTime(timezone=True), nullable=False),
     )
-    op.create_index("ix_notification_delivery_attempts_notification_id", "notification_delivery_attempts", ["notification_id"])
+    op.create_index(
+        "ix_notification_delivery_attempts_notification_id", "notification_delivery_attempts", ["notification_id"]
+    )
 
     # 16. financial_goals
     op.create_table(
@@ -309,14 +310,12 @@ def upgrade() -> None:
         "goal_contributions",
         sa.Column("id", uuid_type, primary_key=True),
         sa.Column("goal_id", uuid_type, sa.ForeignKey("financial_goals.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("user_id", sa.String(64), nullable=False),
         sa.Column("amount", sa.Numeric(14, 2), nullable=False),
         sa.Column("contribution_date", sa.Date(), nullable=False),
         sa.Column("notes", sa.String(255), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
     )
     op.create_index("ix_goal_contributions_goal_id", "goal_contributions", ["goal_id"])
-    op.create_index("ix_goal_contributions_user_id", "goal_contributions", ["user_id"])
     op.create_index("ix_goal_contributions_contribution_date", "goal_contributions", ["contribution_date"])
 
     # 18. goal_projections
@@ -324,23 +323,14 @@ def upgrade() -> None:
         "goal_projections",
         sa.Column("id", uuid_type, primary_key=True),
         sa.Column("goal_id", uuid_type, sa.ForeignKey("financial_goals.id", ondelete="CASCADE"), nullable=False),
-        sa.Column("user_id", sa.String(64), nullable=False, server_default="usr-shivraj-001"),
         sa.Column("projection_date", sa.Date(), nullable=False),
-        sa.Column("projected_amount", sa.Numeric(14, 2), nullable=False, server_default="0.00"),
-        sa.Column("projected_future_value", sa.Numeric(14, 2), nullable=True),
-        sa.Column("shortfall_surplus", sa.Numeric(14, 2), nullable=False, server_default="0.00"),
-        sa.Column("confidence_interval_low", sa.Numeric(14, 2), nullable=False, server_default="0.00"),
-        sa.Column("confidence_interval_high", sa.Numeric(14, 2), nullable=False, server_default="0.00"),
-        sa.Column("required_monthly_savings", sa.Numeric(14, 2), nullable=True),
-        sa.Column("months_remaining", sa.Integer(), nullable=True),
-        sa.Column("formula_version", sa.String(16), nullable=False, server_default="v1.0"),
-        sa.Column("assumptions_version", sa.String(32), nullable=True),
-        sa.Column("assumptions_payload", json_type, nullable=False, server_default="{}"),
-        sa.Column("calculated_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("projected_future_value", sa.Numeric(14, 2), nullable=False),
+        sa.Column("required_monthly_savings", sa.Numeric(14, 2), nullable=False),
+        sa.Column("months_remaining", sa.Integer(), nullable=False),
+        sa.Column("assumptions_version", sa.String(32), nullable=False),
+        sa.Column("calculated_at", sa.DateTime(timezone=True), nullable=False),
     )
     op.create_index("ix_goal_projections_goal_id", "goal_projections", ["goal_id"])
-    op.create_index("ix_goal_projections_user_id", "goal_projections", ["user_id"])
 
     # 19. transaction_uploads (initial baseline without unique constraint added in 002)
     op.create_table(
@@ -413,9 +403,7 @@ def upgrade() -> None:
         "paper_accounts",
         sa.Column("id", sa.String(64), primary_key=True),
         sa.Column("user_id", sa.String(64), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True),
-        sa.Column("account_number", sa.String(32), nullable=False, server_default="ACC-DEFAULT", unique=True),
         sa.Column("currency", sa.String(3), nullable=False, server_default="INR"),
-        sa.Column("status", sa.String(20), nullable=False, server_default="ACTIVE"),
         sa.Column("cash_balance", sa.Numeric(14, 2), nullable=False, server_default="100000.00"),
         sa.Column("current_cash", sa.Numeric(14, 2), nullable=False, server_default="100000.00"),
         sa.Column("initial_balance", sa.Numeric(14, 2), nullable=False, server_default="100000.00"),
@@ -451,7 +439,9 @@ def upgrade() -> None:
     op.create_table(
         "paper_trades",
         sa.Column("id", sa.String(64), primary_key=True),
-        sa.Column("order_id", sa.String(64), sa.ForeignKey("paper_orders.id", ondelete="CASCADE"), nullable=False, unique=True),
+        sa.Column(
+            "order_id", sa.String(64), sa.ForeignKey("paper_orders.id", ondelete="CASCADE"), nullable=False, unique=True
+        ),
         sa.Column("account_id", sa.String(64), sa.ForeignKey("paper_accounts.id", ondelete="CASCADE"), nullable=False),
         sa.Column("symbol", sa.String(20), nullable=False),
         sa.Column("side", sa.String(10), nullable=False),
@@ -495,7 +485,6 @@ def upgrade() -> None:
         sa.Column("id", sa.String(64), primary_key=True),
         sa.Column("user_id", sa.String(64), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
         sa.Column("title", sa.String(255), nullable=False),
-        sa.Column("is_deleted", sa.Boolean(), nullable=True, server_default=sa.false()),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
     )
@@ -505,7 +494,9 @@ def upgrade() -> None:
     op.create_table(
         "ai_messages",
         sa.Column("id", sa.String(64), primary_key=True),
-        sa.Column("conversation_id", sa.String(64), sa.ForeignKey("ai_conversations.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "conversation_id", sa.String(64), sa.ForeignKey("ai_conversations.id", ondelete="CASCADE"), nullable=False
+        ),
         sa.Column("user_id", sa.String(64), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
         sa.Column("role", sa.String(20), nullable=False),
         sa.Column("content", sa.Text(), nullable=False),
@@ -559,7 +550,9 @@ def upgrade() -> None:
     op.create_table(
         "document_chunks",
         sa.Column("id", sa.String(64), primary_key=True),
-        sa.Column("document_id", sa.String(64), sa.ForeignKey("document_registry.id", ondelete="CASCADE"), nullable=False),
+        sa.Column(
+            "document_id", sa.String(64), sa.ForeignKey("document_registry.id", ondelete="CASCADE"), nullable=False
+        ),
         sa.Column("chunk_index", sa.Integer(), nullable=False),
         sa.Column("content", sa.Text(), nullable=False, server_default=""),
         sa.Column("chunk_text", sa.Text(), nullable=True),
@@ -576,24 +569,9 @@ def upgrade() -> None:
     )
     op.create_index("ix_document_chunks_document_id", "document_chunks", ["document_id"])
 
-    # 33. retrieval_events
-    op.create_table(
-        "retrieval_events",
-        sa.Column("id", sa.String(64), primary_key=True),
-        sa.Column("correlation_id", sa.String(64), nullable=False),
-        sa.Column("conversation_id", sa.String(64), nullable=True),
-        sa.Column("query_text", sa.Text(), nullable=False),
-        sa.Column("filter_metadata", json_type, nullable=True),
-        sa.Column("top_k", sa.Integer(), nullable=False),
-        sa.Column("retrieved_chunk_ids", json_type, nullable=True),
-        sa.Column("latency_ms", sa.Float(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
-    )
-
 
 def downgrade() -> None:
     for tbl in [
-        "retrieval_events",
         "document_chunks",
         "document_registry",
         "ai_feedback",

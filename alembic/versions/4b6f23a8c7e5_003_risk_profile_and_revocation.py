@@ -37,6 +37,7 @@ def upgrade() -> None:
         return
 
     from sqlalchemy import inspect
+
     bind = op.get_bind()
     insp = inspect(bind)
 

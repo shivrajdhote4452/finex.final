@@ -209,7 +209,9 @@ async def get_conversation_messages(
             if db_conv.user_id != user_id:
                 raise ForbiddenException(message="Forbidden: You do not own this conversation.")
             msg_res = await db.execute(
-                select(AIMessage).where(AIMessage.conversation_id == conversation_id).order_by(AIMessage.created_at.asc())
+                select(AIMessage)
+                .where(AIMessage.conversation_id == conversation_id)
+                .order_by(AIMessage.created_at.asc())
             )
             db_msgs = msg_res.scalars().all()
             messages = [
@@ -304,6 +306,7 @@ async def post_message_to_conversation(
         query=payload.content,
         conversation_id=conversation_id,
         correlation_id=cid,
+        db=db,
     )
 
     # 3. Store assistant message
@@ -392,7 +395,9 @@ async def delete_conversation(
             await db.commit()
             if conversation_id in _CONVERSATION_STORE:
                 _CONVERSATION_STORE[conversation_id]["is_deleted"] = True
-            return create_response_envelope(data={"conversation_id": conversation_id, "deleted": True}, correlation_id=cid)
+            return create_response_envelope(
+                data={"conversation_id": conversation_id, "deleted": True}, correlation_id=cid
+            )
     except (ForbiddenException, NotFoundException):
         raise
     except Exception:

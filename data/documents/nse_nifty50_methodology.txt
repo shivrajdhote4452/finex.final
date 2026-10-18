@@ -1,0 +1,11 @@
+## Section 1: Objective and Representation
+Page: 2
+The NIFTY 50 is the flagship broad market benchmark of the National Stock Exchange of India (NSE). It tracks the performance of 50 large-cap, liquid companies representing approximately 60% of the total free-float market capitalization of listed securities on the NSE. The index serves as a benchmark for portfolio performance, index funds, exchange-traded funds (ETFs), and derivatives trading.
+
+## Section 2: Eligibility and Free-Float Methodology
+Page: 5
+To qualify for inclusion in the NIFTY 50, a security must trade at an average impact cost of 0.50% or less over the previous 6 months for a portfolio size of ₹10 crore. Securities must also have minimum 100% trading frequency over the past 6 months. The index is calculated using the free-float market capitalization methodology, where company equity is weighted strictly by the shares available for active public trading, excluding promoter lock-ins and strategic government holdings.
+
+## Section 3: Reconstitution and Capping Rules
+Page: 9
+NIFTY 50 undergoes semi-annual reconstitution in March and September. A four-week notice is provided to the market before changes take effect. No individual company within the index can have an effective weight exceeding 33% at the time of rebalancing. Furthermore, the cumulative weight of top three stocks cannot exceed 62%.

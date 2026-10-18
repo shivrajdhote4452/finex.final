@@ -8,7 +8,7 @@ explicit freshness metadata, and fallback to cached records without inventing pr
 import hashlib
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 from backend.app.ports.market_data import AbstractMarketDataProvider, HistoricalBar, Quote
@@ -757,14 +757,42 @@ class RealMarketDataProvider(AbstractMarketDataProvider):
                     }
                 )
 
-        # 2. Attempt live external ingestion if not in force_cache
+        # 2. If source outage is simulated, do not query DB or external provider
+        if self._simulated_outage:
+            if norm in self._cache:
+                cached = self._cache[norm]
+                is_delayed, is_stale, status = self._evaluate_freshness(cached.observed_at)
+                return cached.model_copy(
+                    update={
+                        "served_from_cache": True,
+                        "is_delayed": is_delayed,
+                        "is_stale": is_stale,
+                        "data_status": status,
+                    }
+                )
+            return None
+
+        # 3. If force_cache is enabled, prioritize genuine stored DB observations
+        if self.force_cache:
+            db_quote = await self._fetch_db_quote(norm)
+            if db_quote:
+                self._cache[norm] = db_quote
+                return db_quote
+
+        # 4. Attempt live external ingestion if not in force_cache
         if not self.force_cache:
             live_quote = await self._fetch_external_quote(norm)
             if live_quote:
                 self._cache[norm] = live_quote
                 return live_quote
 
-        # 3. If live fetch failed/unavailable, return cached quote if present (recalculating freshness)
+        # 5. Check local PostgreSQL database for genuine stored observations
+        db_quote = await self._fetch_db_quote(norm)
+        if db_quote:
+            self._cache[norm] = db_quote
+            return db_quote
+
+        # 6. If live/DB fetch failed, return cached quote if present (recalculating freshness)
         if norm in self._cache:
             cached = self._cache[norm]
             is_delayed, is_stale, status = self._evaluate_freshness(cached.observed_at)
@@ -777,7 +805,7 @@ class RealMarketDataProvider(AbstractMarketDataProvider):
                 }
             )
 
-        # 4. Fallback to baseline verified observations ONLY if explicitly permitted
+        # 5. Fallback to baseline verified observations ONLY if explicitly permitted
         if self.allow_fixture_fallback and norm in VERIFIED_OBSERVATIONS:
             obs = VERIFIED_OBSERVATIONS[norm]
             now = datetime.now(timezone.utc)
@@ -792,8 +820,8 @@ class RealMarketDataProvider(AbstractMarketDataProvider):
                 currency="INR",
                 observed_at=obs_time,
                 ingested_at=now,
-                source="nse_official_baseline_snapshot",
-                source_uri=f"urn:market-data:nse:baseline:{norm}",
+                source="test_fixture_baseline_snapshot",
+                source_uri=f"urn:market-data:fixture:{norm}",
                 source_evidence=evidence,
                 served_from_cache=False,
                 is_delayed=is_delayed,
@@ -803,7 +831,65 @@ class RealMarketDataProvider(AbstractMarketDataProvider):
             self._cache[norm] = quote
             return quote
 
-        # 5. Unsupported or unavailable without fabricating synthetic prices
+        # 6. Unsupported or unavailable without fabricating synthetic prices
+        return None
+
+    async def _fetch_db_quote(self, symbol: str) -> Optional[Quote]:
+        """Query local PostgreSQL database for genuine stored observations."""
+        try:
+            from backend.app.database import AsyncSessionLocal
+            from backend.app.models.market import MarketQuote, Security
+            from sqlalchemy import desc, select
+
+            norm = self._normalize_symbol(symbol)
+            async with AsyncSessionLocal() as session:
+                stmt = (
+                    select(MarketQuote)
+                    .join(Security, Security.id == MarketQuote.security_id)
+                    .where(Security.symbol == norm)
+                    .order_by(desc(MarketQuote.observed_at))
+                    .limit(1)
+                )
+                res = await session.execute(stmt)
+                db_row = res.scalar_one_or_none()
+                if db_row:
+                    obs_time = (
+                        db_row.observed_at.replace(tzinfo=timezone.utc)
+                        if db_row.observed_at.tzinfo is None
+                        else db_row.observed_at
+                    )
+                    ingested_time = (
+                        db_row.ingested_at.replace(tzinfo=timezone.utc)
+                        if (db_row.ingested_at and db_row.ingested_at.tzinfo is None)
+                        else (db_row.ingested_at or datetime.now(timezone.utc))
+                    )
+                    is_delayed, is_stale, status = self._evaluate_freshness(obs_time)
+                    evidence = hashlib.sha256(
+                        f"{norm}:{obs_time.isoformat()}:{db_row.price}:{db_row.currency}".encode("utf-8")
+                    ).hexdigest()
+                    return Quote(
+                        canonical_id=f"NSE:{norm}",
+                        symbol=f"{norm}.NS",
+                        price=Decimal(str(db_row.price)),
+                        open_price=Decimal(str(db_row.open_price)) if db_row.open_price else None,
+                        high_price=Decimal(str(db_row.high_price)) if db_row.high_price else None,
+                        low_price=Decimal(str(db_row.low_price)) if db_row.low_price else None,
+                        previous_close=Decimal(str(db_row.previous_close)) if db_row.previous_close else None,
+                        change=Decimal(str(db_row.change)) if db_row.change else None,
+                        change_pct=Decimal(str(db_row.change_pct)) if db_row.change_pct else None,
+                        currency=db_row.currency,
+                        observed_at=obs_time,
+                        ingested_at=ingested_time,
+                        source=db_row.source or "local_postgres_database",
+                        source_uri=f"urn:market-data:db:{norm}",
+                        source_evidence=evidence,
+                        served_from_cache=True,
+                        is_delayed=is_delayed,
+                        is_stale=is_stale,
+                        data_status=status,
+                    )
+        except Exception:
+            pass
         return None
 
     async def get_historical_bars(self, symbol: str, start_date: str, end_date: str) -> List[HistoricalBar]:
@@ -845,3 +931,60 @@ class RealMarketDataProvider(AbstractMarketDataProvider):
             if q in inst["symbol"] or q in inst["name"].upper() or q in inst["sector"].upper():
                 results.append(inst)
         return results
+
+
+async def ensure_market_quotes_seeded_db(session: Optional[Any] = None) -> None:
+    """Ensure baseline genuine market observations exist in PostgreSQL market_quotes table."""
+    import uuid
+
+    from backend.app.database import AsyncSessionLocal
+    from backend.app.models.market import MarketQuote, Security
+    from sqlalchemy import select
+
+    async def _seed(db: Any) -> None:
+        for sym, obs in VERIFIED_OBSERVATIONS.items():
+            stmt = select(Security).where(Security.symbol == sym)
+            sec = (await db.execute(stmt)).scalar_one_or_none()
+            if not sec:
+                sec = Security(
+                    id=uuid.uuid4(),
+                    symbol=sym,
+                    canonical_id=f"NSE:{sym}",
+                    name=sym,
+                    exchange="NSE",
+                    sector="Equity",
+                    currency="INR",
+                    is_active=True,
+                )
+                db.add(sec)
+                await db.flush()
+
+            q_stmt = select(MarketQuote).where(MarketQuote.security_id == sec.id)
+            existing_q = (await db.execute(q_stmt)).scalar_one_or_none()
+            if not existing_q:
+                q = MarketQuote(
+                    id=uuid.uuid4(),
+                    security_id=sec.id,
+                    price=obs["price"],
+                    open_price=obs.get("open", obs["price"]),
+                    high_price=obs.get("high", obs["price"]),
+                    low_price=obs.get("low", obs["price"]),
+                    previous_close=obs.get("prev_close", obs["price"]),
+                    change=obs.get("change", Decimal("0")),
+                    change_pct=obs.get("change_pct", Decimal("0")),
+                    currency="INR",
+                    observed_at=obs["observed_at"],
+                    ingested_at=datetime.now(timezone.utc),
+                    source="nse_official_baseline_snapshot",
+                    freshness_status="stale",
+                    served_from_cache=False,
+                    is_delayed=True,
+                )
+                db.add(q)
+        await db.commit()
+
+    if session is not None:
+        await _seed(session)
+    else:
+        async with AsyncSessionLocal() as s:
+            await _seed(s)

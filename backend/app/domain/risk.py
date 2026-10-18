@@ -20,7 +20,9 @@ class RiskBand(str, Enum):
 class RiskAnswer(BaseModel):
     question_id: str
     option_id: str
-    score: Optional[int] = Field(None, ge=0, le=100, description="Optional client score; server catalog is authoritative")
+    score: Optional[int] = Field(
+        None, ge=0, le=100, description="Optional client score; server catalog is authoritative"
+    )
 
 
 class AssessmentSubmission(BaseModel):
@@ -115,9 +117,7 @@ def evaluate_risk_profile(submission: AssessmentSubmission) -> RiskAssessmentRes
 
     # 3. Build server option catalog mapping (question_id, option_id) -> (score, dimension)
     option_catalog = {
-        (q["id"], opt["id"]): (opt["score"], q["dimension"])
-        for q in RISK_QUESTIONNAIRE_V1
-        for opt in q["options"]
+        (q["id"], opt["id"]): (opt["score"], q["dimension"]) for q in RISK_QUESTIONNAIRE_V1 for opt in q["options"]
     }
     required_questions = {q["id"] for q in RISK_QUESTIONNAIRE_V1}
 

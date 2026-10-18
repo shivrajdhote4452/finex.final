@@ -72,6 +72,21 @@ CREATE TABLE IF NOT EXISTS user_audit_logs (
 );
 CREATE INDEX IF NOT EXISTS ix_user_audit_logs_user_id ON user_audit_logs(user_id);
 
+CREATE TABLE IF NOT EXISTS application_events (
+    id VARCHAR(64) PRIMARY KEY,
+    correlation_id VARCHAR(64) NOT NULL,
+    user_id VARCHAR(64) REFERENCES users(id) ON DELETE SET NULL,
+    event_type VARCHAR(100) NOT NULL,
+    status VARCHAR(50) NOT NULL,
+    duration_ms DOUBLE PRECISION,
+    error_message TEXT,
+    payload JSONB,
+    ip_address VARCHAR(45),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+);
+CREATE INDEX IF NOT EXISTS ix_application_events_user_id ON application_events(user_id);
+CREATE INDEX IF NOT EXISTS ix_application_events_event_type ON application_events(event_type);
+
 CREATE TABLE IF NOT EXISTS revoked_tokens (
     id VARCHAR(64) PRIMARY KEY,
     token VARCHAR(512) NOT NULL UNIQUE,
@@ -121,6 +136,7 @@ CREATE INDEX IF NOT EXISTS ix_portfolio_holdings_symbol ON portfolio_holdings(sy
 CREATE TABLE IF NOT EXISTS securities (
     id VARCHAR(64) PRIMARY KEY,
     symbol VARCHAR(20) NOT NULL UNIQUE,
+    canonical_id VARCHAR(70) UNIQUE,
     name VARCHAR(255) NOT NULL,
     isin VARCHAR(12) UNIQUE,
     exchange VARCHAR(10) NOT NULL DEFAULT 'NSE',
@@ -135,37 +151,56 @@ CREATE INDEX IF NOT EXISTS ix_securities_symbol ON securities(symbol);
 
 CREATE TABLE IF NOT EXISTS market_quotes (
     id VARCHAR(64) PRIMARY KEY,
-    symbol VARCHAR(20) NOT NULL UNIQUE,
-    last_price NUMERIC(14, 2) NOT NULL,
+    security_id VARCHAR(64) REFERENCES securities(id) ON DELETE CASCADE,
+    symbol VARCHAR(20),
+    price NUMERIC(14, 4) NOT NULL DEFAULT 0.0000,
+    last_price NUMERIC(14, 2),
+    change NUMERIC(14, 4) NOT NULL DEFAULT 0.0000,
     change_amount NUMERIC(14, 2),
+    change_pct NUMERIC(8, 4) NOT NULL DEFAULT 0.0000,
     change_percentage NUMERIC(6, 2),
+    previous_close NUMERIC(14, 4) NOT NULL DEFAULT 0.0000,
     open_price NUMERIC(14, 2),
     high_price NUMERIC(14, 2),
     low_price NUMERIC(14, 2),
     volume NUMERIC(18, 0),
-    quote_timestamp TIMESTAMPTZ NOT NULL,
+    currency VARCHAR(3) NOT NULL DEFAULT 'INR',
+    observed_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+    quote_timestamp TIMESTAMPTZ,
     source VARCHAR(50) NOT NULL DEFAULT 'nse_realtime',
+    freshness_status VARCHAR(20) NOT NULL DEFAULT 'LIVE',
+    served_from_cache BOOLEAN NOT NULL DEFAULT FALSE,
+    is_delayed BOOLEAN NOT NULL DEFAULT FALSE,
+    ingested_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
     created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
 );
+CREATE INDEX IF NOT EXISTS ix_market_quotes_security_id ON market_quotes(security_id);
 CREATE INDEX IF NOT EXISTS ix_market_quotes_symbol ON market_quotes(symbol);
+CREATE INDEX IF NOT EXISTS ix_market_quotes_observed_at ON market_quotes(observed_at);
 
 CREATE TABLE IF NOT EXISTS market_price_history (
     id VARCHAR(64) PRIMARY KEY,
     security_id VARCHAR(64) NOT NULL REFERENCES securities(id) ON DELETE CASCADE,
     price_date DATE NOT NULL,
+    trade_date DATE,
     open_price NUMERIC(14, 2) NOT NULL,
     high_price NUMERIC(14, 2) NOT NULL,
     low_price NUMERIC(14, 2) NOT NULL,
     close_price NUMERIC(14, 2) NOT NULL,
     adjusted_close NUMERIC(14, 2) NOT NULL,
+    adj_close_price NUMERIC(14, 4) NOT NULL DEFAULT 0.0000,
     volume NUMERIC(18, 0) NOT NULL,
     data_source VARCHAR(50) NOT NULL DEFAULT 'nse',
+    source VARCHAR(50) NOT NULL DEFAULT 'NSE_EOD',
+    currency VARCHAR(3) NOT NULL DEFAULT 'INR',
     is_interpolated BOOLEAN NOT NULL DEFAULT FALSE,
+    ingested_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
     created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
     CONSTRAINT uq_security_price_date UNIQUE (security_id, price_date)
 );
 CREATE INDEX IF NOT EXISTS ix_market_price_history_security_id ON market_price_history(security_id);
 CREATE INDEX IF NOT EXISTS ix_market_price_history_price_date ON market_price_history(price_date);
+CREATE INDEX IF NOT EXISTS ix_market_price_history_trade_date ON market_price_history(trade_date);
 
 CREATE TABLE IF NOT EXISTS market_observations (
     id VARCHAR(64) PRIMARY KEY,
@@ -248,11 +283,19 @@ CREATE TABLE IF NOT EXISTS alert_events (
     id VARCHAR(64) PRIMARY KEY,
     rule_id VARCHAR(64) NOT NULL REFERENCES alert_rules(id) ON DELETE CASCADE,
     user_id VARCHAR(64) NOT NULL,
-    event_payload JSONB NOT NULL,
-    triggered_at TIMESTAMPTZ NOT NULL,
+    event_type VARCHAR(32) NOT NULL DEFAULT 'PRICE_ALERT',
+    symbol VARCHAR(20),
+    triggered_value NUMERIC(14, 4) NOT NULL DEFAULT 0.0000,
+    threshold_value NUMERIC(14, 4) NOT NULL DEFAULT 0.0000,
+    title VARCHAR(255) NOT NULL DEFAULT 'Alert Triggered',
+    message TEXT NOT NULL DEFAULT '',
+    dedupe_key VARCHAR(128) UNIQUE,
+    event_payload JSONB,
+    triggered_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
     created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
 );
 CREATE INDEX IF NOT EXISTS ix_alert_events_user_id ON alert_events(user_id);
+CREATE INDEX IF NOT EXISTS ix_alert_events_dedupe_key ON alert_events(dedupe_key);
 
 CREATE TABLE IF NOT EXISTS notifications (
     id VARCHAR(64) PRIMARY KEY,
@@ -267,6 +310,18 @@ CREATE TABLE IF NOT EXISTS notifications (
 );
 CREATE INDEX IF NOT EXISTS ix_notifications_user_id ON notifications(user_id);
 CREATE INDEX IF NOT EXISTS ix_notifications_is_read ON notifications(is_read);
+
+CREATE TABLE IF NOT EXISTS notification_delivery_attempts (
+    id VARCHAR(64) PRIMARY KEY,
+    notification_id VARCHAR(64) NOT NULL REFERENCES notifications(id) ON DELETE CASCADE,
+    channel VARCHAR(32) NOT NULL,
+    attempt_status VARCHAR(16) NOT NULL,
+    attempt_number INTEGER NOT NULL,
+    response_payload JSONB,
+    error_message TEXT,
+    attempted_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+);
+CREATE INDEX IF NOT EXISTS ix_notification_delivery_attempts_notification_id ON notification_delivery_attempts(notification_id);
 
 -- ============================================================================
 -- 5. FINANCIAL GOALS & PROJECTIONS
@@ -303,7 +358,7 @@ CREATE INDEX IF NOT EXISTS ix_goal_contributions_user_id ON goal_contributions(u
 CREATE TABLE IF NOT EXISTS goal_projections (
     id VARCHAR(64) PRIMARY KEY,
     goal_id VARCHAR(64) NOT NULL REFERENCES financial_goals(id) ON DELETE CASCADE,
-    user_id VARCHAR(64) NOT NULL DEFAULT 'usr-shivraj-001',
+    user_id VARCHAR(64) NOT NULL,
     projection_date DATE NOT NULL,
     projected_amount NUMERIC(14, 2) NOT NULL DEFAULT 0.00,
     projected_future_value NUMERIC(14, 2),

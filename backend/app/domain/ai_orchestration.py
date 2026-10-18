@@ -19,6 +19,7 @@ from typing import List, Optional
 
 from ai.rag.retriever import RegulatoryDocumentRetriever
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class AIIntent(str, Enum):
@@ -106,6 +107,7 @@ class AIOrchestrator:
         query: str,
         conversation_id: Optional[str] = None,
         correlation_id: Optional[str] = None,
+        db: Optional[AsyncSession] = None,
     ) -> OrchestrationResponse:
         t0 = time.perf_counter()
         cid = correlation_id or str(uuid.uuid4())
@@ -136,7 +138,7 @@ class AIOrchestrator:
             )
 
         # Retrieve relevant regulatory evidence
-        retrieved_chunks = await self.retriever.retrieve_relevant_chunks(query, top_k=3)
+        retrieved_chunks = await self.retriever.retrieve_relevant_chunks(query, top_k=3, db=db)
 
         if not retrieved_chunks:
             latency = (time.perf_counter() - t0) * 1000.0

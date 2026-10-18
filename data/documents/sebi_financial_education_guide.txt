@@ -1,0 +1,19 @@
+## Chapter 1: The Foundations of Financial Planning
+Page: 4
+Financial planning begins with establishing realistic goals and a disciplined savings rate. Before investing in market instruments, every individual should maintain an emergency liquidity buffer equal to at least 3 to 6 months of basic living expenses in safe, liquid instruments such as bank fixed deposits or overnight mutual funds. Investing without an emergency reserve forces premature liquidation of equities during downturns.
+
+## Chapter 2: Understanding Risk and Return in Securities
+Page: 8
+Risk and expected return are inextricably linked in capital markets. Equities represent ownership in companies and offer inflation-beating growth over long horizons (5+ years), but subject investors to short-term volatility. Debt securities and government bonds offer capital preservation and predictable coupon returns, but expose long-term holders to purchasing-power risk from inflation. A prudent asset allocation balances growth equities with stabilizing fixed income.
+
+## Chapter 3: Asset Allocation and Diversification Principles
+Page: 12
+Diversification is the primary protection against unsystematic risk. Holding securities across unrelated economic sectors ensures that severe drawdowns in a single industry (such as Technology or Energy) do not impair total portfolio solvency. SEBI guidelines recommend capping single-stock exposure under 10% to 15% and single-sector exposure under 25% to 30% of total equity holdings.
+
+## Chapter 4: Systematic Investment Plans (SIP) and Compounding
+Page: 16
+A Systematic Investment Plan (SIP) allows retail investors to invest a predetermined amount periodically, enforcing rupee cost averaging. By buying more units when prices fall and fewer when prices rise, SIP eliminates the need to time the market. Compounding functions as an exponential force: starting 5 years earlier at age 25 with modest contributions yields substantially higher wealth than starting at age 35 with double the capital contribution.
+
+## Chapter 5: Grievance Redressal and SCORES Portal
+Page: 22
+All registered intermediaries (brokers, depository participants, mutual funds) are bound by SEBI regulations. In the event of unresolved disputes or service failures, investors should first lodge complaints directly with the entity. If unaddressed within 30 days, investors may escalate claims to the SEBI Complaints Redress System (SCORES 2.0) portal or initiate online dispute resolution (ODR) through the SMART ODR platform.

@@ -54,6 +54,18 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         except Exception:
             # Continue if DB is offline during unit testing
             pass
+        try:
+            from ai.rag.ingestion import ensure_documents_indexed_db
+
+            await ensure_documents_indexed_db()
+        except Exception:
+            pass
+        try:
+            from backend.app.adapters.market_data_provider import ensure_market_quotes_seeded_db
+
+            await ensure_market_quotes_seeded_db()
+        except Exception:
+            pass
         yield
         # Shutdown phase
 

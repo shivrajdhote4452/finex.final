@@ -25,15 +25,30 @@ def upgrade() -> None:
         # Offline DDL generation
         with op.batch_alter_table("paper_accounts") as batch_op:
             batch_op.add_column(sa.Column("status", sa.String(20), nullable=False, server_default="ACTIVE"))
-            batch_op.add_column(sa.Column("account_number", sa.String(32), nullable=False, server_default="ACC-DEFAULT"))
-        with op.batch_alter_table("goal_contributions") as batch_op:
-            batch_op.add_column(sa.Column("user_id", sa.String(64), nullable=False, server_default="usr-shivraj-001"))
-            batch_op.create_index("ix_goal_contributions_user_id", ["user_id"])
+            batch_op.add_column(
+                sa.Column("account_number", sa.String(32), nullable=False, server_default="ACC-DEFAULT")
+            )
+
+        # 2. goal_contributions.user_id - derive from parent financial_goals without hardcoding default owner
+        op.add_column("goal_contributions", sa.Column("user_id", sa.String(64), nullable=True))
+        op.execute(
+            "UPDATE goal_contributions SET user_id = (SELECT fg.user_id FROM financial_goals fg WHERE fg.id = goal_contributions.goal_id) WHERE user_id IS NULL"
+        )
+        op.alter_column("goal_contributions", "user_id", nullable=False)
+        op.create_index("ix_goal_contributions_user_id", "goal_contributions", ["user_id"])
+
+        # Forward repair for any existing mismatched contribution owners
+        op.execute(
+            "UPDATE goal_contributions SET user_id = (SELECT fg.user_id FROM financial_goals fg WHERE fg.id = goal_contributions.goal_id) WHERE EXISTS (SELECT 1 FROM financial_goals fg WHERE fg.id = goal_contributions.goal_id AND fg.user_id != goal_contributions.user_id)"
+        )
+
         with op.batch_alter_table("ai_conversations") as batch_op:
             batch_op.add_column(sa.Column("is_deleted", sa.Boolean(), nullable=True, server_default=sa.false()))
+
         with op.batch_alter_table("securities") as batch_op:
             batch_op.add_column(sa.Column("canonical_id", sa.String(70), nullable=True))
             batch_op.create_unique_constraint("uq_securities_canonical_id", ["canonical_id"])
+
         op.create_table(
             "retrieval_events",
             sa.Column("id", sa.String(64), primary_key=True),
@@ -46,6 +61,7 @@ def upgrade() -> None:
             sa.Column("latency_ms", sa.Float(), nullable=True),
             sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
         )
+
         op.create_table(
             "transaction_previews",
             sa.Column("id", sa.String(64), primary_key=True),
@@ -63,9 +79,92 @@ def upgrade() -> None:
         )
         op.create_index("ix_transaction_previews_user_id", "transaction_previews", ["user_id"])
         op.create_index("ix_transaction_previews_file_hash", "transaction_previews", ["file_hash_sha256"])
+
+        with op.batch_alter_table("alert_events") as batch_op:
+            batch_op.add_column(sa.Column("event_type", sa.String(32), nullable=False, server_default="PRICE_ALERT"))
+            batch_op.add_column(sa.Column("symbol", sa.String(20), nullable=True))
+            batch_op.add_column(
+                sa.Column("triggered_value", sa.Numeric(14, 4), nullable=False, server_default="0.0000")
+            )
+            batch_op.add_column(
+                sa.Column("threshold_value", sa.Numeric(14, 4), nullable=False, server_default="0.0000")
+            )
+            batch_op.add_column(sa.Column("title", sa.String(255), nullable=False, server_default="Alert Triggered"))
+            batch_op.add_column(sa.Column("message", sa.Text(), nullable=False, server_default=""))
+            batch_op.add_column(sa.Column("dedupe_key", sa.String(128), nullable=True))
+            batch_op.create_index("ix_alert_events_dedupe_key", ["dedupe_key"])
+
+        # goal_projections.user_id - derive from parent financial_goals without hardcoding default owner
+        op.add_column("goal_projections", sa.Column("user_id", sa.String(64), nullable=True))
+        op.execute(
+            "UPDATE goal_projections SET user_id = (SELECT fg.user_id FROM financial_goals fg WHERE fg.id = goal_projections.goal_id) WHERE user_id IS NULL"
+        )
+        op.alter_column("goal_projections", "user_id", nullable=False)
+        op.create_index("ix_goal_projections_user_id", "goal_projections", ["user_id"])
+
+        # Forward repair for any existing mismatched projection owners
+        op.execute(
+            "UPDATE goal_projections SET user_id = (SELECT fg.user_id FROM financial_goals fg WHERE fg.id = goal_projections.goal_id) WHERE EXISTS (SELECT 1 FROM financial_goals fg WHERE fg.id = goal_projections.goal_id AND fg.user_id != goal_projections.user_id)"
+        )
+
+        with op.batch_alter_table("goal_projections") as batch_op:
+            batch_op.add_column(sa.Column("projected_amount", sa.Numeric(14, 2), nullable=False, server_default="0.00"))
+            batch_op.add_column(
+                sa.Column("shortfall_surplus", sa.Numeric(14, 2), nullable=False, server_default="0.00")
+            )
+            batch_op.add_column(
+                sa.Column("confidence_interval_low", sa.Numeric(14, 2), nullable=False, server_default="0.00")
+            )
+            batch_op.add_column(
+                sa.Column("confidence_interval_high", sa.Numeric(14, 2), nullable=False, server_default="0.00")
+            )
+            batch_op.add_column(sa.Column("formula_version", sa.String(16), nullable=False, server_default="v1.0"))
+            batch_op.add_column(sa.Column("assumptions_payload", json_type, nullable=False, server_default="{}"))
+            batch_op.add_column(sa.Column("created_at", sa.DateTime(timezone=True), nullable=True))
+
+        with op.batch_alter_table("market_quotes") as batch_op:
+            batch_op.add_column(sa.Column("security_id", postgresql.UUID(as_uuid=True), nullable=True))
+            batch_op.add_column(sa.Column("price", sa.Numeric(14, 4), nullable=False, server_default="0.0000"))
+            batch_op.add_column(sa.Column("change", sa.Numeric(14, 4), nullable=False, server_default="0.0000"))
+            batch_op.add_column(sa.Column("change_pct", sa.Numeric(8, 4), nullable=False, server_default="0.0000"))
+            batch_op.add_column(sa.Column("previous_close", sa.Numeric(14, 4), nullable=False, server_default="0.0000"))
+            batch_op.add_column(sa.Column("currency", sa.String(3), nullable=False, server_default="INR"))
+            batch_op.add_column(sa.Column("observed_at", sa.DateTime(timezone=True), nullable=True))
+            batch_op.add_column(sa.Column("freshness_status", sa.String(20), nullable=False, server_default="LIVE"))
+            batch_op.add_column(sa.Column("served_from_cache", sa.Boolean(), nullable=False, server_default=sa.false()))
+            batch_op.add_column(sa.Column("is_delayed", sa.Boolean(), nullable=False, server_default=sa.false()))
+            batch_op.add_column(sa.Column("ingested_at", sa.DateTime(timezone=True), nullable=True))
+
+        with op.batch_alter_table("market_price_history") as batch_op:
+            batch_op.add_column(sa.Column("trade_date", sa.Date(), nullable=True))
+            batch_op.add_column(
+                sa.Column("adj_close_price", sa.Numeric(14, 4), nullable=False, server_default="0.0000")
+            )
+            batch_op.add_column(sa.Column("source", sa.String(50), nullable=False, server_default="NSE_EOD"))
+            batch_op.add_column(sa.Column("currency", sa.String(3), nullable=False, server_default="INR"))
+            batch_op.add_column(sa.Column("ingested_at", sa.DateTime(timezone=True), nullable=True))
+
+        with op.batch_alter_table("document_registry") as batch_op:
+            batch_op.add_column(sa.Column("doc_type", sa.String(50), nullable=False, server_default="REGULATION"))
+            batch_op.add_column(sa.Column("publishing_date", sa.Date(), nullable=True))
+            batch_op.add_column(sa.Column("reporting_period", sa.String(50), nullable=True))
+            batch_op.add_column(sa.Column("security_symbol", sa.String(20), nullable=True))
+            batch_op.add_column(sa.Column("isin", sa.String(20), nullable=True))
+            batch_op.add_column(
+                sa.Column("content_hash", sa.String(64), nullable=False, server_default="sha256-pending")
+            )
+            batch_op.add_column(sa.Column("status", sa.String(20), nullable=False, server_default="ACTIVE"))
+
+        with op.batch_alter_table("document_chunks") as batch_op:
+            batch_op.add_column(sa.Column("content", sa.Text(), nullable=False, server_default=""))
+            batch_op.add_column(sa.Column("word_count", sa.Integer(), nullable=False, server_default="0"))
+            batch_op.add_column(sa.Column("embedding_vector", json_type, nullable=True))
+            batch_op.add_column(sa.Column("status", sa.String(20), nullable=False, server_default="ACTIVE"))
         return
 
+    # ONLINE MODE
     from sqlalchemy import inspect
+
     bind = op.get_bind()
     insp = inspect(bind)
     tables = set(insp.get_table_names())
@@ -77,15 +176,32 @@ def upgrade() -> None:
             if "status" not in acct_cols:
                 batch_op.add_column(sa.Column("status", sa.String(20), nullable=False, server_default="ACTIVE"))
             if "account_number" not in acct_cols:
-                batch_op.add_column(sa.Column("account_number", sa.String(32), nullable=False, server_default="ACC-DEFAULT"))
+                batch_op.add_column(
+                    sa.Column("account_number", sa.String(32), nullable=False, server_default="ACC-DEFAULT")
+                )
 
-    # 2. Forward migration for goal_contributions.user_id
+    # 2. Forward migration for goal_contributions.user_id - derive from parent financial_goals
     if "goal_contributions" in tables:
         goal_cols = [c["name"] for c in insp.get_columns("goal_contributions")]
         if "user_id" not in goal_cols:
+            # Add column as nullable first
             with op.batch_alter_table("goal_contributions") as batch_op:
-                batch_op.add_column(sa.Column("user_id", sa.String(64), nullable=False, server_default="usr-shivraj-001"))
+                batch_op.add_column(sa.Column("user_id", sa.String(64), nullable=True))
+
+            # Backfill ownership from parent financial_goals
+            op.execute(
+                "UPDATE goal_contributions SET user_id = (SELECT fg.user_id FROM financial_goals fg WHERE fg.id = goal_contributions.goal_id) WHERE user_id IS NULL"
+            )
+
+            # Set NOT NULL and create index
+            with op.batch_alter_table("goal_contributions") as batch_op:
+                batch_op.alter_column("user_id", nullable=False)
                 batch_op.create_index("ix_goal_contributions_user_id", ["user_id"])
+
+        # Forward repair for existing databases where user_id was set to hardcoded default
+        op.execute(
+            "UPDATE goal_contributions SET user_id = (SELECT fg.user_id FROM financial_goals fg WHERE fg.id = goal_contributions.goal_id) WHERE EXISTS (SELECT 1 FROM financial_goals fg WHERE fg.id = goal_contributions.goal_id AND fg.user_id != goal_contributions.user_id)"
+        )
 
     # 3. Forward migration for ai_conversations.is_deleted
     if "ai_conversations" in tables:
@@ -142,29 +258,67 @@ def upgrade() -> None:
         evt_cols = [c["name"] for c in insp.get_columns("alert_events")]
         if "event_type" not in evt_cols:
             with op.batch_alter_table("alert_events") as batch_op:
-                batch_op.add_column(sa.Column("event_type", sa.String(32), nullable=False, server_default="PRICE_ALERT"))
+                batch_op.add_column(
+                    sa.Column("event_type", sa.String(32), nullable=False, server_default="PRICE_ALERT")
+                )
                 batch_op.add_column(sa.Column("symbol", sa.String(20), nullable=True))
-                batch_op.add_column(sa.Column("triggered_value", sa.Numeric(14, 4), nullable=False, server_default="0.0000"))
-                batch_op.add_column(sa.Column("threshold_value", sa.Numeric(14, 4), nullable=False, server_default="0.0000"))
-                batch_op.add_column(sa.Column("title", sa.String(255), nullable=False, server_default="Alert Triggered"))
+                batch_op.add_column(
+                    sa.Column("triggered_value", sa.Numeric(14, 4), nullable=False, server_default="0.0000")
+                )
+                batch_op.add_column(
+                    sa.Column("threshold_value", sa.Numeric(14, 4), nullable=False, server_default="0.0000")
+                )
+                batch_op.add_column(
+                    sa.Column("title", sa.String(255), nullable=False, server_default="Alert Triggered")
+                )
                 batch_op.add_column(sa.Column("message", sa.Text(), nullable=False, server_default=""))
                 batch_op.add_column(sa.Column("dedupe_key", sa.String(128), nullable=True))
                 batch_op.create_index("ix_alert_events_dedupe_key", ["dedupe_key"])
 
-    # 8. Forward migration for goal_projections columns
+    # 8. Forward migration for goal_projections columns - derive user_id from financial_goals
     if "goal_projections" in tables:
         proj_cols = [c["name"] for c in insp.get_columns("goal_projections")]
         if "user_id" not in proj_cols:
             with op.batch_alter_table("goal_projections") as batch_op:
-                batch_op.add_column(sa.Column("user_id", sa.String(64), nullable=False, server_default="usr-shivraj-001"))
-                batch_op.add_column(sa.Column("projected_amount", sa.Numeric(14, 2), nullable=False, server_default="0.00"))
-                batch_op.add_column(sa.Column("shortfall_surplus", sa.Numeric(14, 2), nullable=False, server_default="0.00"))
-                batch_op.add_column(sa.Column("confidence_interval_low", sa.Numeric(14, 2), nullable=False, server_default="0.00"))
-                batch_op.add_column(sa.Column("confidence_interval_high", sa.Numeric(14, 2), nullable=False, server_default="0.00"))
-                batch_op.add_column(sa.Column("formula_version", sa.String(16), nullable=False, server_default="v1.0"))
-                batch_op.add_column(sa.Column("assumptions_payload", json_type, nullable=False, server_default="{}"))
-                batch_op.add_column(sa.Column("created_at", sa.DateTime(timezone=True), nullable=True))
+                batch_op.add_column(sa.Column("user_id", sa.String(64), nullable=True))
+
+            # Backfill ownership from parent financial_goals
+            op.execute(
+                "UPDATE goal_projections SET user_id = (SELECT fg.user_id FROM financial_goals fg WHERE fg.id = goal_projections.goal_id) WHERE user_id IS NULL"
+            )
+
+            with op.batch_alter_table("goal_projections") as batch_op:
+                batch_op.alter_column("user_id", nullable=False)
                 batch_op.create_index("ix_goal_projections_user_id", ["user_id"])
+
+        # Forward repair for existing databases
+        op.execute(
+            "UPDATE goal_projections SET user_id = (SELECT fg.user_id FROM financial_goals fg WHERE fg.id = goal_projections.goal_id) WHERE EXISTS (SELECT 1 FROM financial_goals fg WHERE fg.id = goal_projections.goal_id AND fg.user_id != goal_projections.user_id)"
+        )
+
+        with op.batch_alter_table("goal_projections") as batch_op:
+            if "projected_amount" not in proj_cols:
+                batch_op.add_column(
+                    sa.Column("projected_amount", sa.Numeric(14, 2), nullable=False, server_default="0.00")
+                )
+            if "shortfall_surplus" not in proj_cols:
+                batch_op.add_column(
+                    sa.Column("shortfall_surplus", sa.Numeric(14, 2), nullable=False, server_default="0.00")
+                )
+            if "confidence_interval_low" not in proj_cols:
+                batch_op.add_column(
+                    sa.Column("confidence_interval_low", sa.Numeric(14, 2), nullable=False, server_default="0.00")
+                )
+            if "confidence_interval_high" not in proj_cols:
+                batch_op.add_column(
+                    sa.Column("confidence_interval_high", sa.Numeric(14, 2), nullable=False, server_default="0.00")
+                )
+            if "formula_version" not in proj_cols:
+                batch_op.add_column(sa.Column("formula_version", sa.String(16), nullable=False, server_default="v1.0"))
+            if "assumptions_payload" not in proj_cols:
+                batch_op.add_column(sa.Column("assumptions_payload", json_type, nullable=False, server_default="{}"))
+            if "created_at" not in proj_cols:
+                batch_op.add_column(sa.Column("created_at", sa.DateTime(timezone=True), nullable=True))
 
     # 9. Forward migration for market_quotes columns
     if "market_quotes" in tables:
@@ -176,11 +330,15 @@ def upgrade() -> None:
                 batch_op.add_column(sa.Column("price", sa.Numeric(14, 4), nullable=False, server_default="0.0000"))
                 batch_op.add_column(sa.Column("change", sa.Numeric(14, 4), nullable=False, server_default="0.0000"))
                 batch_op.add_column(sa.Column("change_pct", sa.Numeric(8, 4), nullable=False, server_default="0.0000"))
-                batch_op.add_column(sa.Column("previous_close", sa.Numeric(14, 4), nullable=False, server_default="0.0000"))
+                batch_op.add_column(
+                    sa.Column("previous_close", sa.Numeric(14, 4), nullable=False, server_default="0.0000")
+                )
                 batch_op.add_column(sa.Column("currency", sa.String(3), nullable=False, server_default="INR"))
                 batch_op.add_column(sa.Column("observed_at", sa.DateTime(timezone=True), nullable=True))
                 batch_op.add_column(sa.Column("freshness_status", sa.String(20), nullable=False, server_default="LIVE"))
-                batch_op.add_column(sa.Column("served_from_cache", sa.Boolean(), nullable=False, server_default=sa.false()))
+                batch_op.add_column(
+                    sa.Column("served_from_cache", sa.Boolean(), nullable=False, server_default=sa.false())
+                )
                 batch_op.add_column(sa.Column("is_delayed", sa.Boolean(), nullable=False, server_default=sa.false()))
                 batch_op.add_column(sa.Column("ingested_at", sa.DateTime(timezone=True), nullable=True))
 
@@ -190,7 +348,9 @@ def upgrade() -> None:
         if "trade_date" not in mph_cols:
             with op.batch_alter_table("market_price_history") as batch_op:
                 batch_op.add_column(sa.Column("trade_date", sa.Date(), nullable=True))
-                batch_op.add_column(sa.Column("adj_close_price", sa.Numeric(14, 4), nullable=False, server_default="0.0000"))
+                batch_op.add_column(
+                    sa.Column("adj_close_price", sa.Numeric(14, 4), nullable=False, server_default="0.0000")
+                )
                 batch_op.add_column(sa.Column("source", sa.String(50), nullable=False, server_default="NSE_EOD"))
                 batch_op.add_column(sa.Column("currency", sa.String(3), nullable=False, server_default="INR"))
                 batch_op.add_column(sa.Column("ingested_at", sa.DateTime(timezone=True), nullable=True))
@@ -205,7 +365,9 @@ def upgrade() -> None:
                 batch_op.add_column(sa.Column("reporting_period", sa.String(50), nullable=True))
                 batch_op.add_column(sa.Column("security_symbol", sa.String(20), nullable=True))
                 batch_op.add_column(sa.Column("isin", sa.String(20), nullable=True))
-                batch_op.add_column(sa.Column("content_hash", sa.String(64), nullable=False, server_default="sha256-pending"))
+                batch_op.add_column(
+                    sa.Column("content_hash", sa.String(64), nullable=False, server_default="sha256-pending")
+                )
                 batch_op.add_column(sa.Column("status", sa.String(20), nullable=False, server_default="ACTIVE"))
 
     # 12. Forward migration for document_chunks columns

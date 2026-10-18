@@ -19,6 +19,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     from alembic import context
+
     if context.is_offline_mode():
         op.add_column("paper_orders", sa.Column("execution_receipt", sa.JSON(), nullable=True))
         with op.batch_alter_table("transaction_uploads") as batch_op:
@@ -29,6 +30,7 @@ def upgrade() -> None:
 
     # 1. Add execution_receipt column to paper_orders for idempotent replay if not present
     from sqlalchemy import inspect
+
     bind = op.get_bind()
     insp = inspect(bind)
     cols = [c["name"] for c in insp.get_columns("paper_orders")]

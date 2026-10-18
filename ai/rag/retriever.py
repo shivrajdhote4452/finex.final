@@ -1,11 +1,14 @@
 """Regulatory Document Retriever implementing AbstractDocumentRetriever port.
 
-Task ID: S1-AI-02, S4-AI-01
-Deterministic keyword & semantic density scoring across genuine regulatory documents.
+Task ID: S1-AI-02, S4-AI-01, Defect Area 5
+Deterministic keyword & semantic density scoring across genuine regulatory documents
+persisted in PostgreSQL, with optional fallback for isolated unit tests.
 """
 
 import re
 from typing import Dict, List, Optional
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai.rag.ingestion import ingest_corpus_documents
 from backend.app.ports.retriever import AbstractDocumentRetriever, DocumentChunk
@@ -133,14 +136,65 @@ def tokenize(text: str) -> List[str]:
 class RegulatoryDocumentRetriever(AbstractDocumentRetriever):
     """Port adapter for retrieving relevant regulatory chunks with citation tracking."""
 
-    def __init__(self, chunks: Optional[List[DocumentChunk]] = None):
-        self._chunks = chunks if chunks is not None else ingest_corpus_documents()
+    def __init__(
+        self,
+        chunks: Optional[List[DocumentChunk]] = None,
+        allow_fixture_fallback: bool = False,
+    ):
+        self._chunks = chunks
+        self.allow_fixture_fallback = allow_fixture_fallback
+
+    async def _fetch_db_chunks(self, db: Optional[AsyncSession] = None) -> List[DocumentChunk]:
+        """Fetch active document chunks from PostgreSQL database."""
+        try:
+            from sqlalchemy import select
+
+            from backend.app.database import AsyncSessionLocal
+            from backend.app.models.rag import DocumentChunk as DocumentChunkModel
+            from backend.app.models.rag import DocumentRegistry as DocumentRegistryModel
+
+            async def _query(session: AsyncSession) -> List[DocumentChunk]:
+                stmt = (
+                    select(DocumentChunkModel, DocumentRegistryModel)
+                    .join(DocumentRegistryModel, DocumentChunkModel.document_id == DocumentRegistryModel.id)
+                    .where(
+                        DocumentChunkModel.status == "ACTIVE",
+                        DocumentRegistryModel.status == "ACTIVE",
+                    )
+                )
+                res = await session.execute(stmt)
+                rows = res.all()
+                return [
+                    DocumentChunk(
+                        chunk_id=c.id,
+                        document_id=c.document_id,
+                        title=d.title,
+                        publisher=d.publisher,
+                        source_url=d.source_url,
+                        section=c.section_title,
+                        page_number=c.page_number,
+                        content=c.content,
+                        score=0.0,
+                        document_date=d.publishing_date.isoformat() if d.publishing_date else None,
+                        content_hash=d.content_hash,
+                    )
+                    for c, d in rows
+                ]
+
+            if db is not None:
+                return await _query(db)
+            else:
+                async with AsyncSessionLocal() as session:
+                    return await _query(session)
+        except Exception:
+            return []
 
     async def retrieve_relevant_chunks(
         self,
         query: str,
         top_k: int = 5,
         filters: Optional[Dict[str, str]] = None,
+        db: Optional[AsyncSession] = None,
     ) -> List[DocumentChunk]:
         """Rank and return top_k chunks matching query terms subject to metadata filters."""
         all_tokens = set(tokenize(query))
@@ -148,9 +202,24 @@ class RegulatoryDocumentRetriever(AbstractDocumentRetriever):
         if not query_tokens:
             return []
 
+        # 1. Determine candidate pool
+        if self._chunks is not None:
+            candidate_chunks = self._chunks
+        else:
+            db_chunks = await self._fetch_db_chunks(db)
+            if db_chunks:
+                candidate_chunks = db_chunks
+            elif self.allow_fixture_fallback:
+                candidate_chunks = ingest_corpus_documents()
+            else:
+                candidate_chunks = []
+
+        if not candidate_chunks:
+            return []
+
         scored_chunks: List[DocumentChunk] = []
 
-        for chunk in self._chunks:
+        for chunk in candidate_chunks:
             # Apply metadata filters if provided
             if filters:
                 match = True
@@ -191,6 +260,10 @@ class RegulatoryDocumentRetriever(AbstractDocumentRetriever):
             # Normalize to 0.0 - 1.0 range
             normalized_score = min(1.0, round(tf_score / (len(query_tokens) * 3.0), 3))
 
+            # Minimum relevance threshold to avoid irrelevant matches
+            if normalized_score < 0.04:
+                continue
+
             scored_chunks.append(
                 DocumentChunk(
                     chunk_id=chunk.chunk_id,
@@ -203,6 +276,7 @@ class RegulatoryDocumentRetriever(AbstractDocumentRetriever):
                     content=chunk.content,
                     score=normalized_score,
                     document_date=chunk.document_date,
+                    content_hash=chunk.content_hash,
                 )
             )
 

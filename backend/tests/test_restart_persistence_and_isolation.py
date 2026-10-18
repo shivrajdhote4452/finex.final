@@ -576,4 +576,3 @@ async def test_watchlists_and_chat_survive_process_restart(auth_headers_user_a):
         assert msg_list_res.status_code == 200
         msgs = msg_list_res.json()["data"]["messages"]
         assert len(msgs) >= 2  # User message and assistant response
-

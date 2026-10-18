@@ -163,7 +163,9 @@ async def create_user_watchlist(
         # Fallback to memory store
         for w in _WATCHLIST_STORE.values():
             if w["user_id"] == user_id and w["name"].lower() == payload.name.lower():
-                raise ConflictException(message=f"Watchlist with name '{payload.name}' already exists for this account.")
+                raise ConflictException(
+                    message=f"Watchlist with name '{payload.name}' already exists for this account."
+                )
         wl_id = str(uuid.uuid4())
         new_wl_dict = {
             "id": wl_id,

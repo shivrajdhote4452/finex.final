@@ -107,7 +107,12 @@ class PaperTradingEngine:
     )
 
     def __init__(self, market_provider: Optional[RealMarketDataProvider] = None) -> None:
-        self.market_provider = market_provider or RealMarketDataProvider(force_cache=True, allow_fixture_fallback=True)
+        from backend.app.config import get_settings
+
+        settings = get_settings()
+        self.market_provider = market_provider or RealMarketDataProvider(
+            force_cache=True, allow_fixture_fallback=getattr(settings, "MARKET_ALLOW_FIXTURES", False)
+        )
 
     def get_or_create_account(self, user_id: str) -> Dict:
         """Fetch or bootstrap the default paper trading account (₹1,00,000 initial virtual cash)."""
@@ -143,7 +148,7 @@ class PaperTradingEngine:
         return acct
 
     def get_market_quote_sync(self, symbol: str) -> Optional[Quote]:
-        """Fetch quote synchronously checking cache or verified observation fixtures."""
+        """Fetch quote synchronously checking cache or verified observation fixtures ONLY when explicitly permitted."""
         norm = self.market_provider._normalize_symbol(symbol)
         if norm in self.market_provider._cache:
             cached = self.market_provider._cache[norm]
@@ -156,29 +161,32 @@ class PaperTradingEngine:
                     "data_status": status,
                 }
             )
-        if norm in VERIFIED_OBSERVATIONS:
-            obs = VERIFIED_OBSERVATIONS[norm]
-            now = datetime.now(timezone.utc)
-            obs_time = obs["observed_at"]
-            is_delayed, is_stale, status = self.market_provider._evaluate_freshness(obs_time)
-            evidence = hashlib.sha256(f"{norm}:{obs_time.isoformat()}:{obs['price']}:INR".encode("utf-8")).hexdigest()
-            q = Quote(
-                canonical_id=f"NSE:{norm}",
-                symbol=f"{norm}.NS",
-                price=obs["price"],
-                currency="INR",
-                observed_at=obs_time,
-                ingested_at=now,
-                source=obs.get("source", "nse_official_report"),
-                source_uri=f"urn:market-data:nse:{norm}",
-                source_evidence=evidence,
-                served_from_cache=False,
-                is_delayed=is_delayed,
-                is_stale=is_stale,
-                data_status=status,
-            )
-            self.market_provider._cache[norm] = q
-            return q
+        if getattr(self.market_provider, "allow_fixture_fallback", False):
+            if norm in VERIFIED_OBSERVATIONS:
+                obs = VERIFIED_OBSERVATIONS[norm]
+                now = datetime.now(timezone.utc)
+                obs_time = obs["observed_at"]
+                is_delayed, is_stale, status = self.market_provider._evaluate_freshness(obs_time)
+                evidence = hashlib.sha256(
+                    f"{norm}:{obs_time.isoformat()}:{obs['price']}:INR".encode("utf-8")
+                ).hexdigest()
+                q = Quote(
+                    canonical_id=f"NSE:{norm}",
+                    symbol=f"{norm}.NS",
+                    price=obs["price"],
+                    currency="INR",
+                    observed_at=obs_time,
+                    ingested_at=now,
+                    source="test_fixture_baseline_snapshot",
+                    source_uri=f"urn:market-data:fixture:{norm}",
+                    source_evidence=evidence,
+                    served_from_cache=False,
+                    is_delayed=is_delayed,
+                    is_stale=is_stale,
+                    data_status=status,
+                )
+                self.market_provider._cache[norm] = q
+                return q
         return None
 
     def get_market_price(self, symbol: str) -> Optional[Decimal]:
@@ -911,7 +919,7 @@ class PaperTradingEngine:
 
             # 2. Price verification & Limit marketability rules
             quote = await self.market_provider.get_latest_quote(sym)
-            if not quote:
+            if not quote and getattr(self.market_provider, "allow_fixture_fallback", False):
                 quote = self.get_market_quote_sync(sym)
             order_id = f"ord-{uuid.uuid4().hex[:12]}"
 
