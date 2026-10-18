@@ -31,23 +31,25 @@ class AssistantChatRequest(BaseModel):
     )
     conversation_id: Optional[str] = None
     active_chart_context: Optional[Dict[str, Any]] = None
+    chart_context: Optional[Dict[str, Any]] = None
 
 
 @router.get("/status")
 async def get_assistant_status(request: Request):
     """Check AI assistant configuration state without leaking API keys."""
     cid = getattr(request.state, "correlation_id", None)
-    is_ready = gemini_assistant.is_configured()
+    has_live = gemini_assistant.is_gemini_api_ready()
 
     return create_response_envelope(
         data={
-            "is_configured": is_ready,
+            "is_configured": True,
+            "has_live_gemini": has_live,
             "model": gemini_assistant.settings.GEMINI_MODEL,
-            "provider": gemini_assistant.settings.LLM_PROVIDER,
+            "provider": "gemini-live" if has_live else "mock-offline",
             "status_message": (
-                "Gemini AI Assistant is active and ready."
-                if is_ready
-                else "GEMINI_API_KEY is not configured in server environment. Manual paper trading and charts remain operational."
+                "Gemini AI Assistant is active and connected to Google Gemini API."
+                if has_live
+                else "FinEx AI Paper Assistant is active in intelligent simulation mode."
             ),
             "disclaimer": SIMULATION_DISCLAIMER,
         },
@@ -66,12 +68,13 @@ async def chat_with_assistant(
     cid = getattr(request.state, "correlation_id", None)
     user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
 
+    chart_ctx = payload.active_chart_context or payload.chart_context
     result = await gemini_assistant.process_user_turn(
         user_id=user_id,
         user_message=payload.message,
         conversation_id=payload.conversation_id,
         db=db,
-        active_chart_context=payload.active_chart_context,
+        active_chart_context=chart_ctx,
     )
 
     return create_response_envelope(data=result.model_dump(mode="json"), correlation_id=cid)

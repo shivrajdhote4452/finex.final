@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import List, Optional
 
@@ -10,7 +10,13 @@ class Quote(BaseModel):
     canonical_id: str = Field(..., description="Canonical instrument symbol e.g., NSE:RELIANCE")
     symbol: str = Field(..., description="Provider symbol e.g., RELIANCE.NS")
     price: Decimal = Field(..., description="Observation close or latest price")
-    currency: str = Field("INR", description="ISO currency code")
+    open_price: Optional[Decimal] = Field(None, description="Open price")
+    high_price: Optional[Decimal] = Field(None, description="High price")
+    low_price: Optional[Decimal] = Field(None, description="Low price")
+    close_price: Optional[Decimal] = Field(None, description="Close price")
+    change: Optional[Decimal] = Field(None, description="Price change")
+    change_pct: Optional[Decimal] = Field(None, description="Percentage change")
+    currency: str = "INR"
     observed_at: datetime = Field(..., description="UTC timestamp of market observation")
     ingested_at: datetime = Field(..., description="UTC timestamp when data was ingested")
     source: str = Field(..., description="Data provider name (e.g. yfinance, nse_report)")
@@ -32,6 +38,15 @@ class HistoricalBar(BaseModel):
     adj_close: Optional[Decimal] = None
     volume: int
     currency: str = "INR"
+
+    @property
+    def observed_at(self) -> datetime:
+        if self.time is not None:
+            return datetime.fromtimestamp(self.time, tz=timezone.utc)
+        try:
+            return datetime.fromisoformat(self.date.replace("Z", "+00:00"))
+        except Exception:
+            return datetime.strptime(self.date[:10], "%Y-%m-%d").replace(tzinfo=timezone.utc)
 
 
 class AbstractMarketDataProvider(ABC):

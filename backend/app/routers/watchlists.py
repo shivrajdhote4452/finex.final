@@ -204,44 +204,47 @@ async def add_symbol_to_watchlist(
             )
             res = await db.execute(stmt)
             wl = res.scalars().first()
-            if not wl:
+            if not wl and watchlist_id in _WATCHLIST_STORE:
+                # Fall through to _WATCHLIST_STORE handling
+                pass
+            elif not wl:
                 raise NotFoundException(message="Watchlist not found or unauthorized.")
+            else:
+                # Check if symbol already in watchlist
+                existing_syms = [it.security.symbol for it in wl.items if it.security]
+                if sym in existing_syms:
+                    raise ConflictException(message=f"Instrument '{sym}' is already pinned in this watchlist.")
 
-            # Check if symbol already in watchlist
-            existing_syms = [it.security.symbol for it in wl.items if it.security]
-            if sym in existing_syms:
-                raise ConflictException(message=f"Instrument '{sym}' is already pinned in this watchlist.")
+                # Get or create security
+                sec_stmt = select(Security).where(Security.symbol == sym)
+                sec_res = await db.execute(sec_stmt)
+                sec = sec_res.scalars().first()
+                if not sec:
+                    sec = Security(
+                        id=uuid.uuid4(),
+                        symbol=sym,
+                        canonical_id=f"NSE:{sym}",
+                        name=sym,
+                        sector="Equity",
+                    )
+                    db.add(sec)
+                    await db.flush()
 
-            # Get or create security
-            sec_stmt = select(Security).where(Security.symbol == sym)
-            sec_res = await db.execute(sec_stmt)
-            sec = sec_res.scalars().first()
-            if not sec:
-                sec = Security(
+                item = WatchlistItem(
                     id=uuid.uuid4(),
-                    symbol=sym,
-                    canonical_id=f"NSE:{sym}",
-                    name=sym,
-                    sector="Equity",
+                    watchlist_id=wl.id,
+                    security_id=sec.id,
                 )
-                db.add(sec)
-                await db.flush()
+                db.add(item)
+                await db.commit()
 
-            item = WatchlistItem(
-                id=uuid.uuid4(),
-                watchlist_id=wl.id,
-                security_id=sec.id,
-            )
-            db.add(item)
-            await db.commit()
-
-            items_list = existing_syms + [sym]
-            if str(wl.id) in _WATCHLIST_STORE:
-                _WATCHLIST_STORE[str(wl.id)]["items"] = items_list
-            return create_response_envelope(
-                data={"watchlist_id": watchlist_id, "added_symbol": sym, "items": items_list},
-                correlation_id=cid,
-            )
+                items_list = existing_syms + [sym]
+                if str(wl.id) in _WATCHLIST_STORE:
+                    _WATCHLIST_STORE[str(wl.id)]["items"] = items_list
+                return create_response_envelope(
+                    data={"watchlist_id": watchlist_id, "added_symbol": sym, "items": items_list},
+                    correlation_id=cid,
+                )
     except (NotFoundException, ConflictException):
         raise
     except Exception:
@@ -288,23 +291,25 @@ async def remove_symbol_from_watchlist(
             )
             res = await db.execute(stmt)
             wl = res.scalars().first()
-            if not wl:
+            if not wl and watchlist_id in _WATCHLIST_STORE:
+                pass
+            elif not wl:
                 raise NotFoundException(message="Watchlist not found or unauthorized.")
+            else:
+                item_to_remove = next((it for it in wl.items if it.security and it.security.symbol == sym), None)
+                if not item_to_remove:
+                    raise NotFoundException(message=f"Instrument '{sym}' is not in this watchlist.")
 
-            item_to_remove = next((it for it in wl.items if it.security and it.security.symbol == sym), None)
-            if not item_to_remove:
-                raise NotFoundException(message=f"Instrument '{sym}' is not in this watchlist.")
+                await db.delete(item_to_remove)
+                await db.commit()
 
-            await db.delete(item_to_remove)
-            await db.commit()
-
-            remaining = [it.security.symbol for it in wl.items if it.security and it.security.symbol != sym]
-            if str(wl.id) in _WATCHLIST_STORE:
-                _WATCHLIST_STORE[str(wl.id)]["items"] = remaining
-            return create_response_envelope(
-                data={"watchlist_id": watchlist_id, "removed_symbol": sym, "items": remaining},
-                correlation_id=cid,
-            )
+                remaining = [it.security.symbol for it in wl.items if it.security and it.security.symbol != sym]
+                if str(wl.id) in _WATCHLIST_STORE:
+                    _WATCHLIST_STORE[str(wl.id)]["items"] = remaining
+                return create_response_envelope(
+                    data={"watchlist_id": watchlist_id, "removed_symbol": sym, "items": remaining},
+                    correlation_id=cid,
+                )
     except NotFoundException:
         raise
     except Exception:

@@ -63,6 +63,12 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str = Field(default="gemini-1.5-flash", description="Configured Gemini model ID")
     OPENAI_API_KEY: Optional[str] = None
 
+    # Angel One SmartAPI Configuration
+    ANGEL_API_KEY: Optional[str] = Field(default=None, description="Angel One SmartAPI Key")
+    ANGEL_CLIENT_ID: Optional[str] = Field(default=None, description="Angel One Client ID")
+    ANGEL_MPIN: Optional[str] = Field(default=None, description="Angel One 4-digit MPIN")
+    ANGEL_TOTP_SECRET: Optional[str] = Field(default=None, description="Angel One TOTP base32 secret")
+
     # Optional Alpaca Paper Trading (US_ALPACA_PAPER mode)
     ALPACA_API_KEY: Optional[str] = None
     ALPACA_SECRET_KEY: Optional[str] = None
