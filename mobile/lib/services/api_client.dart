@@ -6,31 +6,63 @@ class ApiClient {
   factory ApiClient() => _instance;
   ApiClient._internal();
 
+  static String normalizeBaseUrl(String url) {
+    var trimmed = url.trim();
+    while (trimmed.endsWith('/')) {
+      trimmed = trimmed.substring(0, trimmed.length - 1);
+    }
+    if (!trimmed.endsWith('/api/v1')) {
+      if (trimmed.endsWith('/api')) {
+        trimmed = '$trimmed/v1';
+      } else {
+        trimmed = '$trimmed/api/v1';
+      }
+    }
+    return trimmed;
+  }
+
   // Environment-specific API configuration
   static const String _defaultUrl = String.fromEnvironment(
     'API_BASE_URL',
     defaultValue: 'http://10.0.2.2:8000/api/v1',
   );
-  String baseUrl = _defaultUrl;
+  String baseUrl = normalizeBaseUrl(_defaultUrl);
   String? _token;
+
+  void setBaseUrl(String url) {
+    baseUrl = normalizeBaseUrl(url);
+  }
 
   void setToken(String? token) {
     _token = token;
   }
 
-  void logout() {
-    _token = null;
+  Future<void> logout() async {
+    try {
+      if (_token != null) {
+        final url = Uri.parse('$baseUrl/auth/revoke');
+        await http.post(
+          url,
+          headers: _headers(),
+          body: jsonEncode({'token': _token}),
+        );
+      }
+    } catch (_) {
+      // Safe fallback on network failure
+    } finally {
+      _token = null;
+    }
   }
 
   String? get token => _token;
-  bool get isAuthenticated => _token != null;
+  bool get isAuthenticated => _token != null && _token!.isNotEmpty;
 
   Map<String, String> _headers([Map<String, String>? extra]) {
     final headers = <String, String>{
       'Content-Type': 'application/json',
       'X-Correlation-ID': 'mobile-${DateTime.now().millisecondsSinceEpoch}',
     };
-    if (_token != null) {
+    if (_token != null && _token!.isNotEmpty) {
       headers['Authorization'] = 'Bearer $_token';
     }
     if (extra != null) {
@@ -74,7 +106,7 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> getProfile() async {
-    final url = Uri.parse('$baseUrl/auth/me');
+    final url = Uri.parse('$baseUrl/users/me');
     final response = await http.get(url, headers: _headers());
     final data = jsonDecode(response.body);
     if (response.statusCode == 200 && data['data'] != null) {
@@ -84,16 +116,20 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> recordConsent({
-    required String consentVersion,
-    required bool accepted,
+    String consentVersion = 'v1.0',
+    bool termsAccepted = true,
+    bool privacyAccepted = true,
+    bool educationalDisclaimerAccepted = true,
   }) async {
-    final url = Uri.parse('$baseUrl/auth/consent');
+    final url = Uri.parse('$baseUrl/users/consent');
     final response = await http.post(
       url,
       headers: _headers(),
       body: jsonEncode({
         'consent_version': consentVersion,
-        'accepted': accepted,
+        'terms_accepted': termsAccepted,
+        'privacy_accepted': privacyAccepted,
+        'educational_disclaimer_accepted': educationalDisclaimerAccepted,
       }),
     );
     final data = jsonDecode(response.body);
@@ -103,16 +139,18 @@ class ApiClient {
     throw Exception(data['error']?['message'] ?? 'Failed to record consent');
   }
 
-  Future<Map<String, dynamic>> submitRiskProfile({
-    required String scoreTier,
-    required Map<String, dynamic> answers,
+  Future<Map<String, dynamic>> submitRiskAssessment({
+    required String horizonCategory,
+    required List<Map<String, dynamic>> answers,
+    String questionnaireVersion = 'v1.0',
   }) async {
-    final url = Uri.parse('$baseUrl/auth/risk-profile');
+    final url = Uri.parse('$baseUrl/risk/assessments');
     final response = await http.post(
       url,
       headers: _headers(),
       body: jsonEncode({
-        'score_tier': scoreTier,
+        'questionnaire_version': questionnaireVersion,
+        'horizon_category': horizonCategory,
         'answers': answers,
       }),
     );
@@ -120,7 +158,29 @@ class ApiClient {
     if (response.statusCode == 200 && data['data'] != null) {
       return Map<String, dynamic>.from(data['data']);
     }
-    throw Exception(data['error']?['message'] ?? 'Failed to submit risk profile');
+    throw Exception(data['error']?['message'] ?? 'Failed to submit risk assessment');
+  }
+
+  // Backward compatibility alias
+  Future<Map<String, dynamic>> submitRiskProfile({
+    required String scoreTier,
+    required Map<String, dynamic> answers,
+  }) async {
+    // Map simplified tier to questionnaire schema
+    final horizon = answers['investment_horizon'] == 'LESS_THAN_1_YEAR'
+        ? '<1'
+        : answers['investment_horizon'] == '1-3_YEARS'
+            ? '1-3'
+            : answers['investment_horizon'] == '3-5_YEARS'
+                ? '3-5'
+                : '>5';
+    final qAnswers = [
+      {'question_id': 'Q1', 'option_id': scoreTier == 'CONSERVATIVE' ? 'Q1_A' : scoreTier == 'MODERATE' ? 'Q1_C' : 'Q1_D', 'score': scoreTier == 'CONSERVATIVE' ? 10 : scoreTier == 'MODERATE' ? 70 : 100},
+      {'question_id': 'Q2', 'option_id': 'Q2_C', 'score': 75},
+      {'question_id': 'Q3', 'option_id': scoreTier == 'CONSERVATIVE' ? 'Q3_A' : scoreTier == 'MODERATE' ? 'Q3_B' : 'Q3_C', 'score': scoreTier == 'CONSERVATIVE' ? 20 : scoreTier == 'MODERATE' ? 60 : 95},
+      {'question_id': 'Q4', 'option_id': 'Q4_C', 'score': 70},
+    ];
+    return submitRiskAssessment(horizonCategory: horizon, answers: qAnswers);
   }
 
   // --- Market Data ---
@@ -194,9 +254,13 @@ class ApiClient {
     return [];
   }
 
-  Future<Map<String, dynamic>> resetAccount() async {
-    final url = Uri.parse('$baseUrl/paper-trading/account/reset');
-    final response = await http.post(url, headers: _headers());
+  Future<Map<String, dynamic>> resetAccount({bool confirmReset = true}) async {
+    final url = Uri.parse('$baseUrl/paper-trading/reset');
+    final response = await http.post(
+      url,
+      headers: _headers(),
+      body: jsonEncode({'confirm_reset': confirmReset}),
+    );
     final data = jsonDecode(response.body);
     if (response.statusCode == 200 && data['data'] != null) {
       return Map<String, dynamic>.from(data['data']);

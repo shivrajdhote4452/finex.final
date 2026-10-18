@@ -192,6 +192,62 @@ class _MobilePaperTradingScreenState extends State<MobilePaperTradingScreen> {
     }
   }
 
+  Future<void> _handleResetAccount() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: TerminalColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(6),
+          side: const BorderSide(color: TerminalColors.borderSubtle),
+        ),
+        title: const Text("Reset Virtual Account", style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: TerminalColors.textMain)),
+        content: const Text(
+          "Reset simulated cash balance back to \u20b91,00,000 and clear all virtual holdings?",
+          style: TextStyle(fontSize: 12, color: TerminalColors.textMuted),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("Cancel", style: TextStyle(color: TerminalColors.textMuted)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: TerminalColors.action,
+              foregroundColor: Colors.black,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("Confirm Reset"),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await apiClient.resetAccount(confirmReset: true);
+        await _loadData();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Simulated account reset back to \u20b91,00,000 virtual cash."),
+              backgroundColor: TerminalColors.surface,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Failed to reset account: $e"),
+              backgroundColor: Colors.red[900],
+            ),
+          );
+        }
+      }
+    }
+  }
+
   void _showCoachingDialog({
     required String title,
     required String explanation,
@@ -268,6 +324,11 @@ class _MobilePaperTradingScreenState extends State<MobilePaperTradingScreen> {
         title: const Text("Simulated Paper Trading", style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: TerminalColors.textMain)),
         elevation: 0,
         actions: [
+          IconButton(
+            tooltip: "Reset Paper Account",
+            icon: const Icon(Icons.restart_alt, color: TerminalColors.action, size: 20),
+            onPressed: _handleResetAccount,
+          ),
           IconButton(
             icon: const Icon(Icons.refresh, color: TerminalColors.textMuted, size: 20),
             onPressed: _loadData,

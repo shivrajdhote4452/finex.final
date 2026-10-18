@@ -74,6 +74,8 @@ interface FinancialContextType {
   notifications: AlertNotification[];
   spendingItems: SpendingItem[];
   marketQuotes: Record<string, MarketQuote>;
+  isAccountLoading: boolean;
+  accountError: string | null;
   totalHoldingsValue: number;
   totalPortfolioValue: number;
   unrealizedPnL: number;
@@ -121,6 +123,10 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
   const [notifications, setNotifications] = useState<AlertNotification[]>([]);
   const [spendingItems, setSpendingItems] = useState<SpendingItem[]>([]);
+  const [isAccountLoading, setIsAccountLoading] = useState<boolean>(apiClient.isAuthenticated());
+  const [accountError, setAccountError] = useState<string | null>(null);
+
+  const sessionGenerationRef = useRef<number>(0);
 
   // Sourced Market Quotes from verified backend
   const [marketQuotes, setMarketQuotes] = useState<Record<string, MarketQuote>>({});
@@ -145,22 +151,29 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
 
   // Clear private client state on logout or session expiration
   const clearPrivateState = useCallback(() => {
+    sessionGenerationRef.current += 1;
     setVirtualCash(0);
     setHoldings([]);
     setLedger([]);
     setNotifications([]);
     setSpendingItems([]);
+    setAccountError(null);
+    setIsAccountLoading(false);
   }, []);
 
-  // --- Real Backend Synchronization ---
+  // --- Real Backend Synchronization with Session Generation Guard ---
   // Decoupled from market quotes to prevent infinite request loops
   const refreshAccount = useCallback(async () => {
     if (!apiClient.isAuthenticated()) {
       clearPrivateState();
       return;
     }
+    const thisGen = ++sessionGenerationRef.current;
+    setIsAccountLoading(true);
+    setAccountError(null);
     try {
       const acct = await apiClient.paperTrading.getAccount();
+      if (thisGen !== sessionGenerationRef.current) return;
       if (acct) {
         // Normalize cash_balance and current_cash defensively
         const rawCash = acct.cash_balance ?? acct.current_cash ?? 0;
@@ -181,7 +194,6 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
             const dayPct = currentQuote && Number.isFinite(Number(currentQuote.changePct))
               ? Number(currentQuote.changePct)
               : 0.0;
-            // Map average_buy_price and avg_cost defensively
             const avgCost = Number(p.average_buy_price ?? p.avg_cost ?? 0);
             const shares = Number(p.quantity ?? 0);
             return {
@@ -203,6 +215,7 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
 
       // Fetch persistent orders / ledger
       const ordersRes = await apiClient.paperTrading.getOrders(50);
+      if (thisGen !== sessionGenerationRef.current) return;
       if (ordersRes && ordersRes.orders) {
         const mappedOrders: LedgerEntry[] = ordersRes.orders.map((o) => {
           const fill = Number(o.fill_price) || 0;
@@ -234,6 +247,7 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
 
       // Fetch transactions
       const txRes = await apiClient.spending.getTransactions();
+      if (thisGen !== sessionGenerationRef.current) return;
       if (txRes && txRes.transactions) {
         const mappedTx: SpendingItem[] = txRes.transactions.map((t) => ({
           id: t.id,
@@ -248,6 +262,7 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
 
       // Fetch notifications
       const notifRes = await apiClient.alerts.getNotifications();
+      if (thisGen !== sessionGenerationRef.current) return;
       if (notifRes && notifRes.notifications) {
         const mappedNotifs: AlertNotification[] = notifRes.notifications.map((n) => ({
           id: n.id,
@@ -260,8 +275,16 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
         setNotifications(mappedNotifs);
       }
     } catch (e: any) {
-      if (e?.status === 401) {
-        clearPrivateState();
+      if (thisGen === sessionGenerationRef.current) {
+        if (e?.status === 401) {
+          clearPrivateState();
+        } else {
+          setAccountError(e?.message || 'Failed to sync with server');
+        }
+      }
+    } finally {
+      if (thisGen === sessionGenerationRef.current) {
+        setIsAccountLoading(false);
       }
     }
   }, [clearPrivateState]);
@@ -310,17 +333,21 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
     }
   }, []);
 
-  // Mount effects: fetch independently without cascading loop
+  // Mount effects: fetch market data independently
   useEffect(() => {
     refreshMarketData();
   }, [refreshMarketData]);
 
+  // Reactive subscription to auth state changes (login, logout, expiration)
   useEffect(() => {
-    if (apiClient.isAuthenticated()) {
-      refreshAccount();
-    } else {
-      clearPrivateState();
-    }
+    const unsubscribe = apiClient.onAuthStateChange((isAuth) => {
+      if (isAuth) {
+        refreshAccount();
+      } else {
+        clearPrivateState();
+      }
+    });
+    return unsubscribe;
   }, [refreshAccount, clearPrivateState]);
 
   // Derived Financial Metrics normalized against NaN
@@ -511,6 +538,8 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
         notifications,
         spendingItems,
         marketQuotes,
+        isAccountLoading,
+        accountError,
         totalHoldingsValue,
         totalPortfolioValue,
         unrealizedPnL,

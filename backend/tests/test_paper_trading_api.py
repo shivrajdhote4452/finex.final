@@ -66,6 +66,11 @@ def setup_paper_trading_module():
     _ACCOUNTS_STORE.clear()
     asyncio.run(_clean())
     yield
+    asyncio.run(_clean())
+    _ORDERS_STORE.clear()
+    _POSITIONS_STORE.clear()
+    _LEDGER_STORE.clear()
+    _ACCOUNTS_STORE.clear()
 
 
 @pytest.mark.asyncio
@@ -486,3 +491,77 @@ async def test_stale_quote_rejects_trade_execution(app, auth_headers):
         acct_after = await client.get("/api/v1/paper-trading/account", headers=auth_headers)
         cash_after = acct_after.json()["data"]["cash_balance"]
         assert cash_after == cash_before
+
+
+@pytest.mark.asyncio
+async def test_paper_trading_idempotency_limit_price_change_conflict(app, auth_headers):
+    """Verify that submitting the same idempotency key with a changed limit price returns HTTP 409 Conflict."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        idemp_key = "idemp-limit-conflict-test-999"
+
+        # 1. First submission: LIMIT buy at 3000.0
+        res1 = await client.post(
+            "/api/v1/paper-trading/orders",
+            json={
+                "symbol": "RELIANCE",
+                "side": "BUY",
+                "quantity": 2.0,
+                "order_type": "LIMIT",
+                "limit_price": 3000.0,
+                "idempotency_key": idemp_key,
+            },
+            headers=auth_headers,
+        )
+        assert res1.status_code == 200
+        data1 = res1.json()["data"]
+        assert data1["order_id"] is not None
+
+        # 2. Identical retry: returns same order receipt
+        res2 = await client.post(
+            "/api/v1/paper-trading/orders",
+            json={
+                "symbol": "RELIANCE",
+                "side": "BUY",
+                "quantity": 2.0,
+                "order_type": "LIMIT",
+                "limit_price": 3000.0,
+                "idempotency_key": idemp_key,
+            },
+            headers=auth_headers,
+        )
+        assert res2.status_code == 200
+        data2 = res2.json()["data"]
+        assert data2["order_id"] == data1["order_id"]
+
+        # 3. Changed limit price (3000 -> 4000): MUST return HTTP 409 Conflict
+        res_conflict_price = await client.post(
+            "/api/v1/paper-trading/orders",
+            json={
+                "symbol": "RELIANCE",
+                "side": "BUY",
+                "quantity": 2.0,
+                "order_type": "LIMIT",
+                "limit_price": 4000.0,
+                "idempotency_key": idemp_key,
+            },
+            headers=auth_headers,
+        )
+        assert res_conflict_price.status_code == 409
+        assert "conflict" in res_conflict_price.json()["detail"].lower()
+
+        # 4. Changed quantity (2 -> 5): MUST return HTTP 409 Conflict
+        res_conflict_qty = await client.post(
+            "/api/v1/paper-trading/orders",
+            json={
+                "symbol": "RELIANCE",
+                "side": "BUY",
+                "quantity": 5.0,
+                "order_type": "LIMIT",
+                "limit_price": 3000.0,
+                "idempotency_key": idemp_key,
+            },
+            headers=auth_headers,
+        )
+        assert res_conflict_qty.status_code == 409
+        assert "conflict" in res_conflict_qty.json()["detail"].lower()

@@ -43,15 +43,21 @@ class _MobileAuthScreenState extends State<MobileAuthScreen> {
     });
 
     try {
-      // In mobile environment, Google ID token is submitted to /auth/google
-      // For sandbox verification without Google Play Services native prompt, dev login fallback is used
-      await apiClient.devLogin(
-        email: "shivraj.dhote@finex.internal",
-        name: "Shivraj Dhote",
-      );
-      if (mounted) {
-        widget.onAuthenticated();
+      // Check for Google OAuth ID token from native environment
+      const nativeGoogleIdToken = String.fromEnvironment('GOOGLE_ID_TOKEN', defaultValue: '');
+      if (nativeGoogleIdToken.isNotEmpty) {
+        await apiClient.loginWithGoogle(nativeGoogleIdToken);
+        if (mounted) {
+          widget.onAuthenticated();
+        }
+        return;
       }
+
+      // If native Google Play Services credentials are not configured, guide the user
+      throw Exception(
+        "Google Sign-In requires native platform credentials (google-services.json on Android / GoogleService-Info.plist on iOS). "
+        "For simulated sandbox evaluation, please use 'DEVELOPER SANDBOX SIGN-IN'.",
+      );
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -198,16 +204,65 @@ class _MobileOnboardingScreenState extends State<MobileOnboardingScreen> {
 
     try {
       // 1. Record consent v1.0
-      await apiClient.recordConsent(consentVersion: "v1.0", accepted: true);
+      await apiClient.recordConsent(
+        consentVersion: "v1.0",
+        termsAccepted: true,
+        privacyAccepted: true,
+        educationalDisclaimerAccepted: true,
+      );
 
-      // 2. Submit risk assessment questionnaire
-      await apiClient.submitRiskProfile(
-        scoreTier: _riskAppetite,
-        answers: {
-          "risk_appetite": _riskAppetite,
-          "investment_horizon": _investmentHorizon,
-          "experience": "INTERMEDIATE",
+      // 2. Submit risk assessment questionnaire with approved schema
+      final horizonCategory = _investmentHorizon == "LESS_THAN_1_YEAR"
+          ? "<1"
+          : _investmentHorizon == "1-3_YEARS"
+              ? "1-3"
+              : _investmentHorizon == "3-5_YEARS"
+                  ? "3-5"
+                  : ">5";
+
+      final qAnswers = [
+        {
+          "question_id": "Q1",
+          "option_id": _riskAppetite == "CONSERVATIVE"
+              ? "Q1_A"
+              : _riskAppetite == "MODERATE"
+                  ? "Q1_C"
+                  : "Q1_D",
+          "score": _riskAppetite == "CONSERVATIVE"
+              ? 10
+              : _riskAppetite == "MODERATE"
+                  ? 70
+                  : 100,
         },
+        {
+          "question_id": "Q2",
+          "option_id": "Q2_C",
+          "score": 75,
+        },
+        {
+          "question_id": "Q3",
+          "option_id": _riskAppetite == "CONSERVATIVE"
+              ? "Q3_A"
+              : _riskAppetite == "MODERATE"
+                  ? "Q3_B"
+                  : "Q3_C",
+          "score": _riskAppetite == "CONSERVATIVE"
+              ? 20
+              : _riskAppetite == "MODERATE"
+                  ? 60
+                  : 95,
+        },
+        {
+          "question_id": "Q4",
+          "option_id": "Q4_C",
+          "score": 70,
+        },
+      ];
+
+      await apiClient.submitRiskAssessment(
+        horizonCategory: horizonCategory,
+        answers: qAnswers,
+        questionnaireVersion: "v1.0",
       );
 
       if (mounted) {

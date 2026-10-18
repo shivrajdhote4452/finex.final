@@ -17,12 +17,25 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
+from backend.app.database import AsyncSessionLocal
+from backend.app.models.goals import FinancialGoal, GoalContribution
 from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # In-memory operational store for isolated testing/development baseline
 _GOALS_STORE: Dict[str, Dict[str, Any]] = {}  # goal_id -> goal_dict
 _CONTRIBUTIONS_STORE: Dict[str, List[Dict[str, Any]]] = {}  # goal_id -> list of contributions
 _PROJECTIONS_STORE: Dict[str, List[Dict[str, Any]]] = {}  # goal_id -> list of projections
+
+
+def _parse_uuid(val: Any) -> Optional[uuid.UUID]:
+    if isinstance(val, uuid.UUID):
+        return val
+    try:
+        return uuid.UUID(str(val))
+    except (ValueError, TypeError):
+        return None
 
 
 class GoalCreate(BaseModel):
@@ -240,6 +253,335 @@ class GoalEngine:
             current_amount=goal["current_amount"],
             target_date_str=goal["target_date"],
             annual_return_pct=goal["assumed_annual_return_pct"],
+        )
+        proj.goal_id = goal_id
+        return proj
+
+    async def create_goal_db(
+        self,
+        user_id: str,
+        payload: GoalCreate,
+        db: Optional[AsyncSession] = None,
+    ) -> Dict[str, Any]:
+        """Create and durably persist a user financial goal in PostgreSQL."""
+        calculate_goal_projection(
+            target_amount=payload.target_amount,
+            current_amount=payload.current_amount,
+            target_date_str=payload.target_date,
+            annual_return_pct=payload.assumed_annual_return_pct,
+        )
+        owns_session = db is None
+        session = db if db is not None else AsyncSessionLocal()
+        try:
+            target_d = (
+                date.fromisoformat(payload.target_date) if isinstance(payload.target_date, str) else payload.target_date
+            )
+            now = datetime.now(timezone.utc)
+            goal_uuid = uuid.uuid4()
+            goal_entity = FinancialGoal(
+                id=goal_uuid,
+                user_id=user_id,
+                title=payload.title,
+                category=payload.category,
+                target_amount=Decimal(str(payload.target_amount)),
+                current_amount=Decimal(str(payload.current_amount)),
+                currency="INR",
+                target_date=target_d,
+                assumed_annual_return_pct=Decimal(str(payload.assumed_annual_return_pct)),
+                status="ACTIVE",
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(goal_entity)
+            if owns_session:
+                await session.commit()
+            else:
+                await session.flush()
+
+            goal_dict = {
+                "id": str(goal_uuid),
+                "user_id": user_id,
+                "title": payload.title,
+                "category": payload.category,
+                "target_amount": float(payload.target_amount),
+                "current_amount": float(payload.current_amount),
+                "currency": "INR",
+                "target_date": target_d.isoformat(),
+                "assumed_annual_return_pct": float(payload.assumed_annual_return_pct),
+                "status": "ACTIVE",
+                "created_at": now.isoformat(),
+                "updated_at": now.isoformat(),
+            }
+            _GOALS_STORE[str(goal_uuid)] = goal_dict
+            return goal_dict
+        except Exception:
+            if owns_session:
+                await session.rollback()
+            raise
+        finally:
+            if owns_session:
+                await session.close()
+
+    async def get_user_goals_db(
+        self,
+        user_id: str,
+        db: Optional[AsyncSession] = None,
+    ) -> List[Dict[str, Any]]:
+        """Retrieve all goals belonging to authenticated user from PostgreSQL."""
+        owns_session = db is None
+        session = db if db is not None else AsyncSessionLocal()
+        try:
+            stmt = (
+                select(FinancialGoal).where(FinancialGoal.user_id == user_id).order_by(FinancialGoal.target_date.asc())
+            )
+            res = await session.execute(stmt)
+            goals = res.scalars().all()
+            result = []
+            for g in goals:
+                d = {
+                    "id": str(g.id),
+                    "user_id": g.user_id,
+                    "title": g.title,
+                    "category": g.category,
+                    "target_amount": float(g.target_amount),
+                    "current_amount": float(g.current_amount),
+                    "currency": g.currency,
+                    "target_date": g.target_date.isoformat()
+                    if hasattr(g.target_date, "isoformat")
+                    else str(g.target_date),
+                    "assumed_annual_return_pct": float(g.assumed_annual_return_pct),
+                    "status": g.status,
+                    "created_at": g.created_at.isoformat() if hasattr(g.created_at, "isoformat") else str(g.created_at),
+                    "updated_at": g.updated_at.isoformat() if hasattr(g.updated_at, "isoformat") else str(g.updated_at),
+                }
+                result.append(d)
+                _GOALS_STORE[str(g.id)] = d
+            return result
+        finally:
+            if owns_session:
+                await session.close()
+
+    async def get_goal_by_id_db(
+        self,
+        user_id: str,
+        goal_id: str,
+        db: Optional[AsyncSession] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Retrieve single goal by ID with user ownership check from PostgreSQL."""
+        goal_uuid = _parse_uuid(goal_id)
+        if not goal_uuid:
+            goal = _GOALS_STORE.get(goal_id)
+            if goal and goal["user_id"] == user_id:
+                return goal
+            return None
+
+        owns_session = db is None
+        session = db if db is not None else AsyncSessionLocal()
+        try:
+            stmt = select(FinancialGoal).where(
+                FinancialGoal.id == goal_uuid,
+                FinancialGoal.user_id == user_id,
+            )
+            res = await session.execute(stmt)
+            g = res.scalar_one_or_none()
+            if not g:
+                return None
+            d = {
+                "id": str(g.id),
+                "user_id": g.user_id,
+                "title": g.title,
+                "category": g.category,
+                "target_amount": float(g.target_amount),
+                "current_amount": float(g.current_amount),
+                "currency": g.currency,
+                "target_date": g.target_date.isoformat() if hasattr(g.target_date, "isoformat") else str(g.target_date),
+                "assumed_annual_return_pct": float(g.assumed_annual_return_pct),
+                "status": g.status,
+                "created_at": g.created_at.isoformat() if hasattr(g.created_at, "isoformat") else str(g.created_at),
+                "updated_at": g.updated_at.isoformat() if hasattr(g.updated_at, "isoformat") else str(g.updated_at),
+            }
+            _GOALS_STORE[str(g.id)] = d
+            return d
+        finally:
+            if owns_session:
+                await session.close()
+
+    async def update_goal_db(
+        self,
+        user_id: str,
+        goal_id: str,
+        payload: GoalUpdate,
+        db: Optional[AsyncSession] = None,
+    ) -> Dict[str, Any]:
+        """Update goal parameters in PostgreSQL with row locking."""
+        goal_uuid = _parse_uuid(goal_id)
+        if not goal_uuid:
+            return self.update_goal(user_id, goal_id, payload)
+
+        owns_session = db is None
+        session = db if db is not None else AsyncSessionLocal()
+        try:
+            stmt = (
+                select(FinancialGoal)
+                .where(
+                    FinancialGoal.id == goal_uuid,
+                    FinancialGoal.user_id == user_id,
+                )
+                .with_for_update()
+            )
+            res = await session.execute(stmt)
+            g = res.scalar_one_or_none()
+            if not g:
+                raise KeyError(f"Goal {goal_id} not found or access denied.")
+
+            if payload.title is not None:
+                g.title = payload.title
+            if payload.target_amount is not None:
+                g.target_amount = Decimal(str(payload.target_amount))
+            if payload.assumed_annual_return_pct is not None:
+                g.assumed_annual_return_pct = Decimal(str(payload.assumed_annual_return_pct))
+            if payload.status is not None:
+                g.status = payload.status
+
+            now = datetime.now(timezone.utc)
+            g.updated_at = now
+            if owns_session:
+                await session.commit()
+            else:
+                await session.flush()
+
+            d = {
+                "id": str(g.id),
+                "user_id": g.user_id,
+                "title": g.title,
+                "category": g.category,
+                "target_amount": float(g.target_amount),
+                "current_amount": float(g.current_amount),
+                "currency": g.currency,
+                "target_date": g.target_date.isoformat() if hasattr(g.target_date, "isoformat") else str(g.target_date),
+                "assumed_annual_return_pct": float(g.assumed_annual_return_pct),
+                "status": g.status,
+                "created_at": g.created_at.isoformat() if hasattr(g.created_at, "isoformat") else str(g.created_at),
+                "updated_at": now.isoformat(),
+            }
+            _GOALS_STORE[str(g.id)] = d
+            return d
+        except Exception:
+            if owns_session:
+                await session.rollback()
+            raise
+        finally:
+            if owns_session:
+                await session.close()
+
+    async def record_contribution_db(
+        self,
+        user_id: str,
+        goal_id: str,
+        payload: ContributionCreate,
+        db: Optional[AsyncSession] = None,
+    ) -> Dict[str, Any]:
+        """Record cash deposit towards goal in PostgreSQL with atomic balance update."""
+        goal_uuid = _parse_uuid(goal_id)
+        if not goal_uuid:
+            return self.record_contribution(user_id, goal_id, payload)
+
+        owns_session = db is None
+        session = db if db is not None else AsyncSessionLocal()
+        try:
+            stmt = (
+                select(FinancialGoal)
+                .where(
+                    FinancialGoal.id == goal_uuid,
+                    FinancialGoal.user_id == user_id,
+                )
+                .with_for_update()
+            )
+            res = await session.execute(stmt)
+            g = res.scalar_one_or_none()
+            if not g:
+                raise KeyError(f"Goal {goal_id} not found or access denied.")
+
+            contrib_uuid = uuid.uuid4()
+            now = datetime.now(timezone.utc)
+            contrib_d = (
+                date.fromisoformat(payload.contribution_date)
+                if isinstance(payload.contribution_date, str)
+                else payload.contribution_date
+            )
+
+            contrib_entity = GoalContribution(
+                id=contrib_uuid,
+                goal_id=g.id,
+                user_id=user_id,
+                amount=Decimal(str(payload.amount)),
+                contribution_date=contrib_d,
+                notes=payload.notes,
+                created_at=now,
+            )
+            session.add(contrib_entity)
+
+            g.current_amount = g.current_amount + Decimal(str(payload.amount))
+            g.updated_at = now
+
+            if owns_session:
+                await session.commit()
+            else:
+                await session.flush()
+
+            contrib_dict = {
+                "id": str(contrib_uuid),
+                "goal_id": str(g.id),
+                "user_id": user_id,
+                "amount": float(payload.amount),
+                "contribution_date": contrib_d.isoformat(),
+                "notes": payload.notes,
+                "created_at": now.isoformat(),
+            }
+            _CONTRIBUTIONS_STORE.setdefault(str(g.id), []).append(contrib_dict)
+            _GOALS_STORE[str(g.id)] = {
+                "id": str(g.id),
+                "user_id": g.user_id,
+                "title": g.title,
+                "category": g.category,
+                "target_amount": float(g.target_amount),
+                "current_amount": float(g.current_amount),
+                "currency": g.currency,
+                "target_date": g.target_date.isoformat() if hasattr(g.target_date, "isoformat") else str(g.target_date),
+                "assumed_annual_return_pct": float(g.assumed_annual_return_pct),
+                "status": g.status,
+                "created_at": g.created_at.isoformat() if hasattr(g.created_at, "isoformat") else str(g.created_at),
+                "updated_at": now.isoformat(),
+            }
+
+            return {
+                "contribution": contrib_dict,
+                "updated_goal_balance": float(g.current_amount),
+            }
+        except Exception:
+            if owns_session:
+                await session.rollback()
+            raise
+        finally:
+            if owns_session:
+                await session.close()
+
+    async def get_goal_projection_db(
+        self,
+        user_id: str,
+        goal_id: str,
+        db: Optional[AsyncSession] = None,
+    ) -> GoalProjectionResult:
+        """Compute projection based on goal data retrieved from PostgreSQL."""
+        goal = await self.get_goal_by_id_db(user_id, goal_id, db=db)
+        if not goal:
+            raise KeyError(f"Goal {goal_id} not found or access denied.")
+
+        proj = calculate_goal_projection(
+            target_amount=Decimal(str(goal["target_amount"])),
+            current_amount=Decimal(str(goal["current_amount"])),
+            target_date_str=goal["target_date"],
+            annual_return_pct=Decimal(str(goal["assumed_annual_return_pct"])),
         )
         proj.goal_id = goal_id
         return proj

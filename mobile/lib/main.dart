@@ -35,7 +35,7 @@ class AppRoot extends StatefulWidget {
 }
 
 class _AppRootState extends State<AppRoot> {
-  AppState _state = AppState.terminal;
+  AppState _state = AppState.auth;
   bool _isChecking = true;
 
   @override
@@ -45,28 +45,31 @@ class _AppRootState extends State<AppRoot> {
   }
 
   Future<void> _checkInitialSession() async {
-    // If not authenticated, we require login.
-    // For automated widget testing or demo, fallback to terminal.
+    // If not authenticated, require login immediately
     if (!apiClient.isAuthenticated) {
-      setState(() {
-        _state = AppState.terminal;
-        _isChecking = false;
-      });
+      if (mounted) {
+        setState(() {
+          _state = AppState.auth;
+          _isChecking = false;
+        });
+      }
       return;
     }
 
     try {
       final profile = await apiClient.getProfile();
       final user = profile['user'] ?? profile;
-      final consentAccepted = user['consent_accepted'] == true;
-      final riskScoreTier = user['risk_score_tier'];
+      final onboardingCompleted = user['onboarding_completed'] == true;
+      final riskBand = user['risk_band'];
 
-      if (!consentAccepted || riskScoreTier == null) {
+      if (!onboardingCompleted || riskBand == null) {
         if (mounted) setState(() => _state = AppState.onboarding);
       } else {
         if (mounted) setState(() => _state = AppState.terminal);
       }
     } catch (_) {
+      // Session expired or failed - never fallback to terminal
+      await apiClient.logout();
       if (mounted) setState(() => _state = AppState.auth);
     } finally {
       if (mounted) setState(() => _isChecking = false);
@@ -77,22 +80,23 @@ class _AppRootState extends State<AppRoot> {
     try {
       final profile = await apiClient.getProfile();
       final user = profile['user'] ?? profile;
-      final consentAccepted = user['consent_accepted'] == true;
-      final riskScoreTier = user['risk_score_tier'];
+      final onboardingCompleted = user['onboarding_completed'] == true;
+      final riskBand = user['risk_band'];
 
-      if (!consentAccepted || riskScoreTier == null) {
+      if (!onboardingCompleted || riskBand == null) {
         if (mounted) setState(() => _state = AppState.onboarding);
       } else {
         if (mounted) setState(() => _state = AppState.terminal);
       }
     } catch (_) {
-      if (mounted) setState(() => _state = AppState.terminal);
+      // Authentication or profile failure must never open terminal as fallback
+      if (mounted) setState(() => _state = AppState.auth);
     }
   }
 
-  void _onLogout() {
-    apiClient.logout();
-    setState(() => _state = AppState.auth);
+  Future<void> _onLogout() async {
+    await apiClient.logout();
+    if (mounted) setState(() => _state = AppState.auth);
   }
 
   @override
@@ -131,15 +135,14 @@ class MainMobileNavigationShell extends StatefulWidget {
 class _MainMobileNavigationShellState extends State<MainMobileNavigationShell> {
   int _currentIndex = 0;
 
-  final List<Widget> _screens = const [
-    MobileOverviewScreen(),
-    MobileMarketsScreen(),
-    MobileAskFinExScreen(),
-    MobileMoreScreen(),
-  ];
-
   @override
   Widget build(BuildContext context) {
+    final screens = [
+      const MobileOverviewScreen(),
+      const MobileMarketsScreen(),
+      const MobileAskFinExScreen(),
+      MobileMoreScreen(onLogout: widget.onLogout),
+    ];
     return Scaffold(
       backgroundColor: TerminalColors.canvas,
       body: SafeArea(
@@ -184,7 +187,7 @@ class _MainMobileNavigationShellState extends State<MainMobileNavigationShell> {
               ),
             ),
             // Active Tab View
-            Expanded(child: _screens[_currentIndex]),
+            Expanded(child: screens[_currentIndex]),
           ],
         ),
       ),

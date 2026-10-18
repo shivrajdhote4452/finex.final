@@ -46,18 +46,64 @@ def other_user_headers():
 
 
 @pytest.fixture(autouse=True)
-def clean_stores():
+async def clean_stores():
     _GOALS_STORE.clear()
     _CONTRIBUTIONS_STORE.clear()
     _PROJECTIONS_STORE.clear()
     _UPLOADS_STORE.clear()
     _TRANSACTIONS_STORE.clear()
+    try:
+        from backend.app.database import AsyncSessionLocal
+        from backend.app.models.goals import FinancialGoal, GoalContribution
+        from backend.app.models.spending import Transaction, TransactionUpload
+        from sqlalchemy import delete
+
+        async with AsyncSessionLocal() as session:
+            await session.execute(
+                delete(Transaction).where(Transaction.user_id.in_(["usr-shivraj-001", "usr-other-002"]))
+            )
+            await session.execute(
+                delete(TransactionUpload).where(TransactionUpload.user_id.in_(["usr-shivraj-001", "usr-other-002"]))
+            )
+            await session.execute(
+                delete(GoalContribution).where(GoalContribution.user_id.in_(["usr-shivraj-001", "usr-other-002"]))
+            )
+            await session.execute(
+                delete(FinancialGoal).where(FinancialGoal.user_id.in_(["usr-shivraj-001", "usr-other-002"]))
+            )
+            await session.commit()
+    except Exception:
+        pass
+
     yield
+
     _GOALS_STORE.clear()
     _CONTRIBUTIONS_STORE.clear()
     _PROJECTIONS_STORE.clear()
     _UPLOADS_STORE.clear()
     _TRANSACTIONS_STORE.clear()
+    try:
+        from backend.app.database import AsyncSessionLocal
+        from backend.app.models.goals import FinancialGoal, GoalContribution
+        from backend.app.models.spending import Transaction, TransactionUpload
+        from sqlalchemy import delete
+
+        async with AsyncSessionLocal() as session:
+            await session.execute(
+                delete(Transaction).where(Transaction.user_id.in_(["usr-shivraj-001", "usr-other-002"]))
+            )
+            await session.execute(
+                delete(TransactionUpload).where(TransactionUpload.user_id.in_(["usr-shivraj-001", "usr-other-002"]))
+            )
+            await session.execute(
+                delete(GoalContribution).where(GoalContribution.user_id.in_(["usr-shivraj-001", "usr-other-002"]))
+            )
+            await session.execute(
+                delete(FinancialGoal).where(FinancialGoal.user_id.in_(["usr-shivraj-001", "usr-other-002"]))
+            )
+            await session.commit()
+    except Exception:
+        pass
 
 
 @pytest.mark.asyncio

@@ -11,13 +11,16 @@ Exposes:
 - GET /spending/summary: Monthly spending rollup and category breakdown
 """
 
+from decimal import Decimal
 from typing import Optional
 
 from backend.app.core.envelope import create_response_envelope
+from backend.app.database import get_db
 from backend.app.domain.spending_service import SpendingService
 from backend.app.routers.auth import get_current_user_id
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/spending", tags=["Spending Analytics & Ingestion"])
 spending_service = SpendingService()
@@ -50,16 +53,18 @@ async def preview_transactions_csv(
     request: Request,
     payload: CsvTextUploadRequest,
     current_user: dict = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
 ):
     """CH-09: Parse bank statement CSV into preview without committing transactions."""
     cid = getattr(request.state, "correlation_id", None)
     user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
 
     try:
-        res = spending_service.preview_csv(
+        res = await spending_service.preview_csv_db(
             user_id=user_id,
             file_name=payload.file_name,
             csv_content=payload.csv_content,
+            db=db,
         )
         return create_response_envelope(data=res, correlation_id=cid)
     except ValueError as e:
@@ -71,16 +76,18 @@ async def commit_transactions_csv(
     request: Request,
     payload: CsvCommitRequest,
     current_user: dict = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
 ):
-    """CH-09: Commit accepted transactions from an approved preview session."""
+    """CH-09: Commit accepted transactions from an approved preview session to PostgreSQL."""
     cid = getattr(request.state, "correlation_id", None)
     user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
 
     try:
-        res = spending_service.commit_csv(
+        res = await spending_service.commit_csv_db(
             user_id=user_id,
             preview_id=payload.preview_id,
             accepted_indices=payload.accepted_indices,
+            db=db,
         )
         return create_response_envelope(data=res, correlation_id=cid)
     except KeyError as e:
@@ -92,21 +99,21 @@ async def add_manual_transaction(
     request: Request,
     payload: ManualTransactionRequest,
     current_user: dict = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
 ):
-    """CH-09: Create a manual expense/income entry."""
+    """CH-09: Create a manual expense/income entry in PostgreSQL."""
     cid = getattr(request.state, "correlation_id", None)
     user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
 
     try:
-        from decimal import Decimal
-
-        res = spending_service.add_manual_transaction(
+        res = await spending_service.add_manual_transaction_db(
             user_id=user_id,
             transaction_date=payload.transaction_date,
             amount=Decimal(str(payload.amount)),
             description=payload.description,
             transaction_type=payload.transaction_type,
             category_id=payload.category_id,
+            db=db,
         )
         return create_response_envelope(data=res, correlation_id=cid)
     except ValueError as e:
@@ -118,16 +125,18 @@ async def upload_transactions_csv(
     request: Request,
     payload: CsvTextUploadRequest,
     current_user: dict = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Ingest bank statement CSV with PII masking and categorization."""
+    """Ingest bank statement CSV with PII masking and PostgreSQL persistence."""
     cid = getattr(request.state, "correlation_id", None)
     user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
 
     try:
-        res = spending_service.ingest_csv(
+        res = await spending_service.ingest_csv_db(
             user_id=user_id,
             file_name=payload.file_name,
             csv_content=payload.csv_content,
+            db=db,
         )
         return create_response_envelope(data=res, correlation_id=cid)
     except ValueError as e:
@@ -142,17 +151,19 @@ async def list_transactions(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     current_user: dict = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
 ):
-    """List masked transactions with category filter."""
+    """List masked transactions from PostgreSQL with category filter."""
     cid = getattr(request.state, "correlation_id", None)
     user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
 
-    res = spending_service.list_transactions(
+    res = await spending_service.list_transactions_db(
         user_id=user_id,
         category=category,
         year_month=year_month,
         limit=limit,
         offset=offset,
+        db=db,
     )
     return create_response_envelope(data=res, correlation_id=cid)
 
@@ -163,16 +174,18 @@ async def update_transaction_category(
     request: Request,
     payload: CategoryUpdateRequest,
     current_user: dict = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Update or correct category for a transaction."""
+    """Update or correct category for a transaction in PostgreSQL."""
     cid = getattr(request.state, "correlation_id", None)
     user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
 
     try:
-        updated = spending_service.update_transaction_category(
+        updated = await spending_service.update_transaction_category_db(
             user_id=user_id,
             transaction_id=transaction_id,
             new_category=payload.category_id,
+            db=db,
         )
         return create_response_envelope(data=updated, correlation_id=cid)
     except KeyError:
@@ -187,10 +200,11 @@ async def get_monthly_spending_summary(
     request: Request,
     year_month: str = Query("2026-10", description="Target month in YYYY-MM"),
     current_user: dict = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Retrieve monthly spending roll-up by category."""
+    """Retrieve monthly spending roll-up by category from PostgreSQL."""
     cid = getattr(request.state, "correlation_id", None)
     user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
 
-    summary = spending_service.get_monthly_summary(user_id=user_id, year_month=year_month)
+    summary = await spending_service.get_monthly_summary_db(user_id=user_id, year_month=year_month, db=db)
     return create_response_envelope(data=summary.model_dump(mode="json"), correlation_id=cid)

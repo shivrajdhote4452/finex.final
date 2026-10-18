@@ -14,7 +14,7 @@ from backend.app.ports.market_data import HistoricalBar, Quote
 from fastapi import APIRouter, Query, Request
 
 router = APIRouter(prefix="/market", tags=["Market Data"])
-provider = RealMarketDataProvider(force_cache=True)
+provider = RealMarketDataProvider(force_cache=False, allow_fixture_fallback=True)
 
 
 @router.get("/instruments")
