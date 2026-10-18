@@ -137,10 +137,69 @@ class AIOrchestrator:
                 legal_disclaimer=STATUTORY_DISCLAIMER,
             )
 
+        # Handle Greetings in Ask FinEx section
+        greeting_words = ["hey", "hello", "hi", "namaste", "hie", "heyy", "what can you do", "help", "who are you"]
+        q_lower = query.lower().strip()
+        is_greeting = any(
+            q_lower == w or q_lower.startswith(w + " ") or q_lower.endswith(" " + w) or f" {w} " in f" {q_lower} "
+            for w in greeting_words
+        )
+        if is_greeting and not any(w in q_lower for w in ["invest", "buy", "stock", "fund", "bond", "sebi", "rbi", "nse", "allocation"]):
+            latency = (time.perf_counter() - t0) * 1000.0
+            return OrchestrationResponse(
+                message_id=msg_id,
+                conversation_id=conv_id,
+                correlation_id=cid,
+                intent=AIIntent.FINANCIAL_EDUCATION,
+                headline="Welcome to Ask FinEx Financial Intelligence",
+                content=(
+                    "Namaste! I am your FinEx AI Financial Research Assistant, powered by Google Gemini and grounded in verified regulatory documentation.\n\n"
+                    "You can ask me questions regarding:\n"
+                    "- 📜 **SEBI Investor Protection & Guidelines** (emergency funds, risk profiling)\n"
+                    "- 💡 **Core Financial Principles** (SIP compounding, 50/30/20 rule, asset allocation)\n"
+                    "- ⚖️ **Company Comparisons** (e.g. 'Compare TCS vs INFY')\n"
+                    "- 📊 **Capital Markets Mechanics** (P/E ratios, dividends, debt vs equity)\n\n"
+                    "What financial concept or regulatory topic would you like to explore today?"
+                ),
+                citations=[],
+                latency_ms=round(latency, 2),
+                is_fallback=False,
+                legal_disclaimer=STATUTORY_DISCLAIMER,
+            )
+
         # Retrieve relevant regulatory evidence
         retrieved_chunks = await self.retriever.retrieve_relevant_chunks(query, top_k=3, db=db)
 
         if not retrieved_chunks:
+            # If Gemini is ready, provide educational insight on general financial queries
+            try:
+                from backend.app.domain.gemini_assistant import gemini_assistant
+
+                if gemini_assistant.is_gemini_api_ready():
+                    sys_instruct = (
+                        "You are FinEx AI Financial Research Assistant for Indian Equities and Capital Markets. "
+                        "Provide a clear, objective, and educational explanation of the financial concept asked by the user. "
+                        "Use Indian market examples (e.g. Nifty 50, BSE/NSE, INR) where helpful. "
+                        "Maintain strict SEBI compliance: do not provide personal investment recommendations or guaranteed returns."
+                    )
+                    ai_general = await gemini_assistant.call_gemini_api(query, sys_instruct)
+                    if ai_general:
+                        latency = (time.perf_counter() - t0) * 1000.0
+                        return OrchestrationResponse(
+                            message_id=msg_id,
+                            conversation_id=conv_id,
+                            correlation_id=cid,
+                            intent=intent,
+                            headline=f"Financial Intelligence: {query[:45]}",
+                            content=ai_general,
+                            citations=[],
+                            latency_ms=round(latency, 2),
+                            is_fallback=False,
+                            legal_disclaimer=STATUTORY_DISCLAIMER,
+                        )
+            except Exception:
+                pass
+
             latency = (time.perf_counter() - t0) * 1000.0
             return OrchestrationResponse(
                 message_id=msg_id,
@@ -184,6 +243,27 @@ class AIOrchestrator:
             f"Key Takeaway: Capital market participation requires balancing expected returns with prudent risk limits. "
             f"Holding diversified assets and reviewing regulatory disclosures provides structural resilience."
         )
+
+        # Enhance with live Gemini synthesis when available
+        try:
+            from backend.app.domain.gemini_assistant import gemini_assistant
+
+            if gemini_assistant.is_gemini_api_ready():
+                evidence_text = "\n\n".join(
+                    [f"Source [{i+1}] ({c.publisher} - {c.title}):\n{c.content}" for i, c in enumerate(retrieved_chunks)]
+                )
+                sys_instruct = (
+                    "You are FinEx AI Financial Research Assistant for Indian Capital Markets. "
+                    "Synthesize a clear, authoritative, and well-structured response to the user's question. "
+                    "Ground your explanation in the following verified regulatory context:\n"
+                    f"{evidence_text}\n\n"
+                    "Explain the concepts clearly, highlight practical takeaways for Indian retail investors, and maintain strict SEBI educational compliance."
+                )
+                ai_text = await gemini_assistant.call_gemini_api(query, sys_instruct)
+                if ai_text:
+                    content_body = ai_text
+        except Exception:
+            pass
 
         latency = (time.perf_counter() - t0) * 1000.0
 

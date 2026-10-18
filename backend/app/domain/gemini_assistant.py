@@ -222,11 +222,15 @@ class GeminiInvestmentAssistant:
         return True
 
     async def call_gemini_api(self, prompt: str, system_instruction: str) -> Optional[str]:
-        """Invoke Google Gemini 1.5 API using httpx."""
+        """Invoke Google Gemini 1.5 API using httpx with robust headers and graceful fallback."""
         if not self.is_gemini_api_ready():
             return None
         key = self.settings.GEMINI_API_KEY
         model = getattr(self.settings, "GEMINI_MODEL", "gemini-1.5-flash") or "gemini-1.5-flash"
+        headers = {
+            "x-goog-api-key": key,
+            "Content-Type": "application/json",
+        }
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
         payload = {
             "system_instruction": {"parts": [{"text": system_instruction}]},
@@ -237,8 +241,8 @@ class GeminiInvestmentAssistant:
             },
         }
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                res = await client.post(url, json=payload)
+            async with httpx.AsyncClient(timeout=12.0) as client:
+                res = await client.post(url, json=payload, headers=headers)
                 if res.status_code == 200:
                     data = res.json()
                     candidates = data.get("candidates", [])
@@ -246,6 +250,18 @@ class GeminiInvestmentAssistant:
                         parts = candidates[0].get("content", {}).get("parts", [])
                         if parts:
                             return parts[0].get("text", "").strip()
+                elif res.status_code == 404:
+                    # Model ID fallback if gemini-1.5-flash has variant naming
+                    for alt_model in ["gemini-1.5-flash-latest", "gemini-2.0-flash", "gemini-1.5-pro"]:
+                        alt_url = f"https://generativelanguage.googleapis.com/v1beta/models/{alt_model}:generateContent?key={key}"
+                        res_alt = await client.post(alt_url, json=payload, headers=headers)
+                        if res_alt.status_code == 200:
+                            data = res_alt.json()
+                            candidates = data.get("candidates", [])
+                            if candidates:
+                                parts = candidates[0].get("content", {}).get("parts", [])
+                                if parts:
+                                    return parts[0].get("text", "").strip()
         except Exception:
             pass
         return None
@@ -684,6 +700,26 @@ class GeminiInvestmentAssistant:
             for w in greeting_words
         )
         if is_greeting and not any(w in p_lower for w in ["invest", "buy", "chart", "rsi", "balance", "portfolio"]):
+            if self.is_gemini_api_ready():
+                sys_instruct = (
+                    "You are FinEx AI Paper Investment Assistant for Indian Equities (NSE). "
+                    f"Active chart instrument: {active_sym}. "
+                    f"Respond warmly and helpfully in '{lang}' (English, Hindi, or Hinglish as appropriate). "
+                    f"Greet the user, note you are powered by Gemini AI, and suggest 3 quick ideas they can explore: "
+                    f"1) Technical analysis on {active_sym} chart & indicators (RSI, SMA), "
+                    f"2) Propose paper portfolio trades (e.g. 'Invest ₹15,000 in {active_sym} and TCS'), "
+                    f"3) Check their virtual paper trading balance. Keep your answer concise and welcoming."
+                )
+                gemini_text = await self.call_gemini_api(user_message, sys_instruct)
+                if gemini_text:
+                    return AssistantMessageResponse(
+                        message_id=msg_id,
+                        conversation_id=conv_id,
+                        reply=gemini_text,
+                        language_detected=lang,
+                        is_setup_incomplete=False,
+                    )
+
             if lang == "hi":
                 reply = (
                     f"नमस्ते! मैं आपका FinEx AI पेपर इन्वेस्टमेंट असिस्टेंट हूँ।\n\n"
@@ -832,15 +868,22 @@ class GeminiInvestmentAssistant:
                     f"({'Overbought zone (>70)' if rsi_val and rsi_val > 70 else 'Oversold zone (<30)' if rsi_val and rsi_val < 30 else 'Neutral range (30-70)'})\n\n"
                     f"Yeh observation active chart historical data par aadharit hai."
                 )
-            else:
-                reply = (
-                    f"**{target_sym} Active Chart Analysis:**\n"
-                    f"- Latest Verified Price: ₹{price:,.2f} ({chart_ctx.get('source')})\n"
-                    f"- 20-Day SMA: ₹{f'{sma_val:,.2f}' if sma_val else 'Warming up'}\n"
-                    f"- 14-Period RSI: {f'{rsi_val:.1f}' if rsi_val else 'Warming up'} "
-                    f"({'Overbought territory (>70)' if rsi_val and rsi_val > 70 else 'Oversold territory (<30)' if rsi_val and rsi_val < 30 else 'Healthy neutral range (30-70)'})\n\n"
-                    f"All values are derived directly from verified observation records."
+            if self.is_gemini_api_ready():
+                sys_prompt = (
+                    "You are FinEx AI Technical & Chart Analysis Copilot for Indian Equities (NSE). "
+                    f"Active instrument: {target_sym} at current verified price ₹{price:,.2f} ({chart_ctx.get('source')}). "
+                    f"Quantitative technical indicators: "
+                    f"20-Day Simple Moving Average (SMA): ₹{f'{sma_val:,.2f}' if sma_val else 'Calculating'}, "
+                    f"14-Period RSI: {f'{rsi_val:.1f}' if rsi_val else 'N/A'}, "
+                    f"Timeframe: {chart_ctx.get('timeframe', '1D')}. "
+                    f"Respond in '{lang}' (English, Hindi, or Hinglish as appropriate). "
+                    "Provide an objective, educational technical analysis explaining price momentum, key levels, and risk parameters. "
+                    "Maintain strict compliance: all figures are educational paper trading metrics."
                 )
+                gemini_text = await self.call_gemini_api(user_message, sys_prompt)
+                if gemini_text:
+                    reply = gemini_text
+
             return AssistantMessageResponse(
                 message_id=msg_id,
                 conversation_id=conv_id,

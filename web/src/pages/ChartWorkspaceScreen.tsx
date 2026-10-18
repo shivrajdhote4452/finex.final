@@ -1718,9 +1718,13 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                     fontSize: '11px',
                     fontWeight: 600,
                     cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
                   }}
                 >
-                  ✨ Ask FinEx AI
+                  <span>✨ Ask FinEx AI</span>
+                  <span style={{ fontSize: '9px', backgroundColor: 'rgba(38, 166, 154, 0.2)', color: '#26A69A', padding: '1px 5px', borderRadius: '4px' }}>Gemini</span>
                 </button>
                 <button
                   onClick={() => setRightPanelTab('watchlist')}
@@ -1862,8 +1866,45 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                     ))}
                   </div>
 
+                  {/* Quick Action Suggestion Chips */}
+                  <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                    {[
+                      `Explain ${selectedSymbol} Chart`,
+                      `RSI & Indicators`,
+                      `Invest INR 10,000 in ${selectedSymbol}`,
+                      `My Portfolio Balance`,
+                    ].map((btnText, bIdx) => (
+                      <button
+                        key={bIdx}
+                        type="button"
+                        onClick={() => {
+                          setAiInput(btnText);
+                        }}
+                        style={{
+                          fontSize: '10px',
+                          backgroundColor: '#161618',
+                          color: '#A1A1AA',
+                          border: '1px solid #27272A',
+                          borderRadius: '12px',
+                          padding: '3px 8px',
+                          cursor: 'pointer',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.color = '#F29A60';
+                          e.currentTarget.style.borderColor = '#F29A60';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.color = '#A1A1AA';
+                          e.currentTarget.style.borderColor = '#27272A';
+                        }}
+                      >
+                        {btnText}
+                      </button>
+                    ))}
+                  </div>
+
                   {/* AI Input Area */}
-                  <div style={{ marginTop: '8px', display: 'flex', gap: '6px' }}>
+                  <div style={{ marginTop: '6px', display: 'flex', gap: '6px' }}>
                     <input
                       type="text"
                       placeholder="Ask chart or say 'Invest INR 10,000'..."
