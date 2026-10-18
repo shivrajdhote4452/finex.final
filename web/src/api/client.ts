@@ -278,23 +278,74 @@ class ApiClient {
       }>(`/market/quotes/${symbol}`);
     },
 
-    getHistory: async (symbol: string, startDate?: string, endDate?: string) => {
+    getHistory: async (
+      symbol: string,
+      optionsOrStartDate?: string | { interval?: string; start_date?: string; end_date?: string; as_of?: string },
+      endDate?: string
+    ) => {
       const q = new URLSearchParams();
-      if (startDate) q.set('start_date', startDate);
-      if (endDate) q.set('end_date', endDate);
+      if (typeof optionsOrStartDate === 'string') {
+        if (optionsOrStartDate) q.set('start_date', optionsOrStartDate);
+        if (endDate) q.set('end_date', endDate);
+      } else if (optionsOrStartDate && typeof optionsOrStartDate === 'object') {
+        if (optionsOrStartDate.interval) q.set('interval', optionsOrStartDate.interval);
+        if (optionsOrStartDate.start_date) q.set('start_date', optionsOrStartDate.start_date);
+        if (optionsOrStartDate.end_date) q.set('end_date', optionsOrStartDate.end_date);
+        if (optionsOrStartDate.as_of) q.set('as_of', optionsOrStartDate.as_of);
+      }
       const queryStr = q.toString() ? `?${q.toString()}` : '';
       return this.request<{
         symbol: string;
+        exchange?: string;
+        currency?: string;
+        interval?: string;
+        data_mode?: string;
+        as_of?: string | null;
+        total_bars?: number;
         bars: Array<{
           date: string;
-          open: string | number;
-          high: string | number;
-          low: string | number;
-          close: string | number;
+          time?: number;
+          open: number;
+          high: number;
+          low: number;
+          close: number;
           volume: number;
-          currency: string;
+          currency?: string;
+          observation_time?: string;
         }>;
       }>(`/market/history/${symbol}${queryStr}`);
+    },
+
+    getMode: async () => {
+      return this.request<{
+        mode: string;
+        alpaca_configured: boolean;
+        alpaca_feed: string;
+        replay_active: boolean;
+        simulated_clock: string | null;
+        lag_days: number;
+        currency: string;
+      }>('/market/mode');
+    },
+
+    getIndicators: async (
+      symbol: string,
+      indicator: string,
+      params?: Record<string, any>
+    ) => {
+      const q = new URLSearchParams({ indicator });
+      if (params) {
+        Object.entries(params).forEach(([k, v]) => {
+          if (v !== undefined && v !== null) q.append(k, String(v));
+        });
+      }
+      return this.request<{
+        symbol: string;
+        indicator: string;
+        period?: number;
+        series: Array<any>;
+        data_mode: string;
+      }>(`/market/indicators/${symbol}?${q.toString()}`);
     },
 
     search: async (query: string) => {
@@ -625,6 +676,257 @@ class ApiClient {
         method: 'POST',
         body: JSON.stringify({ content }),
       });
+    },
+  };
+
+  // --- Chart Workspace, Drawings & Replay ---
+  public charts = {
+    getLayouts: async () => {
+      return this.request<{
+        layouts: Array<{
+          id: string;
+          name: string;
+          layout_type: string;
+          active_symbols: string[];
+          timeframes: string[];
+          sync_crosshair: boolean;
+          sync_time: boolean;
+          sync_symbol: boolean;
+          is_default: boolean;
+          updated_at: string;
+        }>;
+        total: number;
+      }>('/charts/layouts');
+    },
+
+    saveLayout: async (payload: {
+      name: string;
+      layout_type: string;
+      active_symbols: string[];
+      timeframes: string[];
+      sync_crosshair?: boolean;
+      sync_time?: boolean;
+      sync_symbol?: boolean;
+      is_default?: boolean;
+    }) => {
+      return this.request<{
+        layout_id: string;
+        name: string;
+        status: string;
+      }>('/charts/layouts', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    },
+
+    deleteLayout: async (id: string) => {
+      return this.request<{
+        deleted_id: string;
+        status: string;
+      }>(`/charts/layouts/${id}`, {
+        method: 'DELETE',
+      });
+    },
+
+    getDrawings: async (symbol: string) => {
+      return this.request<{
+        symbol: string;
+        market: string;
+        drawings: Array<{
+          id: string;
+          drawing_type: string;
+          coordinates: Array<{ time: number; price: number }>;
+          properties: Record<string, any>;
+          created_at: string;
+        }>;
+        total: number;
+      }>(`/charts/drawings/${symbol}`);
+    },
+
+    saveDrawing: async (payload: {
+      id?: string;
+      symbol: string;
+      drawing_type: string;
+      coordinates: Array<{ time: number; price: number }>;
+      properties?: Record<string, any>;
+      market?: string;
+    }) => {
+      return this.request<{
+        drawing_id: string;
+        symbol: string;
+        drawing_type: string;
+        status: string;
+      }>('/charts/drawings', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    },
+
+    deleteDrawing: async (id: string) => {
+      return this.request<{
+        deleted_id: string;
+        status: string;
+      }>(`/charts/drawings/${id}`, {
+        method: 'DELETE',
+      });
+    },
+
+    clearDrawings: async (symbol: string) => {
+      return this.request<{
+        symbol: string;
+        deleted_count: number;
+        status: string;
+      }>(`/charts/drawings/clear/${symbol}`, {
+        method: 'DELETE',
+      });
+    },
+
+    getIndicatorTemplates: async () => {
+      return this.request<{
+        templates: Array<{
+          id: string;
+          name: string;
+          indicators_config: Array<any>;
+          is_default: boolean;
+        }>;
+        total: number;
+      }>('/charts/indicator-templates');
+    },
+
+    saveIndicatorTemplate: async (payload: {
+      name: string;
+      indicators_config: Array<any>;
+      is_default?: boolean;
+    }) => {
+      return this.request<{
+        template_id: string;
+        name: string;
+        status: string;
+      }>('/charts/indicator-templates', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    },
+
+    getReplaySession: async () => {
+      return this.request<{
+        session_id: string | null;
+        session_name: string;
+        market: string;
+        simulated_clock: string;
+        start_date: string;
+        end_date: string;
+        speed_multiplier: number;
+        status: string;
+        lag_days: number;
+      }>('/charts/replay/session');
+    },
+
+    updateReplaySession: async (payload: {
+      session_name?: string;
+      market?: string;
+      simulated_clock?: string;
+      start_date?: string;
+      end_date?: string;
+      speed_multiplier?: number;
+      status?: string;
+    }) => {
+      return this.request<{
+        session_id: string;
+        simulated_clock: string;
+        status: string;
+        speed_multiplier: number;
+      }>('/charts/replay/session', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    },
+  };
+
+  // --- Gemini AI Paper Investment Assistant ---
+  public geminiAssistant = {
+    chat: async (message: string, chartContext?: any) => {
+      return this.request<{
+        reply: string;
+        language: string;
+        proposal: {
+          proposal_id: string;
+          instruction_text: string;
+          total_budget: number;
+          currency: string;
+          allocations: Array<{
+            symbol: string;
+            side: string;
+            quantity: number;
+            reference_price: number;
+            estimated_subtotal: number;
+            currency: string;
+            source: string;
+          }>;
+          estimated_allocation_total: number;
+          expires_at: string;
+          expires_in_minutes: number;
+          status: string;
+        } | null;
+        execution_receipt: {
+          proposal_id: string;
+          status: string;
+          executed_orders: Array<{
+            order_id: string;
+            symbol: string;
+            side: string;
+            quantity: number;
+            fill_price: number;
+            status: string;
+            fee: number;
+          }>;
+          remaining_virtual_cash: number;
+          currency: string;
+        } | null;
+        is_setup_incomplete?: boolean;
+        disclaimer: string;
+      }>('/ai/assistant/chat', {
+        method: 'POST',
+        body: JSON.stringify({ message, chart_context: chartContext }),
+      });
+    },
+
+    getProposals: async (status?: string) => {
+      const q = status ? `?status=${status}` : '';
+      return this.request<{
+        proposals: Array<any>;
+        total: number;
+      }>(`/ai/assistant/proposals${q}`);
+    },
+
+    executeProposal: async (proposalId: string) => {
+      return this.request<{
+        proposal_id: string;
+        status: string;
+        executed_orders: Array<{
+          order_id: string;
+          symbol: string;
+          side: string;
+          quantity: number;
+          fill_price: number;
+          status: string;
+          fee: number;
+        }>;
+        remaining_virtual_cash: number;
+        currency: string;
+      }>(`/ai/assistant/proposals/${proposalId}/execute`, {
+        method: 'POST',
+      });
+    },
+
+    getStatus: async () => {
+      return this.request<{
+        gemini_configured: boolean;
+        model: string;
+        market_mode: string;
+        disclaimer: string;
+        status_message: string;
+      }>('/ai/assistant/status');
     },
   };
 }

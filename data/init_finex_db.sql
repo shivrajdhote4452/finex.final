@@ -799,11 +799,88 @@ INSERT INTO document_registry (id, title, source_url, publisher, doc_type, publi
 ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================================
--- 10. ALEMBIC MIGRATION BASELINE STAMP
+-- 10. CHART WORKSPACE, DRAWINGS, REPLAY SESSIONS & PAPER PROPOSALS
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS paper_proposals (
+    id VARCHAR(64) PRIMARY KEY,
+    user_id VARCHAR(64) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    account_id VARCHAR(64) NOT NULL REFERENCES paper_accounts(id) ON DELETE CASCADE,
+    instruction_text VARCHAR(1000) NOT NULL,
+    proposed_allocations JSONB NOT NULL,
+    total_budget NUMERIC(14, 2) NOT NULL,
+    currency VARCHAR(10) NOT NULL DEFAULT 'INR',
+    status VARCHAR(20) NOT NULL DEFAULT 'PROPOSED',
+    execution_receipts JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+    expires_at TIMESTAMPTZ NOT NULL,
+    executed_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS ix_paper_proposals_user_id ON paper_proposals(user_id);
+CREATE INDEX IF NOT EXISTS ix_paper_proposals_account_id ON paper_proposals(account_id);
+
+CREATE TABLE IF NOT EXISTS chart_layouts (
+    id VARCHAR(64) PRIMARY KEY,
+    user_id VARCHAR(64) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL DEFAULT 'Default Layout',
+    layout_type VARCHAR(20) NOT NULL DEFAULT 'single',
+    active_symbols JSONB NOT NULL DEFAULT '[]',
+    timeframes JSONB NOT NULL DEFAULT '[]',
+    sync_crosshair BOOLEAN NOT NULL DEFAULT TRUE,
+    sync_time BOOLEAN NOT NULL DEFAULT TRUE,
+    sync_symbol BOOLEAN NOT NULL DEFAULT FALSE,
+    is_default BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+);
+CREATE INDEX IF NOT EXISTS ix_chart_layouts_user_id ON chart_layouts(user_id);
+
+CREATE TABLE IF NOT EXISTS chart_drawings (
+    id VARCHAR(64) PRIMARY KEY,
+    user_id VARCHAR(64) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    symbol VARCHAR(20) NOT NULL,
+    drawing_type VARCHAR(30) NOT NULL,
+    coordinates JSONB NOT NULL,
+    properties JSONB NOT NULL,
+    market VARCHAR(10) NOT NULL DEFAULT 'NSE',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+);
+CREATE INDEX IF NOT EXISTS ix_chart_drawings_user_id ON chart_drawings(user_id);
+CREATE INDEX IF NOT EXISTS ix_chart_drawings_symbol ON chart_drawings(symbol);
+
+CREATE TABLE IF NOT EXISTS chart_indicator_templates (
+    id VARCHAR(64) PRIMARY KEY,
+    user_id VARCHAR(64) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    indicators_config JSONB NOT NULL,
+    is_default BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+);
+CREATE INDEX IF NOT EXISTS ix_chart_indicator_templates_user_id ON chart_indicator_templates(user_id);
+
+CREATE TABLE IF NOT EXISTS replay_sessions (
+    id VARCHAR(64) PRIMARY KEY,
+    user_id VARCHAR(64) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    session_name VARCHAR(100) NOT NULL DEFAULT 'Historical Replay Session',
+    market VARCHAR(20) NOT NULL DEFAULT 'NSE',
+    simulated_clock TIMESTAMPTZ NOT NULL,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    speed_multiplier NUMERIC(4, 2) NOT NULL DEFAULT 1.00,
+    status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+);
+CREATE INDEX IF NOT EXISTS ix_replay_sessions_user_id ON replay_sessions(user_id);
+
+-- ============================================================================
+-- 11. ALEMBIC MIGRATION BASELINE STAMP
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS alembic_version (
     version_num VARCHAR(32) NOT NULL,
     CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
 );
-INSERT INTO alembic_version (version_num) VALUES ('5c7e81d9f012')
-ON CONFLICT DO NOTHING;
+INSERT INTO alembic_version (version_num) VALUES ('6d8e21a9f023')
+ON CONFLICT (version_num) DO NOTHING;

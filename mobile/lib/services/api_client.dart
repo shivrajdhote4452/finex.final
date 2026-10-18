@@ -27,10 +27,18 @@ class ApiClient {
   }
 
   // Environment-specific API configuration
-  static const String _defaultUrl = String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: 'http://10.0.2.2:8000/api/v1',
-  );
+  static String get _defaultUrl {
+    const fromEnv = String.fromEnvironment('API_BASE_URL');
+    if (fromEnv.isNotEmpty) return fromEnv;
+    if (kIsWeb ||
+        defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.linux) {
+      return 'http://127.0.0.1:8000/api/v1';
+    }
+    return 'http://10.0.2.2:8000/api/v1';
+  }
+
   String baseUrl = normalizeBaseUrl(_defaultUrl);
   String? _token;
 
@@ -104,7 +112,7 @@ class ApiClient {
     String email = 'shivraj.dhote@finex.internal',
     String name = 'Shivraj Dhote',
   }) async {
-    if (!kDebugMode) {
+    if (!kDebugMode && !kIsWeb) {
       throw Exception('Developer sandbox sign-in is disabled in production builds.');
     }
     final url = Uri.parse('$baseUrl/auth/dev-login');
@@ -377,6 +385,81 @@ class ApiClient {
       return Map<String, dynamic>.from(data['data']);
     }
     throw Exception(data['error']?['message'] ?? 'AI retrieval query failed');
+  }
+
+  // --- Market History & Technical Indicators ---
+  Future<Map<String, dynamic>> getMarketHistory(
+    String symbol, {
+    String? interval,
+    String? asOf,
+  }) async {
+    final queryParams = <String, String>{};
+    if (interval != null) queryParams['interval'] = interval;
+    if (asOf != null) queryParams['as_of'] = asOf;
+    final uri = Uri.parse('$baseUrl/market/history/$symbol').replace(queryParameters: queryParams);
+    final response = await http.get(uri, headers: _headers());
+    final data = jsonDecode(response.body);
+    if (response.statusCode == 200 && data['data'] != null) {
+      return Map<String, dynamic>.from(data['data']);
+    }
+    return {'symbol': symbol, 'bars': []};
+  }
+
+  Future<Map<String, dynamic>> getIndicators(
+    String symbol,
+    String indicator, {
+    int? period,
+  }) async {
+    final queryParams = <String, String>{'indicator': indicator};
+    if (period != null) queryParams['period'] = period.toString();
+    final uri = Uri.parse('$baseUrl/market/indicators/$symbol').replace(queryParameters: queryParams);
+    final response = await http.get(uri, headers: _headers());
+    final data = jsonDecode(response.body);
+    if (response.statusCode == 200 && data['data'] != null) {
+      return Map<String, dynamic>.from(data['data']);
+    }
+    return {'series': []};
+  }
+
+  Future<Map<String, dynamic>> getMarketMode() async {
+    final url = Uri.parse('$baseUrl/market/mode');
+    final response = await http.get(url, headers: _headers());
+    final data = jsonDecode(response.body);
+    if (response.statusCode == 200 && data['data'] != null) {
+      return Map<String, dynamic>.from(data['data']);
+    }
+    return {'mode': 'INDIA_HISTORICAL_REPLAY', 'currency': 'INR'};
+  }
+
+  // --- Gemini Paper Investment Assistant ---
+  Future<Map<String, dynamic>> sendGeminiAssistantMessage(
+    String message, {
+    Map<String, dynamic>? chartContext,
+  }) async {
+    final url = Uri.parse('$baseUrl/ai/assistant/chat');
+    final response = await http.post(
+      url,
+      headers: _headers(),
+      body: jsonEncode({
+        'message': message,
+        if (chartContext != null) 'chart_context': chartContext,
+      }),
+    );
+    final data = jsonDecode(response.body);
+    if (response.statusCode == 200 && data['data'] != null) {
+      return Map<String, dynamic>.from(data['data']);
+    }
+    throw Exception(data['error']?['message'] ?? 'Assistant communication failed');
+  }
+
+  Future<Map<String, dynamic>> executeProposal(String proposalId) async {
+    final url = Uri.parse('$baseUrl/ai/assistant/proposals/$proposalId/execute');
+    final response = await http.post(url, headers: _headers());
+    final data = jsonDecode(response.body);
+    if (response.statusCode == 200 && data['data'] != null) {
+      return Map<String, dynamic>.from(data['data']);
+    }
+    throw Exception(data['error']?['message'] ?? 'Failed to execute proposal');
   }
 }
 

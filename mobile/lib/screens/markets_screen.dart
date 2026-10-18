@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/terminal_theme.dart';
+import 'chart_screen.dart';
 
 class MobileMarketsScreen extends StatefulWidget {
   const MobileMarketsScreen({super.key});
@@ -199,6 +200,28 @@ class _MobileMarketsScreenState extends State<MobileMarketsScreen> {
               _buildDetailRow("52-Week Range", "${item['low52']} – ${item['high52']}"),
               _buildDetailRow("Data Freshness", "${item['status']} • ${item['observed']}"),
               _buildDetailRow("Total Expense Ratio (TER)", "not available (Equity Share)"),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: TerminalColors.action,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  icon: const Icon(Icons.show_chart, size: 18),
+                  label: const Text("Open Interactive Chart", style: TextStyle(fontWeight: FontWeight.bold)),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => MobileChartScreen(initialSymbol: item['symbol']),
+                      ),
+                    );
+                  },
+                ),
+              ),
               const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.all(10),

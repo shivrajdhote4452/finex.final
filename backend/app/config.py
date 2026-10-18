@@ -46,13 +46,28 @@ class Settings(BaseSettings):
         default=["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:3000"]
     )
 
-    # Provider Toggles
+    # Provider Toggles & Modes
     MARKET_DATA_PROVIDER: str = "yfinance"
+    MARKET_DATA_MODE: str = Field(
+        default="INDIA_HISTORICAL_REPLAY",
+        description="Market data mode: INDIA_HISTORICAL_REPLAY, US_ALPACA_PAPER, INDIAN_LIVE_DATA",
+    )
     MARKET_ALLOW_FIXTURES: bool = Field(
         default=False, description="Allow fallback to static fixtures only in test/demo environments"
     )
-    LLM_PROVIDER: str = "mock"
+    SEBI_EDUCATIONAL_LAG_DAYS: int = 30
+
+    # Gemini AI Configuration
+    LLM_PROVIDER: str = "gemini"
+    GEMINI_API_KEY: Optional[str] = Field(default=None, description="Google Gemini API Key")
+    GEMINI_MODEL: str = Field(default="gemini-1.5-flash", description="Configured Gemini model ID")
     OPENAI_API_KEY: Optional[str] = None
+
+    # Optional Alpaca Paper Trading (US_ALPACA_PAPER mode)
+    ALPACA_API_KEY: Optional[str] = None
+    ALPACA_SECRET_KEY: Optional[str] = None
+    ALPACA_BASE_URL: str = "https://paper-api.alpaca.markets"
+    ALPACA_DATA_URL: str = "https://data.alpaca.markets"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", case_sensitive=True, extra="ignore")
 

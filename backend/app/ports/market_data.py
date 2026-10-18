@@ -23,7 +23,8 @@ class Quote(BaseModel):
 
 
 class HistoricalBar(BaseModel):
-    date: str = Field(..., description="YYYY-MM-DD trading date")
+    date: str = Field(..., description="YYYY-MM-DD trading date or ISO timestamp string")
+    time: Optional[int] = Field(None, description="Unix timestamp in seconds for charting")
     open: Decimal
     high: Decimal
     low: Decimal
@@ -42,8 +43,15 @@ class AbstractMarketDataProvider(ABC):
         pass
 
     @abstractmethod
-    async def get_historical_bars(self, symbol: str, start_date: str, end_date: str) -> List[HistoricalBar]:
-        """Fetch historical daily bars for the specified date range."""
+    async def get_historical_bars(
+        self,
+        symbol: str,
+        start_date: str,
+        end_date: str,
+        interval: str = "1D",
+        as_of: Optional[datetime] = None,
+    ) -> List[HistoricalBar]:
+        """Fetch historical price bars for the specified date range and interval, capped by optional as_of timestamp."""
         pass
 
     @abstractmethod

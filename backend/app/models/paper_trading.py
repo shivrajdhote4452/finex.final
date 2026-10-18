@@ -116,3 +116,24 @@ class PaperCashLedger(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     account = relationship("PaperAccount", back_populates="ledger_entries")
+
+
+class PaperProposal(Base):
+    __tablename__ = "paper_proposals"
+
+    id = Column(String(64), primary_key=True)
+    user_id = Column(String(64), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    account_id = Column(String(64), ForeignKey("paper_accounts.id", ondelete="CASCADE"), nullable=False, index=True)
+    instruction_text = Column(String(1000), nullable=False)
+    proposed_allocations = Column(
+        JSON, nullable=False
+    )  # List of {symbol, quantity, estimated_price, estimated_total, currency}
+    total_budget = Column(Numeric(14, 2), nullable=False)
+    currency = Column(String(10), nullable=False, default="INR")
+    status = Column(String(20), nullable=False, default="PROPOSED")  # PROPOSED, ACCEPTED, REJECTED, EXPIRED, EXECUTED
+    execution_receipts = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    executed_at = Column(DateTime(timezone=True), nullable=True)
+
+    account = relationship("PaperAccount")

@@ -723,6 +723,7 @@ class RealMarketDataProvider(AbstractMarketDataProvider):
                                 bars.append(
                                     HistoricalBar(
                                         date=dt_str,
+                                        time=int(ts),
                                         open=Decimal(str(round(o, 2))),
                                         high=Decimal(str(round(h, 2))),
                                         low=Decimal(str(round(lo, 2))),
@@ -892,25 +893,102 @@ class RealMarketDataProvider(AbstractMarketDataProvider):
             pass
         return None
 
-    async def get_historical_bars(self, symbol: str, start_date: str, end_date: str) -> List[HistoricalBar]:
+    async def _fetch_db_history(
+        self,
+        norm: str,
+        start_date: str,
+        end_date: str,
+        as_of: Optional[datetime] = None,
+    ) -> List[HistoricalBar]:
+        """Fetch historical price bars from local PostgreSQL database."""
+        try:
+            from datetime import date
+
+            from backend.app.database import AsyncSessionLocal
+            from backend.app.models.market import MarketPriceHistory, Security
+            from sqlalchemy import asc, select
+
+            s_date = date.fromisoformat(start_date)
+            e_date = date.fromisoformat(end_date)
+
+            async with AsyncSessionLocal() as session:
+                stmt = (
+                    select(MarketPriceHistory)
+                    .join(Security, Security.id == MarketPriceHistory.security_id)
+                    .where(
+                        Security.symbol == norm,
+                        MarketPriceHistory.trade_date >= s_date,
+                        MarketPriceHistory.trade_date <= e_date,
+                    )
+                    .order_by(asc(MarketPriceHistory.trade_date))
+                )
+                res = await session.execute(stmt)
+                rows = res.scalars().all()
+                bars: List[HistoricalBar] = []
+                for r in rows:
+                    bar_dt = datetime.combine(r.trade_date, datetime.min.time()).replace(tzinfo=timezone.utc)
+                    if as_of and bar_dt > as_of:
+                        continue
+                    bars.append(
+                        HistoricalBar(
+                            date=r.trade_date.isoformat(),
+                            time=int(bar_dt.timestamp()),
+                            open=Decimal(str(r.open_price)),
+                            high=Decimal(str(r.high_price)),
+                            low=Decimal(str(r.low_price)),
+                            close=Decimal(str(r.close_price)),
+                            adj_close=Decimal(str(r.adj_close_price or r.close_price)),
+                            volume=int(r.volume),
+                            currency=r.currency,
+                        )
+                    )
+                return bars
+        except Exception:
+            return []
+
+    async def get_historical_bars(
+        self,
+        symbol: str,
+        start_date: str,
+        end_date: str,
+        interval: str = "1D",
+        as_of: Optional[datetime] = None,
+    ) -> List[HistoricalBar]:
         norm = self._normalize_symbol(symbol)
 
-        # 1. Attempt live external history if not forced to cache
+        # 1. In cache-first / replay mode, check PostgreSQL DB history first
+        if self.force_cache or as_of is not None:
+            db_bars = await self._fetch_db_history(norm, start_date, end_date, as_of=as_of)
+            if db_bars:
+                return db_bars
+
+        # 2. Attempt live external history if live mode enabled and not simulated outage
         if not self.force_cache and not self._simulated_outage:
             ext_bars = await self._fetch_external_history(norm, start_date, end_date)
             if ext_bars:
+                if as_of:
+                    ext_bars = [b for b in ext_bars if b.time and b.time <= int(as_of.timestamp())]
                 return ext_bars
 
-        # 2. Fallback to verified baseline history if allowed
+        # 3. Check DB history before fixture fallback
+        db_bars = await self._fetch_db_history(norm, start_date, end_date, as_of=as_of)
+        if db_bars:
+            return db_bars
+
+        # 4. Fallback to verified baseline history if allowed
         if self.allow_fixture_fallback and norm in SOURCED_HISTORICAL_BARS:
             raw_bars = SOURCED_HISTORICAL_BARS[norm]
             bars: List[HistoricalBar] = []
             for b in raw_bars:
                 date_str = b["date"]
                 if start_date <= date_str <= end_date:
+                    bar_dt = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                    if as_of and bar_dt > as_of:
+                        continue
                     bars.append(
                         HistoricalBar(
                             date=date_str,
+                            time=int(bar_dt.timestamp()),
                             open=b["open"],
                             high=b["high"],
                             low=b["low"],
@@ -981,6 +1059,35 @@ async def ensure_market_quotes_seeded_db(session: Optional[Any] = None) -> None:
                     is_delayed=True,
                 )
                 db.add(q)
+
+            # Also seed baseline historical bars for charting
+            from datetime import date
+
+            from backend.app.models.market import MarketPriceHistory
+
+            if sym in SOURCED_HISTORICAL_BARS:
+                for b in SOURCED_HISTORICAL_BARS[sym]:
+                    b_date = date.fromisoformat(b["date"])
+                    h_stmt = select(MarketPriceHistory).where(
+                        MarketPriceHistory.security_id == sec.id,
+                        MarketPriceHistory.trade_date == b_date,
+                    )
+                    existing_h = (await db.execute(h_stmt)).scalar_one_or_none()
+                    if not existing_h:
+                        hist = MarketPriceHistory(
+                            id=uuid.uuid4(),
+                            security_id=sec.id,
+                            trade_date=b_date,
+                            open_price=b["open"],
+                            high_price=b["high"],
+                            low_price=b["low"],
+                            close_price=b["close"],
+                            adj_close_price=b.get("adj_close", b["close"]),
+                            volume=b.get("volume", 100000),
+                            currency="INR",
+                            source="nse_official_baseline_snapshot",
+                        )
+                        db.add(hist)
         await db.commit()
 
     if session is not None:
