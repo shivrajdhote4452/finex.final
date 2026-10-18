@@ -904,7 +904,7 @@ class ApiClient {
       return this.request<{
         proposal_id: string;
         status: string;
-        executed_orders: Array<{
+        executed_orders?: Array<{
           order_id: string;
           symbol: string;
           side: string;
@@ -913,8 +913,11 @@ class ApiClient {
           status: string;
           fee: number;
         }>;
-        remaining_virtual_cash: number;
-        currency: string;
+        receipts?: any[];
+        cash_balance_after?: number;
+        remaining_virtual_cash?: number;
+        currency?: string;
+        error?: string;
       }>(`/ai/assistant/proposals/${proposalId}/execute`, {
         method: 'POST',
       });

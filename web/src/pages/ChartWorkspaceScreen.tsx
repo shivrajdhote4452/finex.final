@@ -717,12 +717,28 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
     setAiExecutingProposal(proposalId);
     try {
       const res = await apiClient.geminiAssistant.executeProposal(proposalId);
+      const status = res?.status;
+      let text = '';
+      if (status === 'EXECUTED') {
+        text = `Paper proposal ${proposalId} executed successfully! Virtual cash balance: ₹${res.cash_balance_after?.toLocaleString('en-IN') || '0'}.`;
+      } else if (status === 'PARTIALLY_EXECUTED') {
+        text = `Paper proposal ${proposalId} partially executed. Some legs filled, some could not be filled.`;
+      } else if (status === 'ALREADY_EXECUTED') {
+        text = `Paper proposal ${proposalId} was already executed previously. No duplicate orders were placed.`;
+      } else if (status === 'EXPIRED') {
+        text = `Execution rejected: Proposal ${proposalId} has expired. Please create a fresh allocation.`;
+      } else if (status === 'CANCELLED') {
+        text = `Execution cancelled: Proposal ${proposalId} was cancelled.`;
+      } else {
+        text = `Execution rejected: ${res?.error || 'Check virtual balance or market quote availability.'}`;
+      }
+
       setAiMessages((prev) => [
         ...prev,
         {
           id: `exec-${Date.now()}`,
           role: 'assistant' as const,
-          text: `Paper proposal ${proposalId} executed successfully! Virtual orders filled across allocation.`,
+          text,
           receipt: res,
           disclaimer: 'Simulated paper transaction recorded in local PostgreSQL ledger.',
         },

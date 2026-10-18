@@ -95,19 +95,36 @@ class MarketHub:
         now_utc = datetime.now(timezone.utc)
 
         if cached:
-            # Refresh timestamp on cached snapshot
+            # Preserve authentic observation timestamp, record served/fetch time
             snapshot = dict(cached)
-            snapshot["observed_at"] = now_utc.isoformat()
-            snapshot["CurrentBarUnixTime"] = int(now_utc.timestamp())
+            snapshot["served_at"] = now_utc.isoformat()
             return snapshot
 
         # Fetch from real market provider
         q = await self.provider.get_latest_quote(clean_symbol)
-        price = float(q.price) if q else 2500.0
-        open_price = float(q.open_price) if (q and q.open_price) else price * 0.995
-        high_price = float(q.high_price) if (q and q.high_price) else price * 1.008
-        low_price = float(q.low_price) if (q and q.low_price) else price * 0.992
-        source = q.source if q else "ANGEL_ONE_SMARTAPI"
+        if not q or not getattr(q, "price", None) or q.price <= 0:
+            return {
+                "symbol": clean_symbol,
+                "status": "UNAVAILABLE",
+                "message": f"Verified market quote unavailable for '{clean_symbol}'",
+                "ltp": None,
+                "open": None,
+                "high": None,
+                "low": None,
+                "close": None,
+                "volume": 0,
+                "source": "NONE",
+                "freshness": "UNAVAILABLE",
+                "observed_at": None,
+                "fetch_timestamp": now_utc.isoformat(),
+            }
+
+        price = float(q.price)
+        open_price = float(q.open_price) if q.open_price else price
+        high_price = float(q.high_price) if q.high_price else price
+        low_price = float(q.low_price) if q.low_price else price
+        close_price = float(getattr(q, "close_price", None) or price)
+        obs_dt = q.observed_at.replace(tzinfo=timezone.utc) if q.observed_at.tzinfo is None else q.observed_at
 
         tick = {
             "symbol": clean_symbol,
@@ -115,12 +132,13 @@ class MarketHub:
             "open": round(open_price, 2),
             "high": round(high_price, 2),
             "low": round(low_price, 2),
-            "close": round(price, 2),
-            "volume": 150000,
-            "source": source,
-            "freshness": "LIVE",
-            "CurrentBarUnixTime": int(now_utc.timestamp()),
-            "observed_at": now_utc.isoformat(),
+            "close": round(close_price, 2),
+            "volume": getattr(q, "volume", 0) or 0,
+            "source": q.source,
+            "freshness": getattr(q, "freshness_status", "END_OF_DAY"),
+            "CurrentBarUnixTime": int(obs_dt.timestamp()),
+            "observed_at": obs_dt.isoformat(),
+            "fetch_timestamp": now_utc.isoformat(),
         }
         self.latest_quotes[clean_symbol] = tick
         return tick

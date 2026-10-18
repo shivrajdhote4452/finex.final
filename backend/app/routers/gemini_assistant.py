@@ -38,18 +38,24 @@ class AssistantChatRequest(BaseModel):
 async def get_assistant_status(request: Request):
     """Check AI assistant configuration state without leaking API keys."""
     cid = getattr(request.state, "correlation_id", None)
-    has_live = gemini_assistant.is_gemini_api_ready()
+    is_cfg = gemini_assistant.is_configured()
+    is_verified = gemini_assistant.is_verified_working()
 
     return create_response_envelope(
         data={
-            "is_configured": True,
-            "has_live_gemini": has_live,
+            "is_configured": is_cfg,
+            "has_live_gemini": is_verified,
+            "is_verified_working": is_verified,
             "model": gemini_assistant.settings.GEMINI_MODEL,
-            "provider": "gemini-live" if has_live else "mock-offline",
+            "provider": "gemini-live" if is_verified else ("gemini-configured" if is_cfg else "mock-offline"),
             "status_message": (
-                "Gemini AI Assistant is active and connected to Google Gemini API."
-                if has_live
-                else "FinEx AI Paper Assistant is active in intelligent simulation mode."
+                "Gemini AI Assistant is verified working with Google Gemini API."
+                if is_verified
+                else (
+                    "Gemini API key is configured. Ready to process queries."
+                    if is_cfg
+                    else "FinEx AI Paper Assistant is active in intelligent simulation mode."
+                )
             ),
             "disclaimer": SIMULATION_DISCLAIMER,
         },
