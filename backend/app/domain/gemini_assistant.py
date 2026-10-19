@@ -14,10 +14,11 @@ Strict Invariants:
 5. Never prints, logs, or transmits API keys.
 """
 
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from decimal import Decimal, ROUND_HALF_UP
+from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 
@@ -205,8 +206,10 @@ class AssistantMessageResponse(BaseModel):
 class GeminiInvestmentAssistant:
     def __init__(self, engine: Optional[PaperTradingEngine] = None, provider: Optional[RealMarketDataProvider] = None):
         self.settings = get_settings()
-        self.engine = engine or PaperTradingEngine()
-        self.provider = provider or RealMarketDataProvider(force_cache=False, allow_fixture_fallback=True)
+        self.provider = provider or RealMarketDataProvider(
+            force_cache=False, allow_fixture_fallback=getattr(self.settings, "MARKET_ALLOW_FIXTURES", False)
+        )
+        self.engine = engine or PaperTradingEngine(market_provider=self.provider)
         self._verified_working = False
 
     def is_gemini_api_ready(self) -> bool:
@@ -271,7 +274,6 @@ class GeminiInvestmentAssistant:
                                     return parts[0].get("text", "").strip()
                 elif res.status_code in (401, 403):
                     self._verified_working = False
-                    # Safe diagnostic without exposing key
                     print(f"[GeminiAssistant] Authentication error ({res.status_code}). Please verify GEMINI_API_KEY.")
                 elif res.status_code == 429:
                     print("[GeminiAssistant] Rate limit reached (HTTP 429). Falling back to verified local data.")
@@ -280,6 +282,187 @@ class GeminiInvestmentAssistant:
         except Exception as e:
             print(f"[GeminiAssistant] API error: {type(e).__name__}. Falling back to verified local data.")
         return None
+
+    async def call_gemini_grounded(
+        self,
+        prompt: str,
+        system_instruction: str,
+        user_id: str,
+        active_sym: str = "RELIANCE",
+        db: Optional[AsyncSession] = None,
+    ) -> Tuple[Optional[str], List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Invoke Gemini API with connected tool definitions and server-validated function calling."""
+        if not self.is_gemini_api_ready():
+            return None, [], []
+
+        key = self.settings.GEMINI_API_KEY
+        model = getattr(self.settings, "GEMINI_MODEL", "gemini-1.5-flash") or "gemini-1.5-flash"
+        headers = {
+            "x-goog-api-key": key,
+            "Content-Type": "application/json",
+        }
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+
+        # Supported research & inquiry tool declarations (execution tool requires explicit confirmation)
+        allowed_tools = [
+            {
+                "name": t["name"],
+                "description": t["description"],
+                "parameters": t["parameters"],
+            }
+            for t in TOOL_DEFINITIONS
+            if t["name"] not in ("execute_paper_proposal",)
+        ]
+
+        payload = {
+            "system_instruction": {"parts": [{"text": system_instruction}]},
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "tools": [{"function_declarations": allowed_tools}],
+            "generationConfig": {
+                "temperature": 0.2,
+                "maxOutputTokens": 1000,
+            },
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=14.0) as client:
+                res = await client.post(url, json=payload, headers=headers)
+                if res.status_code == 404:
+                    for alt_model in ["gemini-1.5-flash-latest", "gemini-2.0-flash", "gemini-1.5-pro"]:
+                        alt_url = f"https://generativelanguage.googleapis.com/v1beta/models/{alt_model}:generateContent"
+                        res = await client.post(alt_url, json=payload, headers=headers)
+                        if res.status_code == 200:
+                            url = alt_url
+                            break
+
+                if res.status_code != 200:
+                    if res.status_code in (401, 403):
+                        self._verified_working = False
+                    return None, [], []
+
+                self._verified_working = True
+                data = res.json()
+                candidates = data.get("candidates", [])
+                if not candidates:
+                    return None, [], []
+
+                parts = candidates[0].get("content", {}).get("parts", [])
+                if not parts:
+                    return None, [], []
+
+                fn_call = parts[0].get("functionCall")
+                if not fn_call:
+                    # Model answered with text directly
+                    return parts[0].get("text", "").strip(), [], []
+
+                # Function Call detected - execute through verified backend handlers
+                fn_name = fn_call.get("name")
+                raw_args = fn_call.get("args") or {}
+
+                tool_result: Any = None
+                evidence: Any = None
+
+                if fn_name == "get_market_snapshot":
+                    symbols = raw_args.get("symbols", [active_sym])
+                    if not isinstance(symbols, list):
+                        symbols = [str(symbols)]
+                    tool_result = await self.tool_get_market_snapshot(symbols)
+                    evidence = tool_result
+                elif fn_name == "search_instruments":
+                    query = str(raw_args.get("query", ""))
+                    market = str(raw_args.get("market", "NSE"))
+                    tool_result = await self.tool_search_instruments(query, market=market)
+                    evidence = tool_result
+                elif fn_name == "get_price_history":
+                    symbol = str(raw_args.get("symbol", active_sym))
+                    interval = str(raw_args.get("interval", "1D"))
+                    tool_result = await self.tool_get_price_history(symbol, interval=interval)
+                    evidence = tool_result
+                elif fn_name == "get_stock_facts":
+                    symbols = raw_args.get("symbols", [active_sym])
+                    if not isinstance(symbols, list):
+                        symbols = [str(symbols)]
+                    tool_result = await self.tool_get_stock_facts(symbols)
+                    evidence = tool_result
+                elif fn_name == "get_my_paper_portfolio":
+                    currency = str(raw_args.get("currency", "INR"))
+                    # Enforce authenticated user_id strictly
+                    tool_result = await self.tool_get_my_paper_portfolio(user_id, currency=currency, db=db)
+                    evidence = tool_result
+                elif fn_name == "get_my_risk_constraints":
+                    tool_result = await self.tool_get_my_risk_constraints(user_id, db=db)
+                    evidence = tool_result
+                elif fn_name == "compare_candidates":
+                    symbols = raw_args.get("symbols", [active_sym])
+                    if not isinstance(symbols, list):
+                        symbols = [str(symbols)]
+                    criteria = raw_args.get("criteria")
+                    tool_result = await self.tool_compare_candidates(symbols, criteria=criteria)
+                    evidence = tool_result
+                elif fn_name == "get_chart_context":
+                    symbol = str(raw_args.get("symbol", active_sym))
+                    timeframe = str(raw_args.get("timeframe", "1D"))
+                    tool_result = await self.tool_get_chart_context(symbol, timeframe=timeframe, db=db)
+                    evidence = tool_result
+                elif fn_name == "get_my_paper_order_status":
+                    order_id = str(raw_args.get("order_id", ""))
+                    tool_result = await self.tool_get_my_paper_order_status(user_id, order_id=order_id, db=db)
+                    evidence = tool_result
+                elif fn_name == "create_paper_proposal":
+                    symbols = raw_args.get("symbols", [active_sym])
+                    if not isinstance(symbols, list):
+                        symbols = [str(symbols)]
+                    budget = float(raw_args.get("budget", 10000.0))
+                    currency = str(raw_args.get("currency", "INR"))
+                    tool_result = await self.tool_create_paper_proposal(
+                        user_id=user_id,
+                        symbols=symbols,
+                        budget=budget,
+                        currency=currency,
+                        db=db,
+                    )
+                    evidence = tool_result
+                else:
+                    tool_result = {"status": "UNSUPPORTED_TOOL", "message": f"Tool '{fn_name}' is not supported."}
+
+                # Second turn: Send verified backend result back to Gemini for grounded interpretation
+                followup_payload = {
+                    "system_instruction": {"parts": [{"text": system_instruction}]},
+                    "contents": [
+                        {"role": "user", "parts": [{"text": prompt}]},
+                        {"role": "model", "parts": [{"functionCall": fn_call}]},
+                        {
+                            "role": "function",
+                            "parts": [
+                                {
+                                    "functionResponse": {
+                                        "name": fn_name,
+                                        "response": {"output": tool_result},
+                                    }
+                                }
+                            ],
+                        },
+                    ],
+                    "generationConfig": {
+                        "temperature": 0.2,
+                        "maxOutputTokens": 1000,
+                    },
+                }
+
+                res_followup = await client.post(url, json=followup_payload, headers=headers)
+                if res_followup.status_code == 200:
+                    f_data = res_followup.json()
+                    f_cands = f_data.get("candidates", [])
+                    if f_cands:
+                        f_parts = f_cands[0].get("content", {}).get("parts", [])
+                        if f_parts:
+                            final_text = f_parts[0].get("text", "").strip()
+                            ev_list = [evidence] if isinstance(evidence, dict) else (evidence if isinstance(evidence, list) else [])
+                            return final_text, [{"name": fn_name, "args": raw_args}], ev_list
+        except Exception as e:
+            print(f"[GeminiAssistant] Grounded API error: {type(e).__name__}. Falling back to verified local data.")
+
+        return None, [], []
 
     def detect_language(self, prompt: str) -> str:
         """Detect language: English ('en'), Hindi ('hi'), or Hinglish ('hi-Latn')."""
@@ -564,13 +747,18 @@ class GeminiInvestmentAssistant:
         self,
         user_id: str,
         proposal_id: str,
+        is_retry: bool = False,
         db: Optional[AsyncSession] = None,
     ) -> Dict[str, Any]:
-        """Execute pre-validated paper proposal upon explicit authorization."""
+        """Execute pre-validated paper proposal upon explicit authorization with budget enforcement and retry recovery."""
         if not db:
             return {"status": "FAILED", "error": "Database session required for execution"}
 
-        stmt = select(PaperProposal).where(PaperProposal.id == proposal_id, PaperProposal.user_id == user_id)
+        stmt = (
+            select(PaperProposal)
+            .where(PaperProposal.id == proposal_id, PaperProposal.user_id == user_id)
+            .with_for_update()
+        )
         res = await db.execute(stmt)
         prop = res.scalar_one_or_none()
 
@@ -590,39 +778,125 @@ class GeminiInvestmentAssistant:
             await db.commit()
             return {"status": "EXPIRED", "error": "This paper proposal has expired. Please request a fresh allocation.", "proposal_id": proposal_id}
 
-        # Check previously filled legs to prevent duplicate fills on retry
+        # Check existing receipts and already filled legs
         existing_receipts = prop.execution_receipts or []
-        already_filled_symbols = {
-            r["symbol"] for r in existing_receipts if r.get("status") == "FILLED"
-        }
+        already_filled_receipts = [r for r in existing_receipts if r.get("status") == "FILLED"]
+        already_filled_symbols = {r["symbol"] for r in already_filled_receipts}
+
+        # Handle retry vs replayed attempt
+        if prop.status in ("PARTIALLY_EXECUTED", "REJECTED", "FAILED"):
+            if is_retry:
+                # Bounded attempts
+                if prop.attempt_count >= 3:
+                    return {
+                        "status": "TERMINAL_FAILURE",
+                        "error": "Maximum execution retry attempts (3) reached for this proposal. Please request a new proposal.",
+                        "proposal_id": proposal_id,
+                    }
+                prop.attempt_count += 1
+            else:
+                # Repeated execution of the same attempt returns saved result
+                summary = await self.engine.get_portfolio_summary_db(user_id, db=db)
+                return {
+                    "proposal_id": proposal_id,
+                    "status": prop.status,
+                    "executed_at": prop.executed_at.isoformat() if prop.executed_at else now.isoformat(),
+                    "receipts": existing_receipts,
+                    "cash_balance_after": summary.get("current_cash"),
+                    "disclaimer": SIMULATION_DISCLAIMER,
+                    "replayed": True,
+                }
+
+        # Calculate already spent cash by completed legs using exact Decimal arithmetic
+        already_spent = sum(
+            Decimal(str(r.get("net_value") or r.get("gross_value", "0.00")))
+            for r in already_filled_receipts
+        )
+
+        auth_budget = Decimal(str(prop.requested_budget if prop.requested_budget is not None else prop.total_budget))
+        remaining_budget = auth_budget - already_spent
+
+        if remaining_budget <= Decimal("0.00") and len(already_filled_symbols) < len(prop.proposed_allocations):
+            return {
+                "status": "REJECTED",
+                "error": f"Authorized budget of ₹{auth_budget:,.2f} is fully exhausted by completed legs (spent: ₹{already_spent:,.2f}).",
+                "proposal_id": proposal_id,
+            }
+
+        # Check unfulfilled legs
+        unfulfilled_legs = [leg for leg in prop.proposed_allocations if leg["symbol"] not in already_filled_symbols]
+        if not unfulfilled_legs:
+            prop.status = "EXECUTED"
+            await db.commit()
+            summary = await self.engine.get_portfolio_summary_db(user_id, db=db)
+            return {
+                "proposal_id": proposal_id,
+                "status": "EXECUTED",
+                "executed_at": now.isoformat(),
+                "receipts": existing_receipts,
+                "cash_balance_after": summary.get("current_cash"),
+                "disclaimer": SIMULATION_DISCLAIMER,
+            }
+
+        # Revalidate execution prices & budget for all remaining unfulfilled legs before submitting
+        total_projected_new_cost = Decimal("0.00")
+        leg_quotes = {}
+        for leg in unfulfilled_legs:
+            sym = leg["symbol"]
+            qty = Decimal(str(leg["quantity"]))
+            q = await self.provider.get_latest_quote(sym)
+            if not q and getattr(self.engine.market_provider, "allow_fixture_fallback", False):
+                q = self.engine.get_market_quote_sync(sym)
+            leg_quotes[sym] = q
+            if q and q.price and q.price > 0 and not q.is_stale and q.data_status != "stale":
+                proj_cost = (qty * q.price).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                total_projected_new_cost += proj_cost
+
+        # Reject if price increases make the authorized allocation unaffordable
+        if total_projected_new_cost > remaining_budget:
+            return {
+                "status": "REJECTED",
+                "error": (
+                    f"Execution cost of remaining legs (₹{total_projected_new_cost:,.2f}) exceeds authorized remaining "
+                    f"budget of ₹{remaining_budget:,.2f} (authorized maximum: ₹{auth_budget:,.2f}, already spent: ₹{already_spent:,.2f}). "
+                    f"Market prices have increased. Please request a revised proposal."
+                ),
+                "proposal_id": proposal_id,
+                "authorized_budget": float(auth_budget),
+                "already_spent": float(already_spent),
+                "remaining_budget": float(remaining_budget),
+                "projected_cost": float(total_projected_new_cost),
+            }
 
         updated_receipts = list(existing_receipts)
         any_failed = False
         any_filled = len(already_filled_symbols) > 0
 
-        for leg in prop.proposed_allocations:
+        for leg in unfulfilled_legs:
             sym = leg["symbol"]
-            if sym in already_filled_symbols:
-                # Leg was already filled in a prior attempt, skip re-ordering
-                continue
+            qty = Decimal(str(leg["quantity"]))
 
-            # Stable idempotency key per proposal and leg (no random UUID suffix!)
-            stable_idemp_key = f"prop-{prop.id}-leg-{sym}"
+            # Stable idempotency key per proposal, leg, and attempt
+            attempt_idx = getattr(prop, "attempt_count", 1) or 1
+            stable_idemp_key = f"prop-{prop.id}-leg-{sym}-att-{attempt_idx}"
+
             order_req = OrderSubmitRequest(
                 symbol=sym,
                 side="BUY",
-                quantity=Decimal(str(leg["quantity"])),
+                quantity=qty,
                 order_type="MARKET",
+                max_total_cost=remaining_budget,
                 idempotency_key=stable_idemp_key,
             )
             try:
                 exec_result = await self.engine.execute_order_db(user_id, order_req, db=db)
                 receipt_dict = exec_result.model_dump(mode="json")
-                # Remove any previous failed receipt for this symbol
                 updated_receipts = [r for r in updated_receipts if r.get("symbol") != sym]
                 updated_receipts.append(receipt_dict)
                 if exec_result.status == "FILLED":
                     any_filled = True
+                    remaining_budget -= exec_result.net_value
+                    already_spent += exec_result.net_value
                 else:
                     any_failed = True
             except Exception as e:
@@ -630,7 +904,6 @@ class GeminiInvestmentAssistant:
                 updated_receipts = [r for r in updated_receipts if r.get("symbol") != sym]
                 updated_receipts.append({"symbol": sym, "status": "REJECTED", "error": str(e)})
 
-        # Determine overall proposal status
         filled_count = sum(1 for r in updated_receipts if r.get("status") == "FILLED")
         total_legs = len(prop.proposed_allocations)
 
@@ -645,7 +918,6 @@ class GeminiInvestmentAssistant:
         prop.execution_receipts = updated_receipts
         await db.commit()
 
-        # Fetch updated portfolio balance
         summary = await self.engine.get_portfolio_summary_db(user_id, db=db)
 
         return {
@@ -654,6 +926,7 @@ class GeminiInvestmentAssistant:
             "executed_at": now.isoformat(),
             "receipts": updated_receipts,
             "cash_balance_after": summary.get("current_cash"),
+            "attempt_count": getattr(prop, "attempt_count", 1),
             "disclaimer": SIMULATION_DISCLAIMER,
         }
 
@@ -739,73 +1012,8 @@ class GeminiInvestmentAssistant:
         if active_chart_context and isinstance(active_chart_context, dict):
             active_sym = active_chart_context.get("symbol", "RELIANCE")
 
-        # 1. Refusal & Cancellation Intent ("do not execute", "don't execute", "cancel", "wait", "don't buy", "stop")
-        refusal_phrases = [
-            "do not execute",
-            "don't execute",
-            "dont execute",
-            "do not buy",
-            "don't buy",
-            "dont buy",
-            "do not invest",
-            "don't invest",
-            "dont invest",
-            "do not trade",
-            "don't trade",
-            "dont trade",
-            "cancel",
-            "stop",
-            "wait",
-            "abort",
-            "reject",
-            "mat karo",
-            "ruko",
-            "nahi karna",
-        ]
-        is_refusal = any(phrase in p_lower for phrase in refusal_phrases) or p_lower in [
-            "no",
-            "nah",
-            "nope",
-            "nahi",
-            "cancel",
-            "stop",
-            "wait",
-        ]
-        if is_refusal:
-            if db:
-                # Safely cancel any active pending proposal in this conversation
-                prop_stmt = (
-                    select(PaperProposal)
-                    .where(
-                        PaperProposal.user_id == user_id,
-                        PaperProposal.status == "PROPOSED",
-                    )
-                    .order_by(desc(PaperProposal.created_at))
-                    .limit(1)
-                )
-                prop_res = await db.execute(prop_stmt)
-                active_prop = prop_res.scalar_one_or_none()
-                if active_prop:
-                    active_prop.status = "CANCELLED"
-                    await db.commit()
-
-            if lang == "hi":
-                reply = "प्रस्ताव निष्पादन रद्द कर दिया गया है। कोई पेपर ट्रेड निष्पादित नहीं किया गया और आपका वर्चुअल बैलेंस सुरक्षित है।"
-            elif lang == "hi-Latn":
-                reply = "Paper trade execution cancel kar diya gaya hai. Koi order place nahi hua aur aapka virtual cash balance safe hai."
-            else:
-                reply = "Paper trade execution cancelled. No orders were placed and your virtual balance remains unchanged."
-
-            return AssistantMessageResponse(
-                message_id=msg_id,
-                conversation_id=conv_id,
-                reply=reply,
-                language_detected=lang,
-                is_setup_incomplete=False,
-            )
-
-        # 2. Research & Educational Question Intent ("Should I invest?", "Is it good to buy?", etc.)
-        # Informational and research queries must remain research requests and NEVER execute trades.
+        # 1. Research & Educational Question Intent ("Should I invest?", "Is it good to buy?", etc.)
+        # Informational and research queries must remain research requests and NEVER execute or cancel trades.
         is_research_query = (
             user_message.strip().endswith("?")
             or any(
@@ -841,8 +1049,135 @@ class GeminiInvestmentAssistant:
             )
         )
 
+        # 2. Refusal & Cancellation Intent ("do not execute", "don't execute", "cancel", "wait", "don't buy", "stop")
+        refusal_phrases = [
+            "do not execute",
+            "don't execute",
+            "dont execute",
+            "do not buy",
+            "don't buy",
+            "dont buy",
+            "do not invest",
+            "don't invest",
+            "dont invest",
+            "do not trade",
+            "don't trade",
+            "dont trade",
+            "cancel proposal",
+            "cancel order",
+            "abort trade",
+            "stop execution",
+            "mat karo",
+            "ruko",
+            "nahi karna",
+        ]
+        is_refusal = not is_research_query and (
+            any(phrase in p_lower for phrase in refusal_phrases)
+            or p_lower in [
+                "no",
+                "nah",
+                "nope",
+                "nahi",
+                "cancel",
+                "stop",
+                "wait",
+                "abort",
+                "reject",
+            ]
+            or (p_lower.startswith("cancel ") and "prop-" in p_lower)
+        )
+
+        if is_refusal:
+            active_prop = None
+            if db:
+                # Check if explicit proposal ID was provided for cancellation
+                explicit_cancel_match = re.search(r"\b(prop-[a-zA-Z0-9_-]+)\b", user_message, re.IGNORECASE)
+                if explicit_cancel_match:
+                    target_cancel_id = explicit_cancel_match.group(1)
+                    prop_stmt = select(PaperProposal).where(
+                        PaperProposal.id == target_cancel_id,
+                        PaperProposal.user_id == user_id,
+                    )
+                    prop_res = await db.execute(prop_stmt)
+                    active_prop = prop_res.scalar_one_or_none()
+                    if active_prop:
+                        if active_prop.status == "PROPOSED":
+                            active_prop.status = "CANCELLED"
+                            await db.commit()
+                            reply = f"Proposal '{target_cancel_id}' has been cancelled. No orders were placed and your virtual balance remains unchanged."
+                        else:
+                            reply = f"Proposal '{target_cancel_id}' is in '{active_prop.status}' state and cannot be cancelled."
+                    else:
+                        reply = f"Proposal '{target_cancel_id}' was not found for your account to cancel."
+                    return AssistantMessageResponse(
+                        message_id=msg_id,
+                        conversation_id=conv_id,
+                        reply=reply,
+                        language_detected=lang,
+                        is_setup_incomplete=False,
+                    )
+                else:
+                    # Scope strictly to this conversation - NEVER cancel proposals in unrelated conversations
+                    prop_stmt = (
+                        select(PaperProposal)
+                        .where(
+                            PaperProposal.user_id == user_id,
+                            PaperProposal.conversation_id == conv_id,
+                            PaperProposal.status == "PROPOSED",
+                        )
+                        .order_by(desc(PaperProposal.created_at))
+                        .limit(1)
+                    )
+                    prop_res = await db.execute(prop_stmt)
+                    active_prop = prop_res.scalar_one_or_none()
+                    if active_prop:
+                        active_prop.status = "CANCELLED"
+                        await db.commit()
+                        if lang == "hi":
+                            reply = "प्रस्ताव निष्पादन रद्द कर दिया गया है। कोई पेपर ट्रेड निष्पादित नहीं किया गया और आपका वर्चुअल बैलेंस सुरक्षित है।"
+                        elif lang == "hi-Latn":
+                            reply = "Paper trade execution cancel kar diya gaya hai. Koi order place nahi hua aur aapka virtual cash balance safe hai."
+                        else:
+                            reply = "Paper trade execution cancelled. No orders were placed and your virtual balance remains unchanged."
+                    else:
+                        # Do not claim a proposal was cancelled when nothing matched
+                        reply = "No active pending paper trade proposal found in this conversation to cancel."
+            else:
+                reply = "No active pending paper trade proposal found to cancel."
+
+            return AssistantMessageResponse(
+                message_id=msg_id,
+                conversation_id=conv_id,
+                reply=reply,
+                language_detected=lang,
+                is_setup_incomplete=False,
+            )
+
         # 3. Explicit Proposal Authorization
-        # Requires explicit confirmation tokens and must NOT be a refusal or question.
+        # Reject negated or ambiguous authorization
+        negated_approval_phrases = [
+            "do not confirm",
+            "don't confirm",
+            "dont confirm",
+            "not confirm",
+            "do not execute",
+            "don't execute",
+            "dont execute",
+            "never execute",
+            "never confirm",
+            "not sure",
+        ]
+        is_negated_approval = any(neg in p_lower for neg in negated_approval_phrases)
+
+        if is_negated_approval and not is_research_query:
+            return AssistantMessageResponse(
+                message_id=msg_id,
+                conversation_id=conv_id,
+                reply="Confirmation not granted. No paper orders were placed.",
+                language_detected=lang,
+                is_setup_incomplete=False,
+            )
+
         approval_tokens = {
             "yes",
             "approve",
@@ -856,48 +1191,100 @@ class GeminiInvestmentAssistant:
             "yes proceed",
             "yes confirm",
             "confirm order",
+            "execute order",
+            "confirm trade",
+            "execute trade",
         }
         is_approval = (
-            p_lower in approval_tokens
-            or p_lower.startswith("confirm proposal ")
-            or p_lower.startswith("execute proposal ")
-            or (
-                any(p_lower == token for token in ["yes", "confirm", "approve", "proceed", "haan"])
-                and not is_refusal
-                and not is_research_query
+            not is_refusal
+            and not is_research_query
+            and not is_negated_approval
+            and (
+                p_lower in approval_tokens
+                or p_lower.startswith("confirm proposal")
+                or p_lower.startswith("execute proposal")
+                or p_lower.startswith("confirm prop-")
+                or p_lower.startswith("execute prop-")
+                or any(f"confirm {t}" in p_lower for t in ["proposal", "order", "trade", "this"])
+                or (
+                    any(p_lower == token for token in ["yes", "confirm", "approve", "proceed", "haan"])
+                )
             )
         )
 
-        if is_approval and not is_refusal and not is_research_query:
-            if db:
-                # Find matching proposal bound to this user and conversation
-                prop_stmt = (
+        if is_approval and db:
+            explicit_prop_id_match = re.search(r"\b(prop-[a-zA-Z0-9_-]+)\b", user_message, re.IGNORECASE)
+            target_prop = None
+
+            if explicit_prop_id_match:
+                # 1. Explicit proposal ID takes absolute precedence!
+                explicit_id = explicit_prop_id_match.group(1)
+                spec_stmt = select(PaperProposal).where(
+                    PaperProposal.id == explicit_id,
+                    PaperProposal.user_id == user_id,
+                )
+                spec_res = await db.execute(spec_stmt)
+                target_prop = spec_res.scalar_one_or_none()
+
+                if not target_prop:
+                    # Never substitute another proposal when requested ID is invalid or unavailable!
+                    reply = f"Proposal '{explicit_id}' was not found for this account. No other proposal will be executed."
+                    return AssistantMessageResponse(
+                        message_id=msg_id,
+                        conversation_id=conv_id,
+                        reply=reply,
+                        language_detected=lang,
+                        is_setup_incomplete=False,
+                    )
+
+                if target_prop.status == "CANCELLED":
+                    reply = f"Proposal '{explicit_id}' was cancelled and cannot be executed."
+                    return AssistantMessageResponse(
+                        message_id=msg_id,
+                        conversation_id=conv_id,
+                        reply=reply,
+                        language_detected=lang,
+                        is_setup_incomplete=False,
+                    )
+
+                if target_prop.status == "EXECUTED":
+                    reply = f"Proposal '{explicit_id}' has already been executed. No duplicate orders were placed."
+                    return AssistantMessageResponse(
+                        message_id=msg_id,
+                        conversation_id=conv_id,
+                        reply=reply,
+                        language_detected=lang,
+                        is_setup_incomplete=False,
+                    )
+
+                now_exp = datetime.now(timezone.utc)
+                exp_dt = target_prop.expires_at.replace(tzinfo=timezone.utc) if target_prop.expires_at.tzinfo is None else target_prop.expires_at
+                if now_exp > exp_dt:
+                    target_prop.status = "EXPIRED"
+                    await db.commit()
+                    reply = f"Proposal '{explicit_id}' has expired. Please request a fresh allocation proposal."
+                    return AssistantMessageResponse(
+                        message_id=msg_id,
+                        conversation_id=conv_id,
+                        reply=reply,
+                        language_detected=lang,
+                        is_setup_incomplete=False,
+                    )
+            else:
+                # 2. Generic confirmation without explicit ID:
+                # Query all active pending proposals in THIS conversation
+                stmt_pending = (
                     select(PaperProposal)
                     .where(
                         PaperProposal.user_id == user_id,
-                        PaperProposal.status == "PROPOSED",
+                        PaperProposal.conversation_id == conv_id,
+                        PaperProposal.status.in_(["PROPOSED", "PARTIALLY_EXECUTED"]),
                     )
+                    .order_by(PaperProposal.created_at)
                 )
-                # First check conversation match
-                prop_stmt_conv = prop_stmt.where(PaperProposal.conversation_id == conv_id).order_by(desc(PaperProposal.created_at)).limit(1)
-                prop_res = await db.execute(prop_stmt_conv)
-                recent_prop = prop_res.scalar_one_or_none()
+                pending_list = (await db.execute(stmt_pending)).scalars().all()
 
-                if not recent_prop:
-                    # Check if user explicitly mentioned a proposal_id (e.g. "confirm prop-abc123")
-                    for token in p_lower.split():
-                        if token.startswith("prop-"):
-                            spec_stmt = select(PaperProposal).where(
-                                PaperProposal.id == token,
-                                PaperProposal.user_id == user_id,
-                                PaperProposal.status == "PROPOSED",
-                            )
-                            spec_res = await db.execute(spec_stmt)
-                            recent_prop = spec_res.scalar_one_or_none()
-                            if recent_prop:
-                                break
-
-                if not recent_prop:
+                if not pending_list:
                     if lang in ("hi", "hi-Latn"):
                         reply = "Is conversation me koi active pending paper trade proposal nahi mila. Pehle naya allocation proposal create karein (jaise: 'Invest ₹10,000 in RELIANCE')."
                     else:
@@ -910,42 +1297,73 @@ class GeminiInvestmentAssistant:
                         is_setup_incomplete=False,
                     )
 
-                exec_result = await self.tool_execute_paper_proposal(user_id, recent_prop.id, db=db)
-                status = exec_result.get("status")
-
-                if status == "EXECUTED":
-                    if lang in ("hi", "hi-Latn"):
-                        reply = (
-                            f"Aapka paper order safalta-purvak execute ho gaya hai! "
-                            f"Virtual cash balance: ₹{exec_result.get('cash_balance_after', 0):,.2f}."
-                        )
-                    else:
-                        reply = (
-                            f"Paper allocation executed successfully! "
-                            f"Remaining virtual cash balance: ₹{exec_result.get('cash_balance_after', 0):,.2f}."
-                        )
-                elif status == "PARTIALLY_EXECUTED":
+                if len(pending_list) > 1:
+                    # Multiple proposals in same conversation: require user to select one!
+                    prop_ids_str = ", ".join(f"'{p.id}'" for p in pending_list)
                     reply = (
-                        f"Paper allocation partially executed. Some order legs filled, but others could not be completed. "
-                        f"Check receipts for details. Remaining virtual cash: ₹{exec_result.get('cash_balance_after', 0):,.2f}."
+                        f"Multiple pending proposals found in this conversation ({prop_ids_str}). "
+                        f"Please specify which proposal ID you wish to confirm (e.g. 'confirm {pending_list[-1].id}')."
                     )
-                elif status == "ALREADY_EXECUTED":
-                    reply = "This paper proposal was already executed. No duplicate orders were placed."
-                elif status == "EXPIRED":
-                    reply = "This paper proposal has expired. Please request a fresh allocation proposal."
-                elif status == "CANCELLED":
-                    reply = "This paper proposal was cancelled. No orders were executed."
-                else:
-                    reply = f"Proposal execution could not proceed: {exec_result.get('error', 'Execution rejected')}."
+                    return AssistantMessageResponse(
+                        message_id=msg_id,
+                        conversation_id=conv_id,
+                        reply=reply,
+                        language_detected=lang,
+                        is_setup_incomplete=False,
+                    )
 
-                return AssistantMessageResponse(
-                    message_id=msg_id,
-                    conversation_id=conv_id,
-                    reply=reply,
-                    language_detected=lang,
-                    execution_receipt=exec_result,
-                    is_setup_incomplete=False,
+                target_prop = pending_list[0]
+                now_exp = datetime.now(timezone.utc)
+                exp_dt = target_prop.expires_at.replace(tzinfo=timezone.utc) if target_prop.expires_at.tzinfo is None else target_prop.expires_at
+                if now_exp > exp_dt:
+                    target_prop.status = "EXPIRED"
+                    await db.commit()
+                    reply = "This paper proposal has expired. Please request a fresh allocation proposal."
+                    return AssistantMessageResponse(
+                        message_id=msg_id,
+                        conversation_id=conv_id,
+                        reply=reply,
+                        language_detected=lang,
+                        is_setup_incomplete=False,
+                    )
+
+            is_retry = (target_prop.status in ("PARTIALLY_EXECUTED", "REJECTED")) or ("retry" in p_lower)
+            exec_result = await self.tool_execute_paper_proposal(user_id, target_prop.id, is_retry=is_retry, db=db)
+            status = exec_result.get("status")
+
+            if status == "EXECUTED":
+                if lang in ("hi", "hi-Latn"):
+                    reply = (
+                        f"Aapka paper order safalta-purvak execute ho gaya hai! "
+                        f"Virtual cash balance: ₹{exec_result.get('cash_balance_after', 0):,.2f}."
+                    )
+                else:
+                    reply = (
+                        f"Paper allocation executed successfully! "
+                        f"Remaining virtual cash balance: ₹{exec_result.get('cash_balance_after', 0):,.2f}."
+                    )
+            elif status == "PARTIALLY_EXECUTED":
+                reply = (
+                    f"Paper allocation partially executed. Some order legs filled, but others could not be completed. "
+                    f"Check receipts for details. Remaining virtual cash: ₹{exec_result.get('cash_balance_after', 0):,.2f}."
                 )
+            elif status == "ALREADY_EXECUTED":
+                reply = "This paper proposal was already executed. No duplicate orders were placed."
+            elif status == "EXPIRED":
+                reply = "This paper proposal has expired. Please request a fresh allocation proposal."
+            elif status == "CANCELLED":
+                reply = "This paper proposal was cancelled. No orders were executed."
+            else:
+                reply = f"Proposal execution could not proceed: {exec_result.get('error', 'Execution rejected')}."
+
+            return AssistantMessageResponse(
+                message_id=msg_id,
+                conversation_id=conv_id,
+                reply=reply,
+                language_detected=lang,
+                execution_receipt=exec_result,
+                is_setup_incomplete=False,
+            )
 
         # 2. Greetings and Conversational Onboarding (e.g. "hey", "hello", "hi", "namaste", "what can you do")
         greeting_words = [
@@ -1184,8 +1602,6 @@ class GeminiInvestmentAssistant:
             and any(c.isdigit() for c in user_message)
             and not is_research_query
         ):
-            import re
-
             numbers = re.findall(r"\b\d[\d,]*\b", user_message.replace(",", ""))
             budget_val = float(numbers[0]) if numbers else 10000.0
 
@@ -1258,21 +1674,26 @@ class GeminiInvestmentAssistant:
                 is_setup_incomplete=False,
             )
 
-        # 6. Try Live Gemini API if key is available
+        # 6. Try Live Gemini API with Grounding if key is available
         if self.is_gemini_api_ready():
             sys_instruct = (
                 "You are FinEx AI Paper Investment Assistant for Indian Equities (NSE). "
                 f"Active chart context: {active_chart_context or {'symbol': active_sym}}. "
                 "Respond helpfully in the user's language (English, Hindi, or Hinglish). "
-                "Maintain strict SEBI educational compliance: all trades and balances are 100% virtual paper trading."
+                "Maintain strict SEBI educational compliance: all trades and balances are 100% virtual paper trading. "
+                "Ground all market prices and facts strictly using provided backend tools. Never invent quotes."
             )
-            gemini_reply = await self.call_gemini_api(user_message, sys_instruct)
+            gemini_reply, tool_calls, evidence = await self.call_gemini_grounded(
+                user_message, sys_instruct, user_id=user_id, active_sym=active_sym, db=db
+            )
             if gemini_reply:
                 return AssistantMessageResponse(
                     message_id=msg_id,
                     conversation_id=conv_id,
                     reply=gemini_reply,
                     language_detected=lang,
+                    tool_calls=tool_calls,
+                    evidence_cards=evidence,
                     is_setup_incomplete=False,
                 )
 

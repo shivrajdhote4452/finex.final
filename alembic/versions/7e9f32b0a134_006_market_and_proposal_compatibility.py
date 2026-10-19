@@ -25,27 +25,64 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     conn = op.get_bind()
     is_sqlite = conn.dialect.name == "sqlite"
+    inspector = sa.inspect(conn)
+
+    def get_column_names(table_name: str) -> set:
+        return {col["name"] for col in inspector.get_columns(table_name)}
+
+    def get_index_names(table_name: str) -> set:
+        return {idx["name"] for idx in inspector.get_indexes(table_name)}
 
     # 1. securities.provider_token
-    op.add_column("securities", sa.Column("provider_token", sa.String(length=32), nullable=True))
-    op.create_index("ix_securities_provider_token", "securities", ["provider_token"], unique=False)
+    sec_cols = get_column_names("securities")
+    sec_indexes = get_index_names("securities")
+    if "provider_token" not in sec_cols:
+        op.add_column("securities", sa.Column("provider_token", sa.String(length=32), nullable=True))
+    if "ix_securities_provider_token" not in sec_indexes:
+        op.create_index("ix_securities_provider_token", "securities", ["provider_token"], unique=False)
 
     # 2. market_quotes: symbol, close_price
-    op.add_column("market_quotes", sa.Column("symbol", sa.String(length=32), nullable=True))
-    op.add_column("market_quotes", sa.Column("close_price", sa.Numeric(precision=18, scale=4), nullable=True))
-    op.create_index("ix_market_quotes_symbol", "market_quotes", ["symbol"], unique=False)
+    mq_cols = get_column_names("market_quotes")
+    mq_indexes = get_index_names("market_quotes")
+    if "symbol" not in mq_cols:
+        op.add_column("market_quotes", sa.Column("symbol", sa.String(length=32), nullable=True))
+    else:
+        if not is_sqlite:
+            op.alter_column(
+                "market_quotes",
+                "symbol",
+                type_=sa.String(length=32),
+                existing_type=sa.String(length=20),
+                existing_nullable=True,
+            )
+    if "close_price" not in mq_cols:
+        op.add_column("market_quotes", sa.Column("close_price", sa.Numeric(precision=18, scale=4), nullable=True))
+    if "ix_market_quotes_symbol" not in mq_indexes:
+        op.create_index("ix_market_quotes_symbol", "market_quotes", ["symbol"], unique=False)
 
     # 3. market_price_history: symbol, interval, observed_at
-    op.add_column("market_price_history", sa.Column("symbol", sa.String(length=32), nullable=True))
-    op.add_column("market_price_history", sa.Column("interval", sa.String(length=32), server_default="1D", nullable=True))
-    op.add_column("market_price_history", sa.Column("observed_at", sa.DateTime(timezone=True), nullable=True))
-    op.create_index("ix_market_price_history_symbol", "market_price_history", ["symbol"], unique=False)
-    op.create_index("ix_market_price_history_observed_at", "market_price_history", ["observed_at"], unique=False)
+    mph_cols = get_column_names("market_price_history")
+    mph_indexes = get_index_names("market_price_history")
+    if "symbol" not in mph_cols:
+        op.add_column("market_price_history", sa.Column("symbol", sa.String(length=32), nullable=True))
+    if "interval" not in mph_cols:
+        op.add_column("market_price_history", sa.Column("interval", sa.String(length=32), server_default="1D", nullable=True))
+    if "observed_at" not in mph_cols:
+        op.add_column("market_price_history", sa.Column("observed_at", sa.DateTime(timezone=True), nullable=True))
+    if "ix_market_price_history_symbol" not in mph_indexes:
+        op.create_index("ix_market_price_history_symbol", "market_price_history", ["symbol"], unique=False)
+    if "ix_market_price_history_observed_at" not in mph_indexes:
+        op.create_index("ix_market_price_history_observed_at", "market_price_history", ["observed_at"], unique=False)
 
     # 4. paper_proposals: conversation_id, requested_budget
-    op.add_column("paper_proposals", sa.Column("conversation_id", sa.String(length=64), nullable=True))
-    op.add_column("paper_proposals", sa.Column("requested_budget", sa.Numeric(precision=14, scale=2), nullable=True))
-    op.create_index("ix_paper_proposals_conversation_id", "paper_proposals", ["conversation_id"], unique=False)
+    pp_cols = get_column_names("paper_proposals")
+    pp_indexes = get_index_names("paper_proposals")
+    if "conversation_id" not in pp_cols:
+        op.add_column("paper_proposals", sa.Column("conversation_id", sa.String(length=64), nullable=True))
+    if "requested_budget" not in pp_cols:
+        op.add_column("paper_proposals", sa.Column("requested_budget", sa.Numeric(precision=14, scale=2), nullable=True))
+    if "ix_paper_proposals_conversation_id" not in pp_indexes:
+        op.create_index("ix_paper_proposals_conversation_id", "paper_proposals", ["conversation_id"], unique=False)
 
     # --- Safe Non-Destructive Backfills ---
     if is_sqlite:

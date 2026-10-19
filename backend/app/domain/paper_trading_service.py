@@ -43,6 +43,7 @@ class OrderSubmitRequest(BaseModel):
     quantity: Decimal = Field(..., gt=0, description="Positive quantity of shares to trade")
     order_type: str = Field("MARKET", description="'MARKET' or 'LIMIT'")
     limit_price: Optional[Decimal] = None
+    max_total_cost: Optional[Decimal] = Field(None, description="Maximum authorized total cost including fees")
     idempotency_key: Optional[str] = Field(None, min_length=8, max_length=128)
 
 
@@ -456,6 +457,46 @@ class PaperTradingEngine:
         # 3. Validation by side
         if side == "BUY":
             required_cash = gross_val + fee
+            if payload.max_total_cost is not None and required_cash > payload.max_total_cost:
+                order_record = {
+                    "id": order_id,
+                    "account_id": acct_id,
+                    "user_id": user_id,
+                    "symbol": sym,
+                    "side": side,
+                    "quantity": qty,
+                    "order_type": order_type,
+                    "limit_price": payload.limit_price,
+                    "fill_price": fill_price,
+                    "gross_value": gross_val,
+                    "fee": fee,
+                    "net_value": required_cash,
+                    "status": "REJECTED",
+                    "rejection_reason": f"Execution cost of ₹{required_cash:,.2f} exceeds authorized budget limit of ₹{payload.max_total_cost:,.2f}. Trade rejected.",
+                    "cash_balance_after": acct["current_cash"],
+                    "idempotency_key": idemp_key,
+                    "fingerprint": fingerprint,
+                    "created_at": now_str,
+                }
+                _ORDERS_STORE[order_id] = order_record
+                return ExecutionResult(
+                    order_id=order_id,
+                    account_id=acct_id,
+                    symbol=sym,
+                    side=side,
+                    quantity=qty,
+                    fill_price=fill_price,
+                    gross_value=gross_val,
+                    fee=fee,
+                    net_value=required_cash,
+                    status="REJECTED",
+                    rejection_reason=order_record["rejection_reason"],
+                    cash_balance_after=acct["current_cash"],
+                    realized_pnl=None,
+                    executed_at=now_str,
+                    disclaimer=self.SIMULATION_DISCLAIMER,
+                )
+
             if acct["current_cash"] < required_cash:
                 order_record = {
                     "id": order_id,
@@ -1105,6 +1146,46 @@ class PaperTradingEngine:
             if side == "BUY":
                 required_cash = gross_val + fee
                 current_cash = Decimal(str(acct.current_cash))
+                if payload.max_total_cost is not None and required_cash > payload.max_total_cost:
+                    reason = f"Execution cost of ₹{required_cash:,.2f} exceeds authorized budget limit of ₹{payload.max_total_cost:,.2f}. Trade rejected."
+                    exec_result = ExecutionResult(
+                        order_id=order_id,
+                        account_id=acct_id,
+                        symbol=sym,
+                        side=side,
+                        quantity=qty,
+                        fill_price=fill_price,
+                        gross_value=gross_val,
+                        fee=fee,
+                        net_value=required_cash,
+                        status="REJECTED",
+                        rejection_reason=reason,
+                        cash_balance_after=current_cash,
+                        realized_pnl=None,
+                        executed_at=now_str,
+                        disclaimer=self.SIMULATION_DISCLAIMER,
+                    )
+                    order_rec = PaperOrder(
+                        id=order_id,
+                        account_id=acct_id,
+                        user_id=user_id,
+                        symbol=sym,
+                        side=side,
+                        order_type=order_type,
+                        quantity=qty,
+                        limit_price=payload.limit_price,
+                        fill_price=fill_price,
+                        fee=fee,
+                        status="REJECTED",
+                        rejection_reason=reason,
+                        idempotency_key=idemp_key,
+                        execution_receipt=exec_result.model_dump(mode="json"),
+                    )
+                    session.add(order_rec)
+                    if owns_session:
+                        await session.commit()
+                    return exec_result
+
                 if current_cash < required_cash:
                     reason = (
                         f"Insufficient virtual cash. Required: ₹{required_cash:,.2f}, Available: ₹{current_cash:,.2f}."

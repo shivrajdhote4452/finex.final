@@ -23,7 +23,7 @@ def do_run_migrations(connection):
 
 async def run_async_migrations():
     settings = get_settings()
-    db_url = settings.DATABASE_URL
+    db_url = config.get_main_option("sqlalchemy.url") or settings.DATABASE_URL
     # For SQLite, check same thread
     is_sqlite = "sqlite" in db_url
     engine_kwargs = {}
@@ -44,7 +44,7 @@ def run_migrations_online() -> None:
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""
     settings = get_settings()
-    url = settings.DATABASE_URL
+    url = config.get_main_option("sqlalchemy.url") or settings.DATABASE_URL
     context.configure(
         url=url,
         target_metadata=target_metadata,

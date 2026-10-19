@@ -137,5 +137,6 @@ class PaperProposal(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     expires_at = Column(DateTime(timezone=True), nullable=False)
     executed_at = Column(DateTime(timezone=True), nullable=True)
+    attempt_count = Column(Integer, nullable=False, default=1)
 
     account = relationship("PaperAccount")

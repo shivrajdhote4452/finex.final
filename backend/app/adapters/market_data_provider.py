@@ -1081,8 +1081,9 @@ class RealMarketDataProvider(AbstractMarketDataProvider):
     def _evaluate_freshness(self, observed_at: datetime) -> Tuple[bool, bool, str]:
         now = datetime.now(timezone.utc)
         age_seconds = max(0.0, (now - observed_at).total_seconds())
-        is_weekend = now.weekday() in (5, 6) or observed_at.weekday() in (5, 6)
-        stale_threshold = 72 * 3600 if is_weekend else 24 * 3600
+        # Account for Friday-to-Monday weekend market closure (markets closed Saturday & Sunday)
+        is_weekend = now.weekday() in (5, 6, 0) or observed_at.weekday() in (5, 6, 4)
+        stale_threshold = 96 * 3600 if is_weekend else 24 * 3600
         is_stale = age_seconds > stale_threshold
         is_delayed = age_seconds > 900
         status = "stale" if is_stale else ("delayed" if is_delayed else "fresh")

@@ -1,14 +1,14 @@
 {
   "author": "Shivraj Dhote",
   "task_id": "S8-API-03",
-  "timestamp": "2026-10-18T14:26:46Z",
+  "timestamp": "2026-10-19T08:08:05Z",
   "workload_profile": {
     "concurrency": 6,
     "iterations_per_worker": 3,
     "endpoints_tested": 9,
     "total_requests": 162,
-    "total_time_sec": 2.797,
-    "throughput_rps": 57.92
+    "total_time_sec": 2.31,
+    "throughput_rps": 70.12
   },
   "reliability_metrics": {
     "successful_requests": 162,
@@ -16,13 +16,13 @@
     "success_rate_pct": 100.0
   },
   "latency_percentiles_ms": {
-    "min": 12.87,
-    "avg": 101.69,
-    "p50": 121.04,
-    "p90": 165.63,
-    "p95": 180.72,
-    "p99": 197.82,
-    "max": 201.76
+    "min": 6.72,
+    "avg": 82.34,
+    "p50": 92.25,
+    "p90": 129.85,
+    "p95": 218.3,
+    "p99": 243.9,
+    "max": 256.24
   },
   "sla_assessment": {
     "p95_under_500ms": true,

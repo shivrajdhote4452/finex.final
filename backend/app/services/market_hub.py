@@ -25,11 +25,25 @@ logger = logging.getLogger(__name__)
 class MarketHub:
     """Central WebSocket broadcaster for real-time market ticks."""
 
-    def __init__(self):
-        # symbol -> set of active WebSockets
+    def __init__(
+        self,
+        provider: Optional[RealMarketDataProvider] = None,
+        enable_demo_simulation: Optional[bool] = None,
+    ):
+        from backend.app.config import get_settings
+
+        settings = get_settings()
         self.connections: Dict[str, Set[WebSocket]] = {}
         self.latest_quotes: Dict[str, Dict[str, Any]] = {}
-        self.provider = RealMarketDataProvider(force_cache=False, allow_fixture_fallback=True)
+        self.allow_fixtures = getattr(settings, "MARKET_ALLOW_FIXTURES", False)
+        self.enable_demo_simulation = (
+            enable_demo_simulation
+            if enable_demo_simulation is not None
+            else getattr(settings, "ENABLE_DEMO_SIMULATION", False)
+        )
+        self.provider = provider or RealMarketDataProvider(
+            force_cache=False, allow_fixture_fallback=self.allow_fixtures
+        )
         self._simulation_task: Optional[asyncio.Task] = None
         self._is_running = False
 
@@ -187,7 +201,7 @@ class MarketHub:
                 pass
 
     async def _run_simulation_loop(self) -> None:
-        """Emit periodic ticks for subscribed symbols so charts stay active and dynamic."""
+        """Emit periodic ticks for subscribed symbols using genuine observations from supported backend sources."""
         while self._is_running:
             try:
                 active_symbols = list(self.connections.keys())
@@ -195,28 +209,79 @@ class MarketHub:
                     if not self.connections.get(symbol):
                         continue
 
-                    current = await self.get_latest_tick_snapshot(symbol)
-                    cur_price = current["ltp"]
+                    if self.enable_demo_simulation:
+                        # Explicitly separated and labelled demonstration simulation ONLY when explicitly enabled
+                        current = await self.get_latest_tick_snapshot(symbol)
+                        cur_price = current.get("ltp")
+                        if cur_price is not None:
+                            delta_pct = (random.random() - 0.49) * 0.003
+                            new_price = round(cur_price * (1.0 + delta_pct), 2)
+                            now_utc = datetime.now(timezone.utc)
+                            tick = {
+                                "symbol": symbol,
+                                "ltp": new_price,
+                                "open": current.get("open", new_price),
+                                "high": max(current.get("high", new_price), new_price),
+                                "low": min(current.get("low", new_price), new_price),
+                                "close": new_price,
+                                "volume": current.get("volume", 0) + random.randint(10, 100),
+                                "source": "DEMO_SIMULATION_FIXTURE",
+                                "freshness": "SIMULATED",
+                                "CurrentBarUnixTime": int(now_utc.timestamp()),
+                                "observed_at": now_utc.isoformat(),
+                            }
+                            await self.broadcast_tick(symbol, tick)
+                        continue
 
-                    # Micro-fluctuation between -0.15% and +0.15%
-                    delta_pct = (random.random() - 0.49) * 0.003
-                    new_price = round(cur_price * (1.0 + delta_pct), 2)
-                    new_high = max(current["high"], new_price)
-                    new_low = min(current["low"], new_price)
-
+                    # Normal Operation: NEVER invent prices, fake volume, or fabricate observation timestamps
+                    q = await self.provider.get_latest_quote(symbol)
                     now_utc = datetime.now(timezone.utc)
+                    if not q or not getattr(q, "price", None) or q.price <= 0:
+                        tick = {
+                            "symbol": symbol,
+                            "status": "UNAVAILABLE",
+                            "message": f"Verified market quote unavailable for '{symbol}'",
+                            "ltp": None,
+                            "open": None,
+                            "high": None,
+                            "low": None,
+                            "close": None,
+                            "volume": 0,
+                            "source": "NONE",
+                            "freshness": "UNAVAILABLE",
+                            "observed_at": None,
+                            "fetch_timestamp": now_utc.isoformat(),
+                        }
+                        self.latest_quotes[symbol] = tick
+                        await self.broadcast_tick(symbol, tick)
+                        continue
+
+                    # Genuine observation from supported provider
+                    obs_dt = (
+                        q.observed_at.replace(tzinfo=timezone.utc)
+                        if q.observed_at.tzinfo is None
+                        else q.observed_at
+                    )
+                    freshness = (
+                        "STALE"
+                        if (q.is_stale or q.data_status == "stale")
+                        else ("DELAYED" if q.is_delayed else getattr(q, "freshness_status", "CURRENT"))
+                    )
+                    price = float(q.price)
                     tick = {
                         "symbol": symbol,
-                        "ltp": new_price,
-                        "open": current["open"],
-                        "high": new_high,
-                        "low": new_low,
-                        "close": new_price,
-                        "volume": current["volume"] + random.randint(10, 500),
-                        "source": current.get("source", "ANGEL_ONE_SMARTAPI"),
-                        "freshness": "LIVE",
-                        "CurrentBarUnixTime": int(now_utc.timestamp()),
-                        "observed_at": now_utc.isoformat(),
+                        "status": "AVAILABLE",
+                        "ltp": round(price, 2),
+                        "open": round(float(q.open_price), 2) if q.open_price else round(price, 2),
+                        "high": round(float(q.high_price), 2) if q.high_price else round(price, 2),
+                        "low": round(float(q.low_price), 2) if q.low_price else round(price, 2),
+                        "close": round(float(getattr(q, "close_price", None) or price), 2),
+                        "volume": getattr(q, "volume", 0) or 0,
+                        "source": q.source,
+                        "freshness": freshness,
+                        "CurrentBarUnixTime": int(obs_dt.timestamp()),
+                        "observed_at": obs_dt.isoformat(),
+                        "fetch_timestamp": now_utc.isoformat(),
                     }
                     await self.broadcast_tick(symbol, tick)
 
@@ -224,7 +289,7 @@ class MarketHub:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.warning(f"MarketHub simulation loop error: {e}")
+                logger.warning(f"MarketHub loop error: {e}")
                 await asyncio.sleep(2.0)
 
 
