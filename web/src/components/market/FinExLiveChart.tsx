@@ -292,7 +292,7 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, fontSize: 11, color: '#64748B' }}>
           <span>Source: <strong style={{ color: '#94A3B8' }}>{freshness.source}</strong></span>
           {freshness.asOf && <span>As of: {freshness.asOf}</span>}
-          <span style={{ color: '#38BDF8', fontWeight: 500 }}>SmartAPI WS Mode 2</span>
+          <span style={{ color: '#38BDF8', fontWeight: 500 }}>FinEx Live Feed (2s Poll)</span>
         </div>
       </div>
 

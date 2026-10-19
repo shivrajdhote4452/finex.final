@@ -61,69 +61,6 @@ class MarketHub:
         self._simulation_task: Optional[asyncio.Task] = None
         self._is_running = False
 
-    def start_angel_stream(self, angel_adapter: Any, loop: Optional[asyncio.AbstractEventLoop] = None) -> None:
-        """Connect Angel One live websocket stream to this hub."""
-        if loop is not None:
-            self._loop = loop
-        else:
-            try:
-                self._loop = asyncio.get_running_loop()
-            except RuntimeError:
-                try:
-                    self._loop = asyncio.get_event_loop()
-                except RuntimeError:
-                    self._loop = None
-        self.provider = angel_adapter
-        angel_adapter.start_live_stream(self.handle_angel_raw_tick, auto_reconnect=True)
-        logger.info("Angel One live stream connected to MarketHub.")
-
-    def handle_angel_raw_tick(self, raw_message: Any) -> None:
-        """Process incoming raw WebSocket message from Angel One SmartWebSocketV2."""
-        try:
-            # Handle dictionary message from Angel One SDK
-            if isinstance(raw_message, dict):
-                token = str(raw_message.get("token", raw_message.get("symboltoken", "")))
-                symbol = TOKEN_TO_SYMBOL.get(token)
-                if not symbol:
-                    return
-
-                ltp_raw = raw_message.get("last_traded_price", raw_message.get("ltp", 0.0))
-                # SmartAPI prices may be multiplied by 100 in binary feeds
-                ltp = float(ltp_raw) / 100.0 if float(ltp_raw) > 100000 else float(ltp_raw)
-                now_utc = datetime.now(timezone.utc)
-
-                obs_time_str = raw_message.get("exchange_timestamp") or raw_message.get("observed_at")
-                if obs_time_str:
-                    try:
-                        obs_dt = datetime.fromisoformat(obs_time_str).replace(tzinfo=timezone.utc)
-                    except Exception:
-                        obs_dt = now_utc
-                else:
-                    obs_dt = now_utc
-
-                tick = {
-                    "symbol": symbol,
-                    "status": "AVAILABLE",
-                    "ltp": round(ltp, 2),
-                    "open": round(float(raw_message.get("open", ltp)), 2),
-                    "high": round(float(raw_message.get("high", ltp)), 2),
-                    "low": round(float(raw_message.get("low", ltp)), 2),
-                    "close": round(ltp, 2),
-                    "volume": int(raw_message.get("volume", 0)),
-                    "source": "angel_smartapi",
-                    "freshness": "LIVE",
-                    "data_status": "fresh",
-                    "served_from_cache": False,
-                    "CurrentBarUnixTime": int(obs_dt.timestamp()),
-                    "observed_at": obs_dt.isoformat(),
-                    "ingested_at": now_utc.isoformat(),
-                }
-                self.latest_quotes[symbol] = tick
-                # Dispatch tick to subscribers thread-safely
-                if self._loop and self._loop.is_running():
-                    asyncio.run_coroutine_threadsafe(self.broadcast_tick(symbol, tick), self._loop)
-        except Exception as e:
-            logger.debug(f"Tick processing notice: {e}")
 
     async def connect(self, symbol: str, websocket: WebSocket) -> None:
         """Register client connection for a symbol and send initial snapshot."""
@@ -293,12 +230,17 @@ class MarketHub:
                         continue
 
                     # 2. Normal Operation: Fetch from active provider
-                    q = await self.provider.get_latest_quote(symbol)
+                    try:
+                        q = await self.provider.get_latest_quote(symbol)
+                    except Exception as err:
+                        logger.warning(f"Error calling get_latest_quote for {symbol}: {err}")
+                        q = None
+
                     now_utc = datetime.now(timezone.utc)
                     if not q or not getattr(q, "price", None) or q.price <= 0:
                         cached = self.latest_quotes.get(symbol)
                         if cached and cached.get("ltp") is not None:
-                            # Both socket & REST down: serve last cached quote with served_from_cache=True, REAL timestamp, data_status="stale"
+                            # Provider down or failed: serve last cached quote with served_from_cache=True, REAL timestamp, data_status="stale"
                             stale_tick = dict(cached)
                             stale_tick["served_from_cache"] = True
                             stale_tick["data_status"] = "stale"
@@ -320,6 +262,7 @@ class MarketHub:
                             "source": "NONE",
                             "freshness": "UNAVAILABLE",
                             "data_status": "unavailable",
+                            "served_from_cache": False,
                             "observed_at": None,
                             "fetch_timestamp": now_utc.isoformat(),
                         }
@@ -333,11 +276,17 @@ class MarketHub:
                         if q.observed_at.tzinfo is None
                         else q.observed_at
                     )
-                    freshness = (
-                        "STALE"
-                        if (q.is_stale or q.data_status == "stale")
-                        else ("DELAYED" if q.is_delayed else getattr(q, "freshness_status", "CURRENT"))
-                    )
+                    served_from_cache = getattr(q, "served_from_cache", False)
+                    data_status = getattr(q, "data_status", "fresh")
+                    if served_from_cache or data_status == "stale":
+                        freshness = "CACHED"
+                    elif q.is_stale:
+                        freshness = "STALE"
+                    elif q.is_delayed:
+                        freshness = "DELAYED"
+                    else:
+                        freshness = "LIVE" if q.source == "angel_smartapi" else getattr(q, "freshness_status", "CURRENT")
+
                     price = float(q.price)
                     tick = {
                         "symbol": symbol,
@@ -350,10 +299,13 @@ class MarketHub:
                         "volume": getattr(q, "volume", 0) or 0,
                         "source": q.source,
                         "freshness": freshness,
+                        "served_from_cache": served_from_cache,
+                        "data_status": data_status,
                         "CurrentBarUnixTime": int(obs_dt.timestamp()),
                         "observed_at": obs_dt.isoformat(),
                         "fetch_timestamp": now_utc.isoformat(),
                     }
+                    self.latest_quotes[symbol] = tick
                     await self.broadcast_tick(symbol, tick)
 
                 await asyncio.sleep(2.0)

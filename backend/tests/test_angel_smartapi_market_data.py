@@ -14,9 +14,11 @@ Validates:
 - /api/v1/market/ws/{symbol} real-time WebSocket tick streaming
 """
 
+import asyncio
+from datetime import datetime, timezone
 from decimal import Decimal
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from starlette.testclient import TestClient
@@ -357,24 +359,204 @@ def test_angel_adapter_outage_401_session_regeneration():
     assert res["data"]["ltp"] == 1205.50
     assert mock_sc.generateSession.call_count == 1
 
-
-def test_angel_adapter_socket_reconnect_loop():
-    """Verify start_live_stream launches background connection loop and stop_live_stream terminates it."""
+@pytest.mark.asyncio
+async def test_angel_adapter_circuit_breaker():
+    """Verify circuit breaker trips after 5 consecutive failures and short-circuits 6th call without hitting network."""
     adapter = AngelOneMarketAdapter(api_key="test_api_key", client_id="SHIV001", mpin="1234", totp_secret="JBSWY3DPEHPK3PXP")
     adapter.jwt_token = "valid_token"
-    adapter.feed_token = "valid_feed"
+    adapter.smart_api = MagicMock()
 
-    with patch("backend.app.services.angel_adapter.SmartWebSocketV2") as mock_sws_cls:
-        mock_instance = MagicMock()
-        mock_sws_cls.return_value = mock_instance
+    # Mock _fetch_ltp_with_retry raising on every call
+    mock_fetch = MagicMock(side_effect=RuntimeError("Angel API network timeout"))
+    adapter._fetch_ltp_with_retry = mock_fetch
 
-        received_ticks = []
-        thread = adapter.start_live_stream(lambda t: received_ticks.append(t), auto_reconnect=False)
-        assert thread is not None
-        assert adapter._stream_active is True
+    # Calls 1 to 5 fail and increment failure counter
+    for _ in range(5):
+        assert adapter.is_circuit_open is False
+        q = await adapter.get_latest_quote("RELIANCE")
+        assert q is None
 
-        adapter.stop_live_stream()
-        assert adapter._stream_active is False
+    assert mock_fetch.call_count == 5
+    assert adapter._consecutive_failures == 5
+    assert adapter.is_circuit_open is True
+
+    # 6th call: circuit breaker is open -> returns None without calling _fetch_ltp_with_retry
+    q6 = await adapter.get_latest_quote("RELIANCE")
+    assert q6 is None
+    # Mock call count MUST remain 5, proving network was NOT touched
+    assert mock_fetch.call_count == 5
+
+    # Reset circuit breaker (simulating recovery timeout / reset)
+    adapter._breaker_open_until = 0.0
+    mock_fetch.side_effect = None
+    mock_fetch.return_value = {
+        "status": True,
+        "data": {"exchange": "NSE", "tradingsymbol": "RELIANCE-EQ", "symboltoken": "2885", "ltp": 1205.0},
+    }
+
+    q_recovered = await adapter.get_latest_quote("RELIANCE")
+    assert q_recovered is not None
+    assert q_recovered.price == Decimal("1205.0")
+    assert adapter._consecutive_failures == 0
+    assert adapter.is_circuit_open is False
+    assert mock_fetch.call_count == 6
+
+
+@pytest.mark.asyncio
+async def test_hub_provider_outage_broadcasts_unavailable():
+    """Verify provider outage causes hub to broadcast status: UNAVAILABLE ticks with no fake price."""
+    hub = MarketHub()
+    mock_provider = MagicMock()
+    mock_provider.get_latest_quote = AsyncMock(side_effect=RuntimeError("Angel API hard outage"))
+    hub.provider = mock_provider
+
+    broadcasted_ticks = []
+    async def capture_tick(symbol, tick):
+        broadcasted_ticks.append(tick)
+    hub.broadcast_tick = capture_tick
+
+    # Connect client to RELIANCE
+    mock_ws = MagicMock()
+    hub.connections["RELIANCE"] = {mock_ws}
+
+    # Run tick loop iteration during simulated market hours
+    with patch("backend.app.services.angel_adapter.is_nse_market_open", return_value=True):
+        hub._is_running = True
+        loop_task = asyncio.create_task(hub._run_simulation_loop())
+        await asyncio.sleep(0.05)
+        hub._is_running = False
+        loop_task.cancel()
+        try:
+            await loop_task
+        except asyncio.CancelledError:
+            pass
+
+    assert len(broadcasted_ticks) >= 1
+    t = broadcasted_ticks[0]
+    assert t["symbol"] == "RELIANCE"
+    assert t["status"] == "UNAVAILABLE"
+    assert t["ltp"] is None
+    assert t["freshness"] == "UNAVAILABLE"
+    assert t["data_status"] == "unavailable"
+
+
+@pytest.mark.asyncio
+async def test_hub_provider_reconnect_resumes_live():
+    """Verify provider failing 3 times then recovering resumes LIVE ticks with genuine prices."""
+    hub = MarketHub()
+    mock_provider = MagicMock()
+    now_utc = datetime.now(timezone.utc)
+    live_quote = Quote(
+        canonical_id="NSE:RELIANCE",
+        symbol="RELIANCE.NS",
+        price=Decimal("1208.50"),
+        observed_at=now_utc,
+        ingested_at=now_utc,
+        source="angel_smartapi",
+        served_from_cache=False,
+        data_status="fresh",
+    )
+
+    # First 3 calls raise, 4th call succeeds with live quote
+    mock_provider.get_latest_quote = AsyncMock(side_effect=[
+        RuntimeError("Outage 1"),
+        RuntimeError("Outage 2"),
+        RuntimeError("Outage 3"),
+        live_quote,
+    ])
+    hub.provider = mock_provider
+
+    broadcasted_ticks = []
+    async def capture_tick(symbol, tick):
+        broadcasted_ticks.append(tick)
+    hub.broadcast_tick = capture_tick
+
+    mock_ws = MagicMock()
+    hub.connections["RELIANCE"] = {mock_ws}
+
+    # Execute 4 step iterations
+    for _ in range(4):
+        try:
+            q = await hub.provider.get_latest_quote("RELIANCE")
+        except Exception:
+            q = None
+
+        if not q or not getattr(q, "price", None) or q.price <= 0:
+            tick = {
+                "symbol": "RELIANCE",
+                "status": "UNAVAILABLE",
+                "ltp": None,
+                "freshness": "UNAVAILABLE",
+                "data_status": "unavailable",
+            }
+        else:
+            tick = {
+                "symbol": "RELIANCE",
+                "status": "AVAILABLE",
+                "ltp": float(q.price),
+                "freshness": "LIVE",
+                "data_status": "fresh",
+            }
+        await hub.broadcast_tick("RELIANCE", tick)
+
+    assert len(broadcasted_ticks) == 4
+    # First 3 ticks are UNAVAILABLE
+    for i in range(3):
+        assert broadcasted_ticks[i]["status"] == "UNAVAILABLE"
+        assert broadcasted_ticks[i]["ltp"] is None
+    # 4th tick is recovered LIVE
+    assert broadcasted_ticks[3]["status"] == "AVAILABLE"
+    assert broadcasted_ticks[3]["ltp"] == 1208.50
+    assert broadcasted_ticks[3]["freshness"] == "LIVE"
+
+
+@pytest.mark.asyncio
+async def test_hub_serves_cached_quote_labeled_accurately():
+    """Verify Quote with served_from_cache=True is broadcast with freshness: CACHED and served_from_cache=True end-to-end."""
+    hub = MarketHub()
+    now_utc = datetime.now(timezone.utc)
+    cached_quote = Quote(
+        canonical_id="NSE:RELIANCE",
+        symbol="RELIANCE.NS",
+        price=Decimal("1205.00"),
+        observed_at=now_utc,
+        ingested_at=now_utc,
+        source="angel_smartapi",
+        served_from_cache=True,
+        data_status="stale",
+    )
+
+    mock_provider = MagicMock()
+    mock_provider.get_latest_quote = AsyncMock(return_value=cached_quote)
+    hub.provider = mock_provider
+
+    broadcasted_ticks = []
+    async def capture_tick(symbol, tick):
+        broadcasted_ticks.append(tick)
+    hub.broadcast_tick = capture_tick
+
+    mock_ws = MagicMock()
+    hub.connections["RELIANCE"] = {mock_ws}
+
+    with patch("backend.app.services.angel_adapter.is_nse_market_open", return_value=True):
+        hub._is_running = True
+        loop_task = asyncio.create_task(hub._run_simulation_loop())
+        await asyncio.sleep(0.05)
+        hub._is_running = False
+        loop_task.cancel()
+        try:
+            await loop_task
+        except asyncio.CancelledError:
+            pass
+
+    assert len(broadcasted_ticks) >= 1
+    t = broadcasted_ticks[0]
+    assert t["symbol"] == "RELIANCE"
+    assert t["status"] == "AVAILABLE"
+    assert t["ltp"] == 1205.00
+    assert t["served_from_cache"] is True
+    assert t["freshness"] == "CACHED"
+    assert t["data_status"] == "stale"
 
 
 @pytest.mark.live

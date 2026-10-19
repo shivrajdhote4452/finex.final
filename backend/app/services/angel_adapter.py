@@ -5,8 +5,7 @@ Implements AbstractMarketDataProvider:
 - Headless TOTP login via pyotp
 - Full Nifty 50 instrument token registry (39 instruments)
 - Real-time LTP quote fetching via SmartConnect.ltpData
-- Historical candle data via SmartConnect.getCandleData with resilient fallback
-- Live quote ticks via SmartWebSocketV2
+- Real-time LTP quote fetching via SmartConnect.ltpData with circuit breaker
 - Tenacity retries with exponential backoff on REST operations
 """
 
@@ -43,13 +42,16 @@ def is_nse_market_open(as_of: Optional[datetime] = None) -> bool:
     market_close = now_ist.replace(hour=15, minute=30, second=0, microsecond=0)
     return market_open <= now_ist <= market_close
 
+# Custom exception for circuit breaker and service unavailability
+class MarketDataUnavailable(Exception):
+    """Raised when market data provider is unavailable or circuit breaker is tripped."""
+    pass
+
 # Try importing SmartApi; handle gracefully if environment issues arise
 try:
     from SmartApi import SmartConnect
-    from SmartApi.smartWebSocketV2 import SmartWebSocketV2
 except ImportError:
     SmartConnect = None
-    SmartWebSocketV2 = None
     logger.warning("SmartApi package is not available or incomplete.")
 
 # Full Nifty 50 Universe Instrument Tokens for Angel One SmartAPI (NSE)
@@ -144,6 +146,34 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
         self.refresh_token: Optional[str] = None
         self._cache: Dict[str, Quote] = {}
 
+        # Circuit Breaker state (trips after 5 consecutive failures, short-circuits for 60s)
+        self._consecutive_failures: int = 0
+        self._breaker_open_until: float = 0.0
+        self.failure_threshold: int = 5
+        self.recovery_timeout: float = 60.0
+
+    @property
+    def is_circuit_open(self) -> bool:
+        """Returns True if the circuit breaker is currently tripped."""
+        return time.time() < self._breaker_open_until
+
+    def _record_failure(self) -> None:
+        """Record REST failure and trip breaker if threshold exceeded."""
+        self._consecutive_failures += 1
+        if self._consecutive_failures >= self.failure_threshold:
+            self._breaker_open_until = time.time() + self.recovery_timeout
+            logger.warning(
+                f"Angel One circuit breaker TRIPPED ({self._consecutive_failures} consecutive failures). "
+                f"Short-circuiting for {self.recovery_timeout}s."
+            )
+
+    def _record_success(self) -> None:
+        """Reset circuit breaker counters upon successful API response."""
+        if self._consecutive_failures > 0 or self._breaker_open_until > 0.0:
+            logger.info("Angel One circuit breaker RESET after successful response.")
+        self._consecutive_failures = 0
+        self._breaker_open_until = 0.0
+
     def is_configured(self) -> bool:
         """Verify if Angel One credentials are valid and ready."""
         required = [self.api_key, self.client_id, self.mpin, self.totp_secret]
@@ -199,6 +229,11 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
         if clean not in FINEX_INSTRUMENTS:
             return None
 
+        # Check circuit breaker before hitting network
+        if self.is_circuit_open:
+            logger.warning(f"Angel One circuit breaker active ({self._consecutive_failures} failures). Fast-degrading quote for {clean}.")
+            return None
+
         now = datetime.now(timezone.utc)
         if clean in self._cache:
             cached = self._cache[clean]
@@ -213,25 +248,33 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
             try:
                 await asyncio.to_thread(self.authenticate)
             except Exception as e:
+                self._record_failure()
                 logger.warning(f"Failed authenticating Angel One on quote request: {e}")
                 return None
 
         if not self.smart_api:
+            self._record_failure()
             return None
 
         try:
             res = await asyncio.to_thread(self._fetch_ltp_with_retry, "NSE", tradingsymbol, token)
         except Exception as e:
+            self._record_failure()
             logger.warning(f"Error fetching LTP for {clean} from Angel One: {e}")
             return None
 
         if not res or not res.get("status") or not res.get("data"):
+            self._record_failure()
             return None
 
         data = res["data"]
         ltp = data.get("ltp") or data.get("close")
         if ltp is None or float(ltp) <= 0:
+            self._record_failure()
             return None
+
+        # Reset circuit breaker counters on verified successful LTP fetch
+        self._record_success()
 
         price_dec = Decimal(str(ltp))
         now = datetime.now(timezone.utc)
@@ -409,75 +452,3 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
                 results.append(item)
         return results
 
-    def start_live_stream(
-        self, on_tick_callback: Callable[[Any], None], auto_reconnect: bool = True
-    ) -> Optional[threading.Thread]:
-        """Start SmartWebSocketV2 streaming in Quote Feed Mode 2 with auto-reconnect backoff."""
-        if not self.is_configured():
-            logger.info("Angel One credentials not configured. Native live stream disabled.")
-            return None
-
-        if not self.jwt_token or not self.feed_token:
-            self.authenticate()
-
-        if not SmartWebSocketV2:
-            logger.error("SmartWebSocketV2 class is not available.")
-            return None
-
-        correlation_id = f"angel-ws-{uuid.uuid4().hex[:8]}"
-
-        def _run_connection_loop():
-            backoff_secs = 1.0
-            max_backoff = 30.0
-
-            while getattr(self, "_stream_active", False):
-                try:
-                    logger.info(f"[{correlation_id}] Connecting Angel One SmartWebSocketV2...")
-                    sws = SmartWebSocketV2(self.jwt_token, self.api_key, self.client_id, self.feed_token)
-                    token_list = [{"exchangeType": 1, "tokens": list(FINEX_INSTRUMENTS.values())}]
-
-                    def on_open(wsapp):
-                        nonlocal backoff_secs
-                        backoff_secs = 1.0
-                        logger.info(f"[{correlation_id}] Angel One SmartWebSocketV2 connected. Subscribing to tokens...")
-                        sws.subscribe("finex_live_stream", 2, token_list)
-
-                    def on_data(wsapp, message):
-                        on_tick_callback(message)
-
-                    def on_error(wsapp, error):
-                        logger.warning(f"[{correlation_id}] Angel One SmartWebSocketV2 error: {error}")
-
-                    def on_close(wsapp):
-                        logger.info(f"[{correlation_id}] Angel One SmartWebSocketV2 disconnected.")
-
-                    sws.on_open = on_open
-                    sws.on_data = on_data
-                    sws.on_error = on_error
-                    sws.on_close = on_close
-
-                    self._current_ws = sws
-                    sws.connect()
-                except Exception as e:
-                    logger.error(f"[{correlation_id}] SmartWebSocketV2 connection exception: {e}")
-
-                if not auto_reconnect or not getattr(self, "_stream_active", False):
-                    break
-
-                logger.info(f"[{correlation_id}] Auto-reconnecting SmartWebSocketV2 in {backoff_secs:.1f}s...")
-                time.sleep(backoff_secs)
-                backoff_secs = min(backoff_secs * 2.0, max_backoff)
-
-        self._stream_active = True
-        thread = threading.Thread(target=_run_connection_loop, daemon=True, name="angel_ws_stream_thread")
-        thread.start()
-        return thread
-
-    def stop_live_stream(self) -> None:
-        """Stop live SmartWebSocketV2 stream."""
-        self._stream_active = False
-        if hasattr(self, "_current_ws") and self._current_ws:
-            try:
-                self._current_ws.close()
-            except Exception:
-                pass

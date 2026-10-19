@@ -22,11 +22,11 @@
 | Task ID | Component | Description | Status | Evidence / Notes |
 |---|---|---|---|---|
 | W0-KHY / W0-NIL | Web (React) | Route/design shell, reusable UI kit structure | Verified Working | Implemented per Visual Design Book in `web/` |
-| W0-SHI / W0-LIK | Mobile (Flutter) | Flutter flavors, navigation skeleton, theme | Ready | Design Book specifications captured |
+| W0-SHI / W0-LIK | Mobile (Flutter) | Flutter flavors, navigation skeleton, theme | Deferred | Design Book specifications captured; native mobile packaging deferred to post-demo (19 Oct 2026, [ADR 006](docs/architecture-decisions.md#adr-006-mobile-flutter-scope-freeze--deferral-decision)) |
 | W0-DIS | Backend (FastAPI) | App factory, health/readiness, safe errors | Verified Working | `backend/app/factory.py`, passing tests |
 | W0-NAY | Architecture | Ports for LLM, retrieval, market, operational/analytics storage | Verified Working | `backend/app/ports/` |
 | W0-PAL | Storage (Postgres) | Postgres connection, migration baseline, transaction proof | Ready | SQLAlchemy + Alembic setup |
-| W0-MIT | Analytics (Delta) | Databricks bundle/schema/job skeleton & Delta write proof | Ready | Local fixture / adapter path |
+| W0-MIT | Analytics (Delta) | Databricks bundle/schema/job skeleton & Delta write proof | Deferred | Local fixture / adapter path; remote Databricks cloud cluster deferred to post-demo (19 Oct 2026, [ADR 007](docs/architecture-decisions.md#adr-007-delta-lake-analytical-scope-freeze--deferral-decision)) |
 | W0-PIY | Contracts | OpenAPI validation, TS/Dart generation workflow | Ready | Frozen OpenAPI schema tooling |
 | W0-PAY / W0-PRA / W0-MRU | AI / ML | Structured validation, policy/prompt registry, mock adapter | Verified Working | `ai/evaluation/evaluate.py` 100% pass |
 | W0-SYO | Quality & UAT | Glossary, task/acceptance templates, dependency tracking | Verified Working | Established in docs & matrix |
@@ -38,7 +38,7 @@
 | Task ID | Track | Title & Description | Status | Evidence / Output |
 |---|---|---|---|---|
 | S1-PRD-01 | PRD | React application shell (routes /login, /onboarding, /dashboard, etc.) | Verified Working | Implemented per Visual Design Book in `web/` |
-| S1-PRD-02 | PRD | Flutter application shell (dev/staging/prod flavors, routes, widgets) | Backlog | Visual design held per Shivraj's directive |
+| S1-PRD-02 | PRD | Flutter application shell (dev/staging/prod flavors, routes, widgets) | Deferred | Native mobile deferred to post-demo (19 Oct 2026, [ADR 006](docs/architecture-decisions.md#adr-006-mobile-flutter-scope-freeze--deferral-decision)) |
 | S1-PRD-03 | PRD | Cross-platform UI contract (docs/ui-contract-v1.md, state tables, mock JSON) | Verified Working | Documented in `docs/ui-contract-v1.md` |
 | S1-API-01 | API | FastAPI factory, /api/v1/health/live, /ready, config loader, env validation | Verified Working | `backend/app/factory.py`, `config.py` |
 | S1-API-02 | API | API v1 conventions: response envelope, ApiError, correlation ID, middleware | Verified Working | `backend/app/core/`, `docs/api-standard-v1.md` |
@@ -57,8 +57,8 @@
 | Task ID | Track | Title & Description | Status | Evidence / Notes |
 |---|---|---|---|---|
 | S2-PRD-01 | PRD | React login, consent, onboarding and risk questionnaire screens | Verified Working | `WelcomeScreen.tsx`, `OnboardingScreen.tsx` |
-| S2-PRD-02 | PRD | Flutter login, consent, onboarding and risk questionnaire flow | Backlog | Mobile track |
-| S2-PRD-03 | PRD | Cross-platform onboarding test automation and analytics events | Backlog | |
+| S2-PRD-02 | PRD | Flutter login, consent, onboarding and risk questionnaire flow | Deferred | Native mobile deferred to post-demo (19 Oct 2026, [ADR 006](docs/architecture-decisions.md#adr-006-mobile-flutter-scope-freeze--deferral-decision)) |
+| S2-PRD-03 | PRD | Cross-platform onboarding test automation and analytics events | Deferred | Web verified working; native mobile E2E deferred (19 Oct 2026, [ADR 006](docs/architecture-decisions.md#adr-006-mobile-flutter-scope-freeze--deferral-decision)) |
 | S2-API-01 | API | Google OAuth callback, JWT lifecycle, refresh/logout, /users/me | Verified Working | `backend/app/routers/auth.py` |
 | S2-API-02 | API | Onboarding & consent endpoints, /risk/questions, /risk/assessments | Verified Working | `backend/app/routers/risk.py` |
 | S2-API-03 | API | Contract and integration tests for auth, profile, consent and risk | Verified Working | `backend/tests/test_auth_and_risk_api.py` |
@@ -171,13 +171,13 @@
 | Task ID | Track | Title & Description | Status | Evidence / Notes |
 |---|---|---|---|---|
 | S8-PRD-01 | PRD | Harden React application: accessibility, bundle size, error monitoring | Verified Working | Production build in 1.38s (`web/dist`), 0 secrets, WCAG contrast |
-| S8-PRD-02 | PRD | Harden Flutter application: secure storage, Android release, store packet | Verified Working | Release web bundle built in 43.1s, `docs/runbooks/mobile_release_runbook.md` |
+| S8-PRD-02 | PRD | Harden Flutter application: secure storage, Android release, store packet | Deferred | Release web bundle built in 43.1s; native store publishing deferred to post-demo (19 Oct 2026, [ADR 006](docs/architecture-decisions.md#adr-006-mobile-flutter-scope-freeze--deferral-decision)) |
 | S8-PRD-03 | PRD | Cross-platform UAT fixes, shared copy/validation, user help & limitations | Verified Working | `docs/user_help_and_known_limitations.md`, `docs/uat_signoff_report.md` |
 | S8-API-01 | API | Harden FastAPI security: rate limits, CORS, token revocation, secure headers | Verified Working | `RateLimiterMiddleware`, `RequestSizeLimitMiddleware`, `test_sprint8_security_and_observability.py` |
 | S8-API-02 | API | Observability and deployment: structured logs, metrics, health dependencies | Verified Working | `/readyz` 503 on degraded DB, `CorrelationIdMiddleware`, `deployment-and-rollback.md` |
 | S8-API-03 | API | API integration/load/reliability tests (p95/timeout verification) | Verified Working | 360 reqs @ 71.6 req/s, 100% success rate in `run_load_test.py` |
 | S8-DAT-01 | DAT | Unity Catalog permissions & environment separation for data schemas | Verified Working | `unity_catalog_permissions.sql`, 5/5 passed in `validate_least_privilege.py` |
-| S8-DAT-02 | DAT | Orchestrate production Databricks workflows with retries and monitoring | Backlog -> Verified Working | `databricks_production_workflows.json`, 6/6 passed in `workflow_orchestrator.py` |
+| S8-DAT-02 | DAT | Orchestrate production Databricks workflows with retries and monitoring | Deferred | Local orchestrator validated (`workflow_orchestrator.py`); remote cloud cluster execution deferred to post-demo (19 Oct 2026, [ADR 007](docs/architecture-decisions.md#adr-007-delta-lake-analytical-scope-freeze--deferral-decision)) |
 | S8-DAT-03 | DAT | Final data reconciliation, retention, backup/export and deletion verification | Verified Working | 9/9 passed in `data_retention_and_erasure.py` (export + hard purge) |
 | S8-AI-01 | AI | Full AI regression across all 8 domains (education, risk, RAG, paper, etc.) | Verified Working | 8/8 domains (100.0%) passed in `ai/evaluation/evaluate_master_regression.py` |
 | S8-AI-02 | AI | Register AI experiments/prompts in MLflow, version tags, telemetry queries | Verified Working | 7 components registered in `ai/registry/model_registry.json`, `ai_model_promotion_checklist.md` |

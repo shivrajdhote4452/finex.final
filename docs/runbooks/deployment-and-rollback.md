@@ -137,7 +137,8 @@ az containerapp ingress traffic set --name finex-api-app -g finex-prod-rg --traf
    - A scheduled pre-market job (or container boot before 09:00 IST) triggers `authenticate()` to ensure valid JWT and feed tokens prior to NSE market opening (09:15 IST).
 2. **Automatic 401 Session Recovery:**
    - REST calls (`ltpData`, `getCandleData`) automatically catch 401 / `Invalid Token` / `AG8001` error codes, trigger `authenticate()`, and retry the request seamlessly without disrupting frontend clients.
-3. **WebSocket Disconnect & Reconnect Loop:**
-   - `SmartWebSocketV2` operates inside an auto-reconnecting background thread with exponential backoff (1s doubling to max 30s) and correlation IDs.
-   - If the WebSocket drops mid-stream, `MarketHub` automatically falls back to REST `ltpData` quotes, and if both become unreachable, serves the last verified cached quote with `served_from_cache=true`, its real timestamp, and `data_status="stale"`.
+3. **2s REST Polling Pipeline & Circuit Breaker:**
+   - The live tick pipeline operates on a robust 2-second REST polling design (`ltpData`) with tenacity retries and circuit breaker protection.
+   - If 5 consecutive REST failures occur, the circuit breaker trips for 60 seconds to protect latency and rate limits, instantly fast-failing to cached quotes.
+   - If the provider is unreachable, `MarketHub` automatically serves the last verified cached quote with `served_from_cache=true`, its real timestamp, and `data_status="stale"`. Never presents a fake live price.
 

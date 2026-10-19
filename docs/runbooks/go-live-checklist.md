@@ -46,7 +46,12 @@ Angel One JWT tokens expire every 24 hours. The application handles authenticati
 2. **Automatic 401 Session Recovery:**
    - If an active token expires mid-session with error code `AG8001` or HTTP 401, `AngelOneMarketAdapter._fetch_ltp_with_retry` and `getCandleData` automatically trigger `authenticate()`, generate a new JWT and feed token, and retry the request without dropping the client stream.
 
-3. **Scheduled Daily Warmup (Cron / Task Scheduler):**
+3. **2-Second REST Polling Architecture by Design:**
+   - To ensure maximum deterministic reliability during the demo handoff, FinEx uses a 2-second REST polling pipeline (`ltpData`) through `MarketHub`.
+   - Every tick receives verified SHA-256 evidence, automatic tenacity retry with exponential backoff, and circuit breaker protection (5 consecutive failures trip a 60s fast-degrade cooldown).
+   - Ticks are broadcast in real time to connected web and mobile clients over `/api/v1/market/ws/{symbol}` without unstable background client socket threads.
+
+4. **Scheduled Daily Warmup (Cron / Task Scheduler):**
    - For 24/7 deployments, execute a daily health check curl at 08:50 IST:
      ```bash
      curl -s http://127.0.0.1:8000/api/v1/market/quotes/RELIANCE

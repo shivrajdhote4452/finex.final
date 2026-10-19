@@ -83,14 +83,8 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
                 raise RuntimeError("Angel One authentication failed at startup. Please verify ANGEL_* credentials.")
             app.state.angel_adapter = angel
             hub = get_market_hub()
-            hub.start_angel_stream(angel, loop=asyncio.get_running_loop())
+            hub.provider = angel
         yield
-        # Shutdown phase
-        if hasattr(app.state, "angel_adapter"):
-            try:
-                app.state.angel_adapter.stop_live_stream()
-            except Exception:
-                pass
 
     app = FastAPI(
         title=app_settings.APP_NAME,
