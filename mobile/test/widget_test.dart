@@ -33,6 +33,7 @@ void main() {
     expect(find.text("Shivraj's workspace"), findsOneWidget);
     expect(find.text('Home'), findsOneWidget);
     expect(find.text('Markets'), findsOneWidget);
+    expect(find.text('Charts'), findsWidgets);
     expect(find.text('Ask'), findsOneWidget);
     expect(find.text('More'), findsOneWidget);
   });

@@ -161,7 +161,7 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
                         fillColor: TerminalColors.panel,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: TerminalColors.borderSubtle),
+                          borderSide: const BorderSide(color: TerminalColors.borderSubtle),
                         ),
                       ),
                       onChanged: (val) => setModalState(() => filterQuery = val),
@@ -177,7 +177,7 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
                               child: ChoiceChip(
                                 label: Text(sec, style: const TextStyle(fontSize: 11)),
                                 selected: selectedSector == sec,
-                                selectedColor: TerminalColors.action.withOpacity(0.2),
+                                selectedColor: TerminalColors.action.withValues(alpha: 0.2),
                                 labelStyle: TextStyle(
                                   color: selectedSector == sec ? TerminalColors.action : TerminalColors.textMuted,
                                   fontWeight: FontWeight.w600,
@@ -747,7 +747,7 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
-                            color: _range == rng ? TerminalColors.action.withOpacity(0.2) : Colors.transparent,
+                            color: _range == rng ? TerminalColors.action.withValues(alpha: 0.2) : Colors.transparent,
                             borderRadius: BorderRadius.circular(4),
                             border: Border.all(
                               color: _range == rng ? TerminalColors.action : Colors.transparent,
