@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -72,14 +73,24 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         # Angel One SmartAPI live market data initialization
         if app_settings.MARKET_DATA_MODE == "INDIAN_LIVE_DATA":
             from backend.app.services.angel_adapter import AngelOneMarketAdapter
+            from backend.app.services.market_hub import get_market_hub
 
             angel = AngelOneMarketAdapter()
             if not angel.is_configured():
                 raise RuntimeError("INDIAN_LIVE_DATA requires valid Angel One credentials")
-            angel.authenticate()
+            auth_ok = angel.authenticate()
+            if not auth_ok:
+                raise RuntimeError("Angel One authentication failed at startup. Please verify ANGEL_* credentials.")
             app.state.angel_adapter = angel
+            hub = get_market_hub()
+            hub.start_angel_stream(angel, loop=asyncio.get_running_loop())
         yield
         # Shutdown phase
+        if hasattr(app.state, "angel_adapter"):
+            try:
+                app.state.angel_adapter.stop_live_stream()
+            except Exception:
+                pass
 
     app = FastAPI(
         title=app_settings.APP_NAME,

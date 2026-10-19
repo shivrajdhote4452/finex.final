@@ -117,3 +117,27 @@ az containerapp ingress traffic set --name finex-api-app -g finex-prod-rg --traf
   ```
 - **Rate Limit Alarm:** Alert triggers if 429 count > 50 in 5 minutes.
 - **Security Escalation:** Any `401 Unauthorized` spike on `/auth/refresh` indicates potential credential abuse; immediately trigger `POST /api/v1/auth/revoke` for affected account.
+
+---
+
+## 7. Angel One SmartAPI Provisioning & Session-Refresh Operations
+
+### 7.1 Credential Provisioning & Static IP Registration
+1. **Credentials Management:**
+   - Secrets (`ANGEL_API_KEY`, `ANGEL_CLIENT_ID`, `ANGEL_MPIN`, `ANGEL_TOTP_SECRET`) are provisioned exclusively via environment variables or secret manager (Azure Key Vault).
+   - Real credentials must never be committed to git, public documentation, or repository files.
+2. **Static IP Registration:**
+   - Angel One SmartAPI enforces IP binding for security. The egress static IP of the production container app/gateway must be whitelisted in the Angel One Developer Portal (My Profile → My APIs).
+   - Note: Angel One allows IP edits once per calendar week.
+
+### 7.2 Daily Pre-Market Session-Refresh Operations
+1. **Headless TOTP Session Lifecycle:**
+   - SmartAPI JWT sessions expire periodically (typically daily at midnight IST).
+   - In `MARKET_DATA_MODE=INDIAN_LIVE_DATA`, the backend automatically performs headless 2FA TOTP login via `pyotp.TOTP(secret).now()` during startup lifespan.
+   - A scheduled pre-market job (or container boot before 09:00 IST) triggers `authenticate()` to ensure valid JWT and feed tokens prior to NSE market opening (09:15 IST).
+2. **Automatic 401 Session Recovery:**
+   - REST calls (`ltpData`, `getCandleData`) automatically catch 401 / `Invalid Token` / `AG8001` error codes, trigger `authenticate()`, and retry the request seamlessly without disrupting frontend clients.
+3. **WebSocket Disconnect & Reconnect Loop:**
+   - `SmartWebSocketV2` operates inside an auto-reconnecting background thread with exponential backoff (1s doubling to max 30s) and correlation IDs.
+   - If the WebSocket drops mid-stream, `MarketHub` automatically falls back to REST `ltpData` quotes, and if both become unreachable, serves the last verified cached quote with `served_from_cache=true`, its real timestamp, and `data_status="stale"`.
+

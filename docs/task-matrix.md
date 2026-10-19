@@ -80,9 +80,9 @@
 | S3-PRD-03 | PRD | Accessible chart wrappers, response mapping and E2E watchlist/portfolio tests | Verified Working | `mobile/test/widget_test.dart`, `test_market_and_portfolio_api.py` |
 | S3-API-01 | API | /market/search, /market/quotes/{symbol}, watchlists CRUD with freshness | Verified Working | `backend/app/routers/market.py`, `watchlists.py` |
 | S3-API-02 | API | Portfolio CRUD, holdings validation, deterministic snapshot calculation | Verified Working | `backend/app/domain/portfolio.py`, `backend/app/routers/portfolio.py` |
-| S3-API-03 | API | Caching, pagination, provider error mapping and contract tests | Verified Working | 8 passed tests in `backend/tests/test_market_and_portfolio_api.py` |
+| S3-API-03 | API | Caching, pagination, provider error mapping and contract tests | Verified Working | 8 passed tests in `backend/tests/test_market_and_portfolio_api.py`; 17 tests in `backend/tests/test_angel_smartapi_market_data.py` |
 | S3-DAT-01 | DAT | Securities, market_quotes, market_price_history, watchlists tables | Verified Working | `data/ddl/020_market.sql`, `backend/app/models/market.py` |
-| S3-DAT-02 | DAT | Market data ingestion pipeline, normalization, deduplication & MERGE | Verified Working | `backend/app/adapters/market_data_provider.py` |
+| S3-DAT-02 | DAT | Market data ingestion pipeline, normalization, deduplication & MERGE | Verified Working | `backend/app/adapters/market_data_provider.py` & `backend/app/services/angel_adapter.py` (Angel One SmartAPI Live NSE) |
 | S3-DAT-03 | DAT | Market freshness & portfolio DQ checks (stale quote, orphan item, allocation sum) | Verified Working | `data/quality/market_data_quality.py`, 5 tests in `test_market_data_quality.py` |
 | S3-AI-01 | AI | Structured company/fund comparison prompt & schema | Verified Working | `backend/app/domain/company_comparison.py`, `/ai/compare` |
 | S3-AI-02 | AI | Portfolio explanation tool using deterministic backend metrics | Verified Working | `backend/app/domain/portfolio_explainer.py`, `/ai/portfolios/{id}/explain` |

@@ -11,11 +11,14 @@ Implements AbstractMarketDataProvider:
 """
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import hashlib
 import logging
+import threading
+import time
 from typing import Any, Callable, Dict, List, Optional
+import uuid
 
 import pyotp
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -25,6 +28,20 @@ from backend.app.config import get_settings
 from backend.app.ports.market_data import AbstractMarketDataProvider, HistoricalBar, Quote
 
 logger = logging.getLogger(__name__)
+
+
+def is_nse_market_open(as_of: Optional[datetime] = None) -> bool:
+    """Check if current or specified time falls within NSE trading hours (09:15 - 15:30 IST, Mon-Fri)."""
+    ist_tz = timezone(timedelta(hours=5, minutes=30))
+    now_ist = (as_of or datetime.now(timezone.utc)).astimezone(ist_tz)
+
+    # Saturday = 5, Sunday = 6
+    if now_ist.weekday() >= 5:
+        return False
+
+    market_open = now_ist.replace(hour=9, minute=15, second=0, microsecond=0)
+    market_close = now_ist.replace(hour=15, minute=30, second=0, microsecond=0)
+    return market_open <= now_ist <= market_close
 
 # Try importing SmartApi; handle gracefully if environment issues arise
 try:
@@ -165,8 +182,16 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5, min=0.5, max=2.0), reraise=True)
     def _fetch_ltp_with_retry(self, exchange: str, tradingsymbol: str, symboltoken: str) -> Dict[str, Any]:
-        """Fetch real-time LTP quote via SmartConnect with tenacity retries."""
-        return self.smart_api.ltpData(exchange, tradingsymbol, symboltoken)
+        """Fetch real-time LTP quote via SmartConnect with tenacity retries and 401 recovery."""
+        res = self.smart_api.ltpData(exchange, tradingsymbol, symboltoken)
+        if isinstance(res, dict) and (
+            res.get("errorcode") in ("AG8001", "AG8002", "401")
+            or "Invalid Token" in str(res.get("message", ""))
+        ):
+            logger.info("Angel One token expired or invalid (401). Regenerating session...")
+            self.authenticate()
+            res = self.smart_api.ltpData(exchange, tradingsymbol, symboltoken)
+        return res
 
     async def get_latest_quote(self, symbol: str) -> Optional[Quote]:
         """Fetch latest verified quote for symbol from Angel One SmartAPI."""
@@ -384,8 +409,10 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
                 results.append(item)
         return results
 
-    def start_live_stream(self, on_tick_callback: Callable[[Any], None]) -> Optional[Any]:
-        """Start SmartWebSocketV2 streaming in Quote Feed Mode 2."""
+    def start_live_stream(
+        self, on_tick_callback: Callable[[Any], None], auto_reconnect: bool = True
+    ) -> Optional[threading.Thread]:
+        """Start SmartWebSocketV2 streaming in Quote Feed Mode 2 with auto-reconnect backoff."""
         if not self.is_configured():
             logger.info("Angel One credentials not configured. Native live stream disabled.")
             return None
@@ -397,30 +424,60 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
             logger.error("SmartWebSocketV2 class is not available.")
             return None
 
-        sws = SmartWebSocketV2(self.jwt_token, self.api_key, self.client_id, self.feed_token)
-        token_list = [{"exchangeType": 1, "tokens": list(FINEX_INSTRUMENTS.values())}]
+        correlation_id = f"angel-ws-{uuid.uuid4().hex[:8]}"
 
-        def on_open(wsapp):
-            logger.info("Angel One SmartWebSocketV2 connected. Subscribing to token list...")
-            sws.subscribe("finex_live_stream", 2, token_list)
+        def _run_connection_loop():
+            backoff_secs = 1.0
+            max_backoff = 30.0
 
-        def on_data(wsapp, message):
-            on_tick_callback(message)
+            while getattr(self, "_stream_active", False):
+                try:
+                    logger.info(f"[{correlation_id}] Connecting Angel One SmartWebSocketV2...")
+                    sws = SmartWebSocketV2(self.jwt_token, self.api_key, self.client_id, self.feed_token)
+                    token_list = [{"exchangeType": 1, "tokens": list(FINEX_INSTRUMENTS.values())}]
 
-        def on_error(wsapp, error):
-            logger.error(f"Angel One SmartWebSocketV2 error: {error}")
+                    def on_open(wsapp):
+                        nonlocal backoff_secs
+                        backoff_secs = 1.0
+                        logger.info(f"[{correlation_id}] Angel One SmartWebSocketV2 connected. Subscribing to tokens...")
+                        sws.subscribe("finex_live_stream", 2, token_list)
 
-        def on_close(wsapp):
-            logger.info("Angel One SmartWebSocketV2 closed.")
+                    def on_data(wsapp, message):
+                        on_tick_callback(message)
 
-        sws.on_open = on_open
-        sws.on_data = on_data
-        sws.on_error = on_error
-        sws.on_close = on_close
+                    def on_error(wsapp, error):
+                        logger.warning(f"[{correlation_id}] Angel One SmartWebSocketV2 error: {error}")
 
-        try:
-            sws.connect()
-            return sws
-        except Exception as e:
-            logger.error(f"Failed connecting to SmartWebSocketV2: {e}")
-            return None
+                    def on_close(wsapp):
+                        logger.info(f"[{correlation_id}] Angel One SmartWebSocketV2 disconnected.")
+
+                    sws.on_open = on_open
+                    sws.on_data = on_data
+                    sws.on_error = on_error
+                    sws.on_close = on_close
+
+                    self._current_ws = sws
+                    sws.connect()
+                except Exception as e:
+                    logger.error(f"[{correlation_id}] SmartWebSocketV2 connection exception: {e}")
+
+                if not auto_reconnect or not getattr(self, "_stream_active", False):
+                    break
+
+                logger.info(f"[{correlation_id}] Auto-reconnecting SmartWebSocketV2 in {backoff_secs:.1f}s...")
+                time.sleep(backoff_secs)
+                backoff_secs = min(backoff_secs * 2.0, max_backoff)
+
+        self._stream_active = True
+        thread = threading.Thread(target=_run_connection_loop, daemon=True, name="angel_ws_stream_thread")
+        thread.start()
+        return thread
+
+    def stop_live_stream(self) -> None:
+        """Stop live SmartWebSocketV2 stream."""
+        self._stream_active = False
+        if hasattr(self, "_current_ws") and self._current_ws:
+            try:
+                self._current_ws.close()
+            except Exception:
+                pass

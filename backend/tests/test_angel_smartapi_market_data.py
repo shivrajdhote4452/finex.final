@@ -286,3 +286,108 @@ def test_market_websocket_unsupported_symbol_rejection(client):
     with pytest.raises(Exception):
         with client.websocket_connect("/api/v1/market/ws/INVALID_SYMBOL_123") as ws:
             ws.receive_text()
+
+
+@pytest.mark.asyncio
+async def test_angel_adapter_recorded_fixtures_contract():
+    """Verify contract for all three port methods using recorded JSON fixtures."""
+    import os
+    fixtures_dir = os.path.join(os.path.dirname(__file__), "fixtures")
+    with open(os.path.join(fixtures_dir, "angel_ltp_fixture.json"), "r") as f:
+        ltp_fixture = json.load(f)
+    with open(os.path.join(fixtures_dir, "angel_candle_fixture.json"), "r") as f:
+        candle_fixture = json.load(f)
+
+    adapter = AngelOneMarketAdapter(api_key="mock", client_id="mock", mpin="1234", totp_secret="JBSWY3DPEHPK3PXP")
+    adapter.jwt_token = "mock_jwt_token"
+    mock_sc = MagicMock()
+    mock_sc.ltpData.return_value = ltp_fixture
+    mock_sc.getCandleData.return_value = candle_fixture
+    adapter.smart_api = mock_sc
+
+    # 1. get_latest_quote
+    quote = await adapter.get_latest_quote("RELIANCE")
+    assert quote is not None
+    assert quote.canonical_id == "NSE:RELIANCE"
+    assert quote.price == Decimal("1208.10")
+    assert quote.source == "angel_smartapi"
+    assert quote.data_status == "fresh"
+
+    # 2. get_historical_bars
+    bars = await adapter.get_historical_bars("RELIANCE", "2026-10-01", "2026-10-05")
+    assert len(bars) == 3
+    assert bars[0].open == Decimal("1210.0")
+    assert bars[0].close == Decimal("1218.0")
+
+    # 3. search_instruments
+    results = await adapter.search_instruments("TCS")
+    assert len(results) >= 1
+    assert results[0]["symbol"] == "TCS"
+    assert results[0]["provider_token"] == "11536"
+
+
+def test_angel_adapter_outage_401_session_regeneration():
+    """Verify mocked 401 triggers automatic session regeneration and retry succeeds."""
+    adapter = AngelOneMarketAdapter(api_key="test_api_key", client_id="SHIV001", mpin="1234", totp_secret="JBSWY3DPEHPK3PXP")
+    adapter.jwt_token = "expired_token"
+
+    mock_sc = MagicMock()
+    # First call returns 401 error, second call succeeds after authenticate()
+    mock_sc.ltpData.side_effect = [
+        {"status": False, "message": "Invalid Token", "errorcode": "AG8001"},
+        {
+            "status": True,
+            "data": {
+                "exchange": "NSE",
+                "tradingsymbol": "RELIANCE-EQ",
+                "symboltoken": "2885",
+                "ltp": 1205.50,
+            },
+        },
+    ]
+    mock_sc.generateSession.return_value = {
+        "status": True,
+        "data": {"jwtToken": "new_fresh_token", "refreshToken": "new_refresh"},
+    }
+    mock_sc.getfeedToken.return_value = "new_feed_token"
+    adapter.smart_api = mock_sc
+
+    res = adapter._fetch_ltp_with_retry("NSE", "RELIANCE-EQ", "2885")
+    assert res["status"] is True
+    assert res["data"]["ltp"] == 1205.50
+    assert mock_sc.generateSession.call_count == 1
+
+
+def test_angel_adapter_socket_reconnect_loop():
+    """Verify start_live_stream launches background connection loop and stop_live_stream terminates it."""
+    adapter = AngelOneMarketAdapter(api_key="test_api_key", client_id="SHIV001", mpin="1234", totp_secret="JBSWY3DPEHPK3PXP")
+    adapter.jwt_token = "valid_token"
+    adapter.feed_token = "valid_feed"
+
+    with patch("backend.app.services.angel_adapter.SmartWebSocketV2") as mock_sws_cls:
+        mock_instance = MagicMock()
+        mock_sws_cls.return_value = mock_instance
+
+        received_ticks = []
+        thread = adapter.start_live_stream(lambda t: received_ticks.append(t), auto_reconnect=False)
+        assert thread is not None
+        assert adapter._stream_active is True
+
+        adapter.stop_live_stream()
+        assert adapter._stream_active is False
+
+
+@pytest.mark.live
+@pytest.mark.asyncio
+async def test_angel_smartapi_live_quote_market_hours():
+    """Live verification against real Angel One SmartAPI endpoint (requires valid credentials)."""
+    adapter = AngelOneMarketAdapter()
+    if not adapter.is_configured():
+        pytest.skip("Angel One credentials not configured in environment.")
+
+    quote = await adapter.get_latest_quote("RELIANCE")
+    assert quote is not None
+    assert quote.canonical_id == "NSE:RELIANCE"
+    assert quote.price > 0
+    assert quote.source == "angel_smartapi"
+

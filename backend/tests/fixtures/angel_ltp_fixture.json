@@ -1,0 +1,15 @@
+{
+  "status": true,
+  "message": "SUCCESS",
+  "errorcode": "",
+  "data": {
+    "exchange": "NSE",
+    "tradingsymbol": "RELIANCE-EQ",
+    "symboltoken": "2885",
+    "open": "1214.10",
+    "high": "1215.00",
+    "low": "1192.75",
+    "close": "1210.00",
+    "ltp": "1208.10"
+  }
+}

@@ -57,8 +57,73 @@ class MarketHub:
             self.provider = RealMarketDataProvider(
                 force_cache=False, allow_fixture_fallback=self.allow_fixtures
             )
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._simulation_task: Optional[asyncio.Task] = None
         self._is_running = False
+
+    def start_angel_stream(self, angel_adapter: Any, loop: Optional[asyncio.AbstractEventLoop] = None) -> None:
+        """Connect Angel One live websocket stream to this hub."""
+        if loop is not None:
+            self._loop = loop
+        else:
+            try:
+                self._loop = asyncio.get_running_loop()
+            except RuntimeError:
+                try:
+                    self._loop = asyncio.get_event_loop()
+                except RuntimeError:
+                    self._loop = None
+        self.provider = angel_adapter
+        angel_adapter.start_live_stream(self.handle_angel_raw_tick, auto_reconnect=True)
+        logger.info("Angel One live stream connected to MarketHub.")
+
+    def handle_angel_raw_tick(self, raw_message: Any) -> None:
+        """Process incoming raw WebSocket message from Angel One SmartWebSocketV2."""
+        try:
+            # Handle dictionary message from Angel One SDK
+            if isinstance(raw_message, dict):
+                token = str(raw_message.get("token", raw_message.get("symboltoken", "")))
+                symbol = TOKEN_TO_SYMBOL.get(token)
+                if not symbol:
+                    return
+
+                ltp_raw = raw_message.get("last_traded_price", raw_message.get("ltp", 0.0))
+                # SmartAPI prices may be multiplied by 100 in binary feeds
+                ltp = float(ltp_raw) / 100.0 if float(ltp_raw) > 100000 else float(ltp_raw)
+                now_utc = datetime.now(timezone.utc)
+
+                obs_time_str = raw_message.get("exchange_timestamp") or raw_message.get("observed_at")
+                if obs_time_str:
+                    try:
+                        obs_dt = datetime.fromisoformat(obs_time_str).replace(tzinfo=timezone.utc)
+                    except Exception:
+                        obs_dt = now_utc
+                else:
+                    obs_dt = now_utc
+
+                tick = {
+                    "symbol": symbol,
+                    "status": "AVAILABLE",
+                    "ltp": round(ltp, 2),
+                    "open": round(float(raw_message.get("open", ltp)), 2),
+                    "high": round(float(raw_message.get("high", ltp)), 2),
+                    "low": round(float(raw_message.get("low", ltp)), 2),
+                    "close": round(ltp, 2),
+                    "volume": int(raw_message.get("volume", 0)),
+                    "source": "angel_smartapi",
+                    "freshness": "LIVE",
+                    "data_status": "fresh",
+                    "served_from_cache": False,
+                    "CurrentBarUnixTime": int(obs_dt.timestamp()),
+                    "observed_at": obs_dt.isoformat(),
+                    "ingested_at": now_utc.isoformat(),
+                }
+                self.latest_quotes[symbol] = tick
+                # Dispatch tick to subscribers thread-safely
+                if self._loop and self._loop.is_running():
+                    asyncio.run_coroutine_threadsafe(self.broadcast_tick(symbol, tick), self._loop)
+        except Exception as e:
+            logger.debug(f"Tick processing notice: {e}")
 
     async def connect(self, symbol: str, websocket: WebSocket) -> None:
         """Register client connection for a symbol and send initial snapshot."""
@@ -170,38 +235,6 @@ class MarketHub:
         self.latest_quotes[clean_symbol] = tick
         return tick
 
-    def handle_angel_raw_tick(self, raw_message: Any) -> None:
-        """Process incoming raw WebSocket message from Angel One SmartWebSocketV2."""
-        try:
-            # Handle dictionary message from Angel One SDK
-            if isinstance(raw_message, dict):
-                token = str(raw_message.get("token", raw_message.get("symboltoken", "")))
-                symbol = TOKEN_TO_SYMBOL.get(token)
-                if not symbol:
-                    return
-
-                ltp_raw = raw_message.get("last_traded_price", raw_message.get("ltp", 0.0))
-                # SmartAPI prices may be multiplied by 100 in binary feeds
-                ltp = float(ltp_raw) / 100.0 if float(ltp_raw) > 100000 else float(ltp_raw)
-                now_utc = datetime.now(timezone.utc)
-
-                tick = {
-                    "symbol": symbol,
-                    "ltp": round(ltp, 2),
-                    "open": round(float(raw_message.get("open", ltp)), 2),
-                    "high": round(float(raw_message.get("high", ltp)), 2),
-                    "low": round(float(raw_message.get("low", ltp)), 2),
-                    "close": round(ltp, 2),
-                    "volume": int(raw_message.get("volume", 0)),
-                    "source": "ANGEL_ONE_SMARTAPI",
-                    "freshness": "LIVE",
-                    "CurrentBarUnixTime": int(now_utc.timestamp()),
-                    "observed_at": now_utc.isoformat(),
-                }
-                # Fire and forget into asyncio event loop
-                asyncio.create_task(self.broadcast_tick(symbol, tick))
-        except Exception as e:
-            logger.error(f"Error handling Angel raw tick: {e}")
 
     def ensure_tick_engine_started(self) -> None:
         """Start background simulation engine if not already running."""
@@ -246,10 +279,34 @@ class MarketHub:
                             await self.broadcast_tick(symbol, tick)
                         continue
 
-                    # Normal Operation: NEVER invent prices, fake volume, or fabricate observation timestamps
+                    from backend.app.services.angel_adapter import is_nse_market_open
+
+                    # 1. Market Closed Check (09:15 - 15:30 IST, Mon-Fri): do not spin live loop, serve cached
+                    if not is_nse_market_open():
+                        cached = self.latest_quotes.get(symbol)
+                        if cached and cached.get("ltp") is not None:
+                            closed_tick = dict(cached)
+                            closed_tick["served_from_cache"] = True
+                            closed_tick["freshness"] = "CLOSED"
+                            closed_tick["data_status"] = "stale"
+                            await self.broadcast_tick(symbol, closed_tick)
+                        continue
+
+                    # 2. Normal Operation: Fetch from active provider
                     q = await self.provider.get_latest_quote(symbol)
                     now_utc = datetime.now(timezone.utc)
                     if not q or not getattr(q, "price", None) or q.price <= 0:
+                        cached = self.latest_quotes.get(symbol)
+                        if cached and cached.get("ltp") is not None:
+                            # Both socket & REST down: serve last cached quote with served_from_cache=True, REAL timestamp, data_status="stale"
+                            stale_tick = dict(cached)
+                            stale_tick["served_from_cache"] = True
+                            stale_tick["data_status"] = "stale"
+                            stale_tick["freshness"] = "STALE"
+                            stale_tick["fetch_timestamp"] = now_utc.isoformat()
+                            await self.broadcast_tick(symbol, stale_tick)
+                            continue
+
                         tick = {
                             "symbol": symbol,
                             "status": "UNAVAILABLE",
@@ -262,6 +319,7 @@ class MarketHub:
                             "volume": 0,
                             "source": "NONE",
                             "freshness": "UNAVAILABLE",
+                            "data_status": "unavailable",
                             "observed_at": None,
                             "fetch_timestamp": now_utc.isoformat(),
                         }
