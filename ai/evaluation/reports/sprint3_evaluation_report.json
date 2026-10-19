@@ -1,7 +1,7 @@
 {
   "evaluation_name": "Sprint 3 AI Factuality, Freshness and Numeric Consistency Evaluation",
   "author": "Shivraj Dhote",
-  "evaluated_at": "2026-10-19T12:43:41.723981+00:00",
+  "evaluated_at": "2026-10-19T13:09:09.728061+00:00",
   "total_test_cases": 20,
   "overall_passed_cases": 20,
   "pass_rate_pct": 100.0,
