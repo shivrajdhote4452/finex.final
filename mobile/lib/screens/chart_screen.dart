@@ -1,4 +1,6 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart' hide TextDirection;
 import '../theme/terminal_theme.dart';
 import '../services/api_client.dart';
 
@@ -17,13 +19,20 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
   String _range = '1Y';
   bool _showCandlesticks = true;
   bool _showSma20 = true;
+  bool _showEma50 = true;
   final bool _showVolume = true;
+
+  // Flexibility & Interactive Pan / Zoom state
+  double _candleWidth = 9.0; // width per candle in px (zoom level)
+  double _scrollOffset = 0.0; // pan offset in px (0.0 = pinned to latest live candle at right)
+  double _baseCandleWidth = 9.0;
+  Offset? _hoverPosition;
+  int? _hoverIndex;
 
   bool _loading = true;
   String? _error;
   List<Map<String, dynamic>> _bars = [];
   Map<String, dynamic>? _modeInfo;
-  int? _hoverIndex;
 
   // Order Ticket state
   String _orderSide = 'BUY';
@@ -32,6 +41,8 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
   double? _limitPrice;
   bool _orderSubmitting = false;
   String? _orderFeedback;
+
+  final _currencyFmt = NumberFormat.currency(symbol: '₹', locale: 'en_IN', decimalDigits: 2);
 
   static const List<Map<String, String>> _popularSymbols = [
     {'symbol': 'RELIANCE', 'name': 'Reliance Industries', 'sector': 'Energy'},
@@ -75,6 +86,9 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
     setState(() {
       _loading = true;
       _error = null;
+      _scrollOffset = 0.0; // reset pan to latest edge
+      _hoverIndex = null;
+      _hoverPosition = null;
     });
 
     try {
@@ -100,6 +114,35 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
         _loading = false;
       });
     }
+  }
+
+  void _zoomIn() {
+    setState(() {
+      _candleWidth = (_candleWidth * 1.3).clamp(3.0, 36.0);
+    });
+  }
+
+  void _zoomOut() {
+    setState(() {
+      _candleWidth = (_candleWidth / 1.3).clamp(3.0, 36.0);
+    });
+  }
+
+  void _resetZoom() {
+    setState(() {
+      _candleWidth = 9.0;
+      _scrollOffset = 0.0;
+      _hoverIndex = null;
+      _hoverPosition = null;
+    });
+  }
+
+  void _jumpToLive() {
+    setState(() {
+      _scrollOffset = 0.0;
+      _hoverIndex = null;
+      _hoverPosition = null;
+    });
   }
 
   void _openStockSearchModal() {
@@ -153,15 +196,15 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
                     TextField(
                       autofocus: true,
                       style: const TextStyle(fontSize: 14, color: Colors.white),
-                      decoration: InputDecoration(
+                      decoration: const InputDecoration(
                         hintText: "Search 40+ stocks (e.g. TATASTEEL, INFY)...",
-                        hintStyle: const TextStyle(fontSize: 13, color: TerminalColors.textMuted),
-                        prefixIcon: const Icon(Icons.search, color: TerminalColors.action, size: 20),
+                        hintStyle: TextStyle(fontSize: 13, color: TerminalColors.textMuted),
+                        prefixIcon: Icon(Icons.search, color: TerminalColors.action, size: 20),
                         filled: true,
                         fillColor: TerminalColors.panel,
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: TerminalColors.borderSubtle),
+                          borderRadius: BorderRadius.all(Radius.circular(8)),
+                          borderSide: BorderSide(color: TerminalColors.borderSubtle),
                         ),
                       ),
                       onChanged: (val) => setModalState(() => filterQuery = val),
@@ -375,7 +418,7 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
                       children: [
                         const Text("Estimated Total:", style: TextStyle(fontSize: 12, color: TerminalColors.textMuted)),
                         Text(
-                          "₹${total.toStringAsFixed(2)}",
+                          _currencyFmt.format(total),
                           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: TerminalColors.textMain),
                         ),
                       ],
@@ -446,7 +489,6 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
     final textController = TextEditingController();
     String? aiReply;
     bool aiThinking = false;
-    Map<String, dynamic>? activeProposal;
 
     showModalBottomSheet(
       context: context,
@@ -499,75 +541,29 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
                           border: Border.all(color: TerminalColors.borderSubtle),
                         ),
                         child: SingleChildScrollView(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                aiReply ??
-                                    "Ask about this $_symbol chart in English, Hindi, or Hinglish, or ask to allocate virtual paper investments.",
-                                style: const TextStyle(fontSize: 12, color: TerminalColors.textMain, height: 1.4),
-                              ),
-                              if (activeProposal != null) ...[
-                                const SizedBox(height: 12),
-                                Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black,
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(color: TerminalColors.action),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const Text("📋 Paper Investment Proposal",
-                                          style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.bold,
-                                              color: TerminalColors.action)),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                          "Budget: ${activeProposal!['currency']} ${activeProposal!['total_budget']}",
-                                          style: const TextStyle(fontSize: 11, color: TerminalColors.textMuted)),
-                                      const SizedBox(height: 8),
-                                      ElevatedButton(
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: TerminalColors.action,
-                                          foregroundColor: Colors.black,
-                                        ),
-                                        onPressed: () async {
-                                          try {
-                                            await apiClient.executeProposal(activeProposal!['proposal_id']);
-                                            setSheetState(() {
-                                              aiReply = "Proposal executed successfully! Paper orders recorded in ledger.";
-                                              activeProposal = null;
-                                            });
-                                          } catch (err) {
-                                            setSheetState(() => aiReply = "Execution failed: $err");
-                                          }
-                                        },
-                                        child: const Text("Execute Paper Proposal",
-                                            style: TextStyle(fontWeight: FontWeight.bold)),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ],
+                          child: Text(
+                            aiReply ?? "Ask any question about $_symbol technical patterns, RSI levels, support & resistance, or simulated order planning.",
+                            style: const TextStyle(fontSize: 12, height: 1.4, color: TerminalColors.textMain),
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 10),
                     Row(
                       children: [
                         Expanded(
                           child: TextField(
                             controller: textController,
-                            style: const TextStyle(fontSize: 12, color: Colors.white),
+                            style: const TextStyle(fontSize: 13, color: Colors.white),
                             decoration: const InputDecoration(
-                              hintText: "Explain RSI or say 'Invest INR 10,000'...",
-                              hintStyle: TextStyle(fontSize: 11, color: TerminalColors.textMuted),
-                              isDense: true,
+                              hintText: "Ask Gemini about technical indicators...",
+                              hintStyle: TextStyle(fontSize: 12, color: TerminalColors.textMuted),
+                              filled: true,
+                              fillColor: TerminalColors.panel,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.all(Radius.circular(6)),
+                                borderSide: BorderSide(color: TerminalColors.borderSubtle),
+                              ),
                             ),
                           ),
                         ),
@@ -575,8 +571,8 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
                         IconButton(
                           icon: aiThinking
                               ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
+                                  width: 20,
+                                  height: 20,
                                   child: CircularProgressIndicator(strokeWidth: 2, color: TerminalColors.action),
                                 )
                               : const Icon(Icons.send, color: TerminalColors.action, size: 20),
@@ -598,7 +594,6 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
                                     );
                                     setSheetState(() {
                                       aiReply = res['reply'];
-                                      activeProposal = res['proposal'];
                                       aiThinking = false;
                                     });
                                   } catch (e) {
@@ -710,7 +705,7 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
                     child: Text(
                       _modeInfo?['mode']?.contains('US') == true
                           ? "Live IEX (USD Paper)"
-                          : "NSE Historical Replay (${_modeInfo?['lag_days'] ?? 30}D Lag)",
+                          : "NSE Real-Time / Replay",
                       style: const TextStyle(fontSize: 10, color: TerminalColors.textMuted, fontWeight: FontWeight.w600),
                     ),
                   ),
@@ -718,7 +713,7 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
               ),
             ),
 
-            // Groww-style Range Bar
+            // Timeframe / Range Bar
             Container(
               height: 34,
               padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -769,23 +764,24 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
               ),
             ),
 
-            // Timeframe Selector & Indicators bar
+            // Interactive Controls Toolbar: Timeframes, Zoom (+ / - / Reset), Indicators & Style
             Container(
-              height: 34,
+              height: 36,
               padding: const EdgeInsets.symmetric(horizontal: 12),
               color: Colors.black,
               child: Row(
                 children: [
-                  for (final tf in ['1m', '5m', '15m', '1h', '1D', '1W', '1M'])
+                  // Timeframe chips
+                  for (final tf in ['5m', '15m', '1h', '1D', '1W'])
                     Padding(
-                      padding: const EdgeInsets.only(right: 6),
+                      padding: const EdgeInsets.only(right: 4),
                       child: GestureDetector(
                         onTap: () {
                           setState(() => _timeframe = tf);
                           _fetchChartData();
                         },
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
                             color: _timeframe == tf ? TerminalColors.borderMedium : Colors.transparent,
                             borderRadius: BorderRadius.circular(3),
@@ -802,30 +798,82 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
                       ),
                     ),
                   const Spacer(),
-                  // Chart style toggle
-                  GestureDetector(
-                    onTap: () => setState(() => _showCandlesticks = !_showCandlesticks),
-                    child: Icon(
-                      _showCandlesticks ? Icons.candlestick_chart : Icons.show_chart,
-                      size: 18,
-                      color: TerminalColors.action,
-                    ),
+
+                  // Quick Zoom Buttons
+                  _buildToolbarButton(
+                    icon: Icons.zoom_in,
+                    tooltip: "Zoom In (Wider Candles)",
+                    onTap: _zoomIn,
+                  ),
+                  const SizedBox(width: 4),
+                  _buildToolbarButton(
+                    icon: Icons.zoom_out,
+                    tooltip: "Zoom Out (More History)",
+                    onTap: _zoomOut,
+                  ),
+                  const SizedBox(width: 4),
+                  _buildToolbarButton(
+                    icon: Icons.fit_screen,
+                    tooltip: "Reset Zoom & Live Edge",
+                    onTap: _resetZoom,
                   ),
                   const SizedBox(width: 8),
-                  // SMA toggle
+
+                  // Chart style toggle (Candles vs Area/Line)
                   GestureDetector(
-                    onTap: () => setState(() => _showSma20 = !_showSma20),
+                    onTap: () => setState(() => _showCandlesticks = !_showCandlesticks),
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                       decoration: BoxDecoration(
-                        color: _showSma20 ? TerminalColors.borderMedium : Colors.transparent,
+                        color: _showCandlesticks ? const Color(0x33F29A60) : Colors.transparent,
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                      child: Icon(
+                        _showCandlesticks ? Icons.candlestick_chart : Icons.show_chart,
+                        size: 16,
+                        color: TerminalColors.action,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+
+                  // SMA20 toggle
+                  GestureDetector(
+                    onTap: () => setState(() => _showSma20 = !_showSma20),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: _showSma20 ? const Color(0x33F59E0B) : Colors.transparent,
                         borderRadius: BorderRadius.circular(2),
+                        border: Border.all(color: _showSma20 ? Colors.amber : TerminalColors.borderSubtle),
                       ),
                       child: Text(
-                        "SMA20",
+                        "SMA",
                         style: TextStyle(
                           fontSize: 9,
                           color: _showSma20 ? Colors.amber : TerminalColors.textMuted,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+
+                  // EMA50 toggle
+                  GestureDetector(
+                    onTap: () => setState(() => _showEma50 = !_showEma50),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: _showEma50 ? const Color(0x333B82F6) : Colors.transparent,
+                        borderRadius: BorderRadius.circular(2),
+                        border: Border.all(color: _showEma50 ? const Color(0xFF60A5FA) : TerminalColors.borderSubtle),
+                      ),
+                      child: Text(
+                        "EMA",
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: _showEma50 ? const Color(0xFF60A5FA) : TerminalColors.textMuted,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -835,7 +883,7 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
               ),
             ),
 
-            // Main Interactive Mobile Chart Area
+            // Main Interactive Mobile Chart Area with Pan, Zoom & Crosshairs
             Expanded(
               child: _loading
                   ? const Center(child: CircularProgressIndicator(color: TerminalColors.action))
@@ -843,31 +891,136 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
                       ? Center(child: Text("Error: $_error", style: const TextStyle(color: TerminalColors.negative)))
                       : _bars.isEmpty
                           ? const Center(child: Text("No bars available for this instrument.", style: TextStyle(color: TerminalColors.textMuted)))
-                          : GestureDetector(
-                              onHorizontalDragUpdate: (details) {
-                                // Touch crosshair inspection
+                          : LayoutBuilder(
+                              builder: (context, constraints) {
+                                return Stack(
+                                  children: [
+                                    // Interactive Pan, Pinch Zoom, Mouse Wheel Listener
+                                    Listener(
+                                      onPointerSignal: (pointerSignal) {
+                                        if (pointerSignal is PointerScrollEvent) {
+                                          final dy = pointerSignal.scrollDelta.dy;
+                                          setState(() {
+                                            if (dy < 0) {
+                                              _candleWidth = (_candleWidth * 1.15).clamp(3.0, 36.0);
+                                            } else {
+                                              _candleWidth = (_candleWidth / 1.15).clamp(3.0, 36.0);
+                                            }
+                                          });
+                                        }
+                                      },
+                                      child: GestureDetector(
+                                        behavior: HitTestBehavior.opaque,
+                                        onScaleStart: (details) {
+                                          _baseCandleWidth = _candleWidth;
+                                        },
+                                        onScaleUpdate: (details) {
+                                          if (details.pointerCount > 1 || details.scale != 1.0) {
+                                            // Pinch Zoom
+                                            setState(() {
+                                              _candleWidth = (_baseCandleWidth * details.scale).clamp(3.0, 36.0);
+                                            });
+                                          } else {
+                                            // 1-finger horizontal pan drag
+                                            final dx = details.focalPointDelta.dx;
+                                            final step = _candleWidth + 2.0;
+                                            final maxScroll = (_bars.length * step) - (constraints.maxWidth * 0.4);
+                                            setState(() {
+                                              _scrollOffset = (_scrollOffset + dx).clamp(-40.0, maxScroll > 0 ? maxScroll : 0.0);
+                                              _hoverPosition = details.localFocalPoint;
+                                            });
+                                          }
+                                        },
+                                        onTapDown: (details) {
+                                          setState(() {
+                                            _hoverPosition = details.localPosition;
+                                          });
+                                        },
+                                        onDoubleTap: _resetZoom,
+                                        child: CustomPaint(
+                                          size: Size(constraints.maxWidth, constraints.maxHeight),
+                                          painter: _MobileCandlePainter(
+                                            bars: _bars,
+                                            showCandlesticks: _showCandlesticks,
+                                            showSma20: _showSma20,
+                                            showEma50: _showEma50,
+                                            showVolume: _showVolume,
+                                            candleWidth: _candleWidth,
+                                            scrollOffset: _scrollOffset,
+                                            hoverPosition: _hoverPosition,
+                                            onHoverUpdated: (idx) {
+                                              if (_hoverIndex != idx) {
+                                                WidgetsBinding.instance.addPostFrameCallback((_) {
+                                                  if (mounted) setState(() => _hoverIndex = idx);
+                                                });
+                                              }
+                                            },
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+
+                                    // Top Hover Inspection HUD Overlay Box
+                                    if (_hoverIndex != null && _hoverIndex! >= 0 && _hoverIndex! < _bars.length)
+                                      Positioned(
+                                        top: 8,
+                                        left: 10,
+                                        right: 64,
+                                        child: _buildHoverHud(_bars[_hoverIndex!]),
+                                      ),
+
+                                    // Jump To Live Floating Button (Appears when scrolled back into past)
+                                    if (_scrollOffset > 50)
+                                      Positioned(
+                                        bottom: 30,
+                                        right: 64,
+                                        child: GestureDetector(
+                                          onTap: _jumpToLive,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                            decoration: BoxDecoration(
+                                              color: TerminalColors.action,
+                                              borderRadius: BorderRadius.circular(16),
+                                              boxShadow: const [
+                                                BoxShadow(color: Colors.black54, blurRadius: 4, offset: Offset(0, 2)),
+                                              ],
+                                            ),
+                                            child: const Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(Icons.skip_next, size: 14, color: Colors.black),
+                                                SizedBox(width: 4),
+                                                Text(
+                                                  "Jump to Latest",
+                                                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.black),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                );
                               },
-                              child: CustomPaint(
-                                size: Size.infinite,
-                                painter: _MobileCandlePainter(
-                                  bars: _bars,
-                                  showCandlesticks: _showCandlesticks,
-                                  showSma20: _showSma20,
-                                  showVolume: _showVolume,
-                                  hoverIndex: _hoverIndex,
-                                ),
-                              ),
                             ),
             ),
 
-            // TradingView Lightweight Charts Attribution
+            // TradingView Lightweight Charts Status Footer
             Container(
               padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
               color: Colors.black,
-              alignment: Alignment.centerLeft,
-              child: const Text(
-                "TradingView Lightweight Charts™ • Mobile Workspace View",
-                style: TextStyle(fontSize: 9, color: TerminalColors.textFaint),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    "FinEx Interactive Canvas • Pan & Pinch to Zoom",
+                    style: TextStyle(fontSize: 9, color: TerminalColors.textFaint),
+                  ),
+                  Text(
+                    "Zoom: ${(_candleWidth * 10).round()}% · ${_bars.length} Bars",
+                    style: const TextStyle(fontSize: 9, fontFamily: 'monospace', color: TerminalColors.textMuted),
+                  ),
+                ],
               ),
             ),
           ],
@@ -875,22 +1028,94 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
       ),
     );
   }
+
+  Widget _buildToolbarButton({required IconData icon, required String tooltip, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Tooltip(
+        message: tooltip,
+        child: Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: const Color(0x1AFFFFFF),
+            borderRadius: BorderRadius.circular(3),
+          ),
+          child: Icon(icon, size: 15, color: TerminalColors.textMain),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHoverHud(Map<String, dynamic> bar) {
+    final date = (bar['date'] ?? '').toString();
+    final open = double.tryParse(bar['open'].toString()) ?? 0.0;
+    final high = double.tryParse(bar['high'].toString()) ?? 0.0;
+    final low = double.tryParse(bar['low'].toString()) ?? 0.0;
+    final close = double.tryParse(bar['close'].toString()) ?? 0.0;
+    final vol = double.tryParse(bar['volume'].toString()) ?? 0.0;
+    final chg = close - open;
+    final chgPct = open > 0 ? (chg / open) * 100 : 0.0;
+    final isBull = chg >= 0;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xEE111111),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: TerminalColors.borderSubtle),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(date, style: const TextStyle(fontSize: 10, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: Colors.white)),
+              Text(
+                "${isBull ? '+' : ''}${chg.toStringAsFixed(2)} (${isBull ? '+' : ''}${chgPct.toStringAsFixed(2)}%)",
+                style: TextStyle(
+                  fontSize: 10,
+                  fontFamily: 'monospace',
+                  fontWeight: FontWeight.bold,
+                  color: isBull ? const Color(0xFF26A69A) : const Color(0xFFEF5350),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            "O: ${open.toStringAsFixed(2)}  H: ${high.toStringAsFixed(2)}  L: ${low.toStringAsFixed(2)}  C: ${close.toStringAsFixed(2)}  V: ${vol > 1000 ? '${(vol / 1000).toStringAsFixed(1)}k' : vol.toStringAsFixed(0)}",
+            style: const TextStyle(fontSize: 9, fontFamily: 'monospace', color: TerminalColors.textMuted),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
-/// Custom Interactive Candlestick & Volume Painter for Pure-Black Mobile Experience
+/// Fully Flexible Interactive Candlestick, Volume & Multi-Indicator Canvas Painter
 class _MobileCandlePainter extends CustomPainter {
   final List<Map<String, dynamic>> bars;
   final bool showCandlesticks;
   final bool showSma20;
+  final bool showEma50;
   final bool showVolume;
-  final int? hoverIndex;
+  final double candleWidth;
+  final double scrollOffset;
+  final Offset? hoverPosition;
+  final ValueChanged<int?> onHoverUpdated;
 
   _MobileCandlePainter({
     required this.bars,
     required this.showCandlesticks,
     required this.showSma20,
+    required this.showEma50,
     required this.showVolume,
-    this.hoverIndex,
+    required this.candleWidth,
+    required this.scrollOffset,
+    this.hoverPosition,
+    required this.onHoverUpdated,
   });
 
   @override
@@ -899,51 +1124,111 @@ class _MobileCandlePainter extends CustomPainter {
 
     final double width = size.width;
     final double height = size.height;
-    final double volumeHeight = showVolume ? height * 0.2 : 0;
-    final double priceHeight = height - volumeHeight;
+    const double rightScaleWidth = 54.0;
+    const double bottomDateHeight = 22.0;
 
-    // Determine min/max price
+    final double chartWidth = width - rightScaleWidth;
+    final double chartHeight = height - bottomDateHeight;
+    final double volumeHeight = showVolume ? chartHeight * 0.18 : 0.0;
+    final double priceHeight = chartHeight - volumeHeight;
+
+    final double step = candleWidth + 2.0;
+    final int totalBars = bars.length;
+
+    // Determine which bars fall within visible canvas area
+    int? firstVisibleIdx;
+    int? lastVisibleIdx;
     double minPrice = double.infinity;
     double maxPrice = -double.infinity;
-    double maxVolume = 0;
+    double maxVolume = 0.0;
 
-    for (final b in bars) {
-      final high = double.tryParse(b['high'].toString()) ?? 0.0;
-      final low = double.tryParse(b['low'].toString()) ?? 0.0;
-      final vol = double.tryParse(b['volume'].toString()) ?? 0.0;
+    // Calculate x positions for all bars and gather min/max from visible window
+    final List<double> xCenters = List.filled(totalBars, 0.0);
+    for (int i = 0; i < totalBars; i++) {
+      final double x = chartWidth - (step / 2) - ((totalBars - 1 - i) * step) + scrollOffset;
+      xCenters[i] = x;
 
-      if (high > maxPrice) maxPrice = high;
-      if (low < minPrice && low > 0) minPrice = low;
-      if (vol > maxVolume) maxVolume = vol;
+      if (x >= -step && x <= chartWidth + step) {
+        firstVisibleIdx ??= i;
+        lastVisibleIdx = i;
+
+        final high = double.tryParse(bars[i]['high'].toString()) ?? 0.0;
+        final low = double.tryParse(bars[i]['low'].toString()) ?? 0.0;
+        final vol = double.tryParse(bars[i]['volume'].toString()) ?? 0.0;
+
+        if (high > maxPrice) maxPrice = high;
+        if (low < minPrice && low > 0) minPrice = low;
+        if (vol > maxVolume) maxVolume = vol;
+      }
     }
 
-    if (minPrice >= maxPrice) {
-      minPrice = maxPrice * 0.95;
-      maxPrice = maxPrice * 1.05;
+    if (minPrice == double.infinity || maxPrice == -double.infinity || minPrice >= maxPrice) {
+      minPrice = 1000.0;
+      maxPrice = 1100.0;
     }
 
+    // Add 4% vertical padding to top and bottom
+    final double rawRange = maxPrice - minPrice;
+    final double padding = rawRange * 0.05;
+    minPrice -= padding;
+    maxPrice += padding;
     final double priceRange = maxPrice - minPrice;
-    final int count = bars.length;
-    final double barWidth = width / count;
 
-    // Grid Lines
+    // Detect hover index
+    int? detectedHoverIdx;
+    if (hoverPosition != null && hoverPosition!.dx >= 0 && hoverPosition!.dx < chartWidth) {
+      final hx = hoverPosition!.dx;
+      double closestDist = double.infinity;
+      for (int i = (firstVisibleIdx ?? 0); i <= (lastVisibleIdx ?? totalBars - 1); i++) {
+        final dist = (xCenters[i] - hx).abs();
+        if (dist < closestDist) {
+          closestDist = dist;
+          detectedHoverIdx = i;
+        }
+      }
+    }
+    onHoverUpdated(detectedHoverIdx);
+
+    // 1. Draw Background Gridlines & Right Y-Axis Scale
     final gridPaint = Paint()
-      ..color = const Color(0x0DFFFFFF)
+      ..color = const Color(0x10FFFFFF)
       ..strokeWidth = 1;
 
-    for (int i = 1; i <= 4; i++) {
-      final y = priceHeight * (i / 4);
-      canvas.drawLine(Offset(0, y), Offset(width, y), gridPaint);
+    final axisTextPainter = TextPainter(textDirection: TextDirection.ltr);
+
+    for (int i = 0; i <= 4; i++) {
+      final double ratio = i / 4.0;
+      final double y = priceHeight * ratio;
+      final double priceAtY = maxPrice - (priceRange * ratio);
+
+      // Horizontal dashed line
+      canvas.drawLine(Offset(0, y), Offset(chartWidth, y), gridPaint);
+
+      // Right axis label
+      axisTextPainter.text = TextSpan(
+        text: priceAtY.toStringAsFixed(priceAtY >= 500 ? 0 : 2),
+        style: const TextStyle(fontSize: 9, fontFamily: 'monospace', color: TerminalColors.textMuted),
+      );
+      axisTextPainter.layout();
+      axisTextPainter.paint(canvas, Offset(chartWidth + 5, y - 5));
     }
 
-    // Paint Candlesticks & Volume
+    // Vertical Right-Axis Border
+    canvas.drawLine(Offset(chartWidth, 0), Offset(chartWidth, height), Paint()..color = TerminalColors.borderSubtle);
+    // Horizontal Bottom-Axis Border
+    canvas.drawLine(Offset(0, chartHeight), Offset(width, chartHeight), Paint()..color = TerminalColors.borderSubtle);
+
+    // 2. Render Candlesticks and Volume Bars
     final bullPaint = Paint()..color = const Color(0xFF26A69A);
     final bearPaint = Paint()..color = const Color(0xFFEF5350);
-    final wickPaint = Paint()..strokeWidth = 1;
+    final wickPaint = Paint()..strokeWidth = 1.0;
 
-    final List<Offset> smaPoints = [];
+    final List<Offset> linePoints = [];
 
-    for (int i = 0; i < count; i++) {
+    final startIdx = firstVisibleIdx ?? 0;
+    final endIdx = lastVisibleIdx ?? (totalBars - 1);
+
+    for (int i = startIdx; i <= endIdx; i++) {
       final b = bars[i];
       final open = double.tryParse(b['open'].toString()) ?? 0.0;
       final high = double.tryParse(b['high'].toString()) ?? 0.0;
@@ -955,60 +1240,199 @@ class _MobileCandlePainter extends CustomPainter {
       final paint = isBull ? bullPaint : bearPaint;
       wickPaint.color = paint.color;
 
-      final double xCenter = (i * barWidth) + (barWidth / 2);
+      final double xc = xCenters[i];
 
-      // Y coordinates for OHLC
       final double yOpen = priceHeight - ((open - minPrice) / priceRange * priceHeight);
       final double yClose = priceHeight - ((close - minPrice) / priceRange * priceHeight);
       final double yHigh = priceHeight - ((high - minPrice) / priceRange * priceHeight);
       final double yLow = priceHeight - ((low - minPrice) / priceRange * priceHeight);
 
       if (showCandlesticks) {
-        // High-Low Wick
-        canvas.drawLine(Offset(xCenter, yHigh), Offset(xCenter, yLow), wickPaint);
+        // High-low wick
+        canvas.drawLine(Offset(xc, yHigh), Offset(xc, yLow), wickPaint);
 
-        // Body Rect
+        // Body rectangle
         final double top = yOpen < yClose ? yOpen : yClose;
-        final double bodyHeight = (yOpen - yClose).abs().clamp(1.0, priceHeight);
-        final double candleWidth = (barWidth * 0.7).clamp(2.0, 16.0);
+        final double bodyH = (yOpen - yClose).abs().clamp(1.5, priceHeight);
+        final double cWidth = (candleWidth * 0.75).clamp(2.0, 32.0);
 
         canvas.drawRect(
-          Rect.fromLTWH(xCenter - (candleWidth / 2), top, candleWidth, bodyHeight),
+          Rect.fromLTWH(xc - (cWidth / 2), top, cWidth, bodyH),
           paint,
         );
       } else {
-        // Line chart point
-        if (i == 0) {
-          smaPoints.add(Offset(xCenter, yClose));
-        } else {
-          smaPoints.add(Offset(xCenter, yClose));
-        }
+        linePoints.add(Offset(xc, yClose));
       }
 
-      // Volume Bar
+      // Volume histogram bar
       if (showVolume && maxVolume > 0) {
-        final double volBarHeight = (vol / maxVolume) * volumeHeight * 0.85;
-        final double volTop = height - volBarHeight;
-        final volPaint = Paint()..color = paint.color.withAlpha(76);
-        final double candleWidth = (barWidth * 0.7).clamp(2.0, 16.0);
+        final double volBarHeight = (vol / maxVolume) * volumeHeight * 0.9;
+        final double volTop = chartHeight - volBarHeight;
+        final volPaint = Paint()..color = paint.color.withValues(alpha: 0.35);
+        final double cWidth = (candleWidth * 0.75).clamp(2.0, 32.0);
+
         canvas.drawRect(
-          Rect.fromLTWH(xCenter - (candleWidth / 2), volTop, candleWidth, volBarHeight),
+          Rect.fromLTWH(xc - (cWidth / 2), volTop, cWidth, volBarHeight),
           volPaint,
         );
       }
     }
 
-    // Draw Line if line mode
-    if (!showCandlesticks && smaPoints.length > 1) {
+    // 3. Render Mountain / Line if in line mode
+    if (!showCandlesticks && linePoints.length > 1) {
+      final linePath = Path()..moveTo(linePoints.first.dx, linePoints.first.dy);
+      final areaPath = Path()..moveTo(linePoints.first.dx, chartHeight);
+      areaPath.lineTo(linePoints.first.dx, linePoints.first.dy);
+
+      for (int k = 1; k < linePoints.length; k++) {
+        linePath.lineTo(linePoints[k].dx, linePoints[k].dy);
+        areaPath.lineTo(linePoints[k].dx, linePoints[k].dy);
+      }
+
+      areaPath.lineTo(linePoints.last.dx, chartHeight);
+      areaPath.close();
+
+      final areaPaint = Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            TerminalColors.action.withValues(alpha: 0.25),
+            TerminalColors.action.withValues(alpha: 0.0),
+          ],
+        ).createShader(Rect.fromLTWH(0, 0, chartWidth, chartHeight));
+
+      canvas.drawPath(areaPath, areaPaint);
+
       final linePaint = Paint()
         ..color = TerminalColors.action
-        ..strokeWidth = 2
+        ..strokeWidth = 2.0
         ..style = PaintingStyle.stroke;
-      final path = Path()..moveTo(smaPoints.first.dx, smaPoints.first.dy);
-      for (int i = 1; i < smaPoints.length; i++) {
-        path.lineTo(smaPoints[i].dx, smaPoints[i].dy);
+      canvas.drawPath(linePath, linePaint);
+    }
+
+    // 4. Moving Average Overlays (SMA20 & EMA50)
+    if (showSma20 && bars.length >= 20) {
+      final smaPaint = Paint()
+        ..color = Colors.amber
+        ..strokeWidth = 1.5
+        ..style = PaintingStyle.stroke;
+
+      final Path smaPath = Path();
+      bool firstSma = true;
+
+      for (int i = 19; i < totalBars; i++) {
+        final xc = xCenters[i];
+        if (xc < -step || xc > chartWidth + step) continue;
+
+        double sum = 0.0;
+        for (int k = i - 19; k <= i; k++) {
+          sum += double.tryParse(bars[k]['close'].toString()) ?? 0.0;
+        }
+        final avg = sum / 20.0;
+        final yAvg = priceHeight - ((avg - minPrice) / priceRange * priceHeight);
+
+        if (firstSma) {
+          smaPath.moveTo(xc, yAvg);
+          firstSma = false;
+        } else {
+          smaPath.lineTo(xc, yAvg);
+        }
       }
-      canvas.drawPath(path, linePaint);
+      canvas.drawPath(smaPath, smaPaint);
+    }
+
+    if (showEma50 && bars.length >= 50) {
+      final emaPaint = Paint()
+        ..color = const Color(0xFF60A5FA)
+        ..strokeWidth = 1.5
+        ..style = PaintingStyle.stroke;
+
+      final Path emaPath = Path();
+      bool firstEma = true;
+      double multiplier = 2.0 / (50 + 1);
+      double currentEma = double.tryParse(bars[0]['close'].toString()) ?? 0.0;
+
+      for (int i = 1; i < totalBars; i++) {
+        final close = double.tryParse(bars[i]['close'].toString()) ?? 0.0;
+        currentEma = ((close - currentEma) * multiplier) + currentEma;
+
+        if (i >= 49) {
+          final xc = xCenters[i];
+          if (xc < -step || xc > chartWidth + step) continue;
+          final yEma = priceHeight - ((currentEma - minPrice) / priceRange * priceHeight);
+
+          if (firstEma) {
+            emaPath.moveTo(xc, yEma);
+            firstEma = false;
+          } else {
+            emaPath.lineTo(xc, yEma);
+          }
+        }
+      }
+      canvas.drawPath(emaPath, emaPaint);
+    }
+
+    // 5. Render Date Axis along bottom
+    final dateStep = ((chartWidth / 70).floor()).clamp(3, 15);
+    for (int i = startIdx; i <= endIdx; i += dateStep) {
+      final xc = xCenters[i];
+      if (xc >= 10 && xc <= chartWidth - 30) {
+        final rawDate = (bars[i]['date'] ?? '').toString();
+        // Extract DD/MM or MM-DD
+        final displayDate = rawDate.length >= 10 ? rawDate.substring(5, 10) : rawDate;
+        axisTextPainter.text = TextSpan(
+          text: displayDate,
+          style: const TextStyle(fontSize: 9, fontFamily: 'monospace', color: TerminalColors.textMuted),
+        );
+        axisTextPainter.layout();
+        axisTextPainter.paint(canvas, Offset(xc - 12, chartHeight + 4));
+      }
+    }
+
+    // 6. Draw Current Latest Price Pill on Right Axis
+    final latestClose = double.tryParse(bars.last['close'].toString()) ?? 0.0;
+    final double yLatest = (priceHeight - ((latestClose - minPrice) / priceRange * priceHeight)).clamp(8.0, priceHeight - 8.0);
+
+    final ltpBgPaint = Paint()..color = TerminalColors.action;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(Rect.fromLTWH(chartWidth + 2, yLatest - 8, rightScaleWidth - 4, 16), const Radius.circular(3)),
+      ltpBgPaint,
+    );
+    axisTextPainter.text = TextSpan(
+      text: latestClose.toStringAsFixed(latestClose >= 500 ? 0 : 2),
+      style: const TextStyle(fontSize: 9, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: Colors.black),
+    );
+    axisTextPainter.layout();
+    axisTextPainter.paint(canvas, Offset(chartWidth + 6, yLatest - 5));
+
+    // 7. Interactive Crosshair Lines (when hovering / tapping)
+    if (detectedHoverIdx != null && detectedHoverIdx >= 0 && detectedHoverIdx < totalBars) {
+      final hxc = xCenters[detectedHoverIdx];
+      final hy = (hoverPosition?.dy ?? 0.0).clamp(0.0, chartHeight);
+
+      final crosshairPaint = Paint()
+        ..color = const Color(0x66FFFFFF)
+        ..strokeWidth = 1.0;
+
+      // Vertical crosshair
+      canvas.drawLine(Offset(hxc, 0), Offset(hxc, chartHeight), crosshairPaint);
+      // Horizontal crosshair
+      canvas.drawLine(Offset(0, hy), Offset(chartWidth, hy), crosshairPaint);
+
+      // Price badge on right axis for hovered level
+      final hoveredPrice = maxPrice - (hy / priceHeight * priceRange);
+      final hoverPriceBg = Paint()..color = const Color(0xFF333333);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(Rect.fromLTWH(chartWidth + 2, hy - 7, rightScaleWidth - 4, 14), const Radius.circular(2)),
+        hoverPriceBg,
+      );
+      axisTextPainter.text = TextSpan(
+        text: hoveredPrice.toStringAsFixed(hoveredPrice >= 500 ? 0 : 2),
+        style: const TextStyle(fontSize: 8, fontFamily: 'monospace', fontWeight: FontWeight.bold, color: Colors.white),
+      );
+      axisTextPainter.layout();
+      axisTextPainter.paint(canvas, Offset(chartWidth + 5, hy - 5));
     }
   }
 
@@ -1017,6 +1441,10 @@ class _MobileCandlePainter extends CustomPainter {
     return oldDelegate.bars != bars ||
         oldDelegate.showCandlesticks != showCandlesticks ||
         oldDelegate.showSma20 != showSma20 ||
-        oldDelegate.hoverIndex != hoverIndex;
+        oldDelegate.showEma50 != showEma50 ||
+        oldDelegate.showVolume != showVolume ||
+        oldDelegate.candleWidth != candleWidth ||
+        oldDelegate.scrollOffset != scrollOffset ||
+        oldDelegate.hoverPosition != hoverPosition;
   }
 }
