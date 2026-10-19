@@ -226,7 +226,7 @@ class _MobileTransactionsScreenState extends State<MobileTransactionsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final filtered = _orders.filter((o) {
+    final filtered = _orders.where((o) {
       final matchesFilter = _activeFilter == 'ALL' || (o['side'] ?? '') == _activeFilter;
       final sym = (o['symbol'] ?? '').toString().toLowerCase();
       final id = (o['id'] ?? o['order_id'] ?? '').toString().toLowerCase();
@@ -505,13 +505,5 @@ class _MobileTransactionsScreenState extends State<MobileTransactionsScreen> {
         ],
       ),
     );
-  }
-}
-
-extension _IterableExt<T> on Iterable<T> {
-  Iterable<T> filter(bool Function(T) test) sync* {
-    for (var element in this) {
-      if (test(element)) yield element;
-    }
   }
 }
