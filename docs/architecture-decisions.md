@@ -73,16 +73,20 @@
 
 ---
 
-## ADR 006: Mobile (Flutter) Scope Freeze & Deferral Decision
+## ADR 006: Mobile (Flutter) Scope Decision — Defer vs. Fund
 - **Date:** 19 October 2026
-- **Status:** Approved (Scope Freeze)
-- **Context:** The React + Vite web platform is 100% feature-complete, accessible, verified, and integrated with live market feeds, paper trading, portfolio management, AI chatbot, and responsive live charts. Flutter mobile core screens exist in mobile/lib/, but full native store packaging across Android/iOS requires platform-specific signing keys, emulators, and store review timelines.
-- **Decision:** **Defer native mobile release packaging to post-demo (Phase 2 / Sprint 9+).** The web application serves as the primary tier-1 interface for the 10 November 2026 demo handoff. Flutter code remains frozen in the repository as a proven companion client.
+- **Status:** DRAFT (Pending Owner Decision by 31 October 2026)
+- **Draft Reference:** [docs/architecture-decisions/adr-006-mobile-app-scope.md](architecture-decisions/adr-006-mobile-app-scope.md)
+- **Tradeoff Summary:**
+  - **Option A (Defer to post-demo):** Focus 100% on web demo stability, zero risk of emulator crashes during presentation, native store packaging in Sprint 9+.
+  - **Option B (Fund before 31 Oct):** Allocate ~20 hours to Keystore signing and device emulators to demo a live Android APK on 10 Nov.
 
 ---
 
-## ADR 007: Delta Lake Analytical Scope Freeze & Deferral Decision
+## ADR 007: Delta Lake Analytical Scope Decision — Defer vs. Fund
 - **Date:** 19 October 2026
-- **Status:** Approved (Scope Freeze)
-- **Context:** Operational storage, reconciliation, and audit logs are fully operational in PostgreSQL. Heavy Databricks Delta Lake workflow execution scripts exist in data/ddl/ and workflow_orchestrator.py, but provisioning a live remote Databricks cloud cluster for the single-developer demo adds external network failure risks and cloud cost overhead.
-- **Decision:** **Defer live remote Databricks workflow provisioning to post-demo (Phase 2 / Sprint 9+).** For the 10 November 2026 demo, analytical history, price history candles, and portfolio reconciliation are executed deterministically on PostgreSQL and local Python analytical runners, maintaining 100% zero-break reliability without external cluster dependencies.
+- **Status:** DRAFT (Pending Owner Decision by 31 October 2026)
+- **Draft Reference:** [docs/architecture-decisions/adr-007-delta-lake-scope.md](architecture-decisions/adr-007-delta-lake-scope.md)
+- **Tradeoff Summary:**
+  - **Option A (Defer to post-demo):** Rely on PostgreSQL + local Python runners for demo; 100% deterministic, 0 cloud cluster cost, zero network dropout risk.
+  - **Option B (Fund before 31 Oct):** Provision live remote Databricks workspace/cluster before 31 Oct; requires cloud budget and adds external service latency risk.
