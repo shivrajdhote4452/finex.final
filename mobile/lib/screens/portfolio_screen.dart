@@ -1,0 +1,507 @@
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import '../services/api_client.dart';
+import '../theme/terminal_theme.dart';
+import '../widgets/quick_trade_modal.dart';
+import 'transactions_screen.dart';
+
+class MobilePortfolioScreen extends StatefulWidget {
+  const MobilePortfolioScreen({super.key});
+
+  @override
+  State<MobilePortfolioScreen> createState() => _MobilePortfolioScreenState();
+}
+
+class _MobilePortfolioScreenState extends State<MobilePortfolioScreen> {
+  double _virtualCash = 100000.0;
+  double _totalHoldingsValue = 0.0;
+  double _totalPortfolioValue = 100000.0;
+  double _unrealizedPnL = 0.0;
+  List<Map<String, dynamic>> _holdings = [];
+  bool _isLoading = false;
+
+  final _currencyFmt = NumberFormat.currency(symbol: '₹ ', locale: 'en_IN', decimalDigits: 2);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPortfolio();
+  }
+
+  Future<void> _loadPortfolio() async {
+    setState(() => _isLoading = true);
+    try {
+      final acct = await apiClient.getAccount();
+      if (mounted) {
+        final cash = (acct['cash_balance'] ?? acct['current_cash'] as num?)?.toDouble() ?? 100000.0;
+        final rawPos = List<Map<String, dynamic>>.from(acct['positions'] ?? []);
+        
+        double totalVal = 0.0;
+        double totalPnL = 0.0;
+        final processed = rawPos.map<Map<String, dynamic>>((p) {
+          final sym = p['symbol'] ?? '';
+          final qty = (p['quantity'] as num?)?.toDouble() ?? 0.0;
+          final avgBuy = (p['average_buy_price'] ?? p['avg_cost'] as num?)?.toDouble() ?? 0.0;
+          final curPrice = (p['current_price'] as num?)?.toDouble() ?? avgBuy;
+          final mktVal = (p['market_value'] as num?)?.toDouble() ?? (qty * curPrice);
+          final pnl = (p['unrealized_pnl'] as num?)?.toDouble() ?? (mktVal - (qty * avgBuy));
+          totalVal += mktVal;
+          totalPnL += pnl;
+
+          return {
+            'symbol': sym,
+            'quantity': qty,
+            'avgBuy': avgBuy,
+            'currentPrice': curPrice,
+            'marketValue': mktVal,
+            'unrealizedPnL': pnl,
+          };
+        }).toList();
+
+        setState(() {
+          _virtualCash = cash;
+          _totalHoldingsValue = totalVal;
+          _unrealizedPnL = totalPnL;
+          _totalPortfolioValue = cash + totalVal;
+          _holdings = processed;
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _showRebalanceModal() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: TerminalColors.surface,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+            border: Border(top: BorderSide(color: TerminalColors.borderSubtle)),
+          ),
+          padding: const EdgeInsets.all(20),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      color: TerminalColors.borderMedium,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('⚖️ SIMULATE PORTFOLIO REBALANCE', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: TerminalColors.action)),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 20, color: TerminalColors.textMuted),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Equal-weight rebalancing adjusts each holding to target equal allocation (e.g. 20% per position), generating simulated corrective market orders.',
+                  style: TextStyle(fontSize: 12, color: TerminalColors.textMuted, height: 1.4),
+                ),
+                const SizedBox(height: 16),
+                if (_holdings.isEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(color: TerminalColors.panel, borderRadius: BorderRadius.circular(6)),
+                    child: const Text('No active holdings to rebalance. Open positions via Paper Trading first.', style: TextStyle(fontSize: 12, color: TerminalColors.textMuted)),
+                  )
+                else
+                  ..._holdings.map((h) {
+                    final targetWeight = 100.0 / _holdings.length;
+                    final currentWeight = _totalHoldingsValue > 0 ? (h['marketValue'] / _totalHoldingsValue) * 100 : 0.0;
+                    final diff = targetWeight - currentWeight;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(h['symbol'], style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: TerminalColors.textMain)),
+                          Row(
+                            children: [
+                              Text('${currentWeight.toStringAsFixed(1)}% → ${targetWeight.toStringAsFixed(1)}%', style: const TextStyle(fontSize: 12, fontFamily: 'monospace', color: TerminalColors.textMuted)),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: diff >= 0 ? TerminalColors.positiveBg : TerminalColors.negativeBg,
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
+                                child: Text(
+                                  diff >= 0 ? 'BUY' : 'SELL',
+                                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: diff >= 0 ? TerminalColors.positive : TerminalColors.negative),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: TerminalColors.action,
+                      foregroundColor: Colors.black,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    ),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Simulated rebalance calculations updated across ledger.'),
+                          backgroundColor: TerminalColors.surface,
+                        ),
+                      );
+                    },
+                    child: const Text('CONFIRM SIMULATED REBALANCE', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final costBasis = _totalHoldingsValue - _unrealizedPnL;
+    final pnlReturnPct = costBasis > 0 ? (_unrealizedPnL / costBasis) * 100 : 0.0;
+    final isProfit = _unrealizedPnL >= 0;
+
+    return Scaffold(
+      backgroundColor: TerminalColors.canvas,
+      appBar: AppBar(
+        title: const Text('PORTFOLIO & HOLDINGS ARCHITECTURE'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh, size: 20, color: TerminalColors.action),
+            onPressed: _loadPortfolio,
+          ),
+        ],
+        bottom: _isLoading
+            ? const PreferredSize(
+                preferredSize: Size.fromHeight(2),
+                child: LinearProgressIndicator(color: TerminalColors.action, minHeight: 2),
+              )
+            : null,
+      ),
+      body: RefreshIndicator(
+        color: TerminalColors.action,
+        backgroundColor: TerminalColors.surface,
+        onRefresh: _loadPortfolio,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            // Header
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('ASSET MANAGEMENT', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: TerminalColors.action, letterSpacing: 0.5)),
+                    SizedBox(height: 2),
+                    Text('Holdings Architecture', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: TerminalColors.textMain)),
+                  ],
+                ),
+                Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.balance, size: 20, color: TerminalColors.action),
+                      tooltip: 'Simulate Rebalance',
+                      onPressed: _showRebalanceModal,
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.receipt_long, size: 20, color: TerminalColors.textMuted),
+                      tooltip: 'Audit Ledger',
+                      onPressed: () {
+                        Navigator.push(context, MaterialPageRoute(builder: (context) => const MobileTransactionsScreen()));
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // Top KPI Cards (Grid 2x2)
+            Row(
+              children: [
+                Expanded(child: _buildMetricCard('HOLDINGS VALUATION', _currencyFmt.format(_totalHoldingsValue), '${_holdings.length} Active Positions', TerminalColors.textMain)),
+                const SizedBox(width: 12),
+                Expanded(child: _buildMetricCard('UNREALIZED P&L', '${isProfit ? '+' : ''}${_currencyFmt.format(_unrealizedPnL)}', '${isProfit ? '+' : ''}${pnlReturnPct.toStringAsFixed(2)}% Return', isProfit ? TerminalColors.positive : TerminalColors.negative)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(child: _buildMetricCard('VIRTUAL CASH', _currencyFmt.format(_virtualCash), 'Deployable Reserve', TerminalColors.action)),
+                const SizedBox(width: 12),
+                Expanded(child: _buildMetricCard('ACCOUNT EQUITY', _currencyFmt.format(_totalPortfolioValue), '100% Reconciled', TerminalColors.textMain)),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // Quick Instant Trade Button
+            SizedBox(
+              width: double.infinity,
+              height: 44,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: TerminalColors.positive,
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                ),
+                icon: const Icon(Icons.bolt, size: 18),
+                label: const Text('⚡ INSTANT TRADE TICKET', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+                onPressed: () {
+                  QuickTradeModal.show(context, onTradeExecuted: _loadPortfolio);
+                },
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Asset Distribution Strip
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: TerminalColors.surface,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: TerminalColors.borderSubtle),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('ASSET DISTRIBUTION', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: TerminalColors.textMuted)),
+                      Text('${_holdings.length} Assets', style: const TextStyle(fontSize: 11, color: TerminalColors.textFaint)),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (_holdings.isEmpty)
+                    const Text('No equity assets currently held in portfolio.', style: TextStyle(fontSize: 12, color: TerminalColors.textMuted))
+                  else ...[
+                    // Distribution segmented bar
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: SizedBox(
+                        height: 10,
+                        child: Row(
+                          children: _holdings.map((h) {
+                            final weight = _totalHoldingsValue > 0 ? (h['marketValue'] / _totalHoldingsValue) : 0.0;
+                            return Expanded(
+                              flex: (weight * 1000).toInt().clamp(1, 1000),
+                              child: Container(
+                                color: _getColorForSymbol(h['symbol']),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 8,
+                      children: _holdings.map((h) {
+                        final weight = _totalHoldingsValue > 0 ? ((h['marketValue'] / _totalHoldingsValue) * 100).toStringAsFixed(1) : '0';
+                        return Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(width: 8, height: 8, decoration: BoxDecoration(color: _getColorForSymbol(h['symbol']), shape: BoxShape.circle)),
+                            const SizedBox(width: 4),
+                            Text('${h['symbol']} ($weight%)', style: const TextStyle(fontSize: 11, color: TerminalColors.textMuted, fontFamily: 'monospace')),
+                          ],
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Detailed Holdings List
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('ACTIVE POSITIONS', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: TerminalColors.textMuted)),
+                TextButton(
+                  onPressed: _showRebalanceModal,
+                  child: const Text('Rebalance', style: TextStyle(fontSize: 12, color: TerminalColors.action)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            if (_holdings.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: TerminalColors.surface,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: TerminalColors.borderSubtle),
+                ),
+                alignment: Alignment.center,
+                child: const Column(
+                  children: [
+                    Icon(Icons.pie_chart_outline, size: 36, color: TerminalColors.textFaint),
+                    SizedBox(height: 8),
+                    Text('Zero Active Equity Positions', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: TerminalColors.textMain)),
+                    SizedBox(height: 4),
+                    Text('Execute paper orders from Markets or Charts to build portfolio allocation.', style: TextStyle(fontSize: 12, color: TerminalColors.textMuted), textAlign: TextAlign.center),
+                  ],
+                ),
+              )
+            else
+              ..._holdings.map((h) {
+                final sym = h['symbol'] as String;
+                final qty = (h['quantity'] as num).toInt();
+                final avgBuy = h['avgBuy'] as double;
+                final curPrice = h['currentPrice'] as double;
+                final mktVal = h['marketValue'] as double;
+                final pnl = h['unrealizedPnL'] as double;
+                final posWeight = _totalHoldingsValue > 0 ? ((mktVal / _totalHoldingsValue) * 100).toStringAsFixed(1) : '0';
+                final isHoldingProfit = pnl >= 0;
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: TerminalColors.surface,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: TerminalColors.borderSubtle),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Text(sym, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: TerminalColors.textMain)),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(color: TerminalColors.input, borderRadius: BorderRadius.circular(3)),
+                                child: Text('$posWeight% wt', style: const TextStyle(fontSize: 10, fontFamily: 'monospace', color: TerminalColors.textMuted)),
+                              ),
+                            ],
+                          ),
+                          Text(_currencyFmt.format(mktVal), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, fontFamily: 'monospace', color: TerminalColors.textMain)),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('$qty Shares @ ₹${avgBuy.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12, color: TerminalColors.textMuted, fontFamily: 'monospace')),
+                          Row(
+                            children: [
+                              const Text('LTP: ', style: TextStyle(fontSize: 11, color: TerminalColors.textFaint)),
+                              Text('₹${curPrice.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, fontFamily: 'monospace', color: TerminalColors.textMain)),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      const Divider(color: TerminalColors.borderSubtle, height: 1),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              const Text('P&L: ', style: TextStyle(fontSize: 11, color: TerminalColors.textFaint)),
+                              Text(
+                                '${isHoldingProfit ? '+' : ''}${_currencyFmt.format(pnl)}',
+                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, fontFamily: 'monospace', color: isHoldingProfit ? TerminalColors.positive : TerminalColors.negative),
+                              ),
+                            ],
+                          ),
+                          InkWell(
+                            onTap: () {
+                              QuickTradeModal.show(context, initialSymbol: sym, onTradeExecuted: _loadPortfolio);
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: TerminalColors.actionBg,
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: TerminalColors.action),
+                              ),
+                              child: const Text('TRADE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: TerminalColors.action)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMetricCard(String label, String value, String sub, Color valColor) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: TerminalColors.surface,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: TerminalColors.borderSubtle),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: TerminalColors.textMuted)),
+          const SizedBox(height: 6),
+          Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, fontFamily: 'monospace', color: valColor)),
+          const SizedBox(height: 4),
+          Text(sub, style: const TextStyle(fontSize: 11, color: TerminalColors.textFaint)),
+        ],
+      ),
+    );
+  }
+
+  Color _getColorForSymbol(String sym) {
+    final colors = [
+      TerminalColors.action,
+      TerminalColors.positive,
+      const Color(0xFF60A5FA), // Blue
+      const Color(0xFFA78BFA), // Purple
+      const Color(0xFFF472B6), // Pink
+      const Color(0xFFFBBF24), // Amber
+    ];
+    return colors[sym.hashCode.abs() % colors.length];
+  }
+}

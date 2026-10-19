@@ -4,6 +4,7 @@ import 'theme/terminal_theme.dart';
 import 'screens/auth_screen.dart';
 import 'screens/overview_screen.dart';
 import 'screens/markets_screen.dart';
+import 'screens/chart_screen.dart';
 import 'screens/ask_finex_screen.dart';
 import 'screens/more_screen.dart';
 
@@ -141,6 +142,7 @@ class _MainMobileNavigationShellState extends State<MainMobileNavigationShell> {
     final screens = [
       const MobileOverviewScreen(),
       const MobileMarketsScreen(),
+      const MobileChartScreen(),
       const MobileAskFinExScreen(),
       MobileMoreScreen(onLogout: widget.onLogout),
     ];
@@ -151,40 +153,51 @@ class _MainMobileNavigationShellState extends State<MainMobileNavigationShell> {
           children: [
             // Top Terminal Mini Ticker & Workspace Status
             Container(
-              height: 32,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              height: 34,
               decoration: const BoxDecoration(
                 color: TerminalColors.canvas,
                 border: Border(bottom: BorderSide(color: TerminalColors.borderSubtle)),
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: const BoxDecoration(
-                          color: TerminalColors.action,
-                          shape: BoxShape.circle,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: const BoxDecoration(
+                            color: TerminalColors.action,
+                            shape: BoxShape.circle,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 6),
-                      const Text(
-                        "Shivraj's workspace",
-                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: TerminalColors.textMain),
-                      ),
-                    ],
-                  ),
-                  const Row(
-                    children: [
-                      Text("NIFTY 25,480", style: TextStyle(fontSize: 10, fontFamily: 'monospace', color: TerminalColors.textMuted)),
-                      SizedBox(width: 4),
-                      Text("+0.45%", style: TextStyle(fontSize: 10, fontFamily: 'monospace', color: TerminalColors.positive, fontWeight: FontWeight.w700)),
-                    ],
-                  ),
-                ],
+                        const SizedBox(width: 6),
+                        const Text(
+                          "Shivraj's workspace",
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: TerminalColors.textMain),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(width: 14),
+                    Container(height: 14, width: 1, color: TerminalColors.borderSubtle),
+                    const SizedBox(width: 14),
+                    _buildTopTickerPill("NIFTY 50", "25,480.30", "+0.45%", true),
+                    const SizedBox(width: 12),
+                    _buildTopTickerPill("SENSEX", "83,120.15", "+0.38%", true),
+                    const SizedBox(width: 12),
+                    _buildTopTickerPill("BANK NIFTY", "52,190.40", "-0.12%", false),
+                    const SizedBox(width: 12),
+                    _buildTopTickerPill("INDIA VIX", "12.85", "-2.40%", false),
+                    const SizedBox(width: 12),
+                    _buildTopTickerPill("RELIANCE", "₹2,984.50", "+1.25%", true),
+                    const SizedBox(width: 12),
+                    _buildTopTickerPill("TCS", "₹4,125.00", "+0.85%", true),
+                    const SizedBox(width: 12),
+                    _buildTopTickerPill("INFY", "₹1,892.40", "-0.42%", false),
+                  ],
+                ),
               ),
             ),
             // Active Tab View
@@ -207,6 +220,11 @@ class _MainMobileNavigationShellState extends State<MainMobileNavigationShell> {
             label: 'Markets',
           ),
           BottomNavigationBarItem(
+            icon: Icon(Icons.show_chart_outlined),
+            activeIcon: Icon(Icons.show_chart),
+            label: 'Charts',
+          ),
+          BottomNavigationBarItem(
             icon: Icon(Icons.smart_toy_outlined),
             activeIcon: Icon(Icons.smart_toy),
             label: 'Ask',
@@ -220,4 +238,40 @@ class _MainMobileNavigationShellState extends State<MainMobileNavigationShell> {
       ),
     );
   }
+
+  Widget _buildTopTickerPill(String symbol, String price, String change, bool isPositive) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: const Color(0x10FFFFFF),
+        borderRadius: BorderRadius.circular(3),
+        border: Border.all(color: TerminalColors.borderSubtle),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            symbol,
+            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: TerminalColors.textMuted),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            price,
+            style: const TextStyle(fontSize: 10, fontFamily: 'monospace', fontWeight: FontWeight.w600, color: TerminalColors.textMain),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            "${isPositive ? '▲ ' : '▼ '}$change",
+            style: TextStyle(
+              fontSize: 9,
+              fontFamily: 'monospace',
+              fontWeight: FontWeight.w700,
+              color: isPositive ? TerminalColors.positive : TerminalColors.negative,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
+

@@ -43,7 +43,15 @@ class Settings(BaseSettings):
 
     # CORS
     ALLOWED_ORIGINS: List[str] = Field(
-        default=["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:3000"]
+        default=[
+            "http://localhost:3000",
+            "http://localhost:5173",
+            "http://127.0.0.1:3000",
+            "http://localhost:8085",
+            "http://127.0.0.1:8085",
+            "http://localhost:8080",
+            "http://127.0.0.1:8080",
+        ]
     )
 
     # Provider Toggles & Modes
@@ -100,11 +108,35 @@ class Settings(BaseSettings):
     @field_validator("ALLOWED_ORIGINS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, v):
+        origins = []
         if isinstance(v, str):
-            return [i.strip() for i in v.split(",") if i.strip()]
+            try:
+                import json
+
+                parsed = json.loads(v)
+                if isinstance(parsed, list):
+                    origins = [str(i).strip() for i in parsed if str(i).strip()]
+            except Exception:
+                origins = [i.strip() for i in v.split(",") if i.strip()]
         elif isinstance(v, list):
-            return v
-        return ["http://localhost:3000"]
+            origins = [str(i).strip() for i in v if str(i).strip()]
+        else:
+            origins = ["http://localhost:3000"]
+
+        dev_origins = [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:8085",
+            "http://127.0.0.1:8085",
+            "http://localhost:8080",
+            "http://127.0.0.1:8080",
+        ]
+        for d in dev_origins:
+            if d not in origins:
+                origins.append(d)
+        return origins
 
 
 @lru_cache()

@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import '../theme/terminal_theme.dart';
 import 'chart_screen.dart';
 import 'paper_trading_screen.dart';
+import 'portfolio_screen.dart';
+import 'transactions_screen.dart';
 import 'alerts_screen.dart';
 import 'goals_screen.dart';
 import 'spending_screen.dart';
+import 'settings_screen.dart';
 
 class MobileMoreScreen extends StatelessWidget {
   final VoidCallback? onLogout;
@@ -60,6 +63,19 @@ class MobileMoreScreen extends StatelessWidget {
         const SizedBox(height: 10),
 
         _buildModuleItem(
+          icon: Icons.pie_chart_outline,
+          title: "Portfolio & Asset Allocation",
+          subtitle: "Holdings distribution, rebalance simulator & valuation",
+          badge: "Equities",
+          badgeColor: TerminalColors.positive,
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const MobilePortfolioScreen()),
+            );
+          },
+        ),
+        _buildModuleItem(
           icon: Icons.show_chart,
           title: "TradingView Chart Workspace",
           subtitle: "Interactive candlesticks, technical indicators & paper orders",
@@ -88,13 +104,13 @@ class MobileMoreScreen extends StatelessWidget {
         _buildModuleItem(
           icon: Icons.receipt_long_outlined,
           title: "Order Activity & Cash Ledger",
-          subtitle: "Audit trail, trade receipts & P&L statements",
+          subtitle: "Audit trail, trade receipts, contract notes & statements",
           badge: "Atomic Ledger",
           badgeColor: TerminalColors.positive,
           onTap: () {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => const MobilePaperTradingScreen()),
+              MaterialPageRoute(builder: (context) => const MobileTransactionsScreen()),
             );
           },
         ),
@@ -134,7 +150,15 @@ class MobileMoreScreen extends StatelessWidget {
         _buildModuleItem(
           icon: Icons.settings_outlined,
           title: "Settings & Risk Profile",
-          subtitle: "Account, consent version & notifications",
+          subtitle: "Account, sandbox reset, consent & disclosures",
+          badge: "Admin",
+          badgeColor: const Color(0xFF60A5FA),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => MobileSettingsScreen(onLogout: onLogout)),
+            );
+          },
         ),
         _buildModuleItem(
           icon: Icons.logout,
