@@ -249,7 +249,7 @@ class GeminiInvestmentAssistant:
         }
         try:
             async with httpx.AsyncClient(timeout=12.0) as client:
-                res = await client.post(url, json=payload, headers=headers)
+                res = await client.post(url, json=payload, headers=headers, params={"key": key})
                 if res.status_code == 200:
                     self._verified_working = True
                     data = res.json()
@@ -262,7 +262,7 @@ class GeminiInvestmentAssistant:
                     # Model ID fallback if model has variant naming
                     for alt_model in ["gemini-1.5-flash-latest", "gemini-2.0-flash", "gemini-1.5-pro"]:
                         alt_url = f"https://generativelanguage.googleapis.com/v1beta/models/{alt_model}:generateContent"
-                        res_alt = await client.post(alt_url, json=payload, headers=headers)
+                        res_alt = await client.post(alt_url, json=payload, headers=headers, params={"key": key})
                         if res_alt.status_code == 200:
                             self._verified_working = True
                             data = res_alt.json()
@@ -271,9 +271,9 @@ class GeminiInvestmentAssistant:
                                 parts = candidates[0].get("content", {}).get("parts", [])
                                 if parts:
                                     return parts[0].get("text", "").strip()
-                elif res.status_code in (401, 403):
+                elif res.status_code in (400, 401, 403):
                     self._verified_working = False
-                    print(f"[GeminiAssistant] Authentication error ({res.status_code}). Please verify GEMINI_API_KEY.")
+                    print(f"[GeminiAssistant] API authentication error ({res.status_code}): {res.text[:150]}.")
                 elif res.status_code == 429:
                     print("[GeminiAssistant] Rate limit reached (HTTP 429). Falling back to verified local data.")
         except httpx.TimeoutException:
@@ -325,18 +325,19 @@ class GeminiInvestmentAssistant:
 
         try:
             async with httpx.AsyncClient(timeout=14.0) as client:
-                res = await client.post(url, json=payload, headers=headers)
+                res = await client.post(url, json=payload, headers=headers, params={"key": key})
                 if res.status_code == 404:
                     for alt_model in ["gemini-1.5-flash-latest", "gemini-2.0-flash", "gemini-1.5-pro"]:
                         alt_url = f"https://generativelanguage.googleapis.com/v1beta/models/{alt_model}:generateContent"
-                        res = await client.post(alt_url, json=payload, headers=headers)
+                        res = await client.post(alt_url, json=payload, headers=headers, params={"key": key})
                         if res.status_code == 200:
                             url = alt_url
                             break
 
                 if res.status_code != 200:
-                    if res.status_code in (401, 403):
+                    if res.status_code in (400, 401, 403):
                         self._verified_working = False
+                        print(f"[GeminiAssistant] Grounded API authentication error ({res.status_code}): {res.text[:150]}.")
                     return None, [], []
 
                 self._verified_working = True
@@ -448,7 +449,7 @@ class GeminiInvestmentAssistant:
                     },
                 }
 
-                res_followup = await client.post(url, json=followup_payload, headers=headers)
+                res_followup = await client.post(url, json=followup_payload, headers=headers, params={"key": key})
                 if res_followup.status_code == 200:
                     f_data = res_followup.json()
                     f_cands = f_data.get("candidates", [])
