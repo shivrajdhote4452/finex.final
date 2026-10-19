@@ -66,7 +66,7 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
         scaleMargins: { top: 0.1, bottom: 0.1 },
       },
       width: container.clientWidth || 800,
-      height: height,
+      height: container.clientHeight || height || 500,
     });
 
     chartInstanceRef.current = chart;
@@ -85,6 +85,7 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
       if (entries[0] && chartInstanceRef.current) {
         chartInstanceRef.current.applyOptions({
           width: entries[0].contentRect.width,
+          height: entries[0].contentRect.height || height,
         });
       }
     });
@@ -161,17 +162,35 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
       ws.onmessage = (event) => {
         try {
           const tick = JSON.parse(event.data);
-          const barTime = tick.CurrentBarUnixTime || Math.floor(Date.now() / 1000);
+          const INTERVAL_SECONDS: Record<string, number> = {
+            ONE_MINUTE: 60,
+            FIVE_MINUTE: 300,
+            FIFTEEN_MINUTE: 900,
+            THIRTY_MINUTE: 1800,
+            ONE_HOUR: 3600,
+            ONE_DAY: 86400,
+            '1m': 60,
+            '5m': 300,
+            '15m': 900,
+            '30m': 1800,
+            '1h': 3600,
+            '1d': 86400,
+            '1D': 86400,
+          };
+          const bucket = INTERVAL_SECONDS[interval] ?? 60;
+          const tickTs = Number(tick.CurrentBarUnixTime) || Math.floor(Date.now() / 1000);
+          const barTime = Math.floor(tickTs / bucket) * bucket;
           const closePrice = Number(tick.ltp || tick.close);
 
           if (seriesRef.current && !isNaN(closePrice)) {
             seriesRef.current.update({
               time: barTime as any,
               open: Number(tick.open || closePrice),
-              high: Number(tick.high || closePrice),
-              low: Number(tick.low || closePrice),
+              high: Math.max(Number(tick.high || closePrice), closePrice),
+              low: Math.min(Number(tick.low || closePrice), closePrice),
               close: closePrice,
             });
+            chartInstanceRef.current?.timeScale().scrollToPosition(3, false);
           }
 
           setFreshness({
@@ -216,8 +235,10 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
         display: 'flex',
         flexDirection: 'column',
         width: '100%',
+        height: '100%',
+        flex: 1,
         backgroundColor: '#090D14',
-        borderRadius: 12,
+        borderRadius: 8,
         border: '1px solid rgba(255, 255, 255, 0.08)',
         overflow: 'hidden',
         boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
@@ -276,7 +297,7 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
       </div>
 
       {/* Chart Canvas */}
-      <div ref={chartContainerRef} style={{ width: '100%', height: height }} aria-label={`Live Chart for ${cleanSymbol}`} />
+      <div ref={chartContainerRef} style={{ width: '100%', height: '100%', flex: 1, minHeight: 350 }} aria-label={`Live Chart for ${cleanSymbol}`} />
     </div>
   );
 };

@@ -9,6 +9,7 @@ import {
 } from 'lightweight-charts';
 import { apiClient } from '../api/client';
 import { useFinancial, MarketQuote, OrderExecutionType } from '../context/FinancialContext';
+import { FinExLiveChart } from '../components/market/FinExLiveChart';
 
 export interface ChartWorkspaceProps {
   onNavigate?: (tab: any) => void;
@@ -93,6 +94,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
   const [timeframe, setTimeframe] = useState<string>('1D');
   const [chartType, setChartType] = useState<ChartType>('candlestick');
   const [layout, setLayout] = useState<WorkspaceLayout>('single');
+  const [chartEngine, setChartEngine] = useState<'finex_live' | 'tradingview'>('finex_live');
 
   // Indicators
   const [activeIndicators, setActiveIndicators] = useState<{
@@ -1113,24 +1115,66 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
             ))}
           </div>
 
-          {/* TradingView Pro Chart Indicator */}
+          {/* Chart Engine Switcher: FinEx Live | TradingView Pro */}
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
               backgroundColor: '#0F172A',
-              padding: '4px 10px',
+              padding: '2px',
               borderRadius: '6px',
               border: '1px solid #1E293B',
-              gap: '6px',
+              gap: '2px',
             }}
           >
-            <span style={{ fontSize: '12px', fontWeight: 700, color: '#38BDF8', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              📈 TradingView Pro Chart
-            </span>
-            <span style={{ fontSize: '10px', backgroundColor: '#0284C7', color: '#FFFFFF', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
-              ACTIVE
-            </span>
+            <button
+              onClick={() => setChartEngine('finex_live')}
+              title="Switch to FinEx Native Real-Time Streaming Chart (Angel One SmartAPI)"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '4px 10px',
+                borderRadius: '4px',
+                fontSize: '11px',
+                fontWeight: 700,
+                border: 'none',
+                cursor: 'pointer',
+                backgroundColor: chartEngine === 'finex_live' ? '#10B981' : 'transparent',
+                color: chartEngine === 'finex_live' ? '#FFFFFF' : '#94A3B8',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <span
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: '50%',
+                  backgroundColor: chartEngine === 'finex_live' ? '#FFFFFF' : '#10B981',
+                }}
+              />
+              FinEx Live (Angel One)
+            </button>
+            <button
+              onClick={() => setChartEngine('tradingview')}
+              title="Switch to TradingView Pro Chart"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '4px 10px',
+                borderRadius: '4px',
+                fontSize: '11px',
+                fontWeight: 700,
+                border: 'none',
+                cursor: 'pointer',
+                backgroundColor: chartEngine === 'tradingview' ? '#0284C7' : 'transparent',
+                color: chartEngine === 'tradingview' ? '#FFFFFF' : '#94A3B8',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              📈 TradingView Pro
+            </button>
           </div>
         </div>
       </div>
@@ -1187,14 +1231,15 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
           <span
             style={{
               fontSize: '10px',
-              padding: '2px 6px',
-              backgroundColor: '#1A2A4E',
-              color: '#64B5F6',
+              padding: '2px 8px',
+              backgroundColor: chartEngine === 'finex_live' ? 'rgba(16, 185, 129, 0.2)' : '#1A2A4E',
+              color: chartEngine === 'finex_live' ? '#34D399' : '#64B5F6',
               borderRadius: '4px',
               fontWeight: 700,
+              border: `1px solid ${chartEngine === 'finex_live' ? 'rgba(16, 185, 129, 0.4)' : '#2563EB'}`,
             }}
           >
-            TradingView Pro Active
+            {chartEngine === 'finex_live' ? '⚡ FinEx Live Active (Angel One)' : '📈 TradingView Pro Active'}
           </span>
         </div>
       </div>
@@ -1340,12 +1385,25 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
 
         {/* 2. Center Chart Area */}
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, position: 'relative' }}>
-          {/* Official TradingView Advanced Widget (Full TradingView Experience) */}
-          <div style={{ flex: 1, width: '100%', height: '100%', backgroundColor: '#000000', position: 'relative' }}>
-            <TradingViewProWidget key={`${selectedSymbol}-${timeframe}`} symbol={selectedSymbol} timeframe={timeframe} />
-          </div>
+          {chartEngine === 'finex_live' ? (
+            <div style={{ flex: 1, width: '100%', height: '100%', backgroundColor: '#090D14', position: 'relative', display: 'flex', overflow: 'hidden' }}>
+              <FinExLiveChart
+                key={`finex-live-${selectedSymbol}-${timeframe}`}
+                symbol={selectedSymbol}
+                interval={timeframe === '1D' ? 'ONE_DAY' : timeframe === '5m' ? 'FIVE_MINUTE' : timeframe === '15m' ? 'FIFTEEN_MINUTE' : 'ONE_MINUTE'}
+                onPriceUpdate={(p) => {
+                  setActiveQuote((prev: MarketQuote | null) => prev ? { ...prev, price: p } : prev);
+                }}
+              />
+            </div>
+          ) : (
+            /* Official TradingView Advanced Widget (Full TradingView Experience) */
+            <div style={{ flex: 1, width: '100%', height: '100%', backgroundColor: '#000000', position: 'relative' }}>
+              <TradingViewProWidget key={`${selectedSymbol}-${timeframe}`} symbol={selectedSymbol} timeframe={timeframe} />
+            </div>
+          )}
 
-          {/* Required TradingView Attribution Notice */}
+          {/* Required Attribution Notice */}
           <div
             style={{
               position: 'absolute',
@@ -1357,7 +1415,9 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
               pointerEvents: 'none',
             }}
           >
-            TradingView Advanced Interactive Charting Platform • Official NSE/BSE Feed
+            {chartEngine === 'finex_live'
+              ? 'FinEx Live Charting Engine • Real-Time Angel One SmartAPI WebSocket Feed'
+              : 'TradingView Advanced Interactive Charting Platform • Official NSE/BSE Feed'}
           </div>
 
           {/* 3. Bottom Collapsible Panel (Order Ticket, Positions, Fundamentals) */}
