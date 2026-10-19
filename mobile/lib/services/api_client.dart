@@ -225,15 +225,6 @@ class ApiClient {
   }
 
   // --- Market Data ---
-  Future<List<Map<String, dynamic>>> getInstruments() async {
-    final url = Uri.parse('$baseUrl/market/instruments');
-    final response = await http.get(url, headers: _headers());
-    final data = jsonDecode(response.body);
-    if (response.statusCode == 200 && data['data'] != null) {
-      return List<Map<String, dynamic>>.from(data['data']['instruments'] ?? []);
-    }
-    return [];
-  }
 
   Future<Map<String, dynamic>?> getQuote(String symbol) async {
     final url = Uri.parse('$baseUrl/market/quotes/$symbol');
