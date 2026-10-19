@@ -15,16 +15,13 @@ Validates:
 """
 
 import asyncio
+import json
 from datetime import datetime, timezone
 from decimal import Decimal
-import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from starlette.testclient import TestClient
-
 from backend.app.adapters.market_data_provider import INSTRUMENT_REGISTRY
-from backend.app.dependencies import get_angel_adapter, get_market_hub
 from backend.app.ports.market_data import AbstractMarketDataProvider, HistoricalBar, Quote
 from backend.app.services.angel_adapter import (
     FINEX_INSTRUMENTS,
@@ -32,6 +29,8 @@ from backend.app.services.angel_adapter import (
     AngelOneMarketAdapter,
 )
 from backend.app.services.market_hub import MarketHub
+from starlette.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 
 @pytest.fixture
@@ -285,7 +284,7 @@ def test_market_websocket_tick_stream(client):
 
 def test_market_websocket_unsupported_symbol_rejection(client):
     """Verify WebSocket closes connection on unsupported instrument."""
-    with pytest.raises(Exception):
+    with pytest.raises(WebSocketDisconnect):
         with client.websocket_connect("/api/v1/market/ws/INVALID_SYMBOL_123") as ws:
             ws.receive_text()
 
@@ -294,6 +293,7 @@ def test_market_websocket_unsupported_symbol_rejection(client):
 async def test_angel_adapter_recorded_fixtures_contract():
     """Verify contract for all three port methods using recorded JSON fixtures."""
     import os
+
     fixtures_dir = os.path.join(os.path.dirname(__file__), "fixtures")
     with open(os.path.join(fixtures_dir, "angel_ltp_fixture.json"), "r") as f:
         ltp_fixture = json.load(f)
@@ -330,7 +330,9 @@ async def test_angel_adapter_recorded_fixtures_contract():
 
 def test_angel_adapter_outage_401_session_regeneration():
     """Verify mocked 401 triggers automatic session regeneration and retry succeeds."""
-    adapter = AngelOneMarketAdapter(api_key="test_api_key", client_id="SHIV001", mpin="1234", totp_secret="JBSWY3DPEHPK3PXP")
+    adapter = AngelOneMarketAdapter(
+        api_key="test_api_key", client_id="SHIV001", mpin="1234", totp_secret="JBSWY3DPEHPK3PXP"
+    )
     adapter.jwt_token = "expired_token"
 
     mock_sc = MagicMock()
@@ -359,10 +361,13 @@ def test_angel_adapter_outage_401_session_regeneration():
     assert res["data"]["ltp"] == 1205.50
     assert mock_sc.generateSession.call_count == 1
 
+
 @pytest.mark.asyncio
 async def test_angel_adapter_circuit_breaker():
     """Verify circuit breaker trips after 5 consecutive failures and short-circuits 6th call without hitting network."""
-    adapter = AngelOneMarketAdapter(api_key="test_api_key", client_id="SHIV001", mpin="1234", totp_secret="JBSWY3DPEHPK3PXP")
+    adapter = AngelOneMarketAdapter(
+        api_key="test_api_key", client_id="SHIV001", mpin="1234", totp_secret="JBSWY3DPEHPK3PXP"
+    )
     adapter.jwt_token = "valid_token"
     adapter.smart_api = MagicMock()
 
@@ -411,8 +416,10 @@ async def test_hub_provider_outage_broadcasts_unavailable():
     hub.provider = mock_provider
 
     broadcasted_ticks = []
+
     async def capture_tick(symbol, tick):
         broadcasted_ticks.append(tick)
+
     hub.broadcast_tick = capture_tick
 
     # Connect client to RELIANCE
@@ -458,17 +465,21 @@ async def test_hub_provider_reconnect_resumes_live():
     )
 
     # First 3 calls raise, 4th call succeeds with live quote
-    mock_provider.get_latest_quote = AsyncMock(side_effect=[
-        RuntimeError("Outage 1"),
-        RuntimeError("Outage 2"),
-        RuntimeError("Outage 3"),
-        live_quote,
-    ])
+    mock_provider.get_latest_quote = AsyncMock(
+        side_effect=[
+            RuntimeError("Outage 1"),
+            RuntimeError("Outage 2"),
+            RuntimeError("Outage 3"),
+            live_quote,
+        ]
+    )
     hub.provider = mock_provider
 
     broadcasted_ticks = []
+
     async def capture_tick(symbol, tick):
         broadcasted_ticks.append(tick)
+
     hub.broadcast_tick = capture_tick
 
     mock_ws = MagicMock()
@@ -531,8 +542,10 @@ async def test_hub_serves_cached_quote_labeled_accurately():
     hub.provider = mock_provider
 
     broadcasted_ticks = []
+
     async def capture_tick(symbol, tick):
         broadcasted_ticks.append(tick)
+
     hub.broadcast_tick = capture_tick
 
     mock_ws = MagicMock()
@@ -572,4 +585,3 @@ async def test_angel_smartapi_live_quote_market_hours():
     assert quote.canonical_id == "NSE:RELIANCE"
     assert quote.price > 0
     assert quote.source == "angel_smartapi"
-

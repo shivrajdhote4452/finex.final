@@ -12,11 +12,9 @@ import json
 import logging
 import random
 from datetime import datetime, timezone
-from decimal import Decimal
 from typing import Any, Dict, Optional, Set
 
 from backend.app.adapters.market_data_provider import RealMarketDataProvider
-from backend.app.services.angel_adapter import FINEX_INSTRUMENTS, TOKEN_TO_SYMBOL
 from fastapi import WebSocket, WebSocketDisconnect
 
 logger = logging.getLogger(__name__)
@@ -50,17 +48,12 @@ class MarketHub:
             if angel.is_configured():
                 self.provider = angel
             else:
-                self.provider = RealMarketDataProvider(
-                    force_cache=False, allow_fixture_fallback=self.allow_fixtures
-                )
+                self.provider = RealMarketDataProvider(force_cache=False, allow_fixture_fallback=self.allow_fixtures)
         else:
-            self.provider = RealMarketDataProvider(
-                force_cache=False, allow_fixture_fallback=self.allow_fixtures
-            )
+            self.provider = RealMarketDataProvider(force_cache=False, allow_fixture_fallback=self.allow_fixtures)
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._simulation_task: Optional[asyncio.Task] = None
         self._is_running = False
-
 
     async def connect(self, symbol: str, websocket: WebSocket) -> None:
         """Register client connection for a symbol and send initial snapshot."""
@@ -71,7 +64,9 @@ class MarketHub:
             self.connections[clean_symbol] = set()
         self.connections[clean_symbol].add(websocket)
 
-        logger.info(f"Client connected to /ws/{clean_symbol}. Active subscribers: {len(self.connections[clean_symbol])}")
+        logger.info(
+            f"Client connected to /ws/{clean_symbol}. Active subscribers: {len(self.connections[clean_symbol])}"
+        )
 
         # Send initial snapshot immediately
         initial_tick = await self.get_latest_tick_snapshot(clean_symbol)
@@ -172,7 +167,6 @@ class MarketHub:
         self.latest_quotes[clean_symbol] = tick
         return tick
 
-
     def ensure_tick_engine_started(self) -> None:
         """Start background simulation engine if not already running."""
         if not self._simulation_task or self._simulation_task.done():
@@ -272,9 +266,7 @@ class MarketHub:
 
                     # Genuine observation from supported provider
                     obs_dt = (
-                        q.observed_at.replace(tzinfo=timezone.utc)
-                        if q.observed_at.tzinfo is None
-                        else q.observed_at
+                        q.observed_at.replace(tzinfo=timezone.utc) if q.observed_at.tzinfo is None else q.observed_at
                     )
                     served_from_cache = getattr(q, "served_from_cache", False)
                     data_status = getattr(q, "data_status", "fresh")
@@ -285,7 +277,9 @@ class MarketHub:
                     elif q.is_delayed:
                         freshness = "DELAYED"
                     else:
-                        freshness = "LIVE" if q.source == "angel_smartapi" else getattr(q, "freshness_status", "CURRENT")
+                        freshness = (
+                            "LIVE" if q.source == "angel_smartapi" else getattr(q, "freshness_status", "CURRENT")
+                        )
 
                     price = float(q.price)
                     tick = {

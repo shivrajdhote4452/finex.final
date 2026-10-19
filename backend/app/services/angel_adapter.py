@@ -10,21 +10,18 @@ Implements AbstractMarketDataProvider:
 """
 
 import asyncio
-from datetime import datetime, timedelta, timezone
-from decimal import Decimal
 import hashlib
 import logging
-import threading
 import time
-from typing import Any, Callable, Dict, List, Optional
-import uuid
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
+from typing import Any, Dict, List, Optional
 
 import pyotp
-from tenacity import retry, stop_after_attempt, wait_exponential
-
 from backend.app.adapters.market_data_provider import INSTRUMENT_REGISTRY, RealMarketDataProvider
 from backend.app.config import get_settings
 from backend.app.ports.market_data import AbstractMarketDataProvider, HistoricalBar, Quote
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger(__name__)
 
@@ -42,10 +39,13 @@ def is_nse_market_open(as_of: Optional[datetime] = None) -> bool:
     market_close = now_ist.replace(hour=15, minute=30, second=0, microsecond=0)
     return market_open <= now_ist <= market_close
 
+
 # Custom exception for circuit breaker and service unavailability
 class MarketDataUnavailable(Exception):
     """Raised when market data provider is unavailable or circuit breaker is tripped."""
+
     pass
+
 
 # Try importing SmartApi; handle gracefully if environment issues arise
 try:
@@ -138,7 +138,9 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
         self.api_key = api_key if api_key is not None else (getattr(settings, "ANGEL_API_KEY", "") or "")
         self.client_id = client_id if client_id is not None else (getattr(settings, "ANGEL_CLIENT_ID", "") or "")
         self.mpin = mpin if mpin is not None else (getattr(settings, "ANGEL_MPIN", "") or "")
-        self.totp_secret = totp_secret if totp_secret is not None else (getattr(settings, "ANGEL_TOTP_SECRET", "") or "")
+        self.totp_secret = (
+            totp_secret if totp_secret is not None else (getattr(settings, "ANGEL_TOTP_SECRET", "") or "")
+        )
 
         self.smart_api = SmartConnect(api_key=self.api_key) if (SmartConnect and self.api_key) else None
         self.jwt_token: Optional[str] = None
@@ -215,8 +217,7 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
         """Fetch real-time LTP quote via SmartConnect with tenacity retries and 401 recovery."""
         res = self.smart_api.ltpData(exchange, tradingsymbol, symboltoken)
         if isinstance(res, dict) and (
-            res.get("errorcode") in ("AG8001", "AG8002", "401")
-            or "Invalid Token" in str(res.get("message", ""))
+            res.get("errorcode") in ("AG8001", "AG8002", "401") or "Invalid Token" in str(res.get("message", ""))
         ):
             logger.info("Angel One token expired or invalid (401). Regenerating session...")
             self.authenticate()
@@ -231,7 +232,9 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
 
         # Check circuit breaker before hitting network
         if self.is_circuit_open:
-            logger.warning(f"Angel One circuit breaker active ({self._consecutive_failures} failures). Fast-degrading quote for {clean}.")
+            logger.warning(
+                f"Angel One circuit breaker active ({self._consecutive_failures} failures). Fast-degrading quote for {clean}."
+            )
             return None
 
         now = datetime.now(timezone.utc)
@@ -377,9 +380,7 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
         return candles
 
     @retry(stop=stop_after_attempt(2), wait=wait_exponential(multiplier=0.5, min=0.5, max=1.5), reraise=True)
-    def _get_candles_with_retry(
-        self, symbol: str, interval: str, from_date: str, to_date: str
-    ) -> List[Dict[str, Any]]:
+    def _get_candles_with_retry(self, symbol: str, interval: str, from_date: str, to_date: str) -> List[Dict[str, Any]]:
         """Fetch historical candles with retry."""
         return self.get_historical_candles(symbol, interval, from_date, to_date)
 
@@ -402,11 +403,11 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
 
         candles = []
         try:
-            candles = await asyncio.to_thread(
-                self._get_candles_with_retry, clean, interval, from_d, to_d
-            )
+            candles = await asyncio.to_thread(self._get_candles_with_retry, clean, interval, from_d, to_d)
         except Exception as e:
-            logger.warning(f"Angel One candle fetch failed for {clean} ({e}). Falling back to genuine stored observations.")
+            logger.warning(
+                f"Angel One candle fetch failed for {clean} ({e}). Falling back to genuine stored observations."
+            )
 
         if candles:
             bars = []
@@ -451,4 +452,3 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
                 item["provider_token"] = FINEX_INSTRUMENTS.get(inst["symbol"])
                 results.append(item)
         return results
-

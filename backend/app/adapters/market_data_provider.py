@@ -1553,16 +1553,22 @@ class RealMarketDataProvider(AbstractMarketDataProvider):
 
         # Dynamic NSE instrument support: if user searches any ticker not in pre-seeded list, allow dynamic discovery
         clean_q = q.replace(".NS", "").replace("NSE:", "").strip()
-        if not any(r["symbol"] == clean_q for r in results) and len(clean_q) >= 2 and clean_q.replace("-", "").isalnum():
-            results.append({
-                "symbol": clean_q,
-                "provider_symbol": f"{clean_q}.NS",
-                "canonical_id": f"NSE:{clean_q}",
-                "name": f"{clean_q} (National Stock Exchange)",
-                "sector": "Indian Equities",
-                "exchange": "NSE",
-                "currency": "INR",
-            })
+        if (
+            not any(r["symbol"] == clean_q for r in results)
+            and len(clean_q) >= 2
+            and clean_q.replace("-", "").isalnum()
+        ):
+            results.append(
+                {
+                    "symbol": clean_q,
+                    "provider_symbol": f"{clean_q}.NS",
+                    "canonical_id": f"NSE:{clean_q}",
+                    "name": f"{clean_q} (National Stock Exchange)",
+                    "sector": "Indian Equities",
+                    "exchange": "NSE",
+                    "currency": "INR",
+                }
+            )
 
         return results
 

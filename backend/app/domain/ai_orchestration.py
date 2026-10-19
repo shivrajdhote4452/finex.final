@@ -144,7 +144,9 @@ class AIOrchestrator:
             q_lower == w or q_lower.startswith(w + " ") or q_lower.endswith(" " + w) or f" {w} " in f" {q_lower} "
             for w in greeting_words
         )
-        if is_greeting and not any(w in q_lower for w in ["invest", "buy", "stock", "fund", "bond", "sebi", "rbi", "nse", "allocation"]):
+        if is_greeting and not any(
+            w in q_lower for w in ["invest", "buy", "stock", "fund", "bond", "sebi", "rbi", "nse", "allocation"]
+        ):
             latency = (time.perf_counter() - t0) * 1000.0
             return OrchestrationResponse(
                 message_id=msg_id,
@@ -250,7 +252,10 @@ class AIOrchestrator:
 
             if gemini_assistant.is_gemini_api_ready():
                 evidence_text = "\n\n".join(
-                    [f"Source [{i+1}] ({c.publisher} - {c.title}):\n{c.content}" for i, c in enumerate(retrieved_chunks)]
+                    [
+                        f"Source [{i + 1}] ({c.publisher} - {c.title}):\n{c.content}"
+                        for i, c in enumerate(retrieved_chunks)
+                    ]
                 )
                 sys_instruct = (
                     "You are FinEx AI Financial Research Assistant for Indian Capital Markets. "

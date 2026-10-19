@@ -21,20 +21,19 @@ Validates:
 18. Gemini API call passes credentials via headers only (no ?key= in URLs).
 """
 
-from datetime import datetime, timezone, timedelta
-from decimal import Decimal
 import inspect
 import uuid
-import pytest
-from httpx import AsyncClient, ASGITransport
-from sqlalchemy import select
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 
-from backend.app.adapters.market_data_provider import RealMarketDataProvider, Quote
-from backend.app.domain.gemini_assistant import GeminiInvestmentAssistant, SIMULATION_DISCLAIMER
-from backend.app.domain.paper_trading_service import PaperTradingEngine, OrderSubmitRequest
-from backend.app.models.paper_trading import PaperProposal, PaperOrder, PaperAccount
-from backend.app.services.market_hub import MarketHub
+import pytest
+from backend.app.adapters.market_data_provider import Quote, RealMarketDataProvider
 from backend.app.database import AsyncSessionLocal
+from backend.app.domain.gemini_assistant import GeminiInvestmentAssistant
+from backend.app.domain.paper_trading_service import PaperTradingEngine
+from backend.app.models.paper_trading import PaperOrder, PaperProposal
+from backend.app.services.market_hub import MarketHub
+from sqlalchemy import select
 
 
 @pytest.fixture
@@ -603,9 +602,7 @@ async def test_market_hub_simulation_loop_no_synthetic_fluctuations():
     for symbol in active_symbols:
         q_sym = await hub.provider.get_latest_quote(symbol)
         obs_dt = (
-            q_sym.observed_at.replace(tzinfo=timezone.utc)
-            if q_sym.observed_at.tzinfo is None
-            else q_sym.observed_at
+            q_sym.observed_at.replace(tzinfo=timezone.utc) if q_sym.observed_at.tzinfo is None else q_sym.observed_at
         )
         freshness = (
             "STALE"
