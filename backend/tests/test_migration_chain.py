@@ -8,14 +8,15 @@ Tests:
 
 import os
 import uuid
-import pytest
 from datetime import date, datetime, timezone
 from decimal import Decimal
+
+import pytest
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import create_async_engine
-from alembic.config import Config
 from alembic import command
+from alembic.config import Config
 from backend.app.config import get_settings
+from sqlalchemy.ext.asyncio import create_async_engine
 
 
 @pytest.fixture
@@ -75,6 +76,7 @@ def run_alembic_upgrade_sync(target_url: str, revision: str = "head"):
 async def test_migration_chain_clean_database_to_head():
     """Verify a completely clean empty database successfully upgrades to head without duplicate column errors."""
     import asyncio
+
     db_name = f"finex_test_clean_{uuid.uuid4().hex[:8]}"
     disposable_url = await create_disposable_database(db_name)
     try:
@@ -84,6 +86,7 @@ async def test_migration_chain_clean_database_to_head():
         # Inspect resulting schema
         engine = create_async_engine(disposable_url)
         async with engine.connect() as conn:
+
             def inspect_schema(sync_conn):
                 inspector = sa.inspect(sync_conn)
                 tables = set(inspector.get_table_names())
@@ -110,6 +113,7 @@ async def test_migration_chain_clean_database_to_head():
 async def test_migration_chain_upgrade_from_005_with_backfills():
     """Verify an existing database at revision 005 (6d8e21a9f023) upgrades to head and accurately backfills."""
     import asyncio
+
     db_name = f"finex_test_upgrade_{uuid.uuid4().hex[:8]}"
     disposable_url = await create_disposable_database(db_name)
     try:
@@ -192,7 +196,9 @@ async def test_migration_chain_upgrade_from_005_with_backfills():
             )
             row_mq = res_mq.mappings().one()
             assert row_mq["symbol"] == "INFY", "market_quotes.symbol was not backfilled from securities"
-            assert Decimal(str(row_mq["close_price"])) == Decimal("1500.50"), "market_quotes.close_price not backfilled from price"
+            assert Decimal(str(row_mq["close_price"])) == Decimal("1500.50"), (
+                "market_quotes.close_price not backfilled from price"
+            )
 
             # Check market_price_history backfill
             res_mph = await conn.execute(
@@ -202,7 +208,9 @@ async def test_migration_chain_upgrade_from_005_with_backfills():
             row_mph = res_mph.mappings().one()
             assert row_mph["symbol"] == "INFY", "market_price_history.symbol was not backfilled"
             assert row_mph["interval"] == "1D", "market_price_history.interval was not set to default '1D'"
-            assert row_mph["observed_at"] is not None, "market_price_history.observed_at was not backfilled from trade_date"
+            assert row_mph["observed_at"] is not None, (
+                "market_price_history.observed_at was not backfilled from trade_date"
+            )
 
             # Check paper_proposals backfill
             res_pp = await conn.execute(
@@ -210,7 +218,9 @@ async def test_migration_chain_upgrade_from_005_with_backfills():
                 {"id": prop_id},
             )
             row_pp = res_pp.mappings().one()
-            assert Decimal(str(row_pp["requested_budget"])) == Decimal("5000.00"), "requested_budget not backfilled from total_budget"
+            assert Decimal(str(row_pp["requested_budget"])) == Decimal("5000.00"), (
+                "requested_budget not backfilled from total_budget"
+            )
             assert row_pp["attempt_count"] == 1, "attempt_count was not backfilled to 1"
 
         await engine2.dispose()
@@ -222,6 +232,7 @@ async def test_migration_chain_upgrade_from_005_with_backfills():
 async def test_migration_chain_upgrade_from_006_to_007():
     """Verify an existing database where revision 006 is already applied upgrades cleanly to 007."""
     import asyncio
+
     db_name = f"finex_test_006_{uuid.uuid4().hex[:8]}"
     disposable_url = await create_disposable_database(db_name)
     try:
@@ -234,10 +245,12 @@ async def test_migration_chain_upgrade_from_006_to_007():
         # Verify attempt_count exists
         engine = create_async_engine(disposable_url)
         async with engine.connect() as conn:
+
             def check_col(sync_conn):
                 inspector = sa.inspect(sync_conn)
                 cols = {c["name"] for c in inspector.get_columns("paper_proposals")}
                 assert "attempt_count" in cols
+
             await conn.run_sync(check_col)
         await engine.dispose()
     finally:

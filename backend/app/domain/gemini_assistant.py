@@ -17,11 +17,10 @@ Strict Invariants:
 import re
 import uuid
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
-
 from backend.app.adapters.market_data_provider import INSTRUMENT_REGISTRY, RealMarketDataProvider
 from backend.app.config import get_settings
 from backend.app.domain.paper_trading_service import (
@@ -34,7 +33,7 @@ from backend.app.domain.technical_indicators import (
     calculate_sma,
 )
 from backend.app.models.core import UserProfile
-from backend.app.models.paper_trading import PaperAccount, PaperOrder, PaperProposal
+from backend.app.models.paper_trading import PaperOrder, PaperProposal
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -457,7 +456,11 @@ class GeminiInvestmentAssistant:
                         f_parts = f_cands[0].get("content", {}).get("parts", [])
                         if f_parts:
                             final_text = f_parts[0].get("text", "").strip()
-                            ev_list = [evidence] if isinstance(evidence, dict) else (evidence if isinstance(evidence, list) else [])
+                            ev_list = (
+                                [evidence]
+                                if isinstance(evidence, dict)
+                                else (evidence if isinstance(evidence, list) else [])
+                            )
                             return final_text, [{"name": fn_name, "args": raw_args}], ev_list
         except Exception as e:
             print(f"[GeminiAssistant] Grounded API error: {type(e).__name__}. Falling back to verified local data.")
@@ -766,17 +769,29 @@ class GeminiInvestmentAssistant:
             return {"status": "REJECTED", "error": f"Proposal '{proposal_id}' not found for authenticated user."}
 
         if prop.status == "EXECUTED":
-            return {"status": "ALREADY_EXECUTED", "error": "This proposal has already been executed.", "proposal_id": proposal_id}
+            return {
+                "status": "ALREADY_EXECUTED",
+                "error": "This proposal has already been executed.",
+                "proposal_id": proposal_id,
+            }
 
         if prop.status == "CANCELLED":
-            return {"status": "CANCELLED", "error": "This proposal was cancelled and cannot be executed.", "proposal_id": proposal_id}
+            return {
+                "status": "CANCELLED",
+                "error": "This proposal was cancelled and cannot be executed.",
+                "proposal_id": proposal_id,
+            }
 
         now = datetime.now(timezone.utc)
         exp = prop.expires_at.replace(tzinfo=timezone.utc) if prop.expires_at.tzinfo is None else prop.expires_at
         if now > exp:
             prop.status = "EXPIRED"
             await db.commit()
-            return {"status": "EXPIRED", "error": "This paper proposal has expired. Please request a fresh allocation.", "proposal_id": proposal_id}
+            return {
+                "status": "EXPIRED",
+                "error": "This paper proposal has expired. Please request a fresh allocation.",
+                "proposal_id": proposal_id,
+            }
 
         # Check existing receipts and already filled legs
         existing_receipts = prop.execution_receipts or []
@@ -809,8 +824,7 @@ class GeminiInvestmentAssistant:
 
         # Calculate already spent cash by completed legs using exact Decimal arithmetic
         already_spent = sum(
-            Decimal(str(r.get("net_value") or r.get("gross_value", "0.00")))
-            for r in already_filled_receipts
+            Decimal(str(r.get("net_value") or r.get("gross_value", "0.00"))) for r in already_filled_receipts
         )
 
         auth_budget = Decimal(str(prop.requested_budget if prop.requested_budget is not None else prop.total_budget))
@@ -870,7 +884,6 @@ class GeminiInvestmentAssistant:
 
         updated_receipts = list(existing_receipts)
         any_failed = False
-        any_filled = len(already_filled_symbols) > 0
 
         for leg in unfulfilled_legs:
             sym = leg["symbol"]
@@ -894,7 +907,6 @@ class GeminiInvestmentAssistant:
                 updated_receipts = [r for r in updated_receipts if r.get("symbol") != sym]
                 updated_receipts.append(receipt_dict)
                 if exec_result.status == "FILLED":
-                    any_filled = True
                     remaining_budget -= exec_result.net_value
                     already_spent += exec_result.net_value
                 else:
@@ -1073,7 +1085,8 @@ class GeminiInvestmentAssistant:
         ]
         is_refusal = not is_research_query and (
             any(phrase in p_lower for phrase in refusal_phrases)
-            or p_lower in [
+            or p_lower
+            in [
                 "no",
                 "nah",
                 "nope",
@@ -1206,9 +1219,7 @@ class GeminiInvestmentAssistant:
                 or p_lower.startswith("confirm prop-")
                 or p_lower.startswith("execute prop-")
                 or any(f"confirm {t}" in p_lower for t in ["proposal", "order", "trade", "this"])
-                or (
-                    any(p_lower == token for token in ["yes", "confirm", "approve", "proceed", "haan"])
-                )
+                or (any(p_lower == token for token in ["yes", "confirm", "approve", "proceed", "haan"]))
             )
         )
 
@@ -1228,7 +1239,9 @@ class GeminiInvestmentAssistant:
 
                 if not target_prop:
                     # Never substitute another proposal when requested ID is invalid or unavailable!
-                    reply = f"Proposal '{explicit_id}' was not found for this account. No other proposal will be executed."
+                    reply = (
+                        f"Proposal '{explicit_id}' was not found for this account. No other proposal will be executed."
+                    )
                     return AssistantMessageResponse(
                         message_id=msg_id,
                         conversation_id=conv_id,
@@ -1258,7 +1271,11 @@ class GeminiInvestmentAssistant:
                     )
 
                 now_exp = datetime.now(timezone.utc)
-                exp_dt = target_prop.expires_at.replace(tzinfo=timezone.utc) if target_prop.expires_at.tzinfo is None else target_prop.expires_at
+                exp_dt = (
+                    target_prop.expires_at.replace(tzinfo=timezone.utc)
+                    if target_prop.expires_at.tzinfo is None
+                    else target_prop.expires_at
+                )
                 if now_exp > exp_dt:
                     target_prop.status = "EXPIRED"
                     await db.commit()
@@ -1314,7 +1331,11 @@ class GeminiInvestmentAssistant:
 
                 target_prop = pending_list[0]
                 now_exp = datetime.now(timezone.utc)
-                exp_dt = target_prop.expires_at.replace(tzinfo=timezone.utc) if target_prop.expires_at.tzinfo is None else target_prop.expires_at
+                exp_dt = (
+                    target_prop.expires_at.replace(tzinfo=timezone.utc)
+                    if target_prop.expires_at.tzinfo is None
+                    else target_prop.expires_at
+                )
                 if now_exp > exp_dt:
                     target_prop.status = "EXPIRED"
                     await db.commit()

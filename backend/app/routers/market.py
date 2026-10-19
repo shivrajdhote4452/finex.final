@@ -14,7 +14,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
-from backend.app.adapters.market_data_provider import INSTRUMENT_REGISTRY, RealMarketDataProvider
+from backend.app.adapters.market_data_provider import INSTRUMENT_REGISTRY
 from backend.app.config import get_settings
 from backend.app.core.envelope import create_response_envelope
 from backend.app.core.errors import NotFoundException
@@ -32,7 +32,7 @@ from backend.app.domain.technical_indicators import (
     calculate_sma,
     calculate_vwap,
 )
-from backend.app.ports.market_data import AbstractMarketDataProvider, HistoricalBar, Quote
+from backend.app.ports.market_data import AbstractMarketDataProvider, HistoricalBar
 from backend.app.services.angel_adapter import FINEX_INSTRUMENTS, AngelOneMarketAdapter
 from backend.app.services.market_hub import MarketHub
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect, status
