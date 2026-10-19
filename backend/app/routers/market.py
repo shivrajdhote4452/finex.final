@@ -18,7 +18,12 @@ from backend.app.adapters.market_data_provider import INSTRUMENT_REGISTRY, RealM
 from backend.app.config import get_settings
 from backend.app.core.envelope import create_response_envelope
 from backend.app.core.errors import NotFoundException
-from backend.app.dependencies import get_angel_adapter, get_db, get_market_hub
+from backend.app.dependencies import (
+    get_angel_adapter,
+    get_db,
+    get_market_data_provider,
+    get_market_hub,
+)
 from backend.app.domain.technical_indicators import (
     calculate_bollinger_bands,
     calculate_ema,
@@ -27,7 +32,7 @@ from backend.app.domain.technical_indicators import (
     calculate_sma,
     calculate_vwap,
 )
-from backend.app.ports.market_data import HistoricalBar, Quote
+from backend.app.ports.market_data import AbstractMarketDataProvider, HistoricalBar, Quote
 from backend.app.services.angel_adapter import FINEX_INSTRUMENTS, AngelOneMarketAdapter
 from backend.app.services.market_hub import MarketHub
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect, status
@@ -38,8 +43,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/market", tags=["Market Data"])
 settings = get_settings()
 
-provider = RealMarketDataProvider(force_cache=False, allow_fixture_fallback=settings.MARKET_ALLOW_FIXTURES)
-
 
 @router.get("/mode")
 async def get_market_data_mode(request: Request):
@@ -49,16 +52,16 @@ async def get_market_data_mode(request: Request):
 
     feed_label = "NSE Historical Replay"
     if mode == "INDIAN_LIVE_DATA":
-        feed_label = "NSE / Upstox (Awaiting Regulatory Authorization)"
+        feed_label = "Angel One SmartAPI (Live NSE Feed)"
 
     return create_response_envelope(
         data={
             "mode": mode,
             "feed_label": feed_label,
             "currency": "INR",
-            "is_simulated": True,
+            "is_simulated": mode != "INDIAN_LIVE_DATA",
             "sebi_educational_lag_days": settings.SEBI_EDUCATIONAL_LAG_DAYS,
-            "sebi_lag_enforced": True,
+            "sebi_lag_enforced": mode == "INDIA_HISTORICAL_REPLAY",
             "current_server_utc": datetime.now(timezone.utc).isoformat(),
         },
         correlation_id=cid,
@@ -81,6 +84,7 @@ async def list_all_instruments(request: Request, market: Optional[str] = Query(N
 async def search_market_instruments(
     request: Request,
     query: str = Query(..., min_length=1, description="Symbol, company name, or sector"),
+    provider: AbstractMarketDataProvider = Depends(get_market_data_provider),
 ):
     """Search supported Indian market instruments across NSE universe."""
     cid = getattr(request.state, "correlation_id", None)
@@ -97,6 +101,7 @@ async def get_instrument_quote(
     request: Request,
     symbol: str,
     db: AsyncSession = Depends(get_db),
+    provider: AbstractMarketDataProvider = Depends(get_market_data_provider),
 ):
     """Fetch verified quote for symbol with explicit observation timestamp, LTP, and freshness status."""
     cid = getattr(request.state, "correlation_id", None)
@@ -130,6 +135,7 @@ async def get_instrument_history(
     as_of: Optional[str] = Query(None, description="Simulated replay clock ISO timestamp"),
     db: AsyncSession = Depends(get_db),
     angel_adapter: AngelOneMarketAdapter = Depends(get_angel_adapter),
+    provider: AbstractMarketDataProvider = Depends(get_market_data_provider),
 ):
     """Fetch historical price bars from Angel One SmartAPI with database/provider cache fallback."""
     cid = getattr(request.state, "correlation_id", None)
@@ -168,6 +174,9 @@ async def get_instrument_history(
                 to_date=f"{e_date} 15:30",
             )
             if candles:
+                if as_of_dt:
+                    as_of_ts = int(as_of_dt.timestamp())
+                    candles = [c for c in candles if c.get("time", 0) <= as_of_ts]
                 return create_response_envelope(
                     data={
                         "symbol": clean_sym,
@@ -180,6 +189,7 @@ async def get_instrument_history(
                         "interval": interval,
                         "start_date": s_date,
                         "end_date": e_date,
+                        "as_of": as_of_dt.isoformat() if as_of_dt else None,
                     },
                     correlation_id=cid,
                 )
@@ -284,6 +294,7 @@ async def get_instrument_indicators(
     interval: str = Query("1D", description="Candle interval"),
     range: Optional[str] = Query(None, description="Preset range: 1mo, 6mo, 1y, 5y"),
     as_of: Optional[str] = Query(None, description="Simulated replay clock ISO timestamp"),
+    provider: AbstractMarketDataProvider = Depends(get_market_data_provider),
 ):
     """Compute verified deterministic technical indicators over genuine historical price bars."""
     cid = getattr(request.state, "correlation_id", None)

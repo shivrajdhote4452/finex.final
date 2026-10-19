@@ -68,6 +68,16 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             await ensure_market_quotes_seeded_db()
         except Exception:
             pass
+
+        # Angel One SmartAPI live market data initialization
+        if app_settings.MARKET_DATA_MODE == "INDIAN_LIVE_DATA":
+            from backend.app.services.angel_adapter import AngelOneMarketAdapter
+
+            angel = AngelOneMarketAdapter()
+            if not angel.is_configured():
+                raise RuntimeError("INDIAN_LIVE_DATA requires valid Angel One credentials")
+            angel.authenticate()
+            app.state.angel_adapter = angel
         yield
         # Shutdown phase
 

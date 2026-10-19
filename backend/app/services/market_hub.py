@@ -41,9 +41,22 @@ class MarketHub:
             if enable_demo_simulation is not None
             else getattr(settings, "ENABLE_DEMO_SIMULATION", False)
         )
-        self.provider = provider or RealMarketDataProvider(
-            force_cache=False, allow_fixture_fallback=self.allow_fixtures
-        )
+        if provider:
+            self.provider = provider
+        elif getattr(settings, "MARKET_DATA_MODE", "") == "INDIAN_LIVE_DATA":
+            from backend.app.services.angel_adapter import AngelOneMarketAdapter
+
+            angel = AngelOneMarketAdapter()
+            if angel.is_configured():
+                self.provider = angel
+            else:
+                self.provider = RealMarketDataProvider(
+                    force_cache=False, allow_fixture_fallback=self.allow_fixtures
+                )
+        else:
+            self.provider = RealMarketDataProvider(
+                force_cache=False, allow_fixture_fallback=self.allow_fixtures
+            )
         self._simulation_task: Optional[asyncio.Task] = None
         self._is_running = False
 

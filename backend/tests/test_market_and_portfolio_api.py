@@ -75,7 +75,12 @@ async def test_market_quote_success(app):
         assert data["currency"] == "INR"
         assert "observed_at" in data
         assert "ingested_at" in data
-        assert data["source"] in ("yahoo_finance_public_v8", "nse_official_report", "nse_official_baseline_snapshot")
+        assert data["source"] in (
+            "yahoo_finance_public_v8",
+            "nse_official_report",
+            "nse_official_baseline_snapshot",
+            "angel_smartapi",
+        )
         assert "source_evidence" in data
 
 

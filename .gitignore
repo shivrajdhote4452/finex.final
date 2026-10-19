@@ -75,3 +75,4 @@ scratch/
 *~
 .DS_Store
 Thumbs.db
+logs/

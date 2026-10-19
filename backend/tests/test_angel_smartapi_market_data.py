@@ -2,32 +2,45 @@
 
 Specification: FinEx Real-Time Market Data & Live Charting
 Validates:
+- AngelOneMarketAdapter implements AbstractMarketDataProvider
+- Full 39 Nifty instruments token registry coverage
 - AngelOneMarketAdapter initialization & TOTP generation
+- async get_latest_quote with Quote schema conformance
+- async get_historical_bars with HistoricalBar schema conformance
+- async search_instruments with provider_token enrichment
 - MarketHub WebSocket connection management & tick broadcast
 - /api/v1/market/quotes/{symbol} with LTP & freshness
 - /api/v1/market/history/{symbol} historical candles format
 - /api/v1/market/ws/{symbol} real-time WebSocket tick streaming
 """
 
+from decimal import Decimal
 import json
-from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
+from starlette.testclient import TestClient
+
+from backend.app.adapters.market_data_provider import INSTRUMENT_REGISTRY
 from backend.app.dependencies import get_angel_adapter, get_market_hub
+from backend.app.ports.market_data import AbstractMarketDataProvider, HistoricalBar, Quote
 from backend.app.services.angel_adapter import (
     FINEX_INSTRUMENTS,
     TOKEN_TO_SYMBOL,
     AngelOneMarketAdapter,
 )
 from backend.app.services.market_hub import MarketHub
-from starlette.testclient import TestClient
 
 
 @pytest.fixture
 def client(app):
     return TestClient(app)
 
+
+def test_angel_adapter_implements_abstract_market_data_provider():
+    """Verify AngelOneMarketAdapter strictly conforms to AbstractMarketDataProvider port."""
+    adapter = AngelOneMarketAdapter(api_key="test", client_id="test", mpin="1234", totp_secret="JBSWY3DPEHPK3PXP")
+    assert isinstance(adapter, AbstractMarketDataProvider)
 
 
 def test_angel_adapter_symbol_token_registry():
@@ -46,6 +59,16 @@ def test_angel_adapter_symbol_token_registry():
 
     assert TOKEN_TO_SYMBOL["2885"] == "RELIANCE"
     assert TOKEN_TO_SYMBOL["11536"] == "TCS"
+
+
+def test_angel_adapter_full_nifty_universe_tokens():
+    """Verify all 39 instruments in INSTRUMENT_REGISTRY have verified tokens in FINEX_INSTRUMENTS."""
+    for inst in INSTRUMENT_REGISTRY:
+        sym = inst["symbol"]
+        assert sym in FINEX_INSTRUMENTS, f"Symbol {sym} missing from Angel One token registry"
+        token = FINEX_INSTRUMENTS[sym]
+        assert token and len(token) > 0, f"Token for {sym} is empty"
+        assert TOKEN_TO_SYMBOL[token] == sym
 
 
 def test_angel_adapter_unconfigured_graceful_state():
@@ -81,6 +104,93 @@ def test_angel_adapter_totp_authentication():
     assert success is True
     assert adapter.jwt_token == "mock_jwt_token_12345"
     assert adapter.feed_token == "mock_feed_token_abcde"
+
+
+@pytest.mark.asyncio
+async def test_angel_adapter_get_latest_quote_conformance():
+    """Verify get_latest_quote maps SmartAPI ltpData response into compliant Quote port model."""
+    adapter = AngelOneMarketAdapter(
+        api_key="test_api_key",
+        client_id="SHIV001",
+        mpin="1234",
+        totp_secret="JBSWY3DPEHPK3PXP",
+    )
+    adapter.jwt_token = "valid_token"
+
+    mock_smart_connect = MagicMock()
+    mock_smart_connect.ltpData.return_value = {
+        "status": True,
+        "data": {
+            "exchange": "NSE",
+            "tradingsymbol": "RELIANCE-EQ",
+            "symboltoken": "2885",
+            "open": 2500.0,
+            "high": 2525.0,
+            "low": 2495.0,
+            "close": 2510.0,
+            "ltp": 2520.0,
+        },
+    }
+    adapter.smart_api = mock_smart_connect
+
+    quote = await adapter.get_latest_quote("RELIANCE")
+    assert quote is not None
+    assert isinstance(quote, Quote)
+    assert quote.canonical_id == "NSE:RELIANCE"
+    assert quote.symbol == "RELIANCE.NS"
+    assert quote.price == Decimal("2520.0")
+    assert quote.open_price == Decimal("2500.0")
+    assert quote.high_price == Decimal("2525.0")
+    assert quote.low_price == Decimal("2495.0")
+    assert quote.close_price == Decimal("2510.0")
+    assert quote.source == "angel_smartapi"
+    assert quote.data_status == "fresh"
+    assert quote.is_stale is False
+    assert quote.served_from_cache is False
+
+
+@pytest.mark.asyncio
+async def test_angel_adapter_get_historical_bars_conformance():
+    """Verify get_historical_bars wraps get_historical_candles and returns compliant HistoricalBar instances."""
+    adapter = AngelOneMarketAdapter(
+        api_key="test_api_key",
+        client_id="SHIV001",
+        mpin="1234",
+        totp_secret="JBSWY3DPEHPK3PXP",
+    )
+    adapter.jwt_token = "valid_token"
+
+    mock_smart_connect = MagicMock()
+    mock_smart_connect.getCandleData.return_value = {
+        "status": True,
+        "data": [
+            ["2026-10-15T09:15:00+05:30", 2500.0, 2520.0, 2490.0, 2515.0, 10500],
+            ["2026-10-16T09:15:00+05:30", 2515.0, 2530.0, 2510.0, 2525.0, 12000],
+        ],
+    }
+    adapter.smart_api = mock_smart_connect
+
+    bars = await adapter.get_historical_bars("RELIANCE", "2026-10-15", "2026-10-16", interval="1D")
+    assert len(bars) == 2
+    b1 = bars[0]
+    assert isinstance(b1, HistoricalBar)
+    assert b1.open == Decimal("2500.0")
+    assert b1.high == Decimal("2520.0")
+    assert b1.low == Decimal("2490.0")
+    assert b1.close == Decimal("2515.0")
+    assert b1.volume == 10500
+    assert b1.currency == "INR"
+
+
+@pytest.mark.asyncio
+async def test_angel_adapter_search_instruments():
+    """Verify search_instruments enriches registry results with provider_token."""
+    adapter = AngelOneMarketAdapter()
+    results = await adapter.search_instruments("RELIANCE")
+    assert len(results) >= 1
+    rel = next((r for r in results if r["symbol"] == "RELIANCE"), None)
+    assert rel is not None
+    assert rel["provider_token"] == "2885"
 
 
 def test_angel_adapter_historical_candles_parsing():

@@ -64,6 +64,7 @@ class AbstractMarketDataProvider(ABC):
         start_date: str,
         end_date: str,
         interval: str = "1D",
+        range_param: Optional[str] = None,
         as_of: Optional[datetime] = None,
     ) -> List[HistoricalBar]:
         """Fetch historical price bars for the specified date range and interval, capped by optional as_of timestamp."""
