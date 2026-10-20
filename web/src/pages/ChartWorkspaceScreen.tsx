@@ -814,7 +814,9 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
       style={{
         display: 'flex',
         flexDirection: 'column',
-        height: 'calc(100vh - 84px)',
+        height: '100%',
+        flex: 1,
+        minHeight: 0,
         backgroundColor: '#000000',
         color: '#FFFFFF',
         fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
@@ -832,6 +834,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
           borderBottom: '1px solid #1C1C1E',
           gap: '12px',
           flexWrap: 'nowrap',
+          flexShrink: 0,
           overflowX: 'auto',
           fontSize: '12px',
         }}
@@ -1189,6 +1192,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
           backgroundColor: '#09090B',
           borderBottom: '1px solid #1C1C1E',
           fontSize: '11px',
+          flexShrink: 0,
           overflowX: 'auto',
         }}
       >
@@ -1245,7 +1249,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
       </div>
 
       {/* --- MAIN WORKSPACE BODY (Toolbar + Chart Canvas + Collapsible Panels) --- */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
         {/* 1. Left Drawing Toolbar (Section 8F) */}
         <div
           style={{
@@ -1384,12 +1388,13 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
         </div>
 
         {/* 2. Center Chart Area */}
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, position: 'relative' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
           {chartEngine === 'finex_live' ? (
-            <div style={{ flex: 1, width: '100%', height: '100%', backgroundColor: '#090D14', position: 'relative', display: 'flex', overflow: 'hidden' }}>
+            <div style={{ flex: 1, width: '100%', minHeight: 0, backgroundColor: '#090D14', position: 'relative', display: 'flex', overflow: 'hidden' }}>
               <FinExLiveChart
-                key={`finex-live-${selectedSymbol}-${timeframe}`}
+                key={`finex-live-${selectedSymbol}-${timeframe}-${rangePreset}`}
                 symbol={selectedSymbol}
+                rangePreset={rangePreset}
                 interval={timeframe === '1D' ? 'ONE_DAY' : timeframe === '5m' ? 'FIVE_MINUTE' : timeframe === '15m' ? 'FIFTEEN_MINUTE' : 'ONE_MINUTE'}
                 onPriceUpdate={(p) => {
                   setActiveQuote((prev: MarketQuote | null) => prev ? { ...prev, price: p } : prev);
@@ -1398,36 +1403,40 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
             </div>
           ) : (
             /* Official TradingView Advanced Widget (Full TradingView Experience) */
-            <div style={{ flex: 1, width: '100%', height: '100%', backgroundColor: '#000000', position: 'relative' }}>
+            <div style={{ flex: 1, width: '100%', minHeight: 0, backgroundColor: '#000000', position: 'relative' }}>
               <TradingViewProWidget key={`${selectedSymbol}-${timeframe}`} symbol={selectedSymbol} timeframe={timeframe} />
             </div>
           )}
 
-          {/* Required Attribution Notice */}
+          {/* Required Attribution Notice / Watermark */}
           <div
             style={{
               position: 'absolute',
-              bottom: isBottomCollapsed ? '8px' : '228px',
-              left: '12px',
-              zIndex: 10,
+              top: '52px',
+              left: '16px',
+              zIndex: 5,
               fontSize: '10px',
-              color: 'rgba(142, 142, 147, 0.6)',
+              fontWeight: 500,
+              color: 'rgba(148, 163, 184, 0.35)',
+              letterSpacing: '0.3px',
               pointerEvents: 'none',
+              userSelect: 'none',
             }}
           >
             {chartEngine === 'finex_live'
-              ? 'FinEx Live Charting Engine • Real-Time Angel One SmartAPI WebSocket Feed'
+              ? 'FinEx Live Charting Engine • Real-Time Angel One SmartAPI Feed'
               : 'TradingView Advanced Interactive Charting Platform • Official NSE/BSE Feed'}
           </div>
 
           {/* 3. Bottom Collapsible Panel (Order Ticket, Positions, Fundamentals) */}
           <div
             style={{
-              height: isBottomCollapsed ? '28px' : '220px',
+              height: isBottomCollapsed ? '28px' : '165px',
               backgroundColor: '#0A0A0C',
               borderTop: '1px solid #1C1C1E',
               display: 'flex',
               flexDirection: 'column',
+              flexShrink: 0,
               transition: 'height 0.2s ease',
             }}
           >

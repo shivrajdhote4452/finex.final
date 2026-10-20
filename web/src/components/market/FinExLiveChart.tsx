@@ -5,6 +5,7 @@ interface FinExLiveChartProps {
   symbol: string;
   height?: number;
   interval?: string;
+  rangePreset?: string;
   onPriceUpdate?: (price: number) => void;
 }
 
@@ -12,6 +13,7 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
   symbol,
   height = 400,
   interval = 'ONE_MINUTE',
+  rangePreset = '1Y',
   onPriceUpdate,
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -60,13 +62,15 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
         secondsVisible: false,
         barSpacing: 8,
         minBarSpacing: 4,
+        rightOffset: 5,
       },
       rightPriceScale: {
         borderColor: 'rgba(255, 255, 255, 0.1)',
-        scaleMargins: { top: 0.1, bottom: 0.1 },
+        scaleMargins: { top: 0.08, bottom: 0.12 },
+        autoScale: true,
       },
       width: container.clientWidth || 800,
-      height: container.clientHeight || height || 500,
+      height: container.clientHeight || 400,
     });
 
     chartInstanceRef.current = chart;
@@ -77,16 +81,21 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
       borderVisible: false,
       wickUpColor: '#10B981',
       wickDownColor: '#EF4444',
+      priceLineVisible: true,
+      lastValueVisible: true,
     });
     seriesRef.current = candleSeries;
 
-    // Handle Resize
+    // Handle Resize to exact pixel dimensions of container
     const resizeObserver = new ResizeObserver((entries) => {
       if (entries[0] && chartInstanceRef.current) {
-        chartInstanceRef.current.applyOptions({
-          width: entries[0].contentRect.width,
-          height: entries[0].contentRect.height || height,
-        });
+        const { width: w, height: h } = entries[0].contentRect;
+        if (w > 0 && h > 0) {
+          chartInstanceRef.current.applyOptions({
+            width: Math.floor(w),
+            height: Math.floor(h),
+          });
+        }
       }
     });
     resizeObserver.observe(container);
@@ -94,7 +103,18 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
     // 2. Fetch Historical Candles
     const fetchHistory = async () => {
       try {
-        const response = await fetch(`/api/v1/market/history/${cleanSymbol}?interval=${interval}&days=180`);
+        const RANGE_DAYS: Record<string, number> = {
+          '1D': 2,
+          '1W': 7,
+          '1M': 30,
+          '3M': 90,
+          '6M': 180,
+          '1Y': 365,
+          '5Y': 1825,
+          'ALL': 3650,
+        };
+        const fetchDays = RANGE_DAYS[rangePreset] ?? 365;
+        const response = await fetch(`/api/v1/market/history/${cleanSymbol}?interval=${interval}&days=${fetchDays}`);
         if (!response.ok) return;
 
         const resJson = await response.json();
@@ -227,7 +247,7 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
       resizeObserver.disconnect();
       chart.remove();
     };
-  }, [cleanSymbol, interval, height]);
+  }, [cleanSymbol, interval, rangePreset, height]);
 
   return (
     <div
@@ -235,8 +255,8 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
         display: 'flex',
         flexDirection: 'column',
         width: '100%',
-        height: '100%',
         flex: 1,
+        minHeight: 0,
         backgroundColor: '#090D14',
         borderRadius: 8,
         border: '1px solid rgba(255, 255, 255, 0.08)',
@@ -250,9 +270,10 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          padding: '10px 16px',
+          padding: '8px 16px',
           borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
           backgroundColor: '#0F172A',
+          flexShrink: 0,
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -297,7 +318,11 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
       </div>
 
       {/* Chart Canvas */}
-      <div ref={chartContainerRef} style={{ width: '100%', height: '100%', flex: 1, minHeight: 350 }} aria-label={`Live Chart for ${cleanSymbol}`} />
+      <div
+        ref={chartContainerRef}
+        style={{ width: '100%', flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}
+        aria-label={`Live Chart for ${cleanSymbol}`}
+      />
     </div>
   );
 };

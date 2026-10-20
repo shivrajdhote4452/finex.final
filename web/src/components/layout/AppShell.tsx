@@ -431,7 +431,17 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
           </header>
 
           {/* Main Content Pane */}
-          <main style={{ flex: 1, padding: '24px 28px', overflowY: 'auto' }}>
+          <main
+            style={{
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              minHeight: 0,
+              minWidth: 0,
+              padding: currentTab === 'charts' || currentTab === 'ask-finex' ? 0 : '24px 28px',
+              overflowY: currentTab === 'charts' || currentTab === 'ask-finex' ? 'hidden' : 'auto',
+            }}
+          >
             {children}
           </main>
         </div>
