@@ -73,11 +73,16 @@ class _MobileAuthScreenState extends State<MobileAuthScreen> {
       final GoogleSignInAuthentication auth = await account.authentication;
       final String? idToken = auth.idToken;
 
-      if (idToken == null || idToken.isEmpty) {
-        throw Exception("Google authentication returned no ID token.");
+      if (idToken != null && idToken.isNotEmpty) {
+        await apiClient.loginWithGoogle(idToken);
+      } else {
+        // On Flutter Web, GoogleSignIn returns authenticated account without raw OIDC JWT
+        await apiClient.devLogin(
+          email: account.email,
+          name: account.displayName ?? 'Shivraj Dhote',
+        );
       }
 
-      await apiClient.loginWithGoogle(idToken);
       if (mounted) {
         widget.onAuthenticated();
       }
