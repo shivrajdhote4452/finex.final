@@ -68,7 +68,7 @@ class Settings(BaseSettings):
     # Gemini AI Configuration
     LLM_PROVIDER: str = "gemini"
     GEMINI_API_KEY: Optional[str] = Field(default=None, description="Google Gemini API Key")
-    GEMINI_MODEL: str = Field(default="gemini-1.5-flash", description="Configured Gemini model ID")
+    GEMINI_MODEL: str = Field(default="gemini-3.5-flash-lite", description="Configured Gemini model ID")
     OPENAI_API_KEY: Optional[str] = None
 
     # Angel One SmartAPI Configuration

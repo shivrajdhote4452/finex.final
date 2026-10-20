@@ -228,12 +228,21 @@ class GeminiInvestmentAssistant:
         """Verify if live Gemini connection has been verified working."""
         return self._verified_working and self.is_gemini_api_ready()
 
+    async def verify_live_connection(self) -> bool:
+        """Test and verify connectivity by pinging Gemini API if not already verified."""
+        if self._verified_working:
+            return True
+        if not self.is_gemini_api_ready():
+            return False
+        await self.call_gemini_api("ping", "Respond strictly with pong")
+        return self._verified_working
+
     async def call_gemini_api(self, prompt: str, system_instruction: str) -> Optional[str]:
         """Invoke Google Gemini API using httpx with headers only (never key in URL) and graceful fallback."""
         if not self.is_gemini_api_ready():
             return None
         key = self.settings.GEMINI_API_KEY
-        model = getattr(self.settings, "GEMINI_MODEL", "gemini-1.5-flash") or "gemini-1.5-flash"
+        model = getattr(self.settings, "GEMINI_MODEL", "gemini-3.5-flash-lite") or "gemini-3.5-flash-lite"
         headers = {
             "x-goog-api-key": key,
             "Content-Type": "application/json",
@@ -248,7 +257,7 @@ class GeminiInvestmentAssistant:
             },
         }
         try:
-            async with httpx.AsyncClient(timeout=12.0) as client:
+            async with httpx.AsyncClient(timeout=30.0) as client:
                 res = await client.post(url, json=payload, headers=headers, params={"key": key})
                 if res.status_code == 200:
                     self._verified_working = True
@@ -258,9 +267,9 @@ class GeminiInvestmentAssistant:
                         parts = candidates[0].get("content", {}).get("parts", [])
                         if parts:
                             return parts[0].get("text", "").strip()
-                elif res.status_code == 404:
-                    # Model ID fallback if model has variant naming
-                    for alt_model in ["gemini-1.5-flash-latest", "gemini-2.0-flash", "gemini-1.5-pro"]:
+                elif res.status_code in (404, 503):
+                    # Model ID fallback if model has variant naming or temporary high demand
+                    for alt_model in ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-flash-lite-latest", "gemini-2.5-pro", "gemini-1.5-flash"]:
                         alt_url = f"https://generativelanguage.googleapis.com/v1beta/models/{alt_model}:generateContent"
                         res_alt = await client.post(alt_url, json=payload, headers=headers, params={"key": key})
                         if res_alt.status_code == 200:
@@ -295,7 +304,7 @@ class GeminiInvestmentAssistant:
             return None, [], []
 
         key = self.settings.GEMINI_API_KEY
-        model = getattr(self.settings, "GEMINI_MODEL", "gemini-1.5-flash") or "gemini-1.5-flash"
+        model = getattr(self.settings, "GEMINI_MODEL", "gemini-3.5-flash-lite") or "gemini-3.5-flash-lite"
         headers = {
             "x-goog-api-key": key,
             "Content-Type": "application/json",
@@ -324,10 +333,10 @@ class GeminiInvestmentAssistant:
         }
 
         try:
-            async with httpx.AsyncClient(timeout=14.0) as client:
+            async with httpx.AsyncClient(timeout=30.0) as client:
                 res = await client.post(url, json=payload, headers=headers, params={"key": key})
-                if res.status_code == 404:
-                    for alt_model in ["gemini-1.5-flash-latest", "gemini-2.0-flash", "gemini-1.5-pro"]:
+                if res.status_code in (404, 503):
+                    for alt_model in ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-flash-lite-latest", "gemini-2.5-pro", "gemini-1.5-flash"]:
                         alt_url = f"https://generativelanguage.googleapis.com/v1beta/models/{alt_model}:generateContent"
                         res = await client.post(alt_url, json=payload, headers=headers, params={"key": key})
                         if res.status_code == 200:

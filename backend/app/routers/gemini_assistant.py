@@ -39,6 +39,8 @@ async def get_assistant_status(request: Request):
     """Check AI assistant configuration state without leaking API keys."""
     cid = getattr(request.state, "correlation_id", None)
     is_cfg = gemini_assistant.is_configured()
+    if is_cfg and not gemini_assistant.is_verified_working():
+        await gemini_assistant.verify_live_connection()
     is_verified = gemini_assistant.is_verified_working()
 
     return create_response_envelope(
