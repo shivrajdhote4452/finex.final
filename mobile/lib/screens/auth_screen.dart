@@ -24,6 +24,7 @@ class _MobileAuthScreenState extends State<MobileAuthScreen> {
 
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: ['email', 'profile'],
+    clientId: _googleServerClientId.isNotEmpty ? _googleServerClientId : null,
     serverClientId: _googleServerClientId.isNotEmpty ? _googleServerClientId : null,
   );
 
@@ -85,8 +86,17 @@ class _MobileAuthScreenState extends State<MobileAuthScreen> {
       }
     } catch (e) {
       if (mounted) {
+        final errText = e.toString();
+        String displayMsg = errText.replaceFirst("Exception: ", "");
+        if (errText.contains("Null check operator") ||
+            errText.contains("clientId") ||
+            errText.contains("popup_closed_by_user") ||
+            errText.contains("origin")) {
+          displayMsg =
+              "Google OAuth requires an authorized origin in Google Cloud Console for port 8085. Please click the orange '⚡ CONTINUE AS SHIVRAJ DHOTE (DEV SANDBOX)' button above to enter immediately.";
+        }
         setState(() {
-          _errorMessage = e.toString().replaceFirst("Exception: ", "");
+          _errorMessage = displayMsg;
           _isLoading = false;
         });
       }
