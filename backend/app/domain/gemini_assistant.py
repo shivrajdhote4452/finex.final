@@ -1509,22 +1509,22 @@ class GeminiInvestmentAssistant:
             for w in greeting_words
         )
         if is_greeting and not any(w in p_lower for w in ["invest", "buy", "chart", "rsi", "balance", "portfolio"]):
-            if self.is_gemini_api_ready():
+            if self.is_llm_ready():
                 sys_instruct = (
                     "You are FinEx AI Paper Investment Assistant for Indian Equities (NSE). "
                     f"Active chart instrument: {active_sym}. "
                     f"Respond warmly and helpfully in '{lang}' (English, Hindi, or Hinglish as appropriate). "
-                    f"Greet the user, note you are powered by Gemini AI, and suggest 3 quick ideas they can explore: "
+                    f"Greet the user, note you are powered by FinEx AI, and suggest 3 quick ideas they can explore: "
                     f"1) Technical analysis on {active_sym} chart & indicators (RSI, SMA), "
                     f"2) Propose paper portfolio trades (e.g. 'Invest ₹15,000 in {active_sym} and TCS'), "
                     f"3) Check their virtual paper trading balance. Keep your answer concise and welcoming."
                 )
-                gemini_text = await self.call_gemini_api(user_message, sys_instruct)
-                if gemini_text:
+                llm_text = await self.call_llm_api(user_message, sys_instruct)
+                if llm_text:
                     return AssistantMessageResponse(
                         message_id=msg_id,
                         conversation_id=conv_id,
-                        reply=gemini_text,
+                        reply=llm_text,
                         language_detected=lang,
                         is_setup_incomplete=False,
                     )
@@ -1688,7 +1688,7 @@ class GeminiInvestmentAssistant:
                     f"All data points are grounded in authentic historical observations."
                 )
 
-            if self.is_gemini_api_ready():
+            if self.is_llm_ready():
                 sys_prompt = (
                     "You are FinEx AI Technical & Chart Analysis Copilot for Indian Equities (NSE). "
                     f"Active instrument: {target_sym} at current verified price {price_str} ({chart_ctx.get('source')}). "
@@ -1700,9 +1700,9 @@ class GeminiInvestmentAssistant:
                     "Provide an objective, educational technical analysis explaining price momentum, key levels, and risk parameters. "
                     "Maintain strict compliance: all figures are educational paper trading metrics."
                 )
-                gemini_text = await self.call_gemini_api(user_message, sys_prompt)
-                if gemini_text:
-                    reply = gemini_text
+                llm_text = await self.call_llm_api(user_message, sys_prompt)
+                if llm_text:
+                    reply = llm_text
 
             return AssistantMessageResponse(
                 message_id=msg_id,
@@ -1825,10 +1825,8 @@ class GeminiInvestmentAssistant:
                     user_message, sys_instruct, user_id=user_id, active_sym=active_sym, db=db
                 )
 
-            if not llm_reply and self.is_groq_api_ready():
-                llm_reply = await self.call_groq_api(user_message, sys_instruct)
-            elif not llm_reply and self.is_gemini_api_ready():
-                llm_reply = await self.call_gemini_api(user_message, sys_instruct)
+            if not llm_reply and self.is_llm_ready():
+                llm_reply = await self.call_llm_api(user_message, sys_instruct)
 
             if llm_reply:
                 return AssistantMessageResponse(
