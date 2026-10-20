@@ -678,6 +678,59 @@ class ApiClient {
         body: JSON.stringify({ content }),
       });
     },
+    createConversation: async (title: string = 'Financial Research Session') => {
+      return this.request<{
+        id: string;
+        title: string;
+        created_at: string;
+        updated_at: string;
+      }>('/ai/conversations', {
+        method: 'POST',
+        body: JSON.stringify({ title }),
+      });
+    },
+
+    deleteConversation: async (conversationId: string) => {
+      return this.request<{
+        success: boolean;
+        deleted_id: string;
+      }>(`/ai/conversations/${conversationId}`, {
+        method: 'DELETE',
+      });
+    },
+
+    getAssistantStatus: async () => {
+      return this.request<{
+        is_configured: boolean;
+        has_live_gemini: boolean;
+        has_live_llm: boolean;
+        is_verified_working: boolean;
+        model: string;
+        provider: string;
+        status_message: string;
+        disclaimer: string;
+      }>('/ai/assistant/status');
+    },
+
+    chatAssistant: async (payload: {
+      message: string;
+      conversation_id?: string;
+      active_chart_context?: Record<string, any>;
+    }) => {
+      return this.request<{
+        message_id: string;
+        conversation_id: string;
+        reply: string;
+        language_detected: string;
+        tool_calls?: any[];
+        evidence_cards?: any[];
+        proposal?: any;
+        is_setup_incomplete?: boolean;
+      }>('/ai/assistant/chat', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    },
   };
 
   // --- Chart Workspace, Drawings & Replay ---
