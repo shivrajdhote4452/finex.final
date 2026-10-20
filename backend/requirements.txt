@@ -21,3 +21,6 @@ pyotp>=2.9.0
 smartapi-python>=1.5.0
 pypdf>=4.0.0
 tenacity>=8.2.0
+logzero>=1.7.0
+websocket-client>=1.6.0
+pycryptodome>=3.20.0

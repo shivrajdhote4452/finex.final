@@ -71,18 +71,26 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
         # Angel One SmartAPI live market data initialization
         if app_settings.MARKET_DATA_MODE == "INDIAN_LIVE_DATA":
-            from backend.app.services.angel_adapter import AngelOneMarketAdapter
-            from backend.app.services.market_hub import get_market_hub
+            import logging
+            startup_logger = logging.getLogger("startup")
+            try:
+                from backend.app.services.angel_adapter import AngelOneMarketAdapter
+                from backend.app.services.market_hub import get_market_hub
 
-            angel = AngelOneMarketAdapter()
-            if not angel.is_configured():
-                raise RuntimeError("INDIAN_LIVE_DATA requires valid Angel One credentials")
-            auth_ok = angel.authenticate()
-            if not auth_ok:
-                raise RuntimeError("Angel One authentication failed at startup. Please verify ANGEL_* credentials.")
-            app.state.angel_adapter = angel
-            hub = get_market_hub()
-            hub.provider = angel
+                angel = AngelOneMarketAdapter()
+                if not angel.is_configured():
+                    startup_logger.warning("INDIAN_LIVE_DATA mode active but Angel One credentials incomplete. Fallback provider active.")
+                else:
+                    auth_ok = angel.authenticate()
+                    if auth_ok:
+                        app.state.angel_adapter = angel
+                        hub = get_market_hub()
+                        hub.provider = angel
+                        startup_logger.info("Angel One live provider registered successfully.")
+                    else:
+                        startup_logger.warning("Angel One authentication incomplete at startup. Fallback provider active.")
+            except Exception as exc:
+                startup_logger.warning(f"Angel One startup initialization failed: {exc}. Fallback provider active.")
         yield
 
     app = FastAPI(

@@ -51,8 +51,11 @@ class MarketDataUnavailable(Exception):
 try:
     from SmartApi import SmartConnect
 except ImportError:
-    SmartConnect = None
-    logger.warning("SmartApi package is not available or incomplete.")
+    try:
+        from SmartApi.smartConnect import SmartConnect
+    except ImportError:
+        SmartConnect = None
+        logger.warning("SmartApi package is not available or incomplete.")
 
 # Full Nifty 50 Universe Instrument Tokens for Angel One SmartAPI (NSE)
 FINEX_INSTRUMENTS: Dict[str, str] = {
@@ -191,6 +194,9 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
             return False
 
         if not self.smart_api:
+            if SmartConnect is None:
+                logger.error("SmartConnect library is not available. Please ensure smartapi-python, logzero, and websocket-client are installed.")
+                return False
             self.smart_api = SmartConnect(api_key=self.api_key)
 
         try:
