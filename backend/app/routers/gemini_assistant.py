@@ -43,18 +43,21 @@ async def get_assistant_status(request: Request):
         await gemini_assistant.verify_live_connection()
     is_verified = gemini_assistant.is_verified_working()
 
+    info = gemini_assistant.get_provider_info()
+
     return create_response_envelope(
         data={
             "is_configured": is_cfg,
             "has_live_gemini": is_verified,
+            "has_live_llm": is_verified,
             "is_verified_working": is_verified,
-            "model": gemini_assistant.settings.GEMINI_MODEL,
-            "provider": "gemini-live" if is_verified else ("gemini-configured" if is_cfg else "mock-offline"),
+            "model": info["model"],
+            "provider": info["provider"],
             "status_message": (
-                "Gemini AI Assistant is verified working with Google Gemini API."
+                f"FinEx AI Assistant is verified working live with {info['model']}."
                 if is_verified
                 else (
-                    "Gemini API key is configured. Ready to process queries."
+                    f"AI provider ({info['provider']}) is configured. Ready to process queries."
                     if is_cfg
                     else "FinEx AI Paper Assistant is active in intelligent simulation mode."
                 )

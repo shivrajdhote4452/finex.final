@@ -211,31 +211,118 @@ class GeminiInvestmentAssistant:
         self.engine = engine or PaperTradingEngine(market_provider=self.provider)
         self._verified_working = False
 
+    def is_groq_api_ready(self) -> bool:
+        """Verify if a valid GROQ_API_KEY is configured."""
+        key = getattr(self.settings, "GROQ_API_KEY", None)
+        if not key or "YOUR_GROQ_API_KEY" in key or "placeholder" in key.lower():
+            return False
+        return len(key.strip()) >= 10
+
     def is_gemini_api_ready(self) -> bool:
         """Verify if a valid, non-placeholder GEMINI_API_KEY is configured for external API calls."""
-        if getattr(self.settings, "LLM_PROVIDER", "").lower() in ("mock", "offline", "simulated", "local"):
-            return False
         key = getattr(self.settings, "GEMINI_API_KEY", None)
         if not key or "YOUR_NEW_GEMINI_API_KEY" in key or "placeholder" in key.lower():
             return False
         return len(key.strip()) >= 10
 
+    def is_llm_ready(self) -> bool:
+        """Verify if any supported LLM provider (Groq or Gemini) is ready."""
+        if getattr(self.settings, "LLM_PROVIDER", "").lower() in ("mock", "offline", "simulated", "local"):
+            return False
+        return self.is_groq_api_ready() or self.is_gemini_api_ready()
+
     def is_configured(self) -> bool:
         """Verify if assistant is configured with a valid API key format."""
-        return self.is_gemini_api_ready()
+        return self.is_llm_ready()
 
     def is_verified_working(self) -> bool:
-        """Verify if live Gemini connection has been verified working."""
-        return self._verified_working and self.is_gemini_api_ready()
+        """Verify if live LLM connection has been verified working."""
+        return self._verified_working and self.is_llm_ready()
+
+    def get_provider_info(self) -> Dict[str, str]:
+        """Return active provider identification and model for status reporting."""
+        pref = getattr(self.settings, "LLM_PROVIDER", "groq").lower()
+        if pref == "groq" and self.is_groq_api_ready():
+            return {
+                "provider": "groq-live" if self._verified_working else "groq-configured",
+                "model": getattr(self.settings, "GROQ_MODEL", "openai/gpt-oss-120b"),
+            }
+        if self.is_gemini_api_ready():
+            return {
+                "provider": "gemini-live" if self._verified_working else "gemini-configured",
+                "model": getattr(self.settings, "GEMINI_MODEL", "gemini-3.5-flash-lite"),
+            }
+        return {
+            "provider": "mock-offline",
+            "model": "deterministic-engine",
+        }
 
     async def verify_live_connection(self) -> bool:
-        """Test and verify connectivity by pinging Gemini API if not already verified."""
+        """Test and verify connectivity by pinging active LLM API if not already verified."""
         if self._verified_working:
             return True
-        if not self.is_gemini_api_ready():
+        if not self.is_llm_ready():
             return False
-        await self.call_gemini_api("ping", "Respond strictly with pong")
-        return self._verified_working
+        res = await self.call_llm_api("ping", "Respond strictly with pong")
+        return bool(res)
+
+    async def call_groq_api(self, prompt: str, system_instruction: str) -> Optional[str]:
+        """Invoke Groq Cloud API using OpenAI-compatible chat completions."""
+        if not self.is_groq_api_ready():
+            return None
+        groq_key = self.settings.GROQ_API_KEY
+        pref_model = getattr(self.settings, "GROQ_MODEL", "openai/gpt-oss-120b") or "openai/gpt-oss-120b"
+        models_to_try = [
+            pref_model,
+            "openai/gpt-oss-120b",
+            "qwen/qwen3.8-27b",
+            "openai/gpt-oss-20b",
+        ]
+        headers = {
+            "Authorization": f"Bearer {groq_key.strip()}",
+            "Content-Type": "application/json",
+        }
+        url = "https://api.groq.com/openai/v1/chat/completions"
+
+        for model in dict.fromkeys(models_to_try):
+            payload = {
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": system_instruction},
+                    {"role": "user", "content": prompt},
+                ],
+                "temperature": 0.2,
+                "max_tokens": 1000,
+            }
+            try:
+                async with httpx.AsyncClient(timeout=25.0) as client:
+                    res = await client.post(url, json=payload, headers=headers)
+                    if res.status_code == 200:
+                        self._verified_working = True
+                        data = res.json()
+                        choices = data.get("choices", [])
+                        if choices:
+                            return choices[0].get("message", {}).get("content", "").strip()
+                    elif res.status_code in (401, 403):
+                        print(f"[GroqAssistant] Auth error ({res.status_code}): {res.text[:150]}")
+                        break
+            except Exception as e:
+                print(f"[GroqAssistant] API error for model {model}: {type(e).__name__}")
+        return None
+
+    async def call_llm_api(self, prompt: str, system_instruction: str) -> Optional[str]:
+        """Unified LLM router supporting Groq and Gemini with bi-directional fallback."""
+        pref = getattr(self.settings, "LLM_PROVIDER", "groq").lower()
+        if pref == "groq":
+            res = await self.call_groq_api(prompt, system_instruction)
+            if res:
+                return res
+            return await self.call_gemini_api(prompt, system_instruction)
+        else:
+            res = await self.call_gemini_api(prompt, system_instruction)
+            if res:
+                return res
+            return await self.call_groq_api(prompt, system_instruction)
 
     async def call_gemini_api(self, prompt: str, system_instruction: str) -> Optional[str]:
         """Invoke Google Gemini API using httpx with headers only (never key in URL) and graceful fallback."""
@@ -1705,23 +1792,49 @@ class GeminiInvestmentAssistant:
                 is_setup_incomplete=False,
             )
 
-        # 6. Try Live Gemini API with Grounding if key is available
-        if self.is_gemini_api_ready():
+        # 6. Try Live LLM (Groq or Gemini) if configured
+        if self.is_llm_ready():
             sys_instruct = (
                 "You are FinEx AI Paper Investment Assistant for Indian Equities (NSE). "
                 f"Active chart context: {active_chart_context or {'symbol': active_sym}}. "
                 "Respond helpfully in the user's language (English, Hindi, or Hinglish). "
                 "Maintain strict SEBI educational compliance: all trades and balances are 100% virtual paper trading. "
-                "Ground all market prices and facts strictly using provided backend tools. Never invent quotes."
+                "Ground all market prices and facts strictly using verified facts. Never invent quotes."
             )
-            gemini_reply, tool_calls, evidence = await self.call_gemini_grounded(
-                user_message, sys_instruct, user_id=user_id, active_sym=active_sym, db=db
-            )
-            if gemini_reply:
+            pref = getattr(self.settings, "LLM_PROVIDER", "groq").lower()
+            llm_reply = None
+            tool_calls = []
+            evidence = []
+
+            if pref == "groq" and self.is_groq_api_ready():
+                snapshots = await self.tool_get_market_snapshot([active_sym, "RELIANCE", "TCS", "HDFCBANK", "INFY"])
+                context_notes = "\n".join([f"- {s['symbol']}: ₹{s['price']:,.2f} ({s['source']})" for s in snapshots])
+                enhanced_sys = (
+                    f"{sys_instruct}\n\n"
+                    f"Current verified NSE quotes:\n{context_notes}\n\n"
+                    "If the user asks for 'best stock for tomorrow' or trading ideas: "
+                    "Do NOT give a blunt refusal. Provide an educational technical momentum screening guide for tomorrow: "
+                    "1. Note SEBI paper trading education. "
+                    "2. Give a 3-point technical checklist (5-day & 20-day SMA trend, RSI crossing 50, volume confirmation). "
+                    "3. Highlight 2-3 of the candidate stocks above with key technical pivot levels to watch."
+                )
+                llm_reply = await self.call_groq_api(user_message, enhanced_sys)
+                evidence = snapshots
+            elif self.is_gemini_api_ready():
+                llm_reply, tool_calls, evidence = await self.call_gemini_grounded(
+                    user_message, sys_instruct, user_id=user_id, active_sym=active_sym, db=db
+                )
+
+            if not llm_reply and self.is_groq_api_ready():
+                llm_reply = await self.call_groq_api(user_message, sys_instruct)
+            elif not llm_reply and self.is_gemini_api_ready():
+                llm_reply = await self.call_gemini_api(user_message, sys_instruct)
+
+            if llm_reply:
                 return AssistantMessageResponse(
                     message_id=msg_id,
                     conversation_id=conv_id,
-                    reply=gemini_reply,
+                    reply=llm_reply,
                     language_detected=lang,
                     tool_calls=tool_calls,
                     evidence_cards=evidence,

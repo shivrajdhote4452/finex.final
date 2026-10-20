@@ -84,6 +84,22 @@ class AIOrchestrator:
     def classify_intent(self, query: str) -> AIIntent:
         q_lower = query.lower()
 
+        # Educational technical screening bypass (e.g. "best stock for tomorrow")
+        screening_phrases = [
+            "best stock",
+            "best shares",
+            "stock for tomorrow",
+            "stocks for tomorrow",
+            "which stock to buy",
+            "what stock to buy",
+            "stocks to buy",
+            "top stock",
+        ]
+        if any(p in q_lower for p in screening_phrases) and not any(
+            p in q_lower for p in ["guaranteed", "zero risk", "insider", "double my money"]
+        ):
+            return AIIntent.FINANCIAL_EDUCATION
+
         # 1. Prohibited advice check
         for phrase in PROHIBITED_KEYWORDS:
             if phrase in q_lower:
@@ -169,22 +185,66 @@ class AIOrchestrator:
                 legal_disclaimer=STATUTORY_DISCLAIMER,
             )
 
+        # Handle Technical Screening Queries (e.g. "best stock for tomorrow")
+        screening_phrases = [
+            "best stock",
+            "best shares",
+            "stock for tomorrow",
+            "stocks for tomorrow",
+            "which stock to buy",
+            "what stock to buy",
+            "stocks to buy",
+            "top stock",
+        ]
+        if any(p in q_lower for p in screening_phrases):
+            try:
+                from backend.app.domain.gemini_assistant import gemini_assistant
+
+                if gemini_assistant.is_llm_ready():
+                    sys_prompt = (
+                        "You are FinEx AI Financial Research Assistant for Indian Equities (NSE). "
+                        "The user asks for stock ideas or best stocks for tomorrow. "
+                        "Under SEBI educational guidelines, personalized buy/sell tips are strictly prohibited. "
+                        "Instead, provide an actionable and highly structured Technical Momentum Screening guide for tomorrow's session:\n"
+                        "1. Clearly state this is an educational simulation checklist for virtual paper trading.\n"
+                        "2. Provide a 3-point technical checklist to identify high-probability setups (e.g. Price > 5-day & 20-day SMA, RSI crossing above 50, Volume > 1.5x average).\n"
+                        "3. Highlight 2-3 prominent NSE benchmark equities (e.g. Reliance, TCS, HDFC Bank) with key technical pivot levels and sectors to monitor.\n"
+                        "Format cleanly with a Markdown comparison table and concise takeaways."
+                    )
+                    ai_reply = await gemini_assistant.call_llm_api(query, sys_prompt)
+                    if ai_reply:
+                        latency = (time.perf_counter() - t0) * 1000.0
+                        return OrchestrationResponse(
+                            message_id=msg_id,
+                            conversation_id=conv_id,
+                            correlation_id=cid,
+                            intent=AIIntent.FINANCIAL_EDUCATION,
+                            headline="Technical Momentum Screening Guide for Tomorrow",
+                            content=ai_reply,
+                            citations=[],
+                            latency_ms=round(latency, 2),
+                            is_fallback=False,
+                            legal_disclaimer=STATUTORY_DISCLAIMER,
+                        )
+            except Exception as e:
+                print(f"[AIOrchestrator] Screening error: {e}")
+
         # Retrieve relevant regulatory evidence
         retrieved_chunks = await self.retriever.retrieve_relevant_chunks(query, top_k=3, db=db)
 
         if not retrieved_chunks:
-            # If Gemini is ready, provide educational insight on general financial queries
+            # If LLM is ready, provide educational insight on general financial queries
             try:
                 from backend.app.domain.gemini_assistant import gemini_assistant
 
-                if gemini_assistant.is_gemini_api_ready():
+                if gemini_assistant.is_llm_ready():
                     sys_instruct = (
                         "You are FinEx AI Financial Research Assistant for Indian Equities and Capital Markets. "
                         "Provide a clear, objective, and educational explanation of the financial concept asked by the user. "
                         "Use Indian market examples (e.g. Nifty 50, BSE/NSE, INR) where helpful. "
                         "Maintain strict SEBI compliance: do not provide personal investment recommendations or guaranteed returns."
                     )
-                    ai_general = await gemini_assistant.call_gemini_api(query, sys_instruct)
+                    ai_general = await gemini_assistant.call_llm_api(query, sys_instruct)
                     if ai_general:
                         latency = (time.perf_counter() - t0) * 1000.0
                         return OrchestrationResponse(
@@ -246,11 +306,11 @@ class AIOrchestrator:
             f"Holding diversified assets and reviewing regulatory disclosures provides structural resilience."
         )
 
-        # Enhance with live Gemini synthesis when available
+        # Enhance with live LLM synthesis (Groq or Gemini) when available
         try:
             from backend.app.domain.gemini_assistant import gemini_assistant
 
-            if gemini_assistant.is_gemini_api_ready():
+            if gemini_assistant.is_llm_ready():
                 evidence_text = "\n\n".join(
                     [
                         f"Source [{i + 1}] ({c.publisher} - {c.title}):\n{c.content}"
@@ -264,7 +324,7 @@ class AIOrchestrator:
                     f"{evidence_text}\n\n"
                     "Explain the concepts clearly, highlight practical takeaways for Indian retail investors, and maintain strict SEBI educational compliance."
                 )
-                ai_text = await gemini_assistant.call_gemini_api(query, sys_instruct)
+                ai_text = await gemini_assistant.call_llm_api(query, sys_instruct)
                 if ai_text:
                     content_body = ai_text
         except Exception:
