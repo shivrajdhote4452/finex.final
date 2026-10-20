@@ -1,3 +1,4 @@
+import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -7,6 +8,8 @@ from backend.app.database import AsyncSessionLocal
 from backend.app.models.core import RevokedToken, User, UserConsent, UserProfile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -230,16 +233,28 @@ class UserStore:
                 onboarding_completed=False,
             )
             return user_rec
-        except Exception:
+        except Exception as e:
             if owns_session:
-                await session.rollback()
-            raise
+                try:
+                    await session.rollback()
+                except Exception:
+                    pass
+            logger.warning(f"Database query failed in get_or_create_user_db: {e}. Falling back to memory store.")
+            return self.get_or_create_user(
+                provider=provider,
+                provider_subject=provider_subject,
+                email=email,
+                name=name,
+            )
         finally:
             if owns_session:
-                await session.close()
+                try:
+                    await session.close()
+                except Exception:
+                    pass
 
     async def get_user_by_id_db(self, user_id: str, db: Optional[AsyncSession] = None) -> Optional[UserRecord]:
-        """Fetch user record from PostgreSQL by ID."""
+        """Fetch user record from PostgreSQL by ID with memory fallback."""
         owns_session = db is None
         session = db if db is not None else AsyncSessionLocal()
         try:
@@ -258,12 +273,18 @@ class UserStore:
                 self._users[u.id] = rec
                 return rec
             return self._users.get(user_id)
+        except Exception as e:
+            logger.warning(f"Database unavailable for get_user_by_id ({e}). Using memory store.")
+            return self._users.get(user_id)
         finally:
             if owns_session:
-                await session.close()
+                try:
+                    await session.close()
+                except Exception:
+                    pass
 
     async def get_profile_db(self, user_id: str, db: Optional[AsyncSession] = None) -> UserProfileRecord:
-        """Fetch investor profile from PostgreSQL."""
+        """Fetch investor profile from PostgreSQL with memory fallback."""
         owns_session = db is None
         session = db if db is not None else AsyncSessionLocal()
         try:
@@ -284,9 +305,15 @@ class UserStore:
                 self._profiles[user_id] = rec
                 return rec
             return self.get_profile(user_id)
+        except Exception as e:
+            logger.warning(f"Database unavailable for get_profile ({e}). Using memory store.")
+            return self.get_profile(user_id)
         finally:
             if owns_session:
-                await session.close()
+                try:
+                    await session.close()
+                except Exception:
+                    pass
 
     async def record_consent_db(
         self,
@@ -297,7 +324,7 @@ class UserStore:
         educational_disclaimer_accepted: bool,
         db: Optional[AsyncSession] = None,
     ) -> UserConsentRecord:
-        """Persist explicit user consent in PostgreSQL without marking onboarding complete."""
+        """Persist explicit user consent with memory fallback."""
         owns_session = db is None
         session = db if db is not None else AsyncSessionLocal()
         try:
@@ -348,15 +375,27 @@ class UserStore:
                 educational_disclaimer_accepted=educational_disclaimer_accepted,
             )
             self._consents.setdefault(user_id, []).append(rec)
-            # Crucial: Onboarding is NOT marked complete merely because consent is accepted!
             return rec
-        except Exception:
+        except Exception as e:
             if owns_session:
-                await session.rollback()
-            raise
+                try:
+                    await session.rollback()
+                except Exception:
+                    pass
+            logger.warning(f"Database unavailable for record_consent ({e}). Using memory store.")
+            return self.record_consent(
+                user_id=user_id,
+                consent_version=consent_version,
+                terms_accepted=terms_accepted,
+                privacy_accepted=privacy_accepted,
+                educational_disclaimer_accepted=educational_disclaimer_accepted,
+            )
         finally:
             if owns_session:
-                await session.close()
+                try:
+                    await session.close()
+                except Exception:
+                    pass
 
     async def record_risk_assessment_db(
         self,
@@ -364,11 +403,10 @@ class UserStore:
         assessment: Dict[str, Any],
         db: Optional[AsyncSession] = None,
     ) -> None:
-        """Persist completed risk assessment in PostgreSQL and mark onboarding complete."""
+        """Persist completed risk assessment with memory fallback."""
         owns_session = db is None
         session = db if db is not None else AsyncSessionLocal()
         try:
-            # Ensure user exists in users table first
             res_u = await session.execute(select(User).where(User.id == user_id))
             if not res_u.scalar_one_or_none():
                 new_u = User(
@@ -416,13 +454,20 @@ class UserStore:
             p.composite_score = composite_score
             p.risk_assessment = assessment
             p.onboarding_completed = True
-        except Exception:
+        except Exception as e:
             if owns_session:
-                await session.rollback()
-            raise
+                try:
+                    await session.rollback()
+                except Exception:
+                    pass
+            logger.warning(f"Database unavailable for record_risk_assessment ({e}). Using memory store.")
+            self.record_risk_assessment(user_id, assessment)
         finally:
             if owns_session:
-                await session.close()
+                try:
+                    await session.close()
+                except Exception:
+                    pass
 
     async def revoke_token_db(
         self,
@@ -430,12 +475,11 @@ class UserStore:
         user_id: Optional[str] = None,
         db: Optional[AsyncSession] = None,
     ) -> None:
-        """Persist revoked token in PostgreSQL for durable revocation across restarts."""
+        """Persist revoked token with memory fallback."""
         self._revoked_tokens.add(token)
         owns_session = db is None
         session = db if db is not None else AsyncSessionLocal()
         try:
-            # Check if already present
             res = await session.execute(select(RevokedToken).where(RevokedToken.token == token))
             if not res.scalar_one_or_none():
                 entry = RevokedToken(
@@ -447,13 +491,19 @@ class UserStore:
                 session.add(entry)
                 if owns_session:
                     await session.commit()
-        except Exception:
+        except Exception as e:
             if owns_session:
-                await session.rollback()
-            raise
+                try:
+                    await session.rollback()
+                except Exception:
+                    pass
+            logger.warning(f"Database unavailable for revoke_token ({e}). Using memory store.")
         finally:
             if owns_session:
-                await session.close()
+                try:
+                    await session.close()
+                except Exception:
+                    pass
 
     async def is_token_revoked_db(self, token: str, db: Optional[AsyncSession] = None) -> bool:
         """Check token revocation against memory and PostgreSQL database."""
@@ -467,9 +517,15 @@ class UserStore:
                 self._revoked_tokens.add(token)
                 return True
             return False
+        except Exception as e:
+            logger.debug(f"Database check in is_token_revoked failed: {e}. Using memory revocation list.")
+            return token in self._revoked_tokens
         finally:
             if owns_session:
-                await session.close()
+                try:
+                    await session.close()
+                except Exception:
+                    pass
 
     # Synchronous adapter methods for backward compatibility
     def get_or_create_user(
