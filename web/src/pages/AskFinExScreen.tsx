@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { apiClient } from '../api/client';
-import { FinExLiveChart } from '../components/market/FinExLiveChart';
 
 interface ChatMessage {
   id: string;
@@ -28,41 +27,30 @@ interface ConversationItem {
   updated_at: string;
 }
 
-const BENCHMARK_SYMBOLS = [
-  { symbol: 'RELIANCE', name: 'Reliance Industries', price: 2980.5, change: '+0.84%' },
-  { symbol: 'TCS', name: 'Tata Consultancy Services', price: 4120.0, change: '+0.42%' },
-  { symbol: 'HDFCBANK', name: 'HDFC Bank Ltd', price: 1685.2, change: '-0.31%' },
-  { symbol: 'INFY', name: 'Infosys Ltd', price: 1895.0, change: '+1.15%' },
-  { symbol: 'ICICIBANK', name: 'ICICI Bank', price: 1245.8, change: '+0.58%' },
-  { symbol: 'TATAMOTORS', name: 'Tata Motors', price: 924.3, change: '-0.22%' },
-  { symbol: 'SBIN', name: 'State Bank of India', price: 812.6, change: '+0.75%' },
-];
-
 export const AskFinExScreen: React.FC = () => {
-  // Chart Workspace State
-  const [selectedSymbol, setSelectedSymbol] = useState<string>('RELIANCE');
-  const [chartInterval, setChartInterval] = useState<string>('1D');
-  const [currentPrice, setCurrentPrice] = useState<number>(2980.5);
-  const [sma20, setSma20] = useState<number | null>(null);
-  const [rsi14, setRsi14] = useState<number | null>(null);
+  // Conversation Sessions (Chat History) State
+  const [conversations, setConversations] = useState<ConversationItem[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [searchFilter, setSearchFilter] = useState<string>('');
+  const [loadingHistory, setLoadingHistory] = useState<boolean>(true);
 
-  // Chat State
+  // Active Chat State
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputVal, setInputVal] = useState('');
   const [loading, setLoading] = useState(false);
-  const [activeConversationId, setActiveConversationId] = useState<string>('conv-welcome-001');
-  const [conversations, setConversations] = useState<ConversationItem[]>([]);
-  const [showHistoryDrawer, setShowHistoryDrawer] = useState<boolean>(false);
   const [selectedCitation, setSelectedCitation] = useState<any | null>(null);
-  const [activeRightTab, setActiveRightTab] = useState<'chat' | 'sources'>('chat');
+  const [showSourcesPanel, setShowSourcesPanel] = useState<boolean>(false);
+
+  // Model & Provider Info
   const [modelInfo, setModelInfo] = useState<{ model: string; provider: string }>({
     model: 'openai/gpt-oss-120b',
     provider: 'Groq Cloud LPU',
   });
 
   const chatScrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  // 1. Fetch AI Provider Status
+  // 1. Fetch AI Provider Status on Mount
   useEffect(() => {
     const fetchStatus = async () => {
       try {
@@ -74,87 +62,34 @@ export const AskFinExScreen: React.FC = () => {
           });
         }
       } catch (e) {
-        // Silent fallback
+        // Fallback default
       }
     };
     fetchStatus();
   }, []);
 
-  // 2. Fetch Indicator Context for Selected Symbol
+  // 2. Load Previous Chat History on mount
+  // Gemini Behavior: Always start in a fresh NEW CHAT state on open!
   useEffect(() => {
-    const fetchIndicators = async () => {
-      try {
-        const histRes = await apiClient.market.getHistory(selectedSymbol, { interval: chartInterval, range: '6mo' });
-        if (histRes && histRes.bars && histRes.bars.length > 0) {
-          const closes = histRes.bars.map((b) => Number(b.close)).filter((c) => !isNaN(c) && c > 0);
-          if (closes.length > 0) {
-            const latest = closes[closes.length - 1];
-            setCurrentPrice(latest);
-
-            // Compute SMA 20
-            if (closes.length >= 20) {
-              const slice20 = closes.slice(-20);
-              const avg = slice20.reduce((acc, v) => acc + v, 0) / 20;
-              setSma20(Number(avg.toFixed(2)));
-            } else {
-              setSma20(latest);
-            }
-
-            // Approximate 14-period RSI
-            if (closes.length >= 15) {
-              let gains = 0;
-              let losses = 0;
-              for (let i = closes.length - 14; i < closes.length; i++) {
-                const diff = closes[i] - closes[i - 1];
-                if (diff >= 0) gains += diff;
-                else losses += Math.abs(diff);
-              }
-              const avgGain = gains / 14;
-              const avgLoss = losses / 14;
-              if (avgLoss === 0) {
-                setRsi14(100);
-              } else {
-                const rs = avgGain / avgLoss;
-                const rsi = 100 - 100 / (1 + rs);
-                setRsi14(Number(rsi.toFixed(1)));
-              }
-            } else {
-              setRsi14(54.2);
-            }
-          }
-        }
-      } catch (err) {
-        console.warn('Indicators fetch error:', err);
-      }
-    };
-    fetchIndicators();
-  }, [selectedSymbol, chartInterval]);
-
-  // 3. Load Persistent Conversations on Mount
-  useEffect(() => {
-    const loadSessions = async () => {
+    const loadChatHistory = async () => {
+      setLoadingHistory(true);
       try {
         const convRes = await apiClient.ai.getConversations();
-        if (convRes && convRes.conversations && convRes.conversations.length > 0) {
+        if (convRes && convRes.conversations) {
           setConversations(convRes.conversations);
-          const firstConv = convRes.conversations[0];
-          setActiveConversationId(firstConv.id);
-          loadMessages(firstConv.id);
-        } else {
-          // Create initial session
-          const newSession = await apiClient.ai.createConversation('Technical & Market Research');
-          if (newSession) {
-            setConversations([newSession]);
-            setActiveConversationId(newSession.id);
-            setInitialGreeting();
-          }
         }
       } catch (err) {
-        setInitialGreeting();
+        console.warn('Could not load chat history:', err);
+      } finally {
+        setLoadingHistory(false);
       }
+
+      // Explicit Gemini Behavior: Show new chat when website/app opens
+      setActiveConversationId(null);
+      setMessages([]);
     };
 
-    loadSessions();
+    loadChatHistory();
   }, []);
 
   // Auto-scroll chat to bottom
@@ -164,24 +99,16 @@ export const AskFinExScreen: React.FC = () => {
     }
   }, [messages, loading]);
 
-  const setInitialGreeting = () => {
-    setMessages([
-      {
-        id: 'init-msg',
-        role: 'assistant',
-        headline: 'FinEx AI Copilot & Technical Screener',
-        body: `Namaste! I am your FinEx AI Technical Copilot, powered by ${modelInfo.provider} (${modelInfo.model}).\n\nI have live visibility into the active chart for **${selectedSymbol}** (Price: ₹${currentPrice.toLocaleString('en-IN')}).\n\nFeel free to ask for:\n- 📈 **Technical momentum analysis** (SMA, RSI, Volume)\n- 🔍 **"Best stock for tomorrow"** technical momentum screening\n- 🎯 **Key support, resistance, and pivot levels**\n- 💼 **Simulated paper trade allocations**`,
-        disclaimer: 'Educational paper trading simulator. All analyses are learning metrics and not financial advice.',
-      },
-    ]);
-  };
-
-  const loadMessages = async (convId: string) => {
+  // Load a specific historical conversation
+  const handleSelectConversation = async (convId: string) => {
+    if (convId === activeConversationId) return;
+    setActiveConversationId(convId);
+    setLoading(true);
     try {
       const msgRes = await apiClient.ai.getMessages(convId);
-      if (msgRes && msgRes.messages && msgRes.messages.length > 0) {
+      if (msgRes && msgRes.messages) {
         setMessages(
-          msgRes.messages.map((m) => ({
+          msgRes.messages.map((m: any) => ({
             id: m.id,
             role: m.role,
             headline: m.headline || '',
@@ -190,46 +117,53 @@ export const AskFinExScreen: React.FC = () => {
             citations: m.citations,
           }))
         );
-        const firstWithCit = msgRes.messages.find((m) => m.citations && m.citations.length > 0);
+        const firstWithCit = msgRes.messages.find((m: any) => m.citations && m.citations.length > 0);
         if (firstWithCit && firstWithCit.citations) {
           setSelectedCitation(firstWithCit.citations[0]);
         }
       } else {
-        setInitialGreeting();
+        setMessages([]);
       }
-    } catch (e) {
-      setInitialGreeting();
+    } catch (err) {
+      console.warn('Failed to load conversation messages:', err);
+      setMessages([]);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleSelectConversation = (convId: string) => {
-    setActiveConversationId(convId);
-    loadMessages(convId);
-    setShowHistoryDrawer(false);
+  // Start a fresh New Chat (Gemini behavior)
+  const handleStartNewChat = () => {
+    setActiveConversationId(null);
+    setMessages([]);
+    setInputVal('');
+    setSelectedCitation(null);
+    setShowSourcesPanel(false);
+    if (inputRef.current) {
+      inputRef.current.focus();
+    }
   };
 
-  const handleNewChat = async () => {
+  // Delete a conversation from history
+  const handleDeleteConversation = async (e: React.MouseEvent, convId: string) => {
+    e.stopPropagation();
     try {
-      const sessionTitle = `${selectedSymbol} Technical Research`;
-      const newConv = await apiClient.ai.createConversation(sessionTitle);
-      if (newConv) {
-        setConversations((prev) => [newConv, ...prev]);
-        setActiveConversationId(newConv.id);
-        setInitialGreeting();
+      await apiClient.ai.deleteConversation(convId);
+      setConversations((prev) => prev.filter((c) => c.id !== convId));
+      if (activeConversationId === convId) {
+        handleStartNewChat();
       }
-    } catch (e) {
-      const localId = `conv-${Date.now()}`;
-      setActiveConversationId(localId);
-      setInitialGreeting();
+    } catch (err) {
+      console.warn('Failed to delete conversation:', err);
     }
-    setShowHistoryDrawer(false);
   };
 
-  const handleSend = async (customText?: string) => {
-    const textToSend = customText || inputVal;
+  // Send message
+  const handleSend = async (presetText?: string) => {
+    const textToSend = presetText || inputVal;
     if (!textToSend.trim() || loading) return;
 
-    if (!customText) setInputVal('');
+    if (!presetText) setInputVal('');
     setLoading(true);
 
     const tempUserMsg: ChatMessage = {
@@ -240,8 +174,27 @@ export const AskFinExScreen: React.FC = () => {
     setMessages((prev) => [...prev, tempUserMsg]);
 
     try {
-      // Send message to backend orchestrator with active chart context
-      const res = await apiClient.ai.sendMessage(activeConversationId, textToSend.trim());
+      let targetConvId = activeConversationId;
+
+      // If in New Chat mode, create persistent session dynamically
+      if (!targetConvId) {
+        const rawTitle = textToSend.trim();
+        const sessionTitle = rawTitle.length > 38 ? `${rawTitle.slice(0, 35)}...` : rawTitle;
+        try {
+          const newConv = await apiClient.ai.createConversation(sessionTitle);
+          if (newConv && newConv.id) {
+            targetConvId = newConv.id;
+            setActiveConversationId(newConv.id);
+            setConversations((prev) => [newConv, ...prev]);
+          }
+        } catch (e) {
+          targetConvId = `conv-${Date.now()}`;
+          setActiveConversationId(targetConvId);
+        }
+      }
+
+      // Send to backend orchestrator (connected to Groq 120B / Gemini)
+      const res = await apiClient.ai.sendMessage(targetConvId || 'conv-default', textToSend.trim());
       if (res && res.assistant_message) {
         const asst = res.assistant_message;
         const newAsstMsg: ChatMessage = {
@@ -263,8 +216,8 @@ export const AskFinExScreen: React.FC = () => {
         {
           id: `msg-err-${Date.now()}`,
           role: 'assistant',
-          headline: 'Synthesizing Response',
-          body: err?.message || 'Unable to connect to AI reasoning engine. Please ensure backend is active.',
+          headline: 'Service Response Issue',
+          body: err?.message || 'Could not retrieve AI response. Please ensure backend is running.',
           disclaimer: 'Operational notification.',
         },
       ]);
@@ -273,696 +226,749 @@ export const AskFinExScreen: React.FC = () => {
     }
   };
 
-  const activeBenchmark = BENCHMARK_SYMBOLS.find((s) => s.symbol === selectedSymbol) || {
-    symbol: selectedSymbol,
-    name: selectedSymbol,
-    price: currentPrice,
-    change: '+0.00%',
-  };
+  // Filter conversations for search box
+  const filteredConversations = conversations.filter((c) =>
+    (c.title || 'Research Session').toLowerCase().includes(searchFilter.toLowerCase())
+  );
 
-  const isPositive = !activeBenchmark.change.startsWith('-');
-
-  return (
-    <div style={{ maxWidth: '1720px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      {/* 1. Header Bar with AI Status, Symbol Chips & Chat History Toggle */}
-      <div
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '16px',
-          borderBottom: '1px solid #1E222D',
-          paddingBottom: '16px',
-        }}
-      >
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-accent-cyan)', fontWeight: 700 }}>
-              AI Chart & Research Copilot
-            </span>
-            <span
-              style={{
-                fontSize: '11px',
-                padding: '3px 10px',
-                borderRadius: '12px',
-                backgroundColor: 'rgba(38, 166, 154, 0.12)',
-                border: '1px solid rgba(38, 166, 154, 0.35)',
-                color: '#26A69A',
-                fontWeight: 600,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '5px',
-              }}
-            >
-              <span>⚡</span>
-              <span>{modelInfo.provider} • {modelInfo.model}</span>
-            </span>
-          </div>
-          <h1 style={{ fontSize: '26px', fontWeight: 700, color: '#FFFFFF', marginTop: '4px', letterSpacing: '-0.02em' }}>
-            Chart Intelligence & AI Copilot Workspace
-          </h1>
-        </div>
-
-        {/* Action Controls: Chat Sessions & New Chat Button */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <button
-            type="button"
-            onClick={() => setShowHistoryDrawer(!showHistoryDrawer)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 14px',
-              borderRadius: '6px',
-              backgroundColor: showHistoryDrawer ? 'rgba(242, 154, 96, 0.18)' : '#161922',
-              border: `1px solid ${showHistoryDrawer ? '#F29A60' : '#2A2E39'}`,
-              color: showHistoryDrawer ? '#F29A60' : '#D1D4DC',
-              fontSize: '12px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            <span>💬</span>
-            <span>Chat History</span>
-            <span
-              style={{
-                fontSize: '10px',
-                backgroundColor: '#262B38',
-                padding: '1px 6px',
-                borderRadius: '10px',
-                color: '#A1A1AA',
-              }}
-            >
-              {conversations.length}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleNewChat}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 16px',
-              borderRadius: '6px',
-              backgroundColor: '#F29A60',
-              border: 'none',
-              color: '#000000',
-              fontSize: '12px',
-              fontWeight: 700,
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-            }}
-          >
-            <span>+</span>
-            <span>New Chat</span>
-          </button>
-        </div>
-      </div>
-
-      {/* 2. Collapsible Past Chat History Drawer */}
-      {showHistoryDrawer && (
-        <div
-          style={{
-            backgroundColor: '#0F121A',
-            border: '1px solid #2A2E39',
-            borderRadius: '8px',
-            padding: '16px 20px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '12px',
-          }}
-        >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', fontWeight: 700, color: '#FFFFFF', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-              Past Conversation Sessions
-            </span>
-            <button
-              onClick={() => setShowHistoryDrawer(false)}
-              style={{ background: 'none', border: 'none', color: '#787B86', cursor: 'pointer', fontSize: '14px' }}
-            >
-              ✕ Close
-            </button>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '10px', maxHeight: '180px', overflowY: 'auto' }}>
-            {conversations.map((c) => (
+  // Simple Markdown Formatter Helper
+  const renderFormattedText = (text: string) => {
+    const lines = text.split('\n');
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        {lines.map((line, idx) => {
+          const trimmed = line.trim();
+          if (trimmed.startsWith('### ')) {
+            return (
+              <h4 key={idx} style={{ fontSize: '14.5px', fontWeight: 700, color: '#FFFFFF', margin: '8px 0 2px 0' }}>
+                {trimmed.replace('### ', '')}
+              </h4>
+            );
+          }
+          if (trimmed.startsWith('## ')) {
+            return (
+              <h3 key={idx} style={{ fontSize: '16px', fontWeight: 700, color: '#FFFFFF', margin: '10px 0 3px 0' }}>
+                {trimmed.replace('## ', '')}
+              </h3>
+            );
+          }
+          if (trimmed.startsWith('# ')) {
+            return (
+              <h2 key={idx} style={{ fontSize: '18px', fontWeight: 700, color: '#FFFFFF', margin: '12px 0 4px 0' }}>
+                {trimmed.replace('# ', '')}
+              </h2>
+            );
+          }
+          if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+            return (
+              <div key={idx} style={{ display: 'flex', alignItems: 'baseline', gap: '8px', paddingLeft: '4px' }}>
+                <span style={{ color: '#F29A60', fontSize: '12px' }}>•</span>
+                <span>{trimmed.replace(/^[-*]\s+/, '')}</span>
+              </div>
+            );
+          }
+          if (/^\d+\.\s/.test(trimmed)) {
+            const num = trimmed.match(/^(\d+)\.\s/)?.[1] || '1';
+            return (
+              <div key={idx} style={{ display: 'flex', alignItems: 'baseline', gap: '8px', paddingLeft: '4px' }}>
+                <span style={{ color: '#F29A60', fontSize: '12px', fontWeight: 600 }}>{num}.</span>
+                <span>{trimmed.replace(/^\d+\.\s+/, '')}</span>
+              </div>
+            );
+          }
+          if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+            // Render table row
+            const cells = trimmed.split('|').filter((_, cIdx, arr) => cIdx > 0 && cIdx < arr.length - 1);
+            if (cells.every((c) => c.trim().startsWith('---') || c.trim().startsWith(':--'))) {
+              return null; // separator row
+            }
+            return (
               <div
-                key={c.id}
-                onClick={() => handleSelectConversation(c.id)}
+                key={idx}
                 style={{
-                  padding: '10px 14px',
-                  borderRadius: '6px',
-                  backgroundColor: c.id === activeConversationId ? 'rgba(242, 154, 96, 0.12)' : '#181C27',
-                  border: `1px solid ${c.id === activeConversationId ? '#F29A60' : '#262B38'}`,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '4px',
-                  transition: 'all 0.15s ease',
+                  display: 'grid',
+                  gridTemplateColumns: `repeat(${cells.length}, 1fr)`,
+                  gap: '8px',
+                  padding: '6px 10px',
+                  backgroundColor: idx % 2 === 0 ? 'rgba(255, 255, 255, 0.03)' : 'transparent',
+                  borderBottom: '1px solid #1E222D',
+                  fontSize: '12px',
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '12.5px', fontWeight: 600, color: c.id === activeConversationId ? '#F29A60' : '#E0E3EB' }}>
-                    {c.title || 'Research Session'}
+                {cells.map((cell, cIdx) => (
+                  <span key={cIdx} style={{ color: '#E0E3EB', fontWeight: cIdx === 0 ? 600 : 400 }}>
+                    {cell.trim()}
                   </span>
-                  {c.id === activeConversationId && (
-                    <span style={{ fontSize: '10px', color: '#10B981', fontWeight: 600 }}>Active</span>
-                  )}
-                </div>
-                <span style={{ fontSize: '10px', color: '#787B86' }}>
-                  {new Date(c.updated_at || c.created_at).toLocaleString()}
-                </span>
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
-      )}
+            );
+          }
+          if (!trimmed) {
+            return <div key={idx} style={{ height: '4px' }} />;
+          }
+          return (
+            <p key={idx} style={{ margin: 0 }}>
+              {line}
+            </p>
+          );
+        })}
+      </div>
+    );
+  };
 
-      {/* 3. Main Workspace: Chart History on the Left | AI Chat Assigned to the Right */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '24px', alignItems: 'start' }}>
-        
-        {/* ================= LEFT SECTION: CHART HISTORY WORKSPACE ================= */}
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '16px',
-            backgroundColor: '#0C0E14',
-            border: '1px solid #1E222D',
-            borderRadius: '10px',
-            padding: '20px',
-          }}
-        >
-          {/* Top Symbol Chips & Timeframe Controls */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
-            {/* Quick Benchmark Chips */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
-              <span style={{ fontSize: '11px', color: '#787B86', marginRight: '4px', fontWeight: 600 }}>TICKER:</span>
-              {BENCHMARK_SYMBOLS.map((s) => (
-                <button
-                  key={s.symbol}
-                  type="button"
-                  onClick={() => setSelectedSymbol(s.symbol)}
-                  style={{
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    padding: '4px 10px',
-                    borderRadius: '4px',
-                    backgroundColor: selectedSymbol === s.symbol ? '#262B38' : '#141722',
-                    border: `1px solid ${selectedSymbol === s.symbol ? '#F29A60' : '#1E222D'}`,
-                    color: selectedSymbol === s.symbol ? '#F29A60' : '#A1A1AA',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                  }}
-                >
-                  {s.symbol}
-                </button>
-              ))}
-            </div>
-
-            {/* Timeframe Interval Buttons */}
-            <div style={{ display: 'flex', gap: '4px', backgroundColor: '#141722', padding: '3px', borderRadius: '5px' }}>
-              {['1m', '5m', '15m', '1h', '1D', '1W'].map((tf) => (
-                <button
-                  key={tf}
-                  type="button"
-                  onClick={() => setChartInterval(tf)}
-                  style={{
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    padding: '3px 8px',
-                    borderRadius: '3px',
-                    backgroundColor: chartInterval === tf ? '#2962FF' : 'transparent',
-                    border: 'none',
-                    color: chartInterval === tf ? '#FFFFFF' : '#787B86',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {tf}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Active Stock Quote & Technical Indicator Metrics Banner */}
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '12px',
-              padding: '12px 16px',
-              backgroundColor: '#12151E',
-              borderRadius: '6px',
-              border: '1px solid #1E222D',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px' }}>
-              <span style={{ fontSize: '18px', fontWeight: 700, color: '#FFFFFF' }}>
-                {activeBenchmark.symbol}
-              </span>
-              <span style={{ fontSize: '12px', color: '#787B86' }}>
-                {activeBenchmark.name}
-              </span>
-              <span style={{ fontSize: '18px', fontWeight: 700, color: '#FFFFFF', marginLeft: '8px' }}>
-                ₹{currentPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+  return (
+    <div
+      style={{
+        maxWidth: '1720px',
+        margin: '0 auto',
+        height: 'calc(100vh - 120px)',
+        display: 'flex',
+        gap: '20px',
+        overflow: 'hidden',
+      }}
+    >
+      {/* ============================================================== */}
+      {/* 1. LEFT SIDEBAR: CHAT HISTORY (Previous Chats + New Chat)      */}
+      {/* ============================================================== */}
+      <div
+        style={{
+          width: '290px',
+          minWidth: '290px',
+          backgroundColor: '#090B10',
+          border: '1px solid #1A1E29',
+          borderRadius: '12px',
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100%',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Top Header & + New Chat Button */}
+        <div style={{ padding: '16px', borderBottom: '1px solid #1A1E29', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '14px', fontWeight: 700, color: '#FFFFFF', letterSpacing: '0.02em' }}>
+                Chat History
               </span>
               <span
                 style={{
-                  fontSize: '12px',
+                  fontSize: '11px',
+                  backgroundColor: '#1E2330',
+                  color: '#A1A1AA',
+                  padding: '2px 7px',
+                  borderRadius: '10px',
                   fontWeight: 600,
-                  color: isPositive ? '#10B981' : '#EF4444',
                 }}
               >
-                {activeBenchmark.change}
+                {conversations.length}
               </span>
             </div>
 
-            {/* Quantitative Indicator Badges */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '11.5px' }}>
-              <div style={{ display: 'flex', gap: '4px' }}>
-                <span style={{ color: '#787B86' }}>20 SMA:</span>
-                <span style={{ color: '#F29A60', fontWeight: 600 }}>
-                  ₹{sma20 ? sma20.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : 'Calculating'}
-                </span>
-              </div>
-              <div style={{ display: 'flex', gap: '4px' }}>
-                <span style={{ color: '#787B86' }}>14 RSI:</span>
-                <span
-                  style={{
-                    color: rsi14 && rsi14 > 70 ? '#EF4444' : rsi14 && rsi14 < 30 ? '#10B981' : '#38BDF8',
-                    fontWeight: 600,
-                  }}
-                >
-                  {rsi14 || 'Calculating'} ({rsi14 && rsi14 > 70 ? 'Overbought' : rsi14 && rsi14 < 30 ? 'Oversold' : 'Neutral'})
-                </span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#10B981', fontWeight: 600 }}>
-                <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10B981', display: 'inline-block' }} />
-                <span>Live Feed</span>
-              </div>
-            </div>
+            <span style={{ fontSize: '11px', color: '#10B981', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10B981', display: 'inline-block' }} />
+              Live
+            </span>
           </div>
 
-          {/* Interactive Candlestick Chart Display */}
-          <div
+          {/* + New Chat Button (Prominent, Gemini/ChatGPT Style) */}
+          <button
+            type="button"
+            onClick={handleStartNewChat}
             style={{
-              height: '460px',
               width: '100%',
-              backgroundColor: '#090D14',
-              borderRadius: '6px',
-              overflow: 'hidden',
-              position: 'relative',
-              border: '1px solid #1A1E29',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              padding: '11px 16px',
+              borderRadius: '8px',
+              backgroundColor: '#F29A60',
+              border: 'none',
+              color: '#000000',
+              fontSize: '13px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              boxShadow: '0 2px 8px rgba(242, 154, 96, 0.25)',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#FFA76E';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = '#F29A60';
             }}
           >
-            <FinExLiveChart
-              symbol={selectedSymbol}
-              height={460}
-              interval={chartInterval}
-              onPriceUpdate={(p) => setCurrentPrice(p)}
-            />
-          </div>
+            <span style={{ fontSize: '16px', lineHeight: 1 }}>+</span>
+            <span>New Chat</span>
+          </button>
 
-          {/* One-Click Copilot Prompts for Active Chart */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <span style={{ fontSize: '11px', textTransform: 'uppercase', color: '#787B86', fontWeight: 600, letterSpacing: '0.04em' }}>
-              One-Click Copilot Analysis for {selectedSymbol}:
-            </span>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-              {[
-                {
-                  label: `⚡ Best stock for tomorrow`,
-                  query: `Give me the best stock for tomorrow with technical momentum checklist and pivot levels`,
-                },
-                {
-                  label: `📈 Analyze ${selectedSymbol} Chart & Indicators`,
-                  query: `Analyze ${selectedSymbol} active chart: current price ₹${currentPrice}, 20-Day SMA ₹${sma20 || 0}, and 14-period RSI ${rsi14 || 0}. Explain the technical trend and key watch levels.`,
-                },
-                {
-                  label: `🎯 Key Support & Resistance Levels`,
-                  query: `What are the key daily support and resistance pivot levels for ${selectedSymbol}?`,
-                },
-                {
-                  label: `💼 Propose ₹15,000 Allocation`,
-                  query: `Invest ₹15,000 in ${selectedSymbol} and TCS paper portfolio`,
-                },
-              ].map((btn, bIdx) => (
-                <button
-                  key={bIdx}
-                  type="button"
-                  onClick={() => handleSend(btn.query)}
+          {/* Search Box */}
+          <input
+            type="text"
+            placeholder="Search previous chats..."
+            value={searchFilter}
+            onChange={(e) => setSearchFilter(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              borderRadius: '6px',
+              backgroundColor: '#11141C',
+              border: '1px solid #242938',
+              color: '#FFFFFF',
+              fontSize: '12px',
+              outline: 'none',
+              boxSizing: 'border-box',
+            }}
+          />
+        </div>
+
+        {/* Previous Chats List */}
+        <div
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            padding: '10px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '6px',
+          }}
+        >
+          {loadingHistory ? (
+            <div style={{ textAlign: 'center', padding: '24px 0', color: '#787B86', fontSize: '12px' }}>
+              Loading past chats...
+            </div>
+          ) : filteredConversations.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '28px 12px', color: '#787B86', fontSize: '12px', lineHeight: 1.5 }}>
+              {searchFilter ? 'No matching chats found.' : 'No previous chats yet.\nStart a new chat to begin!'}
+            </div>
+          ) : (
+            filteredConversations.map((c) => {
+              const isSelected = c.id === activeConversationId;
+              const formattedDate = new Date(c.updated_at || c.created_at).toLocaleDateString('en-IN', {
+                month: 'short',
+                day: 'numeric',
+              });
+
+              return (
+                <div
+                  key={c.id}
+                  onClick={() => handleSelectConversation(c.id)}
                   style={{
-                    fontSize: '11.5px',
-                    backgroundColor: '#161A24',
-                    color: '#D1D4DC',
-                    border: '1px solid #2A2E39',
-                    borderRadius: '5px',
-                    padding: '6px 12px',
+                    padding: '10px 12px',
+                    borderRadius: '7px',
+                    backgroundColor: isSelected ? 'rgba(242, 154, 96, 0.14)' : '#11141C',
+                    border: `1px solid ${isSelected ? '#F29A60' : '#1C202C'}`,
                     cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '8px',
                     transition: 'all 0.15s ease',
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.color = '#F29A60';
-                    e.currentTarget.style.borderColor = '#F29A60';
+                    if (!isSelected) {
+                      e.currentTarget.style.backgroundColor = '#171B26';
+                      e.currentTarget.style.borderColor = '#2B3142';
+                    }
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.color = '#D1D4DC';
-                    e.currentTarget.style.borderColor = '#2A2E39';
+                    if (!isSelected) {
+                      e.currentTarget.style.backgroundColor = '#11141C';
+                      e.currentTarget.style.borderColor = '#1C202C';
+                    }
                   }}
                 >
-                  {btn.label}
-                </button>
-              ))}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
+                    <span style={{ fontSize: '13px', color: isSelected ? '#F29A60' : '#787B86' }}>💬</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                      <span
+                        style={{
+                          fontSize: '12.5px',
+                          fontWeight: isSelected ? 600 : 500,
+                          color: isSelected ? '#FFFFFF' : '#D1D4DC',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          maxWidth: '180px',
+                        }}
+                      >
+                        {c.title || 'Research Session'}
+                      </span>
+                      <span style={{ fontSize: '10px', color: '#787B86' }}>{formattedDate}</span>
+                    </div>
+                  </div>
+
+                  {/* Delete Conversation Button */}
+                  <button
+                    type="button"
+                    title="Delete Chat"
+                    onClick={(e) => handleDeleteConversation(e, c.id)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#787B86',
+                      fontSize: '13px',
+                      cursor: 'pointer',
+                      padding: '4px',
+                      borderRadius: '4px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      opacity: isSelected ? 0.9 : 0.6,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.color = '#EF4444';
+                      e.currentTarget.style.opacity = '1';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.color = '#787B86';
+                      e.currentTarget.style.opacity = isSelected ? '0.9' : '0.6';
+                    }}
+                  >
+                    🗑️
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Sidebar Footer: AI Model & Provider Status */}
+        <div
+          style={{
+            padding: '12px 14px',
+            borderTop: '1px solid #1A1E29',
+            backgroundColor: '#0D0F16',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '4px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '10px', textTransform: 'uppercase', color: '#787B86', fontWeight: 600, letterSpacing: '0.05em' }}>
+              ACTIVE ENGINE
+            </span>
+            <span style={{ fontSize: '10.5px', color: '#26A69A', fontWeight: 600 }}>
+              {modelInfo.provider}
+            </span>
+          </div>
+          <span style={{ fontSize: '11px', color: '#FFFFFF', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            ⚡ {modelInfo.model}
+          </span>
+        </div>
+      </div>
+
+      {/* ============================================================== */}
+      {/* 2. RIGHT MAIN WORKSPACE: AI CHAT (Full Right Area)            */}
+      {/* ============================================================== */}
+      <div
+        style={{
+          flex: 1,
+          backgroundColor: '#090B10',
+          border: '1px solid #1A1E29',
+          borderRadius: '12px',
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100%',
+          overflow: 'hidden',
+          position: 'relative',
+        }}
+      >
+        {/* Top Header of Chat Area */}
+        <div
+          style={{
+            padding: '14px 20px',
+            borderBottom: '1px solid #1A1E29',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            backgroundColor: '#0C0E15',
+          }}
+        >
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#FFFFFF', margin: 0 }}>
+                {activeConversationId
+                  ? conversations.find((c) => c.id === activeConversationId)?.title || 'FinEx AI Assistant'
+                  : 'New Chat'}
+              </h2>
+              <span
+                style={{
+                  fontSize: '11px',
+                  padding: '2px 8px',
+                  borderRadius: '10px',
+                  backgroundColor: 'rgba(38, 166, 154, 0.12)',
+                  border: '1px solid rgba(38, 166, 154, 0.3)',
+                  color: '#26A69A',
+                  fontWeight: 600,
+                }}
+              >
+                ✨ {modelInfo.model}
+              </span>
             </div>
+            <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#787B86' }}>
+              Document-grounded market intelligence, technical momentum screening & regulatory citations.
+            </p>
+          </div>
+
+          {/* Quick Actions Header */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {selectedCitation && (
+              <button
+                type="button"
+                onClick={() => setShowSourcesPanel(!showSourcesPanel)}
+                style={{
+                  fontSize: '11.5px',
+                  padding: '5px 12px',
+                  borderRadius: '6px',
+                  backgroundColor: showSourcesPanel ? 'rgba(242, 154, 96, 0.18)' : '#161922',
+                  border: `1px solid ${showSourcesPanel ? '#F29A60' : '#2A2E39'}`,
+                  color: showSourcesPanel ? '#F29A60' : '#D1D4DC',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                }}
+              >
+                📑 Regulatory Source Desk {showSourcesPanel ? '▲' : '▼'}
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={handleStartNewChat}
+              style={{
+                fontSize: '11.5px',
+                padding: '5px 12px',
+                borderRadius: '6px',
+                backgroundColor: '#161922',
+                border: '1px solid #2A2E39',
+                color: '#D1D4DC',
+                cursor: 'pointer',
+                fontWeight: 600,
+              }}
+            >
+              + New Chat
+            </button>
           </div>
         </div>
 
-        {/* ================= RIGHT SECTION: AI CHAT ASSIGNED TO THE RIGHT ================= */}
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            backgroundColor: '#0C0E14',
-            border: '1px solid #1E222D',
-            borderRadius: '10px',
-            minHeight: '660px',
-            height: '100%',
-          }}
-        >
-          {/* Header of AI Chat */}
+        {/* Source Desk Citations Drawer (if opened) */}
+        {showSourcesPanel && selectedCitation && (
           <div
             style={{
               padding: '16px 20px',
-              borderBottom: '1px solid #1E222D',
+              backgroundColor: '#0F121C',
+              borderBottom: '1px solid #242938',
               display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              backgroundColor: '#0F121A',
-              borderTopLeftRadius: '10px',
-              borderTopRightRadius: '10px',
+              flexDirection: 'column',
+              gap: '8px',
             }}
           >
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '15px', fontWeight: 700, color: '#FFFFFF' }}>
-                  FinEx AI Copilot
-                </span>
-                <span
-                  style={{
-                    fontSize: '10.5px',
-                    padding: '2px 6px',
-                    borderRadius: '4px',
-                    backgroundColor: 'rgba(242, 154, 96, 0.15)',
-                    color: '#F29A60',
-                    fontWeight: 600,
-                  }}
-                >
-                  {selectedSymbol} Focus
-                </span>
-              </div>
-              <span style={{ fontSize: '11px', color: '#787B86' }}>
-                Interactive Reasoning & Technical Screening
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '12px', fontWeight: 700, color: '#F29A60', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Verified Regulatory Grounding Excerpt
               </span>
-            </div>
-
-            {/* Mode Switcher: Chat Stream vs Source Grounding */}
-            <div style={{ display: 'flex', gap: '4px', backgroundColor: '#161922', padding: '3px', borderRadius: '5px' }}>
               <button
-                type="button"
-                onClick={() => setActiveRightTab('chat')}
-                style={{
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  padding: '4px 10px',
-                  borderRadius: '3px',
-                  backgroundColor: activeRightTab === 'chat' ? '#F29A60' : 'transparent',
-                  border: 'none',
-                  color: activeRightTab === 'chat' ? '#000000' : '#A1A1AA',
-                  cursor: 'pointer',
-                }}
+                onClick={() => setShowSourcesPanel(false)}
+                style={{ background: 'none', border: 'none', color: '#787B86', cursor: 'pointer', fontSize: '13px' }}
               >
-                Chat
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveRightTab('sources')}
-                style={{
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  padding: '4px 10px',
-                  borderRadius: '3px',
-                  backgroundColor: activeRightTab === 'sources' ? '#F29A60' : 'transparent',
-                  border: 'none',
-                  color: activeRightTab === 'sources' ? '#000000' : '#A1A1AA',
-                  cursor: 'pointer',
-                }}
-              >
-                Sources {selectedCitation ? '•' : ''}
+                ✕ Close
               </button>
             </div>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: '#FFFFFF' }}>
+              {selectedCitation.title} ({selectedCitation.publisher})
+            </div>
+            <div
+              style={{
+                padding: '10px 14px',
+                backgroundColor: 'rgba(0, 0, 0, 0.35)',
+                border: '1px solid #1E222D',
+                borderRadius: '6px',
+                fontSize: '12.5px',
+                lineHeight: 1.6,
+                color: '#D1D4DC',
+                fontStyle: 'italic',
+              }}
+            >
+              "{selectedCitation.excerpt}"
+            </div>
+            {selectedCitation.source_url && (
+              <a
+                href={selectedCitation.source_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ fontSize: '11.5px', color: '#38BDF8', textDecoration: 'none' }}
+              >
+                🔗 Read full regulatory publication
+              </a>
+            )}
           </div>
+        )}
 
-          {/* Body Content: Either Chat Stream or Source Desk */}
-          {activeRightTab === 'chat' ? (
+        {/* Chat Thread Messages Stream */}
+        <div
+          ref={chatScrollRef}
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            padding: '24px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '20px',
+          }}
+        >
+          {/* Welcome Screen / Gemini-Style Starter Grid if Messages is Empty */}
+          {messages.length === 0 ? (
             <div
               style={{
                 display: 'flex',
                 flexDirection: 'column',
-                flex: 1,
-                justifyContent: 'space-between',
-                padding: '16px 20px',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: 'auto 0',
+                gap: '24px',
+                maxWidth: '720px',
+                alignSelf: 'center',
+                textAlign: 'center',
               }}
             >
-              {/* Message Thread */}
-              <div
-                ref={chatScrollRef}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '16px',
-                  maxHeight: '490px',
-                  overflowY: 'auto',
-                  paddingRight: '6px',
-                }}
-              >
-                {/* Safety Badge */}
-                <div
-                  style={{
-                    padding: '8px 12px',
-                    borderRadius: '5px',
-                    backgroundColor: 'rgba(245, 158, 11, 0.08)',
-                    border: '1px solid rgba(245, 158, 11, 0.25)',
-                    fontSize: '11px',
-                    color: '#F59E0B',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                  }}
-                >
-                  <span>🛡️</span>
-                  <span>Responses are for educational paper trading only. Never personalized investment advice.</span>
-                </div>
-
-                {/* Messages List */}
-                {messages.map((m, idx) => {
-                  if (m.role === 'user') {
-                    return (
-                      <div
-                        key={m.id || idx}
-                        style={{
-                          alignSelf: 'flex-end',
-                          maxWidth: '85%',
-                          backgroundColor: 'rgba(242, 154, 96, 0.15)',
-                          border: '1px solid rgba(242, 154, 96, 0.3)',
-                          borderRadius: '8px',
-                          padding: '10px 14px',
-                          fontSize: '13px',
-                          color: '#FFFFFF',
-                          lineHeight: 1.5,
-                        }}
-                      >
-                        {m.body}
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div
-                      key={m.id || idx}
-                      style={{
-                        alignSelf: 'flex-start',
-                        maxWidth: '95%',
-                        backgroundColor: '#12151E',
-                        border: '1px solid #1E222D',
-                        borderRadius: '8px',
-                        padding: '14px 16px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '10px',
-                      }}
-                    >
-                      {m.headline && (
-                        <div style={{ fontSize: '14px', fontWeight: 700, color: '#FFFFFF', letterSpacing: '-0.01em' }}>
-                          {m.headline}
-                        </div>
-                      )}
-
-                      <div style={{ fontSize: '13px', lineHeight: 1.6, color: '#D1D4DC', whiteSpace: 'pre-line' }}>
-                        {m.body}
-                      </div>
-
-                      {/* Citations Badges */}
-                      {m.citations && m.citations.length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
-                          {m.citations.map((c, cIdx) => (
-                            <button
-                              key={c.chunk_id || cIdx}
-                              type="button"
-                              onClick={() => {
-                                setSelectedCitation(c);
-                                setActiveRightTab('sources');
-                              }}
-                              style={{
-                                fontSize: '10.5px',
-                                color: '#F29A60',
-                                backgroundColor: 'rgba(242, 154, 96, 0.1)',
-                                border: '1px solid rgba(242, 154, 96, 0.3)',
-                                padding: '3px 8px',
-                                borderRadius: '4px',
-                                cursor: 'pointer',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                              }}
-                            >
-                              <span>[{cIdx + 1}]</span>
-                              <span>{c.publisher}: {c.title.slice(0, 24)}...</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-
-                      {m.disclaimer && (
-                        <div style={{ fontSize: '10.5px', color: '#787B86', fontStyle: 'italic', borderTop: '1px solid #1E222D', paddingTop: '6px' }}>
-                          {m.disclaimer}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-
-                {loading && (
-                  <div style={{ alignSelf: 'flex-start', fontSize: '12px', color: '#F29A60', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <span>⚡</span>
-                    <span>Synthesizing technical evidence and market context...</span>
-                  </div>
-                )}
+              <div>
+                <span style={{ fontSize: '13px', color: '#F29A60', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                  FinEx Financial Intelligence
+                </span>
+                <h1 style={{ fontSize: '32px', fontWeight: 700, color: '#FFFFFF', marginTop: '6px', letterSpacing: '-0.02em' }}>
+                  Namaste, Shivraj
+                </h1>
+                <p style={{ color: '#A1A1AA', fontSize: '14px', marginTop: '6px', lineHeight: 1.5 }}>
+                  Ask questions grounded in live NSE market quotes, verified technical momentum indicators, and SEBI regulatory publications.
+                </p>
               </div>
 
-              {/* Chat Input Box */}
-              <div style={{ marginTop: '14px', display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <input
-                  type="text"
-                  value={inputVal}
-                  onChange={(e) => setInputVal(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                  placeholder={`Ask AI about ${selectedSymbol}, indicators, or tomorrow's momentum...`}
-                  style={{
-                    flex: 1,
-                    padding: '11px 14px',
-                    borderRadius: '6px',
-                    backgroundColor: '#141722',
-                    border: '1px solid #2A2E39',
-                    color: '#FFFFFF',
-                    fontSize: '13px',
-                    outline: 'none',
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => handleSend()}
-                  disabled={loading}
-                  style={{
-                    padding: '11px 18px',
-                    borderRadius: '6px',
-                    backgroundColor: '#F29A60',
-                    border: 'none',
-                    color: '#000000',
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
-                >
-                  {loading ? '...' : 'Send'}
-                </button>
+              {/* Starter Question Cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', width: '100%', textAlign: 'left' }}>
+                {[
+                  {
+                    title: '⚡ Best stock for tomorrow',
+                    subtitle: 'Screen top liquid NSE equities for momentum, 20-Day SMA, and pivot watch levels',
+                    prompt: 'Give me best stock for tomorrow with technical momentum checklist and pivot levels',
+                  },
+                  {
+                    title: '📈 Technical Momentum Analysis',
+                    subtitle: 'Explain how to combine 14-period RSI and 20-day SMA for paper trade setups',
+                    prompt: 'How to combine 14-period RSI and 20-day SMA to identify swing paper trade setups in Indian markets?',
+                  },
+                  {
+                    title: '💼 Propose Virtual Portfolio',
+                    subtitle: 'Simulate a ₹1,00,000 diversified allocation across RELIANCE, TCS, and HDFCBANK',
+                    prompt: 'Invest ₹1,00,000 across RELIANCE, TCS, and HDFCBANK in virtual paper trading',
+                  },
+                  {
+                    title: '🛡️ SEBI Risk Management Rules',
+                    subtitle: 'Review essential investor safety guidelines and emergency fund allocation',
+                    prompt: "What is SEBI's rule on emergency funds and portfolio risk management?",
+                  },
+                ].map((card, cIdx) => (
+                  <div
+                    key={cIdx}
+                    onClick={() => handleSend(card.prompt)}
+                    style={{
+                      padding: '16px',
+                      backgroundColor: '#11141D',
+                      border: '1px solid #1F2433',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px',
+                      transition: 'all 0.15s ease',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#181C28';
+                      e.currentTarget.style.borderColor = '#F29A60';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = '#11141D';
+                      e.currentTarget.style.borderColor = '#1F2433';
+                    }}
+                  >
+                    <span style={{ fontSize: '13.5px', fontWeight: 600, color: '#FFFFFF' }}>{card.title}</span>
+                    <span style={{ fontSize: '11.5px', color: '#787B86', lineHeight: 1.4 }}>{card.subtitle}</span>
+                  </div>
+                ))}
               </div>
             </div>
           ) : (
-            /* Sources Tab View */
-            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '14px', fontWeight: 700, color: '#FFFFFF' }}>
-                  Verifiable Grounding Desk
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setActiveRightTab('chat')}
-                  style={{ fontSize: '11.5px', color: '#F29A60', background: 'none', border: 'none', cursor: 'pointer' }}
-                >
-                  ← Back to Chat
-                </button>
-              </div>
-
-              {selectedCitation ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div style={{ backgroundColor: '#141722', padding: '12px', borderRadius: '6px', border: '1px solid #2A2E39' }}>
-                    <span style={{ fontSize: '10.5px', textTransform: 'uppercase', color: '#787B86', fontWeight: 600 }}>Publisher & Title</span>
-                    <div style={{ fontSize: '14px', fontWeight: 600, color: '#FFFFFF', marginTop: '2px' }}>
-                      {selectedCitation.title}
-                    </div>
-                    <div style={{ fontSize: '11.5px', color: '#F29A60', marginTop: '2px' }}>
-                      {selectedCitation.publisher} • {selectedCitation.section || 'General Guidance'} • Page {selectedCitation.page_number || 1}
-                    </div>
-                  </div>
-
+            // Message List
+            messages.map((m, idx) => {
+              if (m.role === 'user') {
+                return (
                   <div
+                    key={m.id || idx}
                     style={{
-                      padding: '14px',
-                      borderRadius: '6px',
-                      backgroundColor: 'rgba(0, 0, 0, 0.4)',
-                      border: '1px solid #1E222D',
-                      fontSize: '12.5px',
-                      lineHeight: 1.6,
-                      color: '#E0E3EB',
+                      alignSelf: 'flex-end',
+                      maxWidth: '80%',
+                      backgroundColor: 'rgba(242, 154, 96, 0.14)',
+                      border: '1px solid rgba(242, 154, 96, 0.3)',
+                      borderRadius: '10px',
+                      padding: '12px 18px',
+                      fontSize: '13.5px',
+                      color: '#FFFFFF',
+                      lineHeight: 1.5,
                     }}
                   >
-                    "{selectedCitation.excerpt}"
+                    {m.body}
+                  </div>
+                );
+              }
+
+              return (
+                <div
+                  key={m.id || idx}
+                  style={{
+                    alignSelf: 'flex-start',
+                    maxWidth: '92%',
+                    backgroundColor: '#10131B',
+                    border: '1px solid #1E2330',
+                    borderRadius: '10px',
+                    padding: '18px 22px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px',
+                  }}
+                >
+                  {m.headline && (
+                    <div style={{ fontSize: '15px', fontWeight: 700, color: '#FFFFFF', letterSpacing: '-0.01em' }}>
+                      {m.headline}
+                    </div>
+                  )}
+
+                  <div style={{ fontSize: '13.5px', lineHeight: 1.65, color: '#D4D8E2' }}>
+                    {renderFormattedText(m.body)}
                   </div>
 
-                  {selectedCitation.source_url && (
-                    <a
-                      href={selectedCitation.source_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ fontSize: '11px', color: '#38BDF8', textDecoration: 'none' }}
+                  {/* Citations Badges */}
+                  {m.citations && m.citations.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px' }}>
+                      {m.citations.map((c, cIdx) => (
+                        <button
+                          key={c.chunk_id || cIdx}
+                          type="button"
+                          onClick={() => {
+                            setSelectedCitation(c);
+                            setShowSourcesPanel(true);
+                          }}
+                          style={{
+                            fontSize: '11px',
+                            color: '#F29A60',
+                            backgroundColor: 'rgba(242, 154, 96, 0.1)',
+                            border: '1px solid rgba(242, 154, 96, 0.3)',
+                            padding: '4px 10px',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                          }}
+                        >
+                          <span>[{cIdx + 1}]</span>
+                          <span>{c.publisher}: {c.title.slice(0, 28)}...</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {m.disclaimer && (
+                    <div
+                      style={{
+                        fontSize: '11px',
+                        color: '#787B86',
+                        fontStyle: 'italic',
+                        borderTop: '1px solid #1A1E29',
+                        paddingTop: '8px',
+                      }}
                     >
-                      🔗 View Original Regulatory Publication
-                    </a>
+                      {m.disclaimer}
+                    </div>
                   )}
                 </div>
-              ) : (
-                <div style={{ padding: '30px 10px', textAlign: 'center', color: '#787B86', fontSize: '12.5px' }}>
-                  No citation selected yet. Click any citation badge [1], [2] inside an assistant response to inspect verified grounding evidence here.
-                </div>
-              )}
+              );
+            })
+          )}
+
+          {loading && (
+            <div
+              style={{
+                alignSelf: 'flex-start',
+                fontSize: '13px',
+                color: '#F29A60',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '12px 18px',
+                backgroundColor: '#10131B',
+                borderRadius: '8px',
+                border: '1px solid #1E2330',
+              }}
+            >
+              <span>⚡</span>
+              <span>FinEx AI is analyzing live quotes & technical data...</span>
             </div>
           )}
+        </div>
+
+        {/* Input Bar at Bottom */}
+        <div
+          style={{
+            padding: '16px 20px',
+            borderTop: '1px solid #1A1E29',
+            backgroundColor: '#0C0E15',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+          }}
+        >
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <input
+              ref={inputRef}
+              type="text"
+              value={inputVal}
+              onChange={(e) => setInputVal(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+              placeholder="Ask about stocks for tomorrow, technical indicators (SMA, RSI), paper trade proposals..."
+              style={{
+                flex: 1,
+                padding: '13px 18px',
+                borderRadius: '8px',
+                backgroundColor: '#12151F',
+                border: '1px solid #242938',
+                color: '#FFFFFF',
+                fontSize: '13.5px',
+                outline: 'none',
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => handleSend()}
+              disabled={loading || !inputVal.trim()}
+              style={{
+                padding: '13px 24px',
+                borderRadius: '8px',
+                backgroundColor: inputVal.trim() && !loading ? '#F29A60' : '#2A2E39',
+                border: 'none',
+                color: inputVal.trim() && !loading ? '#000000' : '#787B86',
+                fontSize: '13px',
+                fontWeight: 700,
+                cursor: inputVal.trim() && !loading ? 'pointer' : 'not-allowed',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              {loading ? 'Thinking...' : 'Send'}
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: '#656A76', padding: '0 4px' }}>
+            <span>Virtual paper trading simulator. Educational metrics only. Not financial advice.</span>
+            <span>Press Enter ↵ to send</span>
+          </div>
         </div>
       </div>
     </div>
