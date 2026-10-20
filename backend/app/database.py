@@ -22,7 +22,7 @@ engine_kwargs: Dict[str, Any] = {
     "future": True,
 }
 
-if settings.ENVIRONMENT == Environment.TESTING or "pytest" in sys.modules:
+if "sqlite" in settings.DATABASE_URL or settings.ENVIRONMENT == Environment.TESTING or "pytest" in sys.modules:
     engine_kwargs["poolclass"] = NullPool
 else:
     engine_kwargs["pool_size"] = settings.DATABASE_POOL_SIZE
