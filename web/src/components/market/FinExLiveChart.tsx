@@ -81,7 +81,7 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
       borderVisible: false,
       wickUpColor: '#10B981',
       wickDownColor: '#EF4444',
-      priceLineVisible: true,
+      priceLineVisible: false,
       lastValueVisible: true,
     });
     seriesRef.current = candleSeries;

@@ -54,76 +54,9 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
   const tickerStocks = Object.values(marketQuotes);
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-app)' }}>
-      {/* 1. Top Live Market Ticker Tape (Pure Black Terminal Marquee) */}
-      <div className="ticker-tape-container">
-        <div className="ticker-tape-track">
-          <div className="ticker-pill">
-            <span style={{ color: '#8E8E93', fontWeight: 600 }}>NIFTY 50</span>
-            <span style={{ color: '#FFFFFF' }}>25,480.30</span>
-            <span style={{ color: 'var(--color-positive)', fontWeight: 600 }}>▲ +0.45%</span>
-          </div>
-          <div className="ticker-pill">
-            <span style={{ color: '#8E8E93', fontWeight: 600 }}>SENSEX</span>
-            <span style={{ color: '#FFFFFF' }}>83,120.15</span>
-            <span style={{ color: 'var(--color-positive)', fontWeight: 600 }}>▲ +0.38%</span>
-          </div>
-          <div className="ticker-pill">
-            <span style={{ color: '#8E8E93', fontWeight: 600 }}>BANK NIFTY</span>
-            <span style={{ color: '#FFFFFF' }}>52,190.40</span>
-            <span style={{ color: 'var(--color-negative)', fontWeight: 600 }}>▼ -0.12%</span>
-          </div>
-          <div className="ticker-pill">
-            <span style={{ color: '#8E8E93', fontWeight: 600 }}>INDIA VIX</span>
-            <span style={{ color: '#FFFFFF' }}>12.85</span>
-            <span style={{ color: 'var(--color-negative)', fontWeight: 600 }}>▼ -2.40%</span>
-          </div>
-
-          {/* Dynamic Stock Quotes from Context */}
-          {tickerStocks.map((s) => (
-            <div
-              key={s.symbol}
-              className={`ticker-pill ${s.lastTick === 'up' ? 'flash-green' : s.lastTick === 'down' ? 'flash-red' : ''}`}
-              onClick={() => openQuickTrade(s.symbol)}
-              title={`Click to trade ${s.symbol}`}
-            >
-              <span style={{ color: '#FFFFFF', fontWeight: 700 }}>{s.symbol}</span>
-              <span style={{ color: '#D4D4D8' }}>₹{s.price.toLocaleString('en-IN')}</span>
-              <span style={{ color: s.isPositive ? 'var(--color-positive)' : 'var(--color-negative)', fontWeight: 600 }}>
-                {s.isPositive ? '▲' : '▼'} {s.isPositive ? '+' : ''}{s.changePct}%
-              </span>
-            </div>
-          ))}
-
-          {/* Repeat for continuous marquee */}
-          <div className="ticker-pill">
-            <span style={{ color: '#8E8E93', fontWeight: 600 }}>NIFTY 50</span>
-            <span style={{ color: '#FFFFFF' }}>25,480.30</span>
-            <span style={{ color: 'var(--color-positive)', fontWeight: 600 }}>▲ +0.45%</span>
-          </div>
-          <div className="ticker-pill">
-            <span style={{ color: '#8E8E93', fontWeight: 600 }}>SENSEX</span>
-            <span style={{ color: '#FFFFFF' }}>83,120.15</span>
-            <span style={{ color: 'var(--color-positive)', fontWeight: 600 }}>▲ +0.38%</span>
-          </div>
-          {tickerStocks.map((s) => (
-            <div
-              key={`${s.symbol}-rep`}
-              className="ticker-pill"
-              onClick={() => openQuickTrade(s.symbol)}
-            >
-              <span style={{ color: '#FFFFFF', fontWeight: 700 }}>{s.symbol}</span>
-              <span style={{ color: '#D4D4D8' }}>₹{s.price.toLocaleString('en-IN')}</span>
-              <span style={{ color: s.isPositive ? 'var(--color-positive)' : 'var(--color-negative)', fontWeight: 600 }}>
-                {s.isPositive ? '▲' : '▼'} {s.isPositive ? '+' : ''}{s.changePct}%
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-
+    <div style={{ height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-app)', overflow: 'hidden' }}>
       {/* 2. Main Two-Column Terminal Container (Sidebar + Central Workspace) */}
-      <div style={{ display: 'flex', flex: 1, minHeight: 'calc(100vh - 34px)' }}>
+      <div style={{ display: 'flex', flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>
         {/* Left Navigation Rail (Per Graphite Terminal Full Frontend Guide) */}
         <aside
           style={{
@@ -135,9 +68,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
             justifyContent: 'space-between',
             padding: '24px 16px',
             flexShrink: 0,
-            position: 'sticky',
-            top: 0,
-            height: 'calc(100vh - 34px)',
+            height: '100%',
             overflowY: 'auto',
           }}
         >
@@ -266,7 +197,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
         </aside>
 
         {/* Central Workspace + Top Workspace Bar */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, backgroundColor: 'var(--bg-app)' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0, height: '100%', overflow: 'hidden', backgroundColor: 'var(--bg-app)' }}>
           {/* Top Workspace Header Bar */}
           <header
             style={{
@@ -277,8 +208,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
               alignItems: 'center',
               justifyContent: 'space-between',
               padding: '0 28px',
-              position: 'sticky',
-              top: 0,
+              flexShrink: 0,
               zIndex: 40,
             }}
           >
