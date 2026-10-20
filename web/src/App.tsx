@@ -16,9 +16,68 @@ import { SpendingScreen } from './pages/SpendingScreen';
 import { SettingsScreen } from './pages/SettingsScreen';
 import { apiClient } from './api/client';
 
+const VALID_TABS: NavigationTab[] = [
+  'overview',
+  'markets',
+  'charts',
+  'portfolio',
+  'transactions',
+  'ask-finex',
+  'practice',
+  'alerts',
+  'goals',
+  'spending',
+  'settings',
+];
+
+const getSavedTab = (): NavigationTab => {
+  try {
+    const hash = window.location.hash.replace('#', '').trim() as NavigationTab;
+    if (VALID_TABS.includes(hash)) {
+      return hash;
+    }
+    const saved = localStorage.getItem('finex_active_tab') as NavigationTab;
+    if (VALID_TABS.includes(saved)) {
+      return saved;
+    }
+  } catch {
+    // Fallback if storage access is restricted
+  }
+  return 'overview';
+};
+
 export const AppContent: React.FC = () => {
   const [authState, setAuthState] = useState<'checking' | 'welcome' | 'onboarding' | 'authenticated'>('checking');
-  const [currentTab, setCurrentTab] = useState<NavigationTab>('overview');
+  const [currentTab, setCurrentTab] = useState<NavigationTab>(getSavedTab);
+
+  const handleNavigate = (tab: NavigationTab) => {
+    setCurrentTab(tab);
+    window.location.hash = tab;
+    try {
+      localStorage.setItem('finex_active_tab', tab);
+    } catch {
+      // Ignore storage errors
+    }
+  };
+
+  // Sync hash changes (e.g., browser back/forward or manual hash updates)
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace('#', '').trim() as NavigationTab;
+      if (VALID_TABS.includes(hash) && hash !== currentTab) {
+        setCurrentTab(hash);
+        try {
+          localStorage.setItem('finex_active_tab', hash);
+        } catch {}
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    if (!window.location.hash && currentTab) {
+      window.location.hash = currentTab;
+    }
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [currentTab]);
 
   // Fail-closed initial session check against FastAPI /users/me
   useEffect(() => {
@@ -93,11 +152,11 @@ export const AppContent: React.FC = () => {
   }
 
   return (
-    <AppShell currentTab={currentTab} onNavigate={(tab) => setCurrentTab(tab)}>
-      {currentTab === 'overview' && <OverviewScreen onNavigate={(t) => setCurrentTab(t)} />}
-      {currentTab === 'markets' && <MarketsScreen onNavigate={(t) => setCurrentTab(t)} />}
-      {currentTab === 'charts' && <ChartWorkspaceScreen onNavigate={(t) => setCurrentTab(t)} />}
-      {currentTab === 'portfolio' && <PortfolioScreen onNavigate={(t) => setCurrentTab(t)} />}
+    <AppShell currentTab={currentTab} onNavigate={handleNavigate}>
+      {currentTab === 'overview' && <OverviewScreen onNavigate={handleNavigate} />}
+      {currentTab === 'markets' && <MarketsScreen onNavigate={handleNavigate} />}
+      {currentTab === 'charts' && <ChartWorkspaceScreen onNavigate={handleNavigate} />}
+      {currentTab === 'portfolio' && <PortfolioScreen onNavigate={handleNavigate} />}
       {currentTab === 'transactions' && <TransactionsScreen />}
       {currentTab === 'practice' && <PracticeScreen />}
       {currentTab === 'ask-finex' && <AskFinExScreen />}
