@@ -1,0 +1,9 @@
+{
+  "name": "finex-final",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "build": "npm --prefix web run build",
+    "web:dev": "npm --prefix web run dev"
+  }
+}

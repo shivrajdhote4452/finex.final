@@ -29,7 +29,6 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
     totalPortfolioValue,
     notifications,
     totalTradesCount,
-    marketQuotes,
     openQuickTrade,
   } = useFinancial();
 
@@ -50,8 +49,6 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
     { id: 'goals', label: 'Goals' },
     { id: 'spending', label: 'Spending' },
   ];
-
-  const tickerStocks = Object.values(marketQuotes);
 
   return (
     <div style={{ height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-app)', overflow: 'hidden' }}>
