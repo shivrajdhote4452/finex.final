@@ -164,12 +164,21 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
     fetchHistory();
 
     // 3. Connect to WebSocket Tick Stream
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    // Connect to backend WebSocket (direct port 8000 or proxied)
-    const wsUrl =
-      window.location.port === '3000'
-        ? `${protocol}//${window.location.hostname}:8000/api/v1/market/ws/${cleanSymbol}`
-        : `${protocol}//${window.location.host}/api/v1/market/ws/${cleanSymbol}`;
+    let wsHost = window.location.host;
+    let wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const envApiUrl = (import.meta as any).env?.VITE_API_URL;
+    if (envApiUrl && envApiUrl.startsWith('http')) {
+      try {
+        const parsed = new URL(envApiUrl);
+        wsHost = parsed.host;
+        wsProtocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+      } catch {
+        // fallback to default
+      }
+    } else if (window.location.port === '3000') {
+      wsHost = `${window.location.hostname}:8000`;
+    }
+    const wsUrl = `${wsProtocol}//${wsHost}/api/v1/market/ws/${cleanSymbol}`;
 
     try {
       const ws = new WebSocket(wsUrl);

@@ -5,7 +5,13 @@
  * Conforms to the FinEx OpenAPI contract and response envelope specification.
  */
 
-const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || '/api/v1';
+const getApiBaseUrl = (): string => {
+  const envUrl = ((import.meta as any).env?.VITE_API_URL || '').trim().replace(/\/+$/, '');
+  if (!envUrl) return '/api/v1';
+  if (envUrl.endsWith('/api/v1')) return envUrl;
+  return `${envUrl}/api/v1`;
+};
+const API_BASE_URL = getApiBaseUrl();
 
 export interface ApiResponseEnvelope<T> {
   success: boolean;
