@@ -68,3 +68,5 @@ To uphold absolute technical transparency, the following environment-specific bo
 4. **Environment Infrastructure:**
    - FinEx operates in local developer sandbox mode utilizing high-performance in-memory and SQLite relational stores with complete schema isolation.
    - While architected for Azure Container Apps and Databricks Unity Catalog, logical local environments do not claim multi-region cloud cluster deployment.
+5. **In-Memory Rate Limiting:**
+   - Rate limiting is in-memory per process; it resets on restart and is not shared across scaled instances. Acceptable for the demo; switch to Redis before multi-instance production.

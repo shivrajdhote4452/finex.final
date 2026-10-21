@@ -6,7 +6,7 @@
  */
 
 const getApiBaseUrl = (): string => {
-  const envUrl = ((import.meta as any).env?.VITE_API_URL || '').trim().replace(/\/+$/, '');
+  const envUrl = ((import.meta as any).env?.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '');
   if (!envUrl) return '/api/v1';
   if (envUrl.endsWith('/api/v1')) return envUrl;
   return `${envUrl}/api/v1`;
