@@ -193,7 +193,7 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
     // 3. Connect to WebSocket Tick Stream
     let wsHost = window.location.host;
     let wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const envApiUrl = (import.meta as any).env?.VITE_API_URL;
+    const envApiUrl = (import.meta as any).env?.VITE_API_BASE_URL;
     if (envApiUrl && envApiUrl.startsWith('http')) {
       try {
         const parsed = new URL(envApiUrl);

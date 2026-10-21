@@ -72,6 +72,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         # Angel One SmartAPI live market data initialization
         if app_settings.MARKET_DATA_MODE == "INDIAN_LIVE_DATA":
             import logging
+
             startup_logger = logging.getLogger("startup")
             try:
                 from backend.app.services.angel_adapter import AngelOneMarketAdapter
@@ -79,7 +80,9 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
                 angel = AngelOneMarketAdapter()
                 if not angel.is_configured():
-                    startup_logger.warning("INDIAN_LIVE_DATA mode active but Angel One credentials incomplete. Fallback provider active.")
+                    startup_logger.warning(
+                        "INDIAN_LIVE_DATA mode active but Angel One credentials incomplete. Fallback provider active."
+                    )
                 else:
                     auth_ok = angel.authenticate()
                     if auth_ok:
@@ -88,7 +91,9 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
                         hub.provider = angel
                         startup_logger.info("Angel One live provider registered successfully.")
                     else:
-                        startup_logger.warning("Angel One authentication incomplete at startup. Fallback provider active.")
+                        startup_logger.warning(
+                            "Angel One authentication incomplete at startup. Fallback provider active."
+                        )
             except Exception as exc:
                 startup_logger.warning(f"Angel One startup initialization failed: {exc}. Fallback provider active.")
         yield

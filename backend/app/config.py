@@ -68,7 +68,7 @@ class Settings(BaseSettings):
     # AI Assistant Configuration (Gemini & Groq)
     LLM_PROVIDER: str = "groq"
     GEMINI_API_KEY: Optional[str] = Field(default=None, description="Google Gemini API Key")
-    GEMINI_MODEL: str = Field(default="gemini-3.5-flash-lite", description="Configured Gemini model ID")
+    GEMINI_MODEL: str = Field(default="gemini-1.5-flash", description="Configured Gemini model ID")
     GROQ_API_KEY: Optional[str] = Field(default=None, description="Groq API Key")
     GROQ_MODEL: str = Field(default="openai/gpt-oss-120b", description="Configured Groq model ID")
     OPENAI_API_KEY: Optional[str] = None

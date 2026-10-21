@@ -250,7 +250,7 @@ class GeminiInvestmentAssistant:
         if self.is_gemini_api_ready():
             return {
                 "provider": "gemini-live" if self._verified_working else "gemini-configured",
-                "model": getattr(self.settings, "GEMINI_MODEL", "gemini-3.5-flash-lite"),
+                "model": getattr(self.settings, "GEMINI_MODEL", "gemini-1.5-flash"),
             }
         return {
             "provider": "mock-offline",
@@ -329,7 +329,7 @@ class GeminiInvestmentAssistant:
         if not self.is_gemini_api_ready():
             return None
         key = self.settings.GEMINI_API_KEY
-        model = getattr(self.settings, "GEMINI_MODEL", "gemini-3.5-flash-lite") or "gemini-3.5-flash-lite"
+        model = getattr(self.settings, "GEMINI_MODEL", "gemini-1.5-flash") or "gemini-1.5-flash"
         headers = {
             "x-goog-api-key": key,
             "Content-Type": "application/json",
@@ -356,7 +356,7 @@ class GeminiInvestmentAssistant:
                             return parts[0].get("text", "").strip()
                 elif res.status_code in (404, 503):
                     # Model ID fallback if model has variant naming or temporary high demand
-                    for alt_model in ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-flash-lite-latest", "gemini-2.5-pro", "gemini-1.5-flash"]:
+                    for alt_model in ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-2.5-pro"]:
                         alt_url = f"https://generativelanguage.googleapis.com/v1beta/models/{alt_model}:generateContent"
                         res_alt = await client.post(alt_url, json=payload, headers=headers, params={"key": key})
                         if res_alt.status_code == 200:
@@ -391,7 +391,7 @@ class GeminiInvestmentAssistant:
             return None, [], []
 
         key = self.settings.GEMINI_API_KEY
-        model = getattr(self.settings, "GEMINI_MODEL", "gemini-3.5-flash-lite") or "gemini-3.5-flash-lite"
+        model = getattr(self.settings, "GEMINI_MODEL", "gemini-1.5-flash") or "gemini-1.5-flash"
         headers = {
             "x-goog-api-key": key,
             "Content-Type": "application/json",
@@ -423,7 +423,7 @@ class GeminiInvestmentAssistant:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 res = await client.post(url, json=payload, headers=headers, params={"key": key})
                 if res.status_code in (404, 503):
-                    for alt_model in ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-flash-lite-latest", "gemini-2.5-pro", "gemini-1.5-flash"]:
+                    for alt_model in ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-2.5-pro"]:
                         alt_url = f"https://generativelanguage.googleapis.com/v1beta/models/{alt_model}:generateContent"
                         res = await client.post(alt_url, json=payload, headers=headers, params={"key": key})
                         if res.status_code == 200:
@@ -433,7 +433,9 @@ class GeminiInvestmentAssistant:
                 if res.status_code != 200:
                     if res.status_code in (400, 401, 403):
                         self._verified_working = False
-                        print(f"[GeminiAssistant] Grounded API authentication error ({res.status_code}): {res.text[:150]}.")
+                        print(
+                            f"[GeminiAssistant] Grounded API authentication error ({res.status_code}): {res.text[:150]}."
+                        )
                     return None, [], []
 
                 self._verified_working = True

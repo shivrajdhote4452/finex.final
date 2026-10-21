@@ -195,7 +195,9 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
 
         if not self.smart_api:
             if SmartConnect is None:
-                logger.error("SmartConnect library is not available. Please ensure smartapi-python, logzero, and websocket-client are installed.")
+                logger.error(
+                    "SmartConnect library is not available. Please ensure smartapi-python, logzero, and websocket-client are installed."
+                )
                 return False
             self.smart_api = SmartConnect(api_key=self.api_key)
 
