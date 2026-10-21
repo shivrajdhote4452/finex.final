@@ -745,6 +745,33 @@ input:focus, select:focus, textarea:focus {
     box-sizing: border-box !important;
   }
 
+  /* Mobile card padding and layout */
+  .glass-card {
+    padding: 16px 14px !important;
+    border-radius: var(--radius-sm) !important;
+  }
+
+  /* Allow card headers and metric bars to wrap naturally on narrow screens */
+  div[style*="justify-content: space-between"],
+  div[style*="justifyContent: 'space-between'"] {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+
+  /* Responsive tables with touch scrolling */
+  table {
+    display: block !important;
+    width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  /* Responsive SVGs */
+  svg {
+    max-width: 100% !important;
+    height: auto;
+  }
+
   /* Mobile Modals */
   .modal-overlay {
     padding: 12px !important;
