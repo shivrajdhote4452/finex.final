@@ -118,7 +118,14 @@ const INSTRUMENT_METADATA: Record<string, { name: string; sector: string; color:
 };
 
 export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [virtualCash, setVirtualCash] = useState<number>(0);
+  const [virtualCash, setVirtualCash] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('finex_virtual_cash');
+      return saved ? Number(saved) : 1000000;
+    } catch {
+      return 1000000;
+    }
+  });
   const [holdings, setHoldings] = useState<HoldingItem[]>([]);
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
   const [notifications, setNotifications] = useState<AlertNotification[]>([]);
@@ -278,6 +285,9 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
       if (thisGen === sessionGenerationRef.current) {
         if (e?.status === 401) {
           clearPrivateState();
+        } else if (e?.status === 404 || e?.message?.includes('404') || e?.message?.includes('Failed to fetch')) {
+          // Static demo mode on Vercel: suppress error banner, keep local simulator running cleanly
+          setAccountError(null);
         } else {
           setAccountError(e?.message || 'Failed to sync with server');
         }

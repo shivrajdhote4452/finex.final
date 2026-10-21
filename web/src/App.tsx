@@ -93,8 +93,13 @@ export const AppContent: React.FC = () => {
         } else {
           setAuthState('onboarding');
         }
-      } catch {
-        setAuthState('welcome');
+      } catch (err: any) {
+        // If backend is offline or static Vercel (404/network error), allow authenticated session if token exists
+        if (apiClient.isAuthenticated()) {
+          setAuthState('authenticated');
+        } else {
+          setAuthState('welcome');
+        }
       }
     };
 
