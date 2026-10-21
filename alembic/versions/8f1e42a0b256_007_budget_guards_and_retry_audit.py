@@ -11,6 +11,7 @@ Forward migration ensuring:
 
 from typing import Sequence, Union
 import sqlalchemy as sa
+from alembic import context as alembic_context
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -22,12 +23,18 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     conn = op.get_bind()
-    inspector = sa.inspect(conn)
+    # Offline (--sql) mode has no live DB: MockConnection cannot be inspected.
+    # Assume nothing exists so all DDL is emitted; online behavior unchanged.
+    inspector = None if alembic_context.is_offline_mode() else sa.inspect(conn)
 
     def get_column_names(table_name: str) -> set:
+        if inspector is None:
+            return set()
         return {col["name"] for col in inspector.get_columns(table_name)}
 
     def get_index_names(table_name: str) -> set:
+        if inspector is None:
+            return set()
         return {idx["name"] for idx in inspector.get_indexes(table_name)}
 
     # 1. paper_proposals: attempt_count
@@ -42,21 +49,29 @@ def upgrade() -> None:
         op.create_index("ix_paper_proposals_attempt_count", "paper_proposals", ["attempt_count"], unique=False)
 
     # Backfill attempt_count for any existing rows
-    conn.execute(sa.text("""
+    conn.execute(
+        sa.text("""
         UPDATE paper_proposals
         SET attempt_count = 1
         WHERE attempt_count IS NULL;
-    """))
+    """)
+    )
 
 
 def downgrade() -> None:
     conn = op.get_bind()
-    inspector = sa.inspect(conn)
+    # Offline (--sql) mode has no live DB: MockConnection cannot be inspected.
+    # Assume nothing exists so all DDL is emitted; online behavior unchanged.
+    inspector = None if alembic_context.is_offline_mode() else sa.inspect(conn)
 
     def get_index_names(table_name: str) -> set:
+        if inspector is None:
+            return set()
         return {idx["name"] for idx in inspector.get_indexes(table_name)}
 
     def get_column_names(table_name: str) -> set:
+        if inspector is None:
+            return set()
         return {col["name"] for col in inspector.get_columns(table_name)}
 
     pp_indexes = get_index_names("paper_proposals")
