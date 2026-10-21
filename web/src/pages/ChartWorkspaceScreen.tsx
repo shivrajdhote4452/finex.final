@@ -165,7 +165,8 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
   const [orderExecuting, setOrderExecuting] = useState<boolean>(false);
   const [orderFeedback, setOrderFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  // Gemini AI Assistant State
+  // AI Assistant State
+  const [aiProviderBadge, setAiProviderBadge] = useState<string>('Groq');
   const [aiMessages, setAiMessages] = useState<Array<{
     id: string;
     role: 'user' | 'assistant';
@@ -177,7 +178,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
     {
       id: 'welcome-ai',
       role: 'assistant',
-      text: 'Namaste! I am your FinEx Gemini Paper Investment Assistant. Ask me to analyze the active chart in Hindi, English, or Hinglish, or allocate paper trades within your virtual budget.',
+      text: 'Namaste! I am your FinEx AI Paper Investment Assistant. Ask me to analyze the active chart in Hindi, English, or Hinglish, or allocate paper trades within your virtual budget.',
       disclaimer: 'Paper trading only. Educational simulation grounded in historical observations.',
     },
   ]);
@@ -221,6 +222,23 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
         if (isMounted) setSavedDrawings(drawData.drawings || []);
       } catch (err) {
         console.warn('Could not fetch drawings:', err);
+      }
+
+      try {
+        const aiStatus = await apiClient.geminiAssistant.getStatus();
+        if (isMounted && aiStatus) {
+          const provider = ((aiStatus as any)?.provider || '').toLowerCase();
+          const model = ((aiStatus as any)?.model || '').toLowerCase();
+          if (provider.includes('groq') || model.includes('oss') || model.includes('llama') || model.includes('qwen')) {
+            setAiProviderBadge('Groq');
+          } else if (provider.includes('gemini')) {
+            setAiProviderBadge('Gemini');
+          } else {
+            setAiProviderBadge('FinEx AI');
+          }
+        }
+      } catch {
+        // Fallback gracefully
       }
 
       try {
@@ -702,13 +720,37 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
       };
       setAiMessages((prev) => [...prev, asstMsg]);
     } catch (err: any) {
+      let errorMsg = 'Unable to reach the FinEx AI Assistant.';
+      let disclaimer = 'Service temporarily unavailable.';
+
+      if (
+        err?.status === 401 ||
+        err?.code === 'UNAUTHORIZED' ||
+        err?.message?.toLowerCase().includes('unauthorized') ||
+        err?.message?.toLowerCase().includes('authentication') ||
+        !apiClient.isAuthenticated()
+      ) {
+        errorMsg = 'Authentication required or your session has expired. Please sign in to chat with FinEx AI.';
+        disclaimer = 'Authentication required (401).';
+      } else if (
+        err?.message?.includes('Failed to fetch') ||
+        err?.message?.includes('NetworkError') ||
+        err?.name === 'TypeError'
+      ) {
+        errorMsg = 'Could not connect to the FinEx backend. If using Render free tier, the backend may be waking up from sleep (takes ~30s on cold start). Please try sending your message again in a moment.';
+        disclaimer = 'Backend connection issue.';
+      } else if (err?.message) {
+        errorMsg = err.message;
+        disclaimer = err?.status ? `Status ${err.status}` : 'Request error.';
+      }
+
       setAiMessages((prev) => [
         ...prev,
         {
           id: `err-${Date.now()}`,
           role: 'assistant' as const,
-          text: 'Unable to reach the Gemini Assistant. Please ensure your backend GEMINI_API_KEY is configured in your .env configuration file.',
-          disclaimer: 'Connection error.',
+          text: errorMsg,
+          disclaimer: disclaimer,
         },
       ]);
     } finally {
@@ -1871,7 +1913,9 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                   }}
                 >
                   <span>✨ Ask FinEx AI</span>
-                  <span style={{ fontSize: '9px', backgroundColor: 'rgba(38, 166, 154, 0.2)', color: '#26A69A', padding: '1px 5px', borderRadius: '4px' }}>Gemini</span>
+                  <span style={{ fontSize: '9px', backgroundColor: 'rgba(242, 154, 96, 0.2)', color: '#F29A60', padding: '1px 5px', borderRadius: '4px', textTransform: 'uppercase' }}>
+                    {aiProviderBadge}
+                  </span>
                 </button>
                 <button
                   onClick={() => setRightPanelTab('watchlist')}
