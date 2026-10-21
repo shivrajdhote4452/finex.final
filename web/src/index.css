@@ -756,7 +756,7 @@ input:focus, select:focus, textarea:focus {
     overflow: hidden !important;
   }
 
-  /* Grids collapse cleanly to single column on mobile */
+  /* Grids collapse cleanly to single or double column on mobile */
   [style*="repeat(4, 1fr)"],
   [style*="1.4fr 1fr 1fr 1fr"],
   [style*="repeat(2, 1fr)"],
@@ -766,6 +766,13 @@ input:focus, select:focus, textarea:focus {
   [style*="1fr 1fr"] {
     grid-template-columns: 1fr !important;
     gap: 12px !important;
+  }
+
+  [style*="repeat(6, 1fr)"],
+  [style*="repeat(5, 1fr)"],
+  [style*="repeat(3, 1fr)"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
   }
 
   /* Fixed width input wrappers adjust to 100% on mobile */

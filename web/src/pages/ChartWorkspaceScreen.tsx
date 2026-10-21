@@ -901,28 +901,27 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
             </button>
 
             {/* Live Price Tag */}
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginLeft: '4px' }}>
-              <span style={{ fontSize: '15px', fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", color: '#FFFFFF', whiteSpace: 'nowrap' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '5px', marginLeft: '2px', minWidth: 0, flexShrink: 1 }}>
+              <span style={{ fontSize: '14px', fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", color: '#FFFFFF', whiteSpace: 'nowrap' }}>
                 {marketMode.currency === 'USD' ? '$' : '₹'}
                 {currentQuote.price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
               <span
                 style={{
-                  fontSize: '12px',
+                  fontSize: '11px',
                   fontWeight: 600,
                   color: currentQuote.isPositive ? '#26A69A' : '#EF5350',
                   whiteSpace: 'nowrap',
                 }}
               >
-                {currentQuote.isPositive ? '+' : ''}
-                {currentQuote.changeVal.toFixed(2)} ({currentQuote.isPositive ? '+' : ''}
-                {currentQuote.changePct.toFixed(2)}%)
+                <span className="desktop-only">{currentQuote.isPositive ? '+' : ''}{currentQuote.changeVal.toFixed(2)} </span>
+                <span>{currentQuote.isPositive ? '+' : ''}{currentQuote.changePct.toFixed(2)}%</span>
               </span>
             </div>
           </div>
 
           {/* Mobile Right Controls: Search, AI Coach, and Order Ticket */}
-          <div className="mobile-only" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div className="mobile-only" style={{ display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}>
             <button
               onClick={() => setIsSearchModalOpen(true)}
               style={{
@@ -1418,9 +1417,19 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                 key={`finex-live-${selectedSymbol}-${timeframe}-${rangePreset}`}
                 symbol={selectedSymbol}
                 rangePreset={rangePreset}
-                interval={timeframe === '1D' ? 'ONE_DAY' : timeframe === '5m' ? 'FIVE_MINUTE' : timeframe === '15m' ? 'FIFTEEN_MINUTE' : 'ONE_MINUTE'}
+                interval={
+                  timeframe === '1m'
+                    ? 'ONE_MINUTE'
+                    : timeframe === '5m'
+                    ? 'FIVE_MINUTE'
+                    : timeframe === '15m'
+                    ? 'FIFTEEN_MINUTE'
+                    : timeframe === '1h'
+                    ? 'ONE_HOUR'
+                    : 'ONE_DAY'
+                }
                 onPriceUpdate={(p) => {
-                  setActiveQuote((prev: MarketQuote | null) => prev ? { ...prev, price: p } : prev);
+                  setActiveQuote((prev: MarketQuote | null) => (prev ? { ...prev, price: p } : prev));
                 }}
               />
             </div>
