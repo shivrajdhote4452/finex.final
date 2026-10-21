@@ -299,6 +299,7 @@ class ApiClient {
         if (optionsOrStartDate.end_date) q.set('end_date', optionsOrStartDate.end_date);
         if (optionsOrStartDate.range) q.set('range', optionsOrStartDate.range);
         if (optionsOrStartDate.as_of) q.set('as_of', optionsOrStartDate.as_of);
+        if ((optionsOrStartDate as any).days) q.set('days', String((optionsOrStartDate as any).days));
       }
       const queryStr = q.toString() ? `?${q.toString()}` : '';
       return this.request<{

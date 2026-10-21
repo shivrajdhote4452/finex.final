@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createChart, ColorType, IChartApi, ISeriesApi } from 'lightweight-charts';
+import { apiClient } from '../../api/client';
 
 interface FinExLiveChartProps {
   symbol: string;
@@ -114,12 +115,12 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
           'ALL': 3650,
         };
         const fetchDays = RANGE_DAYS[rangePreset] ?? 365;
-        const response = await fetch(`/api/v1/market/history/${cleanSymbol}?interval=${interval}&days=${fetchDays}`);
-        if (!response.ok) return;
-
-        const resJson = await response.json();
-        const payload = resJson.data || resJson;
-        const candles = payload.candles || payload.bars || [];
+        const res = await apiClient.market.getHistory(cleanSymbol, {
+          interval: interval,
+          days: fetchDays,
+        } as any);
+        const payload = (res as any)?.data || res;
+        const candles = payload?.candles || payload?.bars || [];
 
         if (candles.length > 0 && seriesRef.current) {
           // Deduplicate and sort by ascending time
