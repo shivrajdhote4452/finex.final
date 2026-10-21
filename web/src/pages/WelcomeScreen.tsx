@@ -57,17 +57,24 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onLoginSuccess }) 
     setLoading(true);
     setErrorMessage(null);
 
+    const timer = setTimeout(() => {
+      setLoading(false);
+    }, 4000);
+
     try {
       if (window.google?.accounts?.id) {
         window.google.accounts.id.prompt((notification: any) => {
+          clearTimeout(timer);
           if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
             setLoading(false);
           }
         });
       } else {
+        clearTimeout(timer);
         throw new Error('Google Identity Services script is loading. Please try again.');
       }
     } catch (err: any) {
+      clearTimeout(timer);
       setErrorMessage(err?.message || 'Google sign-in initialization failed.');
       setLoading(false);
     }
