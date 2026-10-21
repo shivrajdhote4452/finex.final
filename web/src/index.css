@@ -515,6 +515,44 @@ input:focus, select:focus, textarea:focus {
   -webkit-overflow-scrolling: touch;
 }
 
+/* Base Chart Workspace Classes */
+.chart-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 14px;
+  background-color: #080808;
+  border-bottom: 1px solid #1C1C1E;
+  gap: 12px;
+  flex-shrink: 0;
+  overflow-x: auto;
+  font-size: 12px;
+}
+
+.chart-top-primary-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chart-top-scroll-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chart-range-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 14px;
+  background-color: #09090B;
+  border-bottom: 1px solid #1C1C1E;
+  font-size: 11px;
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+
 /* --------------------------------------------------------------------------
    TABLET RESPONSIVENESS (<= 992px)
    -------------------------------------------------------------------------- */
@@ -816,6 +854,90 @@ input:focus, select:focus, textarea:focus {
   /* Responsive Tables inside Cards */
   table {
     min-width: 480px;
+  }
+
+  /* --------------------------------------------------------------------------
+     MOBILE CHART WORKSPACE OVERHAUL
+     -------------------------------------------------------------------------- */
+  .chart-left-toolbar {
+    display: none !important;
+  }
+
+  .chart-top-bar {
+    padding: 6px 10px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 6px !important;
+    background-color: #080808 !important;
+    border-bottom: 1px solid #1C1C1E !important;
+    flex-shrink: 0 !important;
+  }
+
+  .chart-top-primary-row {
+    width: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+  }
+
+  .chart-top-scroll-row {
+    width: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    overflow-x: auto !important;
+    white-space: nowrap !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    padding-bottom: 2px !important;
+  }
+  .chart-top-scroll-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .chart-range-bar {
+    padding: 4px 10px !important;
+    display: flex !important;
+    align-items: center !important;
+    overflow-x: auto !important;
+    white-space: nowrap !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+  }
+  .chart-range-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .chart-right-panel {
+    position: fixed !important;
+    top: 52px !important;
+    right: 0 !important;
+    bottom: 58px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    z-index: 70 !important;
+    background-color: #0A0A0C !important;
+    border-left: none !important;
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.95) !important;
+  }
+
+  .chart-right-panel.collapsed {
+    display: none !important;
+  }
+
+  .chart-bottom-panel {
+    background-color: #0A0A0C !important;
+    border-top: 1px solid var(--border-medium) !important;
+  }
+
+  .chart-bottom-panel.collapsed {
+    height: 32px !important;
+  }
+
+  .chart-bottom-panel:not(.collapsed) {
+    height: 240px !important;
+    overflow-y: auto !important;
   }
 }
 

@@ -142,8 +142,8 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
   // Right Panel & Bottom Dock
   const [rightPanelTab, setRightPanelTab] = useState<'ai' | 'watchlist' | 'details'>('ai');
   const [bottomTab, setBottomTab] = useState<'order' | 'positions' | 'orders' | 'history' | 'fundamentals' | 'alerts'>('order');
-  const [isRightCollapsed, setIsRightCollapsed] = useState<boolean>(false);
-  const [isBottomCollapsed, setIsBottomCollapsed] = useState<boolean>(false);
+  const [isRightCollapsed, setIsRightCollapsed] = useState<boolean>(() => typeof window !== 'undefined' && window.innerWidth <= 768);
+  const [isBottomCollapsed, setIsBottomCollapsed] = useState<boolean>(() => typeof window !== 'undefined' && window.innerWidth <= 768);
   const [rangePreset, setRangePreset] = useState<'1D' | '1W' | '1M' | '3M' | '6M' | '1Y' | '5Y' | 'ALL'>('1Y');
   const [isSearchModalOpen, setIsSearchModalOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -824,136 +824,157 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
       }}
     >
       {/* --- TOP CONTROL BAR (Section 8B) --- */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '6px 14px',
-          backgroundColor: '#080808',
-          borderBottom: '1px solid #1C1C1E',
-          gap: '12px',
-          flexWrap: 'nowrap',
-          flexShrink: 0,
-          overflowX: 'auto',
-          fontSize: '12px',
-        }}
-      >
-        {/* Left: Groww-Style Stock Selector, Search Trigger & Live Price */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {/* Active Stock Trigger Button */}
-          <button
-            onClick={() => setIsSearchModalOpen(true)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              backgroundColor: '#16161A',
-              color: '#FFFFFF',
-              border: '1px solid #2C2C2E',
-              borderRadius: '6px',
-              padding: '4px 10px',
-              cursor: 'pointer',
-              transition: 'border-color 0.15s ease',
-            }}
-            title="Search stocks across NSE & US (Ctrl+K)"
-          >
-            <div
+      <div className="chart-top-bar">
+        {/* Row 1: Stock Selector, Live Price & Mobile Action Buttons */}
+        <div className="chart-top-primary-row">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+            {/* Active Stock Trigger Button */}
+            <button
+              onClick={() => setIsSearchModalOpen(true)}
               style={{
-                width: '22px',
-                height: '22px',
-                borderRadius: '50%',
-                backgroundColor: '#F29A60',
-                color: '#000000',
-                fontWeight: 800,
-                fontSize: '11px',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
+                gap: '8px',
+                backgroundColor: '#16161A',
+                color: '#FFFFFF',
+                border: '1px solid #2C2C2E',
+                borderRadius: '6px',
+                padding: '4px 10px',
+                cursor: 'pointer',
+                transition: 'border-color 0.15s ease',
+                flexShrink: 0,
               }}
+              title="Search stocks across NSE & US (Ctrl+K)"
             >
-              {selectedSymbol.slice(0, 2)}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                <span style={{ fontWeight: 800, fontSize: '13px', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.3px' }}>
-                  {selectedSymbol}
-                </span>
-                <span style={{ fontSize: '9px', color: '#8E8E93', backgroundColor: '#242428', padding: '1px 4px', borderRadius: '3px', fontWeight: 700 }}>
-                  {marketMode.mode.includes('US') ? 'US • IEX' : 'NSE'}
-                </span>
+              <div
+                style={{
+                  width: '22px',
+                  height: '22px',
+                  borderRadius: '50%',
+                  backgroundColor: '#F29A60',
+                  color: '#000000',
+                  fontWeight: 800,
+                  fontSize: '11px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                {selectedSymbol.slice(0, 2)}
               </div>
-            </div>
-            <span style={{ color: '#8E8E93', fontSize: '10px', marginLeft: '2px' }}>▼</span>
-          </button>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <span style={{ fontWeight: 800, fontSize: '13px', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.3px' }}>
+                    {selectedSymbol}
+                  </span>
+                  <span style={{ fontSize: '9px', color: '#8E8E93', backgroundColor: '#242428', padding: '1px 4px', borderRadius: '3px', fontWeight: 700 }}>
+                    {marketMode.mode.includes('US') ? 'US • IEX' : 'NSE'}
+                  </span>
+                </div>
+              </div>
+              <span style={{ color: '#8E8E93', fontSize: '10px', marginLeft: '2px' }}>▼</span>
+            </button>
 
-          {/* Quick Search Trigger Input (Groww Style) */}
-          <button
-            onClick={() => setIsSearchModalOpen(true)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              backgroundColor: '#101012',
-              color: '#8E8E93',
-              border: '1px solid #242428',
-              borderRadius: '6px',
-              padding: '4px 10px',
-              fontSize: '11px',
-              cursor: 'pointer',
-            }}
-            title="Press Ctrl+K or / to search"
-          >
-            <span>🔍</span>
-            <span style={{ color: '#636366' }}>Search stocks...</span>
-            <span style={{ fontSize: '9px', backgroundColor: '#1C1C1E', padding: '1px 4px', borderRadius: '3px', color: '#8E8E93' }}>
-              Ctrl+K
-            </span>
-          </button>
-
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginLeft: '4px' }}>
-            <span style={{ fontSize: '15px', fontWeight: 700, fontFamily: "'JetBrains Mono', monospace" }}>
-              {marketMode.currency === 'USD' ? '$' : '₹'}
-              {currentQuote.price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
-            <span
+            {/* Quick Search Trigger Input (Desktop Only) */}
+            <button
+              onClick={() => setIsSearchModalOpen(true)}
+              className="desktop-only"
               style={{
-                fontSize: '12px',
-                fontWeight: 600,
-                color: currentQuote.isPositive ? '#26A69A' : '#EF5350',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                backgroundColor: '#101012',
+                color: '#8E8E93',
+                border: '1px solid #242428',
+                borderRadius: '6px',
+                padding: '4px 10px',
+                fontSize: '11px',
+                cursor: 'pointer',
               }}
+              title="Press Ctrl+K or / to search"
             >
-              {currentQuote.isPositive ? '+' : ''}
-              {currentQuote.changeVal.toFixed(2)} ({currentQuote.isPositive ? '+' : ''}
-              {currentQuote.changePct.toFixed(2)}%)
-            </span>
-            {(() => {
-              const isLive = marketMode.mode === 'INDIAN_LIVE_DATA' && !(activeQuote as any)?.served_from_cache;
-              const isCached = Boolean((activeQuote as any)?.served_from_cache || (activeQuote as any)?.data_status === 'stale');
-              const statusText = !currentQuote.price ? 'UNAVAILABLE' : (isLive ? 'LIVE' : (isCached ? 'CACHED' : (marketMode.mode.includes('US') ? 'LIVE' : 'CACHED')));
-              const badgeBg = statusText === 'LIVE' ? '#064E3B' : (statusText === 'CACHED' ? '#451A03' : '#7F1D1D');
-              const badgeColor = statusText === 'LIVE' ? '#34D399' : (statusText === 'CACHED' ? '#FBBF24' : '#F87171');
-              return (
-                <span
-                  style={{
-                    fontSize: '9px',
-                    fontWeight: 700,
-                    padding: '1px 5px',
-                    borderRadius: '3px',
-                    backgroundColor: badgeBg,
-                    color: badgeColor,
-                    letterSpacing: '0.5px',
-                  }}
-                >
-                  {statusText}
-                </span>
-              );
-            })()}
+              <span>🔍</span>
+              <span style={{ color: '#636366' }}>Search stocks...</span>
+              <span style={{ fontSize: '9px', backgroundColor: '#1C1C1E', padding: '1px 4px', borderRadius: '3px', color: '#8E8E93' }}>
+                Ctrl+K
+              </span>
+            </button>
+
+            {/* Live Price Tag */}
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginLeft: '4px' }}>
+              <span style={{ fontSize: '15px', fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", color: '#FFFFFF', whiteSpace: 'nowrap' }}>
+                {marketMode.currency === 'USD' ? '$' : '₹'}
+                {currentQuote.price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+              <span
+                style={{
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  color: currentQuote.isPositive ? '#26A69A' : '#EF5350',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {currentQuote.isPositive ? '+' : ''}
+                {currentQuote.changeVal.toFixed(2)} ({currentQuote.isPositive ? '+' : ''}
+                {currentQuote.changePct.toFixed(2)}%)
+              </span>
+            </div>
+          </div>
+
+          {/* Mobile Right Controls: Search, AI Coach, and Order Ticket */}
+          <div className="mobile-only" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <button
+              onClick={() => setIsSearchModalOpen(true)}
+              style={{
+                background: '#16161A',
+                border: '1px solid #2C2C2E',
+                borderRadius: '4px',
+                color: '#FFFFFF',
+                padding: '4px 8px',
+                fontSize: '12px',
+                cursor: 'pointer',
+              }}
+              title="Search stocks"
+            >
+              🔍
+            </button>
+            <button
+              onClick={() => setIsRightCollapsed(!isRightCollapsed)}
+              style={{
+                background: !isRightCollapsed ? '#F29A60' : '#16161A',
+                color: !isRightCollapsed ? '#000000' : '#FFFFFF',
+                border: '1px solid #2C2C2E',
+                borderRadius: '4px',
+                padding: '4px 8px',
+                fontSize: '11px',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+              title="Toggle AI Coach"
+            >
+              ✨ AI
+            </button>
+            <button
+              onClick={() => setIsBottomCollapsed(!isBottomCollapsed)}
+              style={{
+                background: !isBottomCollapsed ? '#26A69A' : '#16161A',
+                color: !isBottomCollapsed ? '#000000' : '#26A69A',
+                border: '1px solid #26A69A',
+                borderRadius: '4px',
+                padding: '4px 8px',
+                fontSize: '11px',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+              title="Toggle Paper Order Ticket"
+            >
+              ⚡ Trade
+            </button>
           </div>
         </div>
 
-        {/* Center: Timeframe & Chart Style Selectors */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+        {/* Row 2: Smooth Touch-Scrollable Bar for Timeframes, Styles, Indicators & Engine */}
+        <div className="chart-top-scroll-row" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
           {['1m', '5m', '15m', '1h', '1D', '1W', '1M'].map((tf) => (
             <button
               key={tf}
@@ -1184,6 +1205,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
 
       {/* --- GROWW-STYLE HISTORICAL RANGE SELECTOR BAR --- */}
       <div
+        className="chart-range-bar"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -1227,8 +1249,8 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
           ))}
         </div>
 
-        {/* Active Engine & Stock Mode Info */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        {/* Active Engine & Stock Mode Info (Desktop Only) */}
+        <div className="desktop-flex" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <span style={{ fontSize: '11px', color: '#8E8E93' }}>
             Active: <strong style={{ color: '#FFFFFF' }}>{selectedSymbol}</strong> ({marketMode.mode.includes('US') ? 'US Equity' : 'NSE Nifty'})
           </span>
@@ -1252,6 +1274,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
       <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
         {/* 1. Left Drawing Toolbar (Section 8F) */}
         <div
+          className="chart-left-toolbar desktop-flex"
           style={{
             width: '42px',
             backgroundColor: '#080808',
@@ -1430,6 +1453,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
 
           {/* 3. Bottom Collapsible Panel (Order Ticket, Positions, Fundamentals) */}
           <div
+            className={`chart-bottom-panel ${isBottomCollapsed ? 'collapsed' : ''}`}
             style={{
               height: isBottomCollapsed ? '28px' : '165px',
               backgroundColor: '#0A0A0C',
@@ -1452,7 +1476,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                 borderBottom: isBottomCollapsed ? 'none' : '1px solid #1C1C1E',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflowX: 'auto', whiteSpace: 'nowrap' }}>
                 {(['order', 'positions', 'history', 'fundamentals', 'alerts'] as const).map((tab) => (
                   <button
                     key={tab}
@@ -1471,9 +1495,10 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                       fontWeight: 600,
                       textTransform: 'uppercase',
                       cursor: 'pointer',
+                      flexShrink: 0,
                     }}
                   >
-                    {tab === 'order' ? 'Paper Order Ticket' : tab === 'fundamentals' ? 'Groww Fundamentals' : tab}
+                    {tab === 'order' ? 'Paper Order' : tab === 'fundamentals' ? 'Fundamentals' : tab}
                   </button>
                 ))}
               </div>
@@ -1486,6 +1511,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                   border: 'none',
                   fontSize: '12px',
                   cursor: 'pointer',
+                  flexShrink: 0,
                 }}
               >
                 {isBottomCollapsed ? '▲ Expand' : '▼ Collapse'}
@@ -1496,7 +1522,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
             {!isBottomCollapsed && (
               <div style={{ flex: 1, padding: '10px 14px', overflowY: 'auto' }}>
                 {bottomTab === 'order' && (
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '24px' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap' }}>
                     {/* Action Side Selector */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                       <div style={{ display: 'flex', gap: '4px' }}>
@@ -1796,6 +1822,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
 
         {/* 4. Right Collapsible Panel (Ask FinEx AI, Watchlist, Details) */}
         <div
+          className={`chart-right-panel ${isRightCollapsed ? 'collapsed' : ''}`}
           style={{
             width: isRightCollapsed ? '28px' : '340px',
             backgroundColor: '#080808',
@@ -1864,10 +1891,12 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                 color: '#8E8E93',
                 border: 'none',
                 cursor: 'pointer',
-                fontSize: '11px',
+                fontSize: isRightCollapsed ? '11px' : '14px',
+                padding: '2px 6px',
               }}
+              title={isRightCollapsed ? 'Open AI panel' : 'Close AI panel'}
             >
-              {isRightCollapsed ? '◀' : '▶'}
+              {isRightCollapsed ? '◀' : '✕'}
             </button>
           </div>
 
