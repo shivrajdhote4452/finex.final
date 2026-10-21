@@ -21,6 +21,7 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
   const chartInstanceRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const lastBarRef = useRef<{ time: number; open: number; high: number; low: number; close: number } | null>(null);
 
   const [freshness, setFreshness] = useState<{
     status: string;
@@ -57,6 +58,16 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
         vertLine: { color: '#6366F1', width: 1, style: 2 },
         horzLine: { color: '#6366F1', width: 1, style: 2 },
       },
+      localization: {
+        locale: 'en-IN',
+        timeFormatter: (time: number) => {
+          const d = new Date(time * 1000);
+          if (interval === 'ONE_DAY' || interval === '1d' || interval === '1D') {
+            return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+          }
+          return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+        },
+      },
       timeScale: {
         borderColor: 'rgba(255, 255, 255, 0.1)',
         timeVisible: true,
@@ -64,6 +75,18 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
         barSpacing: 8,
         minBarSpacing: 4,
         rightOffset: 5,
+        tickMarkFormatter: (time: any) => {
+          if (typeof time === 'number') {
+            const d = new Date(time * 1000);
+            if (interval === 'ONE_DAY' || interval === '1d' || interval === '1D') {
+              return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+            }
+            const hours = String(d.getHours()).padStart(2, '0');
+            const mins = String(d.getMinutes()).padStart(2, '0');
+            return `${hours}:${mins}`;
+          }
+          return null;
+        },
       },
       rightPriceScale: {
         borderColor: 'rgba(255, 255, 255, 0.1)',
@@ -145,6 +168,9 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
           chart.timeScale().fitContent();
 
           const last = formatted[formatted.length - 1];
+          if (last) {
+            lastBarRef.current = { ...last };
+          }
           setFreshness((prev) => ({
             ...prev,
             status: payload.freshness || 'LIVE',
@@ -212,15 +238,41 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
           const barTime = Math.floor(tickTs / bucket) * bucket;
           const closePrice = Number(tick.ltp || tick.close);
 
-          if (seriesRef.current && !isNaN(closePrice)) {
-            seriesRef.current.update({
-              time: barTime as any,
-              open: Number(tick.open || closePrice),
-              high: Math.max(Number(tick.high || closePrice), closePrice),
-              low: Math.min(Number(tick.low || closePrice), closePrice),
-              close: closePrice,
-            });
-            chartInstanceRef.current?.timeScale().scrollToPosition(3, false);
+          if (seriesRef.current && !isNaN(closePrice) && closePrice > 0) {
+            // Guard: Lightweight Charts requires barTime >= lastBar.time
+            const effectiveBarTime = lastBarRef.current && barTime < lastBarRef.current.time
+              ? lastBarRef.current.time
+              : barTime;
+
+            let updatedBar: { time: number; open: number; high: number; low: number; close: number };
+
+            if (lastBarRef.current && lastBarRef.current.time === effectiveBarTime) {
+              // Same active bar: update high, low, close only within this bar's traded range
+              updatedBar = {
+                time: effectiveBarTime,
+                open: lastBarRef.current.open,
+                high: Math.max(lastBarRef.current.high, closePrice),
+                low: Math.min(lastBarRef.current.low, closePrice),
+                close: closePrice,
+              };
+            } else {
+              // New bar started (effectiveBarTime > lastBar.time)
+              updatedBar = {
+                time: effectiveBarTime,
+                open: closePrice,
+                high: closePrice,
+                low: closePrice,
+                close: closePrice,
+              };
+            }
+
+            lastBarRef.current = updatedBar;
+            try {
+              seriesRef.current.update(updatedBar as any);
+              chartInstanceRef.current?.timeScale().scrollToPosition(3, false);
+            } catch (err) {
+              console.warn('Series update ignored:', err);
+            }
           }
 
           setFreshness({
