@@ -13,6 +13,7 @@ Adds missing ORM compatibility columns with safe non-destructive backfills:
 
 from typing import Sequence, Union
 import sqlalchemy as sa
+from alembic import context as alembic_context
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -25,12 +26,18 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     conn = op.get_bind()
     is_sqlite = conn.dialect.name == "sqlite"
-    inspector = sa.inspect(conn)
+    # Offline (--sql) mode has no live DB: MockConnection cannot be inspected.
+    # Assume nothing exists so all DDL is emitted; online behavior unchanged.
+    inspector = None if alembic_context.is_offline_mode() else sa.inspect(conn)
 
     def get_column_names(table_name: str) -> set:
+        if inspector is None:
+            return set()
         return {col["name"] for col in inspector.get_columns(table_name)}
 
     def get_index_names(table_name: str) -> set:
+        if inspector is None:
+            return set()
         return {idx["name"] for idx in inspector.get_indexes(table_name)}
 
     # 1. securities.provider_token
@@ -66,7 +73,9 @@ def upgrade() -> None:
     if "symbol" not in mph_cols:
         op.add_column("market_price_history", sa.Column("symbol", sa.String(length=32), nullable=True))
     if "interval" not in mph_cols:
-        op.add_column("market_price_history", sa.Column("interval", sa.String(length=32), server_default="1D", nullable=True))
+        op.add_column(
+            "market_price_history", sa.Column("interval", sa.String(length=32), server_default="1D", nullable=True)
+        )
     if "observed_at" not in mph_cols:
         op.add_column("market_price_history", sa.Column("observed_at", sa.DateTime(timezone=True), nullable=True))
     if "ix_market_price_history_symbol" not in mph_indexes:
@@ -80,71 +89,95 @@ def upgrade() -> None:
     if "conversation_id" not in pp_cols:
         op.add_column("paper_proposals", sa.Column("conversation_id", sa.String(length=64), nullable=True))
     if "requested_budget" not in pp_cols:
-        op.add_column("paper_proposals", sa.Column("requested_budget", sa.Numeric(precision=14, scale=2), nullable=True))
+        op.add_column(
+            "paper_proposals", sa.Column("requested_budget", sa.Numeric(precision=14, scale=2), nullable=True)
+        )
     if "ix_paper_proposals_conversation_id" not in pp_indexes:
         op.create_index("ix_paper_proposals_conversation_id", "paper_proposals", ["conversation_id"], unique=False)
 
     # --- Safe Non-Destructive Backfills ---
     if is_sqlite:
-        conn.execute(sa.text("""
+        conn.execute(
+            sa.text("""
             UPDATE market_quotes
             SET symbol = (SELECT s.symbol FROM securities s WHERE s.id = market_quotes.security_id)
             WHERE symbol IS NULL;
-        """))
-        conn.execute(sa.text("""
+        """)
+        )
+        conn.execute(
+            sa.text("""
             UPDATE market_quotes
             SET close_price = price
             WHERE close_price IS NULL;
-        """))
-        conn.execute(sa.text("""
+        """)
+        )
+        conn.execute(
+            sa.text("""
             UPDATE market_price_history
             SET symbol = (SELECT s.symbol FROM securities s WHERE s.id = market_price_history.security_id)
             WHERE symbol IS NULL;
-        """))
-        conn.execute(sa.text("""
+        """)
+        )
+        conn.execute(
+            sa.text("""
             UPDATE market_price_history
             SET interval = '1D'
             WHERE interval IS NULL;
-        """))
-        conn.execute(sa.text("""
+        """)
+        )
+        conn.execute(
+            sa.text("""
             UPDATE paper_proposals
             SET requested_budget = total_budget
             WHERE requested_budget IS NULL;
-        """))
+        """)
+        )
     else:
         # PostgreSQL backfills
-        conn.execute(sa.text("""
+        conn.execute(
+            sa.text("""
             UPDATE market_quotes mq
             SET symbol = s.symbol
             FROM securities s
             WHERE mq.security_id = s.id AND mq.symbol IS NULL;
-        """))
-        conn.execute(sa.text("""
+        """)
+        )
+        conn.execute(
+            sa.text("""
             UPDATE market_quotes
             SET close_price = price
             WHERE close_price IS NULL;
-        """))
-        conn.execute(sa.text("""
+        """)
+        )
+        conn.execute(
+            sa.text("""
             UPDATE market_price_history mph
             SET symbol = s.symbol
             FROM securities s
             WHERE mph.security_id = s.id AND mph.symbol IS NULL;
-        """))
-        conn.execute(sa.text("""
+        """)
+        )
+        conn.execute(
+            sa.text("""
             UPDATE market_price_history
             SET interval = '1D'
             WHERE interval IS NULL;
-        """))
-        conn.execute(sa.text("""
+        """)
+        )
+        conn.execute(
+            sa.text("""
             UPDATE market_price_history
             SET observed_at = trade_date::timestamp with time zone
             WHERE observed_at IS NULL;
-        """))
-        conn.execute(sa.text("""
+        """)
+        )
+        conn.execute(
+            sa.text("""
             UPDATE paper_proposals
             SET requested_budget = total_budget
             WHERE requested_budget IS NULL;
-        """))
+        """)
+        )
 
 
 def downgrade() -> None:
