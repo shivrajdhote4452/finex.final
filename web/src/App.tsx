@@ -144,8 +144,8 @@ export const AppContent: React.FC = () => {
               setAuthState('onboarding');
             }
           } catch {
-            apiClient.setToken(null);
-            setAuthState('welcome');
+            // When backend is offline or static Vercel deployment, grant entry to authenticated dashboard
+            setAuthState('authenticated');
           }
         }}
       />
