@@ -92,26 +92,9 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onLoginSuccess }) 
   };
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'grid',
-        gridTemplateColumns: '1.1fr 1fr',
-        backgroundColor: '#000000',
-        color: '#FFFFFF',
-      }}
-    >
+    <div className="welcome-container">
       {/* Left Column: Brand & Terminal Mission (Page 4 Screen 01) */}
-      <div
-        style={{
-          padding: '64px 56px',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between',
-          borderRight: '1px solid #1F1F1F',
-          backgroundColor: '#050505',
-        }}
-      >
+      <div className="welcome-left-col">
         <div>
           {/* Logo Mark */}
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '3px' }}>
@@ -119,11 +102,11 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onLoginSuccess }) 
             <span style={{ fontSize: '28px', fontWeight: 900, color: 'var(--color-action)', letterSpacing: '-0.03em' }}>Ex</span>
           </div>
 
-          <div style={{ marginTop: '72px', maxWidth: '480px' }}>
-            <h1 style={{ fontSize: '42px', fontWeight: 700, lineHeight: 1.15, color: '#FFFFFF', letterSpacing: '-0.02em', marginBottom: '16px' }}>
+          <div className="welcome-mission-box" style={{ marginTop: '72px', maxWidth: '480px' }}>
+            <h1 className="welcome-title">
               Learn the market.<br />Practice with intent.
             </h1>
-            <p style={{ fontSize: '15px', lineHeight: 1.6, color: '#8E8E93', marginBottom: '40px' }}>
+            <p className="welcome-subtitle">
               A workspace for understanding your money, exploring evidence and practicing with virtual funds.
             </p>
 
@@ -150,22 +133,13 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onLoginSuccess }) 
         </div>
 
         {/* Footer Meta */}
-        <div style={{ fontSize: '11px', color: '#52525B', fontFamily: 'var(--font-mono)' }}>
+        <div className="desktop-only" style={{ fontSize: '11px', color: '#52525B', fontFamily: 'var(--font-mono)' }}>
           FinEx Terminal v1.0 · Dedicated to Shivraj Dhote · Pure Black Edition
         </div>
       </div>
 
       {/* Right Column: Sign In Card */}
-      <div
-        style={{
-          padding: '64px 48px',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
-          backgroundColor: '#000000',
-        }}
-      >
+      <div className="welcome-right-col">
         <div style={{ maxWidth: '400px', width: '100%' }}>
           <div style={{ fontSize: '24px', fontWeight: 700, color: '#FFFFFF', marginBottom: '6px' }}>
             Sign in to FinEx

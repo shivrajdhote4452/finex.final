@@ -34,6 +34,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const unreadAlerts = notifications.filter((n) => !n.read).length;
 
@@ -51,41 +52,63 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
   ];
 
   return (
-    <div style={{ height: '100vh', width: '100vw', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-app)', overflow: 'hidden' }}>
+    <div className="app-shell-root">
       {/* 2. Main Two-Column Terminal Container (Sidebar + Central Workspace) */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0, height: '100%', overflow: 'hidden' }}>
-        {/* Left Navigation Rail (Per Graphite Terminal Full Frontend Guide) */}
-        <aside
-          style={{
-            width: '240px',
-            backgroundColor: 'var(--bg-sidebar)',
-            borderRight: '1px solid var(--border-subtle)',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between',
-            padding: '24px 16px',
-            flexShrink: 0,
-            height: '100%',
-            overflowY: 'auto',
-          }}
-        >
+        {/* Mobile Backdrop Overlay */}
+        {isMobileMenuOpen && (
+          <div
+            className="sidebar-backdrop"
+            onClick={() => setIsMobileMenuOpen(false)}
+          />
+        )}
+
+        {/* Navigation Rail (Drawer on mobile, Left rail on desktop) */}
+        <aside className={`app-sidebar ${isMobileMenuOpen ? 'mobile-open' : ''}`}>
           {/* Rail Header / Brand */}
           <div>
             <div
-              onClick={() => onNavigate('overview')}
               style={{
-                cursor: 'pointer',
-                marginBottom: '28px',
-                paddingLeft: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: '24px',
+                paddingLeft: '4px',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: '3px' }}>
-                <span style={{ fontSize: '24px', fontWeight: 900, color: '#FFFFFF', letterSpacing: '-0.03em' }}>Fin</span>
-                <span style={{ fontSize: '24px', fontWeight: 900, color: 'var(--color-action)', letterSpacing: '-0.03em' }}>Ex</span>
+              <div
+                onClick={() => {
+                  onNavigate('overview');
+                  setIsMobileMenuOpen(false);
+                }}
+                style={{ cursor: 'pointer' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '3px' }}>
+                  <span style={{ fontSize: '24px', fontWeight: 900, color: '#FFFFFF', letterSpacing: '-0.03em' }}>Fin</span>
+                  <span style={{ fontSize: '24px', fontWeight: 900, color: 'var(--color-action)', letterSpacing: '-0.03em' }}>Ex</span>
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500, letterSpacing: '0.04em', marginTop: '2px' }}>
+                  Learn · Practice · Plan
+                </div>
               </div>
-              <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500, letterSpacing: '0.04em', marginTop: '2px' }}>
-                Learn &nbsp;·&nbsp; Practice &nbsp;·&nbsp; Plan
-              </div>
+
+              {/* Close Button on Mobile Drawer */}
+              <button
+                className="mobile-only"
+                onClick={() => setIsMobileMenuOpen(false)}
+                style={{
+                  background: '#181818',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: 'var(--radius-xs)',
+                  color: '#FFFFFF',
+                  padding: '4px 8px',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                }}
+                aria-label="Close menu"
+              >
+                ✕
+              </button>
             </div>
 
             {/* Navigation Menu Links */}
@@ -95,7 +118,10 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
                 return (
                   <button
                     key={item.id}
-                    onClick={() => onNavigate(item.id)}
+                    onClick={() => {
+                      onNavigate(item.id);
+                      setIsMobileMenuOpen(false);
+                    }}
                     style={{
                       background: isActive ? '#141414' : 'transparent',
                       border: 'none',
@@ -195,8 +221,73 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
 
         {/* Central Workspace + Top Workspace Bar */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0, height: '100%', overflow: 'hidden', backgroundColor: 'var(--bg-app)' }}>
-          {/* Top Workspace Header Bar */}
+          {/* Mobile Top Header (<= 768px) */}
+          <header className="app-mobile-header">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <button
+                onClick={() => setIsMobileMenuOpen(true)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#FFFFFF',
+                  fontSize: '20px',
+                  lineHeight: 1,
+                  cursor: 'pointer',
+                  padding: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+                aria-label="Open navigation menu"
+              >
+                ☰
+              </button>
+              <div
+                onClick={() => onNavigate('overview')}
+                style={{ display: 'flex', alignItems: 'baseline', gap: '2px', cursor: 'pointer' }}
+              >
+                <span style={{ fontSize: '18px', fontWeight: 900, color: '#FFFFFF', letterSpacing: '-0.03em' }}>Fin</span>
+                <span style={{ fontSize: '18px', fontWeight: 900, color: 'var(--color-action)', letterSpacing: '-0.03em' }}>Ex</span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'flex-end',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '11px',
+                }}
+              >
+                <span style={{ color: 'var(--text-muted)', fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Total Value</span>
+                <span style={{ color: 'var(--color-positive)', fontWeight: 700 }}>
+                  ₹{(totalPortfolioValue ?? 0).toLocaleString('en-IN')}
+                </span>
+              </div>
+
+              <button
+                onClick={() => openQuickTrade()}
+                className="btn btn-action"
+                style={{
+                  padding: '5px 10px',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  borderRadius: 'var(--radius-xs)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                <span>+</span>
+                <span>Trade</span>
+              </button>
+            </div>
+          </header>
+
+          {/* Top Workspace Header Bar (Desktop) */}
           <header
+            className="app-top-header"
             style={{
               height: '56px',
               borderBottom: '1px solid var(--border-subtle)',
@@ -359,6 +450,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
 
           {/* Main Content Pane */}
           <main
+            className={`app-main-pane ${currentTab === 'charts' ? 'charts-mode' : ''} ${currentTab === 'ask-finex' ? 'ask-finex-mode' : ''}`}
             style={{
               flex: 1,
               display: 'flex',
@@ -373,6 +465,52 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
           </main>
         </div>
       </div>
+
+      {/* Mobile Bottom Navigation Bar (<= 768px) */}
+      <nav className="mobile-bottom-nav">
+        <button
+          className={currentTab === 'overview' ? 'active' : ''}
+          onClick={() => onNavigate('overview')}
+        >
+          <span className="nav-icon">📊</span>
+          <span>Overview</span>
+        </button>
+        <button
+          className={currentTab === 'markets' ? 'active' : ''}
+          onClick={() => onNavigate('markets')}
+        >
+          <span className="nav-icon">📈</span>
+          <span>Markets</span>
+        </button>
+        <button
+          className={currentTab === 'charts' ? 'active' : ''}
+          onClick={() => onNavigate('charts')}
+        >
+          <span className="nav-icon">📉</span>
+          <span>Charts</span>
+        </button>
+        <button
+          className={currentTab === 'portfolio' ? 'active' : ''}
+          onClick={() => onNavigate('portfolio')}
+        >
+          <span className="nav-icon">💼</span>
+          <span>Portfolio</span>
+        </button>
+        <button
+          className={currentTab === 'ask-finex' ? 'active' : ''}
+          onClick={() => onNavigate('ask-finex')}
+        >
+          <span className="nav-icon">🤖</span>
+          <span>AI Coach</span>
+        </button>
+        <button
+          onClick={() => setIsMobileMenuOpen(true)}
+        >
+          <span className="nav-icon">☰</span>
+          <span>More</span>
+          {unreadAlerts > 0 && <span className="bottom-badge">{unreadAlerts}</span>}
+        </button>
+      </nav>
 
       {/* Global Quick Trade Modal Drawer */}
       <QuickTradeModal />
