@@ -22,7 +22,14 @@ engine_kwargs: Dict[str, Any] = {
     "future": True,
 }
 
-if "sqlite" in settings.DATABASE_URL or settings.ENVIRONMENT == Environment.TESTING or "pytest" in sys.modules:
+# Normalize DATABASE_URL to asyncpg dialect defensively
+db_url = settings.DATABASE_URL.strip()
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql+asyncpg://", 1)
+elif db_url.startswith("postgresql://") and not db_url.startswith("postgresql+"):
+    db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+if "sqlite" in db_url or settings.ENVIRONMENT == Environment.TESTING or "pytest" in sys.modules:
     engine_kwargs["poolclass"] = NullPool
 else:
     engine_kwargs["pool_size"] = settings.DATABASE_POOL_SIZE
@@ -30,7 +37,7 @@ else:
     engine_kwargs["pool_pre_ping"] = True
 
 engine = create_async_engine(
-    settings.DATABASE_URL,
+    db_url,
     **engine_kwargs,
 )
 

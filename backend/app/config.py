@@ -105,6 +105,12 @@ class Settings(BaseSettings):
     def validate_database_url(cls, v: str, info) -> str:
         if not v or not v.strip():
             raise ValueError("DATABASE_URL is required and cannot be empty.")
+        v = v.strip()
+        # Auto-normalize standard Postgres URLs to asyncpg dialect
+        if v.startswith("postgres://"):
+            v = v.replace("postgres://", "postgresql+asyncpg://", 1)
+        elif v.startswith("postgresql://") and not v.startswith("postgresql+"):
+            v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
         return v
 
     @field_validator("ALLOWED_ORIGINS", mode="before")
