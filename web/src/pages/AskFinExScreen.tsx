@@ -27,6 +27,8 @@ interface ConversationItem {
   updated_at: string;
 }
 
+import { CleanFormattedText } from '../components/common/CleanFormattedText';
+
 export const AskFinExScreen: React.FC = () => {
   // Conversation Sessions (Chat History) State
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
@@ -231,89 +233,9 @@ export const AskFinExScreen: React.FC = () => {
     (c.title || 'Research Session').toLowerCase().includes(searchFilter.toLowerCase())
   );
 
-  // Simple Markdown Formatter Helper
+  // Clean Structured Formatter Helper
   const renderFormattedText = (text: string) => {
-    const lines = text.split('\n');
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-        {lines.map((line, idx) => {
-          const trimmed = line.trim();
-          if (trimmed.startsWith('### ')) {
-            return (
-              <h4 key={idx} style={{ fontSize: '14.5px', fontWeight: 700, color: '#FFFFFF', margin: '8px 0 2px 0' }}>
-                {trimmed.replace('### ', '')}
-              </h4>
-            );
-          }
-          if (trimmed.startsWith('## ')) {
-            return (
-              <h3 key={idx} style={{ fontSize: '16px', fontWeight: 700, color: '#FFFFFF', margin: '10px 0 3px 0' }}>
-                {trimmed.replace('## ', '')}
-              </h3>
-            );
-          }
-          if (trimmed.startsWith('# ')) {
-            return (
-              <h2 key={idx} style={{ fontSize: '18px', fontWeight: 700, color: '#FFFFFF', margin: '12px 0 4px 0' }}>
-                {trimmed.replace('# ', '')}
-              </h2>
-            );
-          }
-          if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
-            return (
-              <div key={idx} style={{ display: 'flex', alignItems: 'baseline', gap: '8px', paddingLeft: '4px' }}>
-                <span style={{ color: '#F29A60', fontSize: '12px' }}>•</span>
-                <span>{trimmed.replace(/^[-*]\s+/, '')}</span>
-              </div>
-            );
-          }
-          if (/^\d+\.\s/.test(trimmed)) {
-            const num = trimmed.match(/^(\d+)\.\s/)?.[1] || '1';
-            return (
-              <div key={idx} style={{ display: 'flex', alignItems: 'baseline', gap: '8px', paddingLeft: '4px' }}>
-                <span style={{ color: '#F29A60', fontSize: '12px', fontWeight: 600 }}>{num}.</span>
-                <span>{trimmed.replace(/^\d+\.\s+/, '')}</span>
-              </div>
-            );
-          }
-          if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
-            // Render table row
-            const cells = trimmed.split('|').filter((_, cIdx, arr) => cIdx > 0 && cIdx < arr.length - 1);
-            if (cells.every((c) => c.trim().startsWith('---') || c.trim().startsWith(':--'))) {
-              return null; // separator row
-            }
-            return (
-              <div
-                key={idx}
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: `repeat(${cells.length}, 1fr)`,
-                  gap: '8px',
-                  padding: '6px 10px',
-                  backgroundColor: idx % 2 === 0 ? 'rgba(255, 255, 255, 0.03)' : 'transparent',
-                  borderBottom: '1px solid #1E222D',
-                  fontSize: '12px',
-                }}
-              >
-                {cells.map((cell, cIdx) => (
-                  <span key={cIdx} style={{ color: '#E0E3EB', fontWeight: cIdx === 0 ? 600 : 400 }}>
-                    {cell.trim()}
-                  </span>
-                ))}
-              </div>
-            );
-          }
-          if (!trimmed) {
-            return <div key={idx} style={{ height: '4px' }} />;
-          }
-          return (
-            <p key={idx} style={{ margin: 0 }}>
-              {line}
-            </p>
-          );
-        })}
-      </div>
-    );
+    return <CleanFormattedText text={text} />;
   };
 
   return (

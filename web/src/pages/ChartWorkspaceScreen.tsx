@@ -10,6 +10,7 @@ import {
 import { apiClient } from '../api/client';
 import { useFinancial, MarketQuote, OrderExecutionType } from '../context/FinancialContext';
 import { FinExLiveChart } from '../components/market/FinExLiveChart';
+import { CleanFormattedText } from '../components/common/CleanFormattedText';
 
 export interface ChartWorkspaceProps {
   onNavigate?: (tab: any) => void;
@@ -1985,8 +1986,12 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                           lineHeight: '1.4',
                         }}
                       >
-                        <div style={{ color: m.role === 'user' ? '#FFFFFF' : '#E5E5EA', whiteSpace: 'pre-wrap' }}>
-                          {m.text}
+                        <div style={{ color: m.role === 'user' ? '#FFFFFF' : '#E5E5EA' }}>
+                          {m.role === 'user' ? (
+                            <div style={{ whiteSpace: 'pre-wrap' }}>{m.text}</div>
+                          ) : (
+                            <CleanFormattedText text={m.text} fontSize="12px" compact />
+                          )}
                         </div>
 
                         {/* Proposal Card if Gemini created bounded proposal */}
