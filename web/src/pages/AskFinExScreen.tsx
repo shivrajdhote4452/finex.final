@@ -35,6 +35,7 @@ export const AskFinExScreen: React.FC = () => {
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [searchFilter, setSearchFilter] = useState<string>('');
   const [loadingHistory, setLoadingHistory] = useState<boolean>(true);
+  const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(true);
 
   // Active Chat State
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -241,30 +242,33 @@ export const AskFinExScreen: React.FC = () => {
   return (
     <div
       style={{
-        maxWidth: '1720px',
-        margin: '0 auto',
-        height: 'calc(100vh - 120px)',
+        width: '100%',
+        height: '100%',
+        flex: 1,
+        minHeight: 0,
         display: 'flex',
-        gap: '20px',
         overflow: 'hidden',
+        backgroundColor: '#07090E',
       }}
     >
       {/* ============================================================== */}
       {/* 1. LEFT SIDEBAR: CHAT HISTORY (Previous Chats + New Chat)      */}
       {/* ============================================================== */}
-      <div
-        style={{
-          width: '290px',
-          minWidth: '290px',
-          backgroundColor: '#090B10',
-          border: '1px solid #1A1E29',
-          borderRadius: '12px',
-          display: 'flex',
-          flexDirection: 'column',
-          height: '100%',
-          overflow: 'hidden',
-        }}
-      >
+      {isHistoryOpen && (
+        <div
+          style={{
+            width: '280px',
+            minWidth: '280px',
+            maxWidth: '320px',
+            backgroundColor: '#090B10',
+            borderRight: '1px solid #1A1E29',
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100%',
+            overflow: 'hidden',
+            flexShrink: 0,
+          }}
+        >
         {/* Top Header & + New Chat Button */}
         <div style={{ padding: '16px', borderBottom: '1px solid #1A1E29', display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -479,6 +483,7 @@ export const AskFinExScreen: React.FC = () => {
           </span>
         </div>
       </div>
+      )}
 
       {/* ============================================================== */}
       {/* 2. RIGHT MAIN WORKSPACE: AI CHAT (Full Right Area)            */}
@@ -486,12 +491,12 @@ export const AskFinExScreen: React.FC = () => {
       <div
         style={{
           flex: 1,
-          backgroundColor: '#090B10',
-          border: '1px solid #1A1E29',
-          borderRadius: '12px',
+          backgroundColor: '#07090E',
           display: 'flex',
           flexDirection: 'column',
           height: '100%',
+          minHeight: 0,
+          minWidth: 0,
           overflow: 'hidden',
           position: 'relative',
         }}
@@ -499,42 +504,70 @@ export const AskFinExScreen: React.FC = () => {
         {/* Top Header of Chat Area */}
         <div
           style={{
-            padding: '14px 20px',
+            padding: '12px 24px',
             borderBottom: '1px solid #1A1E29',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            backgroundColor: '#0C0E15',
+            backgroundColor: '#090B10',
+            flexShrink: 0,
           }}
         >
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#FFFFFF', margin: 0 }}>
-                {activeConversationId
-                  ? conversations.find((c) => c.id === activeConversationId)?.title || 'FinEx AI Assistant'
-                  : 'New Chat'}
-              </h2>
-              <span
-                style={{
-                  fontSize: '11px',
-                  padding: '2px 8px',
-                  borderRadius: '10px',
-                  backgroundColor: 'rgba(38, 166, 154, 0.12)',
-                  border: '1px solid rgba(38, 166, 154, 0.3)',
-                  color: '#26A69A',
-                  fontWeight: 600,
-                }}
-              >
-                ✨ {modelInfo.model}
-              </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+            {/* Toggle History Sidebar button */}
+            <button
+              type="button"
+              onClick={() => setIsHistoryOpen(!isHistoryOpen)}
+              title={isHistoryOpen ? 'Collapse Chat History' : 'Expand Chat History'}
+              style={{
+                background: '#161922',
+                border: '1px solid #2A2E39',
+                borderRadius: '6px',
+                color: isHistoryOpen ? '#D1D4DC' : '#F29A60',
+                padding: '6px 11px',
+                fontSize: '12px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                fontWeight: 600,
+                flexShrink: 0,
+              }}
+            >
+              <span>{isHistoryOpen ? '◀' : '▶'}</span>
+              <span>{isHistoryOpen ? 'Hide History' : 'Chat History'}</span>
+            </button>
+
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <h2 style={{ fontSize: '15px', fontWeight: 700, color: '#FFFFFF', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {activeConversationId
+                    ? conversations.find((c) => c.id === activeConversationId)?.title || 'FinEx AI Assistant'
+                    : 'New Chat'}
+                </h2>
+                <span
+                  style={{
+                    fontSize: '11px',
+                    padding: '2px 8px',
+                    borderRadius: '10px',
+                    backgroundColor: 'rgba(38, 166, 154, 0.12)',
+                    border: '1px solid rgba(38, 166, 154, 0.3)',
+                    color: '#26A69A',
+                    fontWeight: 600,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  ✨ {modelInfo.model}
+                </span>
+              </div>
+              <p style={{ margin: '2px 0 0 0', fontSize: '11.5px', color: '#787B86', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                Document-grounded market intelligence, technical momentum screening & regulatory citations.
+              </p>
             </div>
-            <p style={{ margin: '2px 0 0 0', fontSize: '12px', color: '#787B86' }}>
-              Document-grounded market intelligence, technical momentum screening & regulatory citations.
-            </p>
           </div>
 
           {/* Quick Actions Header */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
             {selectedCitation && (
               <button
                 type="button"
@@ -631,13 +664,25 @@ export const AskFinExScreen: React.FC = () => {
           ref={chatScrollRef}
           style={{
             flex: 1,
+            minHeight: 0,
             overflowY: 'auto',
-            padding: '24px',
+            padding: '24px 24px 16px 24px',
             display: 'flex',
             flexDirection: 'column',
-            gap: '20px',
           }}
         >
+          <div
+            style={{
+              maxWidth: '960px',
+              width: '100%',
+              margin: '0 auto',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '20px',
+              flex: messages.length === 0 ? 1 : undefined,
+              justifyContent: messages.length === 0 ? 'center' : undefined,
+            }}
+          >
           {/* Welcome Screen / Gemini-Style Starter Grid if Messages is Empty */}
           {messages.length === 0 ? (
             <div
@@ -835,61 +880,72 @@ export const AskFinExScreen: React.FC = () => {
               <span>FinEx AI is analyzing live quotes & technical data...</span>
             </div>
           )}
+          </div>
         </div>
 
         {/* Input Bar at Bottom */}
         <div
           style={{
-            padding: '16px 20px',
+            padding: '14px 24px 16px 24px',
             borderTop: '1px solid #1A1E29',
-            backgroundColor: '#0C0E15',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px',
+            backgroundColor: '#090B10',
+            flexShrink: 0,
           }}
         >
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            <input
-              ref={inputRef}
-              type="text"
-              value={inputVal}
-              onChange={(e) => setInputVal(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-              placeholder="Ask about stocks for tomorrow, technical indicators (SMA, RSI), paper trade proposals..."
-              style={{
-                flex: 1,
-                padding: '13px 18px',
-                borderRadius: '8px',
-                backgroundColor: '#12151F',
-                border: '1px solid #242938',
-                color: '#FFFFFF',
-                fontSize: '13.5px',
-                outline: 'none',
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => handleSend()}
-              disabled={loading || !inputVal.trim()}
-              style={{
-                padding: '13px 24px',
-                borderRadius: '8px',
-                backgroundColor: inputVal.trim() && !loading ? '#F29A60' : '#2A2E39',
-                border: 'none',
-                color: inputVal.trim() && !loading ? '#000000' : '#787B86',
-                fontSize: '13px',
-                fontWeight: 700,
-                cursor: inputVal.trim() && !loading ? 'pointer' : 'not-allowed',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              {loading ? 'Thinking...' : 'Send'}
-            </button>
-          </div>
+          <div
+            style={{
+              maxWidth: '960px',
+              width: '100%',
+              margin: '0 auto',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+            }}
+          >
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <input
+                ref={inputRef}
+                type="text"
+                value={inputVal}
+                onChange={(e) => setInputVal(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                placeholder="Ask about stocks for tomorrow, technical indicators (SMA, RSI), paper trade proposals..."
+                style={{
+                  flex: 1,
+                  padding: '13px 18px',
+                  borderRadius: '8px',
+                  backgroundColor: '#12151F',
+                  border: '1px solid #242938',
+                  color: '#FFFFFF',
+                  fontSize: '13.5px',
+                  outline: 'none',
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => handleSend()}
+                disabled={loading || !inputVal.trim()}
+                style={{
+                  padding: '13px 24px',
+                  borderRadius: '8px',
+                  backgroundColor: inputVal.trim() && !loading ? '#F29A60' : '#2A2E39',
+                  border: 'none',
+                  color: inputVal.trim() && !loading ? '#000000' : '#787B86',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: inputVal.trim() && !loading ? 'pointer' : 'not-allowed',
+                  transition: 'all 0.15s ease',
+                  flexShrink: 0,
+                }}
+              >
+                {loading ? 'Thinking...' : 'Send'}
+              </button>
+            </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: '#656A76', padding: '0 4px' }}>
-            <span>Virtual paper trading simulator. Educational metrics only. Not financial advice.</span>
-            <span>Press Enter ↵ to send</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: '#656A76', padding: '0 4px' }}>
+              <span>Virtual paper trading simulator. Educational metrics only. Not financial advice.</span>
+              <span>Press Enter ↵ to send</span>
+            </div>
           </div>
         </div>
       </div>
