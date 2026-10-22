@@ -809,26 +809,26 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate }) => {
 
   // Watchlist List View
   return (
-    <div style={{ maxWidth: '1440px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '28px' }}>
+    <div style={{ maxWidth: '1440px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
       {/* Search & Header */}
-      <div className="markets-header-row">
-        <div>
+      <div className="markets-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap', width: '100%', minWidth: 0 }}>
+        <div style={{ flex: '1 1 260px', minWidth: 0 }}>
           <span style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>
             Market Intelligence
           </span>
-          <h1 style={{ fontSize: '36px', fontWeight: 700, color: '#FFFFFF', marginTop: '4px', letterSpacing: '-0.02em' }}>
+          <h1 style={{ fontSize: 'clamp(22px, 5.5vw, 36px)', fontWeight: 700, color: '#FFFFFF', marginTop: '4px', letterSpacing: '-0.02em', wordBreak: 'break-word', lineHeight: 1.2 }}>
             Instruments & Watchlist
           </h1>
           <p
             title="Verified Indian equities from NSE official reports with real live end-of-day market observations."
-            style={{ color: 'var(--text-muted)', fontSize: '14px', marginTop: '4px', lineHeight: 1.5, wordBreak: 'break-word', whiteSpace: 'normal', overflow: 'visible' }}
+            style={{ color: 'var(--text-muted)', fontSize: '13.5px', marginTop: '4px', lineHeight: 1.5, wordBreak: 'break-word', whiteSpace: 'normal', overflowWrap: 'break-word', maxWidth: '100%' }}
           >
             Verified Indian equities from NSE official reports with real live end-of-day market observations.
           </p>
         </div>
 
         {/* Search */}
-        <div className="markets-header-search" style={{ width: '320px' }}>
+        <div className="markets-header-search" style={{ flex: '1 1 280px', maxWidth: '360px', width: '100%' }}>
           <input
             type="text"
             placeholder="Search symbol e.g., RELIANCE, TCS..."
@@ -843,13 +843,14 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate }) => {
               color: '#FFFFFF',
               fontFamily: 'var(--font-sans)',
               fontSize: '14px',
+              boxSizing: 'border-box',
             }}
           />
         </div>
       </div>
 
       {/* Sector Filter Tabs */}
-      <div className="sector-filter-scroll-row">
+      <div className="sector-filter-scroll-row" style={{ display: 'flex', gap: '8px', overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%', minWidth: 0, paddingBottom: '6px' }}>
         {[
           { id: 'ALL', label: `All Sectors (${sectorCounts.ALL})` },
           { id: 'TECH', label: `Technology (${sectorCounts.TECH})` },
@@ -884,9 +885,9 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate }) => {
       </div>
 
       {/* Watchlist Table */}
-      <div className="glass-card" style={{ padding: '24px' }}>
+      <div className="glass-card" style={{ padding: '20px', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
+        <div className="table-swipe-hint">← Swipe horizontally to view price, change & actions →</div>
         <div className="table-scroll-wrapper">
-          <div className="table-swipe-hint">← Swipe horizontally to view price, change & actions →</div>
           <table style={{ width: '100%', minWidth: '680px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-faint)', fontSize: '11px', textTransform: 'uppercase' }}>

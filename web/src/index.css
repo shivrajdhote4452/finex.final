@@ -620,6 +620,49 @@ input:focus, select:focus, textarea:focus {
   overflow-x: auto;
 }
 
+/* Overview & Layout Responsive Grid Classes */
+.overview-kpi-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr 1fr;
+  gap: 20px;
+  width: 100%;
+}
+
+.overview-quotes-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  width: 100%;
+}
+
+.overview-chart-insight-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 28px;
+  align-items: start;
+  width: 100%;
+}
+
+.overview-bottom-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 28px;
+  width: 100%;
+}
+
+.overview-actions-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.quote-card-btn-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+  width: 100%;
+}
+
 /* --------------------------------------------------------------------------
    TABLET RESPONSIVENESS (<= 992px)
    -------------------------------------------------------------------------- */
@@ -658,12 +701,20 @@ input:focus, select:focus, textarea:focus {
   }
 
   /* Tablet auto-collapsing for metric grids */
+  .overview-kpi-grid,
   [style*="repeat(4, 1fr)"],
   [style*="1.4fr 1fr 1fr 1fr"] {
     grid-template-columns: repeat(2, 1fr) !important;
     gap: 14px !important;
   }
 
+  .overview-quotes-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px !important;
+  }
+
+  .overview-chart-insight-grid,
+  .overview-bottom-grid,
   [style*="2fr 1fr"],
   [style*="1.8fr 1fr"] {
     grid-template-columns: 1fr !important;
@@ -687,6 +738,79 @@ input:focus, select:focus, textarea:focus {
   /* Body & App Root on Mobile */
   body {
     font-size: 13px;
+  }
+
+  /* Universal Responsive Headings & Typography on Mobile (Zero Cut-Offs) */
+  h1 {
+    font-size: clamp(20px, 5.5vw, 24px) !important;
+    line-height: 1.25 !important;
+    word-break: break-word !important;
+    letter-spacing: -0.02em !important;
+  }
+
+  h2 {
+    font-size: clamp(16px, 4.5vw, 18px) !important;
+    line-height: 1.3 !important;
+    word-break: break-word !important;
+  }
+
+  h3 {
+    font-size: clamp(14px, 4vw, 16px) !important;
+    line-height: 1.35 !important;
+    word-break: break-word !important;
+  }
+
+  p, span, div {
+    word-break: break-word;
+  }
+
+  .overview-kpi-grid,
+  .overview-quotes-grid,
+  .overview-chart-insight-grid,
+  .overview-bottom-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+    width: 100% !important;
+  }
+
+  .overview-actions-row {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .overview-actions-row button {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    font-size: 12px !important;
+    padding: 8px 12px !important;
+    text-align: center !important;
+  }
+
+  .quote-card-btn-row {
+    display: flex !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .quote-card-btn-row button {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    font-size: 11px !important;
+    padding: 8px 4px !important;
+    text-align: center !important;
+  }
+
+  .ask-finex-history-pane {
+    position: fixed !important;
+    top: 52px !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 58px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    z-index: 60 !important;
   }
 
   .app-top-header {
@@ -873,11 +997,23 @@ input:focus, select:focus, textarea:focus {
   /* Table Scroll Containment & Swipe Hint on Mobile */
   .table-swipe-hint {
     display: block !important;
+    font-size: 11px !important;
+    color: var(--color-primary) !important;
+    background: rgba(242, 154, 96, 0.08) !important;
+    border: 1px dashed rgba(242, 154, 96, 0.3) !important;
+    padding: 8px 12px !important;
+    border-radius: var(--radius-xs) !important;
+    margin-bottom: 12px !important;
+    text-align: center !important;
+    font-weight: 600 !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
   }
 
   .table-scroll-wrapper {
     overflow-x: auto !important;
     -webkit-overflow-scrolling: touch !important;
+    width: 100% !important;
   }
 
   table {

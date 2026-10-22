@@ -51,23 +51,23 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ onNavigate }) =>
   const greeting = getTimeOfDayGreeting('Shivraj');
 
   return (
-    <div style={{ maxWidth: '1440px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '32px' }}>
+    <div style={{ maxWidth: '1440px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
       {/* Top Welcome & Quick Actions */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '16px' }}>
-        <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '14px', width: '100%', minWidth: 0 }}>
+        <div style={{ minWidth: 0, flex: '1 1 240px' }}>
           <span style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>
             Executive Workspace
           </span>
-          <h1 style={{ fontSize: '36px', fontWeight: 700, color: '#FFFFFF', marginTop: '4px', letterSpacing: '-0.02em' }}>
+          <h1 style={{ fontSize: 'clamp(22px, 5.5vw, 36px)', fontWeight: 700, color: '#FFFFFF', marginTop: '4px', letterSpacing: '-0.02em', wordBreak: 'break-word', lineHeight: 1.2 }}>
             {greeting}
           </h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginTop: '4px' }}>
+          <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '4px', wordBreak: 'break-word', lineHeight: 1.5 }}>
             Simulated portfolio synchronized with authentic ledger.
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-          <button onClick={() => openQuickTrade()} className="btn-emerald" style={{ padding: '10px 20px', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
+        <div className="overview-actions-row">
+          <button onClick={() => openQuickTrade()} className="btn-emerald" style={{ padding: '9px 16px', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
             ⚡ Instant Trade
           </button>
           <button onClick={() => onNavigate('transactions')} className="btn btn-secondary">
@@ -114,7 +114,7 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ onNavigate }) =>
       )}
 
       {/* KPI Metrics Ribbon */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr 1fr', gap: '20px' }}>
+      <div className="overview-kpi-grid">
         {/* Total Value */}
         <div className="glass-card" style={{ padding: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
@@ -208,20 +208,20 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ onNavigate }) =>
       </div>
 
       {/* Live Market Active Instruments Carousel / 1-Click Trade Row */}
-      <div className="glass-card" style={{ padding: '20px 24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span className="pulse-dot" />
-            <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#FFFFFF', margin: 0 }}>
+      <div className="glass-card" style={{ padding: '20px 24px', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px', width: '100%', minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: '1 1 200px' }}>
+            <span className="pulse-dot" style={{ flexShrink: 0 }} />
+            <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#FFFFFF', margin: 0, wordBreak: 'break-word', lineHeight: 1.3 }}>
               Live NSE Market Quotes & Instant 1-Click Order Execution
             </h3>
           </div>
-          <button onClick={() => onNavigate('markets')} className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '11px' }}>
+          <button onClick={() => onNavigate('markets')} className="btn btn-secondary" style={{ padding: '5px 12px', fontSize: '11px', flexShrink: 0 }}>
             Explore All 8 Equities →
           </button>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px' }}>
+        <div className="overview-quotes-grid">
           {Object.values(marketQuotes).slice(0, 4).map((q) => (
             <div
               key={q.symbol}
@@ -233,9 +233,12 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ onNavigate }) =>
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '8px',
+                minWidth: 0,
+                boxSizing: 'border-box',
+                width: '100%',
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', minWidth: 0 }}>
                 <strong style={{ color: '#FFFFFF', fontSize: '14px' }}>{q.symbol}</strong>
                 <span className={q.isPositive ? 'badge badge-profit' : 'badge badge-loss'} style={{ fontSize: '10px' }}>
                   {q.isPositive ? '+' : ''}{q.changePct}%
@@ -244,18 +247,18 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ onNavigate }) =>
               <div className="tabular-nums" style={{ fontSize: '18px', fontWeight: 700, color: '#FFFFFF' }}>
                 ₹{q.price.toLocaleString('en-IN')}
               </div>
-              <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
+              <div className="quote-card-btn-row">
                 <button
                   onClick={() => openQuickTrade(q.symbol)}
                   className="btn-emerald"
-                  style={{ flex: 1, padding: '6px', fontSize: '11px', borderRadius: 'var(--radius-xs)', cursor: 'pointer' }}
+                  style={{ flex: 1, minWidth: 0, padding: '7px 4px', fontSize: '11px', borderRadius: 'var(--radius-xs)', cursor: 'pointer', textAlign: 'center' }}
                 >
                   Buy
                 </button>
                 <button
                   onClick={() => openQuickTrade(q.symbol)}
                   className="btn btn-secondary"
-                  style={{ flex: 1, padding: '6px', fontSize: '11px', borderRadius: 'var(--radius-xs)', color: 'var(--color-loss)', borderColor: 'var(--color-loss-border)' }}
+                  style={{ flex: 1, minWidth: 0, padding: '7px 4px', fontSize: '11px', borderRadius: 'var(--radius-xs)', color: 'var(--color-loss)', borderColor: 'var(--color-loss-border)', textAlign: 'center' }}
                 >
                   Sell
                 </button>
@@ -266,15 +269,15 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ onNavigate }) =>
       </div>
 
       {/* Chart Section & Concentration Insight */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '28px', alignItems: 'start' }}>
+      <div className="overview-chart-insight-grid">
         {/* Interactive Account Value Chart with Line / Candlestick toggle */}
-        <div className="glass-card" style={{ padding: '28px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <h2 style={{ fontSize: '16px', fontWeight: 600, color: '#FFFFFF' }}>Portfolio Performance Curve</h2>
+        <div className="glass-card" style={{ padding: '24px', minWidth: 0, overflow: 'hidden', width: '100%', boxSizing: 'border-box' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', flexWrap: 'wrap', gap: '10px', width: '100%', minWidth: 0 }}>
+            <div style={{ minWidth: 0, flex: '1 1 220px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <h2 style={{ fontSize: '16px', fontWeight: 600, color: '#FFFFFF', margin: 0, wordBreak: 'break-word' }}>Portfolio Performance Curve</h2>
                 {/* Line / Candle Switch */}
-                <div style={{ display: 'inline-flex', background: 'rgba(0,0,0,0.3)', padding: '2px', borderRadius: '4px' }}>
+                <div style={{ display: 'inline-flex', background: 'rgba(0,0,0,0.3)', padding: '2px', borderRadius: '4px', flexShrink: 0 }}>
                   <button
                     onClick={() => setChartView('line')}
                     style={{
@@ -305,21 +308,21 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ onNavigate }) =>
                   </button>
                 </div>
               </div>
-              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Historical simulated valuation (May – Oct 2026)</span>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginTop: '2px' }}>Historical simulated valuation (May – Oct 2026)</span>
             </div>
 
             {hoveredPoint ? (
-              <div className="badge badge-cyan" style={{ fontSize: '13px' }}>
+              <div className="badge badge-cyan" style={{ fontSize: '12px', flexShrink: 0 }}>
                 {hoveredPoint.month}: ₹{hoveredPoint.value.toLocaleString('en-IN')}
               </div>
             ) : (
-              <span className="badge badge-neutral">Hover nodes for exact valuation</span>
+              <span className="badge badge-neutral" style={{ fontSize: '11px', flexShrink: 0 }}>Hover nodes for exact valuation</span>
             )}
           </div>
 
           {/* SVG Interactive Chart */}
-          <div style={{ width: '100%', height: '220px', position: 'relative' }}>
-            <svg viewBox="0 0 600 180" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+          <div style={{ width: '100%', minWidth: 0, height: '200px', position: 'relative', overflow: 'hidden' }}>
+            <svg viewBox="0 0 600 180" style={{ width: '100%', height: '100%', display: 'block' }} preserveAspectRatio="none">
               <defs>
                 <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#F29A60" stopOpacity="0.3" />
@@ -392,7 +395,7 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ onNavigate }) =>
             </svg>
 
             {/* X Labels */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '16px', fontSize: '11px', color: 'var(--text-faint)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginTop: '12px', fontSize: '11px', color: 'var(--text-faint)', padding: '0 4px', boxSizing: 'border-box' }}>
               {chartData.map((d) => (
                 <span key={d.month}>{d.month}</span>
               ))}
@@ -401,28 +404,31 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ onNavigate }) =>
         </div>
 
         {/* Right AI Research Insight Card */}
-        <div className="glass-card" style={{ padding: '28px', border: '1px solid rgba(6, 182, 212, 0.3)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+        <div className="glass-card" style={{ padding: '24px', border: '1px solid rgba(6, 182, 212, 0.3)', minWidth: 0, overflow: 'hidden', width: '100%', boxSizing: 'border-box' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
             <span className="badge badge-cyan">AI Research Insight</span>
             <span style={{ fontSize: '11px', color: 'var(--text-faint)' }}>Grounded in Holdings</span>
           </div>
 
-          <h3 style={{ fontSize: '20px', fontWeight: 600, color: '#FFFFFF', marginBottom: '8px' }}>
+          <h3 style={{ fontSize: '18px', fontWeight: 600, color: '#FFFFFF', marginBottom: '8px', wordBreak: 'break-word', lineHeight: 1.3 }}>
             High IT Concentration
           </h3>
-          <p style={{ fontSize: '13px', lineHeight: 1.6, color: 'var(--text-muted)', marginBottom: '20px' }}>
+          <p style={{ fontSize: '13px', lineHeight: 1.6, color: 'var(--text-muted)', marginBottom: '18px', wordBreak: 'break-word', whiteSpace: 'normal', overflowWrap: 'break-word' }}>
             TCS and Infosys represent <strong>50.8%</strong> of your invested equity holdings. While both are market leaders, SEBI diversification guidelines recommend capping single-sector exposure under 30% to mitigate industry downturns.
           </p>
 
           <div
             style={{
-              padding: '14px',
+              padding: '12px 14px',
               borderRadius: 'var(--radius-sm)',
               backgroundColor: 'rgba(6, 182, 212, 0.08)',
               border: '1px solid rgba(6, 182, 212, 0.2)',
-              marginBottom: '20px',
-              fontSize: '12px',
+              marginBottom: '18px',
+              fontSize: '11.5px',
               color: 'var(--color-accent-cyan)',
+              wordBreak: 'break-word',
+              whiteSpace: 'normal',
+              lineHeight: 1.45,
             }}
           >
             Citation: SEBI Investor Education Guide (Chapter 3: Asset Allocation Principles).
@@ -435,7 +441,7 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ onNavigate }) =>
       </div>
 
       {/* Bottom Grid: Holdings Table & Recent Execution Activity */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '28px' }}>
+      <div className="overview-bottom-grid">
         {/* Holdings Table */}
         <div className="glass-card" style={{ padding: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>

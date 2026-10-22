@@ -35,7 +35,12 @@ export const AskFinExScreen: React.FC = () => {
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [searchFilter, setSearchFilter] = useState<string>('');
   const [loadingHistory, setLoadingHistory] = useState<boolean>(true);
-  const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(true);
+  const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      return false;
+    }
+    return true;
+  });
 
   // Active Chat State
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -104,6 +109,9 @@ export const AskFinExScreen: React.FC = () => {
 
   // Load a specific historical conversation
   const handleSelectConversation = async (convId: string) => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setIsHistoryOpen(false);
+    }
     if (convId === activeConversationId) return;
     setActiveConversationId(convId);
     setLoading(true);
@@ -142,6 +150,9 @@ export const AskFinExScreen: React.FC = () => {
     setInputVal('');
     setSelectedCitation(null);
     setShowSourcesPanel(false);
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setIsHistoryOpen(false);
+    }
     if (inputRef.current) {
       inputRef.current.focus();
     }
@@ -256,6 +267,7 @@ export const AskFinExScreen: React.FC = () => {
       {/* ============================================================== */}
       {isHistoryOpen && (
         <div
+          className="ask-finex-history-pane"
           style={{
             width: '280px',
             minWidth: '280px',
@@ -290,10 +302,28 @@ export const AskFinExScreen: React.FC = () => {
               </span>
             </div>
 
-            <span style={{ fontSize: '11px', color: '#10B981', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10B981', display: 'inline-block' }} />
-              Connected
-            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '11px', color: '#10B981', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10B981', display: 'inline-block' }} />
+                Connected
+              </span>
+              <button
+                type="button"
+                className="mobile-only"
+                onClick={() => setIsHistoryOpen(false)}
+                style={{
+                  background: '#161922',
+                  border: '1px solid #2A2E39',
+                  borderRadius: '4px',
+                  color: '#FFFFFF',
+                  padding: '3px 8px',
+                  fontSize: '11px',
+                  cursor: 'pointer',
+                }}
+              >
+                ✕ Close
+              </button>
+            </div>
           </div>
 
           {/* + New Chat Button (Prominent, Gemini/ChatGPT Style) */}
@@ -504,16 +534,18 @@ export const AskFinExScreen: React.FC = () => {
         {/* Top Header of Chat Area */}
         <div
           style={{
-            padding: '12px 24px',
+            padding: '10px 16px',
             borderBottom: '1px solid #1A1E29',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             backgroundColor: '#090B10',
             flexShrink: 0,
+            flexWrap: 'wrap',
+            gap: '8px',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: '1 1 auto' }}>
             {/* Toggle History Sidebar button */}
             <button
               type="button"
@@ -524,7 +556,7 @@ export const AskFinExScreen: React.FC = () => {
                 border: '1px solid #2A2E39',
                 borderRadius: '6px',
                 color: isHistoryOpen ? '#D1D4DC' : '#F29A60',
-                padding: '6px 11px',
+                padding: '6px 10px',
                 fontSize: '12px',
                 cursor: 'pointer',
                 display: 'flex',
@@ -534,8 +566,8 @@ export const AskFinExScreen: React.FC = () => {
                 flexShrink: 0,
               }}
             >
-              <span>{isHistoryOpen ? '◀' : '▶'}</span>
-              <span>{isHistoryOpen ? 'Hide History' : 'Chat History'}</span>
+              <span>{isHistoryOpen ? '✕' : '💬'}</span>
+              <span>{isHistoryOpen ? 'Hide' : `History (${conversations.length})`}</span>
             </button>
 
             <div style={{ minWidth: 0 }}>
