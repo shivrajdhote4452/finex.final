@@ -5,6 +5,51 @@ interface OnboardingScreenProps {
   onComplete: () => void;
 }
 
+const OnboardingStepper: React.FC<{ activeStepIndex: 2 | 4 }> = ({ activeStepIndex }) => {
+  const steps = [
+    { num: '01', label: 'Basics', index: 1 },
+    { num: '02', label: 'Time horizon', index: 2 },
+    { num: '03', label: 'Capacity', index: 3 },
+    { num: '04', label: 'Review', index: 4 },
+  ];
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        gap: '20px',
+        marginBottom: '28px',
+        borderBottom: '1px solid var(--border-subtle)',
+        paddingBottom: '14px',
+        overflowX: 'auto',
+        whiteSpace: 'nowrap',
+        scrollbarWidth: 'none',
+      }}
+    >
+      {steps.map((s) => {
+        const isActive = s.index === activeStepIndex;
+        return (
+          <div
+            key={s.num}
+            style={{
+              fontSize: '12px',
+              color: isActive ? 'var(--color-action)' : 'var(--text-faint)',
+              fontWeight: isActive ? 700 : 500,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              flexShrink: 0,
+            }}
+          >
+            <span>{s.num}</span>
+            <span>{s.label}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   const [step, setStep] = useState<2 | 3>(2);
   const [selectedHorizon, setSelectedHorizon] = useState('3-5');
@@ -48,20 +93,25 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
   };
 
   if (step === 3) {
-    // Screen 03 / 06: Risk Result & Explanation
+    // Risk Result & Explanation
     return (
       <div style={{ maxWidth: '960px', margin: '0 auto', padding: '16px 0' }}>
         <div style={{ fontSize: '11px', color: 'var(--color-action)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-          SCREEN 03 / 06 · RISK RESULT & EXPLANATION
+          RISK RESULT & EXPLANATION
         </div>
         <h1 style={{ fontSize: '32px', fontWeight: 700, color: '#FFFFFF', margin: '6px 0 4px 0' }}>
           Your risk profile
         </h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '28px' }}>
-          Deterministic score evaluated via FinEx Risk Engine: Score {evaluatedProfile.score}/100.
+        <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '24px', lineHeight: 1.5 }}>
+          Deterministic score via FinEx Risk Engine:{' '}
+          <span style={{ color: '#FFFFFF', fontWeight: 600, whiteSpace: 'nowrap' }}>
+            {evaluatedProfile.score}/100.
+          </span>
         </p>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '24px', alignItems: 'start' }}>
+        <OnboardingStepper activeStepIndex={4} />
+
+        <div className="onboarding-result-grid">
           {/* Profile Summary Panel */}
           <div className="glass-card" style={{ padding: '28px', border: '1px solid var(--border-medium)', backgroundColor: '#111111' }}>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
@@ -78,6 +128,14 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
             </p>
             <div
               onClick={() => setStep(2)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setStep(2);
+                }
+              }}
               style={{
                 fontSize: '12px',
                 color: 'var(--color-action)',
@@ -91,11 +149,27 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
             >
               Review your answers →
             </div>
-            <div style={{ fontSize: '11px', color: 'var(--text-faint)', borderTop: '1px solid var(--border-subtle)', paddingTop: '12px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-faint)', borderTop: '1px solid var(--border-subtle)', paddingTop: '12px', marginBottom: '20px' }}>
               No return is guaranteed.
             </div>
-          </div>
 
+            {/* Primary Action Button directly beneath summary */}
+            <button
+              type="button"
+              onClick={onComplete}
+              className="btn btn-action"
+              style={{
+                width: '100%',
+                padding: '12px 20px',
+                fontSize: '14px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                borderRadius: 'var(--radius-sm)',
+              }}
+            >
+              Continue →
+            </button>
+          </div>
 
           {/* Influencing Answers */}
           <div className="glass-card" style={{ padding: '28px', backgroundColor: '#111111' }}>
@@ -110,7 +184,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
                   <strong style={{ color: '#FFFFFF', fontSize: '13px' }}>Time horizon</strong>
                 </div>
                 <p style={{ fontSize: '12px', color: 'var(--text-muted)', paddingLeft: '24px' }}>
-                  Selected answer: 3-5 years in this example.
+                  Selected answer: {horizonOptions.find((o) => o.id === selectedHorizon)?.title || '3-5 years'}.
                 </p>
               </div>
 
@@ -120,7 +194,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
                   <strong style={{ color: '#FFFFFF', fontSize: '13px' }}>Willingness to take risk</strong>
                 </div>
                 <p style={{ fontSize: '12px', color: 'var(--text-muted)', paddingLeft: '24px' }}>
-                  Explain the approved response factors in plain language.
+                  Evaluated moderate risk tolerance with disciplined drawdown buffers.
                 </p>
               </div>
 
@@ -130,17 +204,17 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
                   <strong style={{ color: '#FFFFFF', fontSize: '13px' }}>Capacity to absorb loss</strong>
                 </div>
                 <p style={{ fontSize: '12px', color: 'var(--text-muted)', paddingLeft: '24px' }}>
-                  Keep financial capacity separate from risk preference.
+                  Financial reserves preserved for capital stability.
                 </p>
               </div>
             </div>
 
-            <div style={{ marginTop: '28px', display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
-              <button onClick={() => setStep(2)} className="btn btn-secondary">
-                View scoring details
+            <div style={{ marginTop: '28px', display: 'flex', gap: '12px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              <button type="button" onClick={() => setStep(2)} className="btn btn-secondary" style={{ flex: '1 1 auto' }}>
+                Review answers
               </button>
-              <button onClick={onComplete} className="btn btn-action">
-                Confirm profile
+              <button type="button" onClick={onComplete} className="btn btn-action" style={{ flex: '1 1 auto' }}>
+                Confirm profile →
               </button>
             </div>
           </div>
@@ -149,11 +223,11 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
     );
   }
 
-  // Screen 02 / 05: Risk Onboarding Questionnaire
+  // Risk Onboarding Questionnaire
   return (
     <div style={{ maxWidth: '960px', margin: '0 auto', padding: '16px 0' }}>
       <div style={{ fontSize: '11px', color: 'var(--color-action)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-        SCREEN 02 / 05 · RISK ONBOARDING
+        RISK ONBOARDING
       </div>
       <h1 style={{ fontSize: '32px', fontWeight: 700, color: '#FFFFFF', margin: '6px 0 4px 0' }}>
         Understand your investment horizon
@@ -162,13 +236,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
         Question 2 of 4.
       </p>
 
-      {/* Progress Steps */}
-      <div style={{ display: 'flex', gap: '24px', marginBottom: '28px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '14px' }}>
-        <div style={{ fontSize: '12px', color: 'var(--text-faint)' }}>01 Basics</div>
-        <div style={{ fontSize: '12px', color: 'var(--color-action)', fontWeight: 700 }}>02 Time horizon</div>
-        <div style={{ fontSize: '12px', color: 'var(--text-faint)' }}>03 Capacity</div>
-        <div style={{ fontSize: '12px', color: 'var(--text-faint)' }}>04 Review</div>
-      </div>
+      <OnboardingStepper activeStepIndex={2} />
 
       <div className="onboarding-risk-grid">
         {/* Question Options */}

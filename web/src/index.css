@@ -574,6 +574,14 @@ input:focus, select:focus, textarea:focus {
   align-items: start;
 }
 
+/* Onboarding Risk Result Responsive Grid */
+.onboarding-result-grid {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
 /* Base Chart Workspace Classes */
 .chart-top-bar {
   display: flex;
@@ -877,8 +885,9 @@ input:focus, select:focus, textarea:focus {
     border-collapse: collapse;
   }
 
-  /* Onboarding Risk Profile: Single Column Stack on Mobile */
-  .onboarding-risk-grid {
+  /* Onboarding Risk Profile & Results: Single Column Stack on Mobile */
+  .onboarding-risk-grid,
+  .onboarding-result-grid {
     display: flex !important;
     flex-direction: column !important;
     gap: 20px !important;
