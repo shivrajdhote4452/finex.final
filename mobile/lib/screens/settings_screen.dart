@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/api_client.dart';
 import '../theme/terminal_theme.dart';
+import '../widgets/mobile_theme_toggle.dart';
 
 class MobileSettingsScreen extends StatefulWidget {
   final VoidCallback? onLogout;
@@ -152,15 +153,16 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
           Container(
             padding: const EdgeInsets.all(3),
             decoration: BoxDecoration(
-              color: TerminalColors.surface,
+              color: TerminalColors.getSurface(context),
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: TerminalColors.borderSubtle),
+              border: Border.all(color: TerminalColors.getBorderSubtle(context)),
             ),
             child: Row(
               children: [
                 _buildSubTabButton("profile", "Profile"),
-                _buildSubTabButton("sandbox", "Sandbox Rules"),
-                _buildSubTabButton("compliance", "Compliance"),
+                _buildSubTabButton("appearance", "Theme"),
+                _buildSubTabButton("sandbox", "Sandbox"),
+                _buildSubTabButton("compliance", "Legal"),
               ],
             ),
           ),
@@ -168,6 +170,7 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
 
           // Tab Body
           if (_activeTab == 'profile') _buildProfileSection(),
+          if (_activeTab == 'appearance') _buildAppearanceSection(),
           if (_activeTab == 'sandbox') _buildSandboxSection(),
           if (_activeTab == 'compliance') _buildComplianceSection(),
 
@@ -305,8 +308,47 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
                 ),
               ],
             ),
+            const Divider(color: TerminalColors.borderSubtle, height: 20),
+            const Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("Theme Mode", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: TerminalColors.textMain)),
+                    SizedBox(height: 2),
+                    Text("System Default, Light, or Dark", style: TextStyle(fontSize: 11, color: TerminalColors.textMuted)),
+                  ],
+                ),
+                MobileThemeSegmentedToggle(),
+              ],
+            ),
           ],
         ),
+      ],
+    );
+  }
+
+  Widget _buildAppearanceSection() {
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          "THEME & DISPLAY MODE",
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.5,
+            color: TerminalColors.textMuted,
+          ),
+        ),
+        SizedBox(height: 6),
+        Text(
+          "Choose whether FinEx syncs automatically with your computer / mobile device theme or locks to Light or Dark mode.",
+          style: TextStyle(fontSize: 12, color: TerminalColors.textMuted, height: 1.4),
+        ),
+        SizedBox(height: 16),
+        MobileThemeSelectionCards(),
       ],
     );
   }

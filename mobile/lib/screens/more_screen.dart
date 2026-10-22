@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/terminal_theme.dart';
+import '../widgets/mobile_theme_toggle.dart';
 import 'chart_screen.dart';
 import 'paper_trading_screen.dart';
 import 'portfolio_screen.dart';
@@ -54,7 +55,50 @@ class MobileMoreScreen extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 12),
+
+        // Theme Mode Quick Switcher Card
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: TerminalColors.getSurface(context),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: TerminalColors.getBorderSubtle(context)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.palette_outlined, size: 20, color: TerminalColors.getAction(context)),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Theme Mode",
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: TerminalColors.getTextMain(context),
+                        ),
+                      ),
+                      Text(
+                        "System · Light · Dark",
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: TerminalColors.getTextMuted(context),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const MobileThemeSegmentedToggle(),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
 
         const Text(
           "WORKSPACE MODULES",

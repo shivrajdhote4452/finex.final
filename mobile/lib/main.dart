@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'services/api_client.dart';
 import 'theme/terminal_theme.dart';
+import 'theme/theme_controller.dart';
 import 'screens/auth_screen.dart';
 import 'screens/overview_screen.dart';
 import 'screens/markets_screen.dart';
@@ -8,7 +9,9 @@ import 'screens/chart_screen.dart';
 import 'screens/ask_finex_screen.dart';
 import 'screens/more_screen.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await themeController.init();
   runApp(const FinExMobileApp());
 }
 
@@ -17,11 +20,18 @@ class FinExMobileApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'FinEx Terminal',
-      debugShowCheckedModeBanner: false,
-      theme: TerminalTheme.darkTheme,
-      home: const AppRoot(),
+    return AnimatedBuilder(
+      animation: themeController,
+      builder: (context, _) {
+        return MaterialApp(
+          title: 'FinEx Terminal',
+          debugShowCheckedModeBanner: false,
+          theme: TerminalTheme.lightTheme,
+          darkTheme: TerminalTheme.darkTheme,
+          themeMode: themeController.themeMode,
+          home: const AppRoot(),
+        );
+      },
     );
   }
 }
