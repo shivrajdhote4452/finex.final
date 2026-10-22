@@ -811,7 +811,7 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate }) => {
   return (
     <div style={{ maxWidth: '1440px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '28px' }}>
       {/* Search & Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div className="markets-header-row">
         <div>
           <span style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>
             Market Intelligence
@@ -819,13 +819,16 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate }) => {
           <h1 style={{ fontSize: '36px', fontWeight: 700, color: '#FFFFFF', marginTop: '4px', letterSpacing: '-0.02em' }}>
             Instruments & Watchlist
           </h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginTop: '4px' }}>
+          <p
+            title="Verified Indian equities from NSE official reports with real live end-of-day market observations."
+            style={{ color: 'var(--text-muted)', fontSize: '14px', marginTop: '4px', lineHeight: 1.5, wordBreak: 'break-word', whiteSpace: 'normal', overflow: 'visible' }}
+          >
             Verified Indian equities from NSE official reports with real live end-of-day market observations.
           </p>
         </div>
 
         {/* Search */}
-        <div style={{ width: '320px' }}>
+        <div className="markets-header-search" style={{ width: '320px' }}>
           <input
             type="text"
             placeholder="Search symbol e.g., RELIANCE, TCS..."
@@ -846,7 +849,7 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate }) => {
       </div>
 
       {/* Sector Filter Tabs */}
-      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+      <div className="sector-filter-scroll-row">
         {[
           { id: 'ALL', label: `All Sectors (${sectorCounts.ALL})` },
           { id: 'TECH', label: `Technology (${sectorCounts.TECH})` },
@@ -861,6 +864,7 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate }) => {
           <button
             key={sec.id}
             onClick={() => setSelectedSector(sec.id)}
+            className="sector-filter-pill"
             style={{
               padding: '8px 16px',
               borderRadius: 'var(--radius-sm)',
@@ -870,6 +874,8 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate }) => {
               fontSize: '13px',
               fontWeight: selectedSector === sec.id ? 600 : 500,
               cursor: 'pointer',
+              flexShrink: 0,
+              whiteSpace: 'nowrap',
             }}
           >
             {sec.label}
@@ -879,8 +885,9 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate }) => {
 
       {/* Watchlist Table */}
       <div className="glass-card" style={{ padding: '24px' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '14px' }}>
+        <div className="table-scroll-wrapper">
+          <div className="table-swipe-hint">← Swipe horizontally to view price, change & actions →</div>
+          <table style={{ width: '100%', minWidth: '680px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-faint)', fontSize: '11px', textTransform: 'uppercase' }}>
                 <th style={{ padding: '16px' }}>Instrument</th>

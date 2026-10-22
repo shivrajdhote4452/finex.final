@@ -159,7 +159,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
         Understand your investment horizon
       </h1>
       <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '24px' }}>
-        Question 2 of 4 in this illustrative layout. Use the approved questionnaire in production.
+        Question 2 of 4.
       </p>
 
       {/* Progress Steps */}
@@ -170,7 +170,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
         <div style={{ fontSize: '12px', color: 'var(--text-faint)' }}>04 Review</div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '28px', alignItems: 'start' }}>
+      <div className="onboarding-risk-grid">
         {/* Question Options */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <div style={{ fontSize: '15px', fontWeight: 600, color: '#FFFFFF', marginBottom: '4px' }}>
