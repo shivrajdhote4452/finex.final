@@ -292,7 +292,7 @@ export const AskFinExScreen: React.FC = () => {
 
             <span style={{ fontSize: '11px', color: '#10B981', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
               <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10B981', display: 'inline-block' }} />
-              Live
+              Connected
             </span>
           </div>
 

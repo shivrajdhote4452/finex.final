@@ -14,6 +14,7 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
     unrealizedPnL,
     totalPortfolioValue,
     openQuickTrade,
+    depositFunds,
   } = useFinancial();
 
   const [showRebalanceModal, setShowRebalanceModal] = useState(false);
@@ -22,7 +23,7 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
   return (
     <div style={{ maxWidth: '1440px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '32px' }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <span style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>
             Asset Management & Rebalancing
@@ -35,7 +36,7 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '12px' }}>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
           <button onClick={() => setShowRebalanceModal(true)} className="btn btn-secondary">
             ⚖️ Simulate Rebalance
           </button>
@@ -47,6 +48,40 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
           </button>
         </div>
       </div>
+
+      {/* Empty Wallet State Banner when no cash and no positions */}
+      {virtualCash === 0 && holdings.length === 0 && (
+        <div
+          className="glass-card"
+          style={{
+            padding: '20px 24px',
+            border: '1px solid var(--color-action)',
+            backgroundColor: 'rgba(242, 154, 96, 0.08)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: '16px',
+            flexWrap: 'wrap',
+          }}
+        >
+          <div>
+            <div style={{ color: '#FFFFFF', fontWeight: 600, fontSize: '15px' }}>
+              Your paper wallet is empty
+            </div>
+            <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '2px' }}>
+              Seed your practice account with virtual capital to start simulating trades with authentic market data.
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => depositFunds(1000000)}
+            className="btn btn-action"
+            style={{ whiteSpace: 'nowrap', cursor: 'pointer' }}
+          >
+            Start with ₹10,00,000
+          </button>
+        </div>
+      )}
 
       {/* Metrics Row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px' }}>
@@ -131,8 +166,9 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
 
       {/* Holdings Detailed Table */}
       <div className="glass-card" style={{ padding: '24px' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+        <div className="table-scroll-wrapper">
+          <div className="table-swipe-hint">← Swipe horizontally to view full holdings data →</div>
+          <table style={{ width: '100%', minWidth: '760px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-faint)', fontSize: '11px', textTransform: 'uppercase' }}>
                 <th style={{ padding: '12px 14px' }}>Holding</th>
@@ -191,6 +227,7 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
 
         {/* Ledger Reconciliation Note */}
         <div
+          title={`Ledger Proof: Holdings (₹${totalHoldingsValue.toLocaleString('en-IN')}) + Cash (₹${virtualCash.toLocaleString('en-IN')}) = Account Total (₹${totalPortfolioValue.toLocaleString('en-IN')})`}
           style={{
             marginTop: '24px',
             padding: '12px 16px',
@@ -200,14 +237,17 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
+            gap: '12px',
+            flexWrap: 'wrap',
             fontSize: '12px',
             color: 'var(--text-muted)',
+            lineHeight: 1.5,
           }}
         >
-          <span>
+          <span style={{ flex: '1 1 auto', minWidth: '220px', wordBreak: 'break-word', whiteSpace: 'normal', overflow: 'visible' }}>
             Ledger Proof: Holdings (<strong>₹{totalHoldingsValue.toLocaleString('en-IN')}</strong>) + Cash (<strong>₹{virtualCash.toLocaleString('en-IN')}</strong>) = Account Total (<strong>₹{totalPortfolioValue.toLocaleString('en-IN')}</strong>)
           </span>
-          <span className="badge badge-profit">Zero Discrepancy</span>
+          <span className="badge badge-profit" style={{ flexShrink: 0 }}>Zero Discrepancy</span>
         </div>
       </div>
 

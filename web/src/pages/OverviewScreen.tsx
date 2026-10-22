@@ -6,6 +6,17 @@ interface OverviewScreenProps {
   onNavigate: (tab: NavigationTab) => void;
 }
 
+export function getTimeOfDayGreeting(name: string = 'Shivraj'): string {
+  const hour = new Date().getHours();
+  if (hour >= 5 && hour < 12) {
+    return `Good morning, ${name}`;
+  } else if (hour >= 12 && hour < 17) {
+    return `Good afternoon, ${name}`;
+  } else {
+    return `Good evening, ${name}`;
+  }
+}
+
 export const OverviewScreen: React.FC<OverviewScreenProps> = ({ onNavigate }) => {
   const {
     virtualCash,
@@ -16,6 +27,7 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ onNavigate }) =>
     unrealizedPnL,
     marketQuotes,
     openQuickTrade,
+    depositFunds,
   } = useFinancial();
 
   const [hoveredPoint, setHoveredPoint] = useState<{ month: string; value: number } | null>(null);
@@ -36,24 +48,25 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ onNavigate }) =>
 
   const equityPct = Math.round((totalHoldingsValue / (totalPortfolioValue || 1)) * 100);
   const cashPct = 100 - equityPct;
+  const greeting = getTimeOfDayGreeting('Shivraj');
 
   return (
     <div style={{ maxWidth: '1440px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '32px' }}>
       {/* Top Welcome & Quick Actions */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <span style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>
             Executive Workspace
           </span>
           <h1 style={{ fontSize: '36px', fontWeight: 700, color: '#FFFFFF', marginTop: '4px', letterSpacing: '-0.02em' }}>
-            Good afternoon, Shivraj
+            {greeting}
           </h1>
           <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginTop: '4px' }}>
-            Live simulated portfolio synchronized with authentic NSE observations and atomic virtual ledger.
+            Simulated portfolio synchronized with authentic ledger.
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '12px' }}>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
           <button onClick={() => openQuickTrade()} className="btn-emerald" style={{ padding: '10px 20px', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}>
             ⚡ Instant Trade
           </button>
@@ -65,6 +78,40 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ onNavigate }) =>
           </button>
         </div>
       </div>
+
+      {/* Empty Wallet State Banner when no cash and no positions */}
+      {virtualCash === 0 && holdings.length === 0 && (
+        <div
+          className="glass-card"
+          style={{
+            padding: '20px 24px',
+            border: '1px solid var(--color-action)',
+            backgroundColor: 'rgba(242, 154, 96, 0.08)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: '16px',
+            flexWrap: 'wrap',
+          }}
+        >
+          <div>
+            <div style={{ color: '#FFFFFF', fontWeight: 600, fontSize: '15px' }}>
+              Your paper wallet is empty
+            </div>
+            <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '2px' }}>
+              Seed your practice account with virtual capital to start simulating trades with authentic market data.
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => depositFunds(1000000)}
+            className="btn btn-action"
+            style={{ whiteSpace: 'nowrap', cursor: 'pointer' }}
+          >
+            Start with ₹10,00,000
+          </button>
+        </div>
+      )}
 
       {/* KPI Metrics Ribbon */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr 1fr', gap: '20px' }}>
@@ -115,7 +162,21 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ onNavigate }) =>
           <div className="tabular-nums" style={{ fontSize: '32px', fontWeight: 700, color: '#FFFFFF', lineHeight: 1.1 }}>
             ₹{virtualCash.toLocaleString('en-IN')}
           </div>
-          <div style={{ fontSize: '12px', color: 'var(--color-primary)', marginTop: '14px' }}>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={(e) => {
+              e.stopPropagation();
+              openQuickTrade();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                openQuickTrade();
+              }
+            }}
+            style={{ fontSize: '12px', color: 'var(--color-primary)', marginTop: '14px', cursor: 'pointer', fontWeight: 500 }}
+          >
             {cashPct}% Liquid • Deploy now →
           </div>
         </div>
