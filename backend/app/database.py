@@ -36,6 +36,12 @@ else:
     engine_kwargs["max_overflow"] = settings.DATABASE_MAX_OVERFLOW
     engine_kwargs["pool_pre_ping"] = True
 
+if "-pooler" in db_url or "pgbouncer" in db_url:
+    connect_args = engine_kwargs.get("connect_args", {})
+    connect_args["statement_cache_size"] = 0
+    connect_args["prepared_statement_cache_size"] = 0
+    engine_kwargs["connect_args"] = connect_args
+
 engine = create_async_engine(
     db_url,
     **engine_kwargs,
