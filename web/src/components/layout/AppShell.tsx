@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useFinancial } from '../../context/FinancialContext';
 import { QuickTradeModal } from '../trading/QuickTradeModal';
+import { ThemeToggle } from '../common/ThemeToggle';
 
 export type NavigationTab =
   | 'overview'
@@ -84,7 +85,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
                 style={{ cursor: 'pointer' }}
               >
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: '3px' }}>
-                  <span style={{ fontSize: '24px', fontWeight: 900, color: '#FFFFFF', letterSpacing: '-0.03em' }}>Fin</span>
+                  <span style={{ fontSize: '24px', fontWeight: 900, color: 'var(--text-main)', letterSpacing: '-0.03em' }}>Fin</span>
                   <span style={{ fontSize: '24px', fontWeight: 900, color: 'var(--color-action)', letterSpacing: '-0.03em' }}>Ex</span>
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 500, letterSpacing: '0.04em', marginTop: '2px' }}>
@@ -194,15 +195,15 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
               <div>Educational use only. No real-money orders.</div>
             </div>
 
-            {/* Settings Link */}
+            {/* Settings Link & Theme Toggle */}
             <button
               onClick={() => onNavigate('settings')}
               style={{
-                background: currentTab === 'settings' ? '#141414' : 'transparent',
+                background: currentTab === 'settings' ? 'var(--bg-card-hover)' : 'transparent',
                 border: 'none',
                 borderLeft: currentTab === 'settings' ? '2px solid var(--color-action)' : '2px solid transparent',
                 borderRadius: 'var(--radius-xs)',
-                color: currentTab === 'settings' ? '#FFFFFF' : 'var(--text-muted)',
+                color: currentTab === 'settings' ? 'var(--text-main)' : 'var(--text-muted)',
                 fontSize: '13px',
                 fontWeight: 500,
                 cursor: 'pointer',
@@ -216,6 +217,11 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
               <span>⚙</span>
               <span>Settings</span>
             </button>
+
+            {/* Quick theme segmented control in sidebar */}
+            <div style={{ padding: '0 4px', marginTop: '2px' }}>
+              <ThemeToggle variant="segmented" />
+            </div>
           </div>
         </aside>
 
@@ -266,6 +272,9 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
                 </span>
               </div>
 
+              {/* Mobile Theme Toggle */}
+              <ThemeToggle variant="dropdown" />
+
               <button
                 onClick={() => openQuickTrade()}
                 className="btn btn-action"
@@ -303,7 +312,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
             {/* Left: Workspace Identifier */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <div className="pulse-dot" style={{ backgroundColor: 'var(--color-action)', boxShadow: '0 0 6px var(--color-action)' }} />
-              <span style={{ fontSize: '13px', fontWeight: 600, color: '#FFFFFF', letterSpacing: '-0.01em' }}>
+              <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)', letterSpacing: '-0.01em' }}>
                 Shivraj’s workspace
               </span>
             </div>
@@ -395,6 +404,9 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
                 INR
               </span>
 
+              {/* Theme Switcher in Desktop Header */}
+              <ThemeToggle variant="segmented" />
+
               {/* Quick Trade Button */}
               <button
                 onClick={() => openQuickTrade()}
@@ -421,7 +433,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
                   cursor: 'pointer',
                   padding: '3px 6px',
                   borderRadius: 'var(--radius-xs)',
-                  backgroundColor: '#121212',
+                  backgroundColor: 'var(--bg-card)',
                   border: '1px solid var(--border-subtle)',
                 }}
                 onClick={() => onNavigate('settings')}
@@ -442,7 +454,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
                 >
                   S
                 </div>
-                <span style={{ fontSize: '12px', fontWeight: 600, color: '#FFFFFF' }}>Shivraj</span>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-main)' }}>Shivraj</span>
                 <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>↓</span>
               </div>
             </div>

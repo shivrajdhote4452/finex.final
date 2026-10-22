@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useFinancial } from '../context/FinancialContext';
+import { ThemeToggle } from '../components/common/ThemeToggle';
 
 interface SettingsScreenProps {
   onSignOut: () => void;
@@ -9,7 +10,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
   const { virtualCash, resetAccount } = useFinancial();
   const [resetSuccess, setResetSuccess] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [activeSubTab, setActiveSubTab] = useState<'profile' | 'sandbox' | 'compliance'>('profile');
+  const [activeSubTab, setActiveSubTab] = useState<'profile' | 'appearance' | 'sandbox' | 'compliance'>('profile');
 
   const handleReset = () => {
     resetAccount();
@@ -64,6 +65,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {[
               { id: 'profile', label: 'Investor Profile' },
+              { id: 'appearance', label: 'Theme & Appearance' },
               { id: 'sandbox', label: 'Sandbox & Trading Rules' },
               { id: 'compliance', label: 'Consent & Regulatory' },
             ].map((tab) => {
@@ -146,7 +148,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '16px', borderBottom: '1px solid var(--border-subtle)' }}>
                   <div>
-                    <div style={{ fontSize: '14px', fontWeight: 600, color: '#FFFFFF' }}>In-App Market Alerts</div>
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' }}>In-App Market Alerts</div>
                     <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Push notifications for price thresholds & allocation drift</div>
                   </div>
                   <button
@@ -157,7 +159,28 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
                     {notificationsEnabled ? 'Enabled ✓' : 'Disabled'}
                   </button>
                 </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '4px' }}>
+                  <div>
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' }}>Interface Theme</div>
+                    <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Computer theme sync, daylight light mode, or graphite dark mode</div>
+                  </div>
+                  <ThemeToggle variant="segmented" />
+                </div>
               </div>
+            </div>
+          )}
+
+          {activeSubTab === 'appearance' && (
+            <div>
+              <h3 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '8px' }}>
+                Theme & Display Preferences
+              </h3>
+              <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '24px' }}>
+                FinEx adapts smoothly to your environment. Choose between automatic computer system matching, clean daylight light mode, or deep graphite dark mode.
+              </p>
+
+              <ThemeToggle variant="cards" />
             </div>
           )}
 

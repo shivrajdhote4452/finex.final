@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { ThemeProvider } from './context/ThemeContext';
 import { FinancialProvider } from './context/FinancialContext';
 import { AppShell, NavigationTab } from './components/layout/AppShell';
 import { WelcomeScreen } from './pages/WelcomeScreen';
@@ -182,9 +183,11 @@ export const AppContent: React.FC = () => {
 
 export const App: React.FC = () => {
   return (
-    <FinancialProvider>
-      <AppContent />
-    </FinancialProvider>
+    <ThemeProvider>
+      <FinancialProvider>
+        <AppContent />
+      </FinancialProvider>
+    </ThemeProvider>
   );
 };
 

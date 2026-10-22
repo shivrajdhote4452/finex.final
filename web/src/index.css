@@ -4,7 +4,8 @@
    Theme: Pure Deep Black (#000000 Canvas) with Warm Terminal Amber Action (#F29A60)
    ========================================================================== */
 
-:root {
+:root,
+[data-theme="dark"] {
   /* Canvas & Pure Black Surface Layers (Zero Green Tint) */
   --bg-app: #000000;
   --bg-sidebar: #080808;
@@ -13,6 +14,8 @@
   --bg-card-solid: #121212;
   --bg-panel: #161616;
   --bg-input: #0A0A0A;
+  --bg-subtle: #1C1C1C;
+  --bg-dropdown: #141414;
 
   /* Crisp Dividers & Borders */
   --border-subtle: #222222;
@@ -54,6 +57,84 @@
   --text-faint: #52525B;
   --text-inverse: #000000;
 
+  /* Card & Modal Shadows */
+  --card-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+  --card-shadow-hover: 0 4px 16px rgba(0, 0, 0, 0.6), 0 0 10px rgba(242, 154, 96, 0.15);
+  --dropdown-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
+
+  /* Font Families */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+
+  /* Terminal Precision Radii (4px to 6px per Guide) */
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-full: 9999px;
+
+  /* Fast Transitions */
+  --transition-fast: 140ms cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-smooth: 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-theme="light"] {
+  /* Canvas & Clean High-Contrast Light Surface Layers */
+  --bg-app: #F8F9FA;
+  --bg-sidebar: #FFFFFF;
+  --bg-card: #FFFFFF;
+  --bg-card-hover: #F1F3F5;
+  --bg-card-solid: #FFFFFF;
+  --bg-panel: #F1F3F5;
+  --bg-input: #FFFFFF;
+  --bg-subtle: #E9ECEF;
+  --bg-dropdown: #FFFFFF;
+
+  /* Crisp Dividers & Borders */
+  --border-subtle: #E2E8F0;
+  --border-medium: #CBD5E1;
+  --border-active: #D96B27;
+  --border-glow: 0 0 12px rgba(217, 107, 39, 0.2);
+
+  /* Graphite Terminal Semantic Colors (Tuned for Crisp Light Contrast) */
+  --color-action: #D96B27;         /* Deep Warm Amber */
+  --color-action-hover: #BF5617;
+  --color-action-bg: rgba(217, 107, 39, 0.12);
+  --color-action-border: rgba(217, 107, 39, 0.35);
+
+  --color-primary: #D96B27;
+  --color-primary-hover: #BF5617;
+  --color-primary-glow: rgba(217, 107, 39, 0.25);
+
+  --color-positive: #059669;       /* Deep Emerald / Mint */
+  --color-profit: #059669;
+  --color-profit-bg: rgba(5, 150, 105, 0.1);
+  --color-profit-border: rgba(5, 150, 105, 0.25);
+
+  --color-negative: #DC2626;       /* Crisp Crimson Red */
+  --color-loss: #DC2626;
+  --color-loss-bg: rgba(220, 38, 38, 0.1);
+  --color-loss-border: rgba(220, 38, 38, 0.25);
+
+  --color-virtual: #D96B27;
+  --color-virtual-bg: rgba(217, 107, 39, 0.12);
+  --color-virtual-border: rgba(217, 107, 39, 0.3);
+
+  --color-accent-cyan: #059669;
+  --color-accent-cyan-glow: rgba(5, 150, 105, 0.2);
+
+  /* Typography Colors */
+  --text-main: #0F172A;
+  --text-primary: #1E293B;
+  --text-muted: #64748B;
+  --text-faint: #94A3B8;
+  --text-inverse: #FFFFFF;
+
+  /* Card & Modal Shadows */
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 4px 12px rgba(0, 0, 0, 0.03);
+  --card-shadow-hover: 0 4px 16px rgba(0, 0, 0, 0.08), 0 0 10px rgba(217, 107, 39, 0.12);
+  --dropdown-shadow: 0 10px 25px rgba(0, 0, 0, 0.1), 0 4px 10px rgba(0, 0, 0, 0.04);
+
   /* Font Families */
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
@@ -94,8 +175,8 @@ body {
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
-  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+  box-shadow: var(--card-shadow);
+  transition: border-color var(--transition-fast), background-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .glass-card:hover {
@@ -109,7 +190,7 @@ body {
 .glass-card-interactive:hover {
   border-color: var(--color-action);
   background-color: var(--bg-card-hover);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6), 0 0 10px rgba(242, 154, 96, 0.15);
+  box-shadow: var(--card-shadow-hover);
 }
 
 /* Tabular Numerals (Strict Monospace Alignment) */
@@ -1129,4 +1210,100 @@ input:focus, select:focus, textarea:focus {
     overflow-y: auto !important;
   }
 }
+
+/* ==========================================================================
+   THEME ADAPTATION SYSTEM (LIGHT & DARK DUAL ENGINE)
+   ========================================================================== */
+
+/* Smooth Theme Transitions */
+body,
+.app-sidebar,
+.app-top-header,
+.app-mobile-header,
+.glass-card,
+.btn-secondary {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+/* Secondary Button Light Theme */
+[data-theme="light"] .btn-secondary {
+  background: #F1F5F9;
+  color: var(--text-primary);
+  border: 1px solid var(--border-medium);
+}
+
+[data-theme="light"] .btn-secondary:hover {
+  background: #E2E8F0;
+  border-color: #94A3B8;
+  color: var(--text-main);
+}
+
+/* Neutral Badge Light Theme */
+[data-theme="light"] .badge-neutral {
+  background: #F1F5F9;
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+}
+
+/* Headings in Light Mode */
+[data-theme="light"] h1,
+[data-theme="light"] h2,
+[data-theme="light"] h3,
+[data-theme="light"] h4,
+[data-theme="light"] h5,
+[data-theme="light"] h6 {
+  color: var(--text-main);
+}
+
+/* Inputs & Form Elements in Light Mode */
+[data-theme="light"] input,
+[data-theme="light"] select,
+[data-theme="light"] textarea {
+  color: var(--text-main) !important;
+  background-color: var(--bg-input) !important;
+}
+
+[data-theme="light"] select option {
+  background-color: #FFFFFF !important;
+  color: #1E293B !important;
+}
+
+/* Modal and Dropdown surfaces in Light Mode */
+[data-theme="light"] .modal-backdrop {
+  background: rgba(15, 23, 42, 0.45);
+}
+
+/* Dynamic text color mapping for legacy white inline texts */
+[data-theme="light"] [style*="color: rgb(255, 255, 255)"]:not(.badge):not(.btn):not(.btn *):not(.badge *):not([style*="background"]),
+[data-theme="light"] [style*="color: #FFFFFF"]:not(.badge):not(.btn):not(.btn *):not(.badge *):not([style*="background"]),
+[data-theme="light"] [style*="color: #ffffff"]:not(.badge):not(.btn):not(.btn *):not(.badge *):not([style*="background"]) {
+  color: var(--text-main) !important;
+}
+
+/* Dynamic background mapping for dark cards in Light Mode */
+[data-theme="light"] [style*="background-color: #111111"],
+[data-theme="light"] [style*="background-color: rgb(17, 17, 17)"],
+[data-theme="light"] [style*="background-color: #121212"],
+[data-theme="light"] [style*="background-color: #181818"],
+[data-theme="light"] [style*="background: #181818"],
+[data-theme="light"] [style*="background: #111111"],
+[data-theme="light"] [style*="background-color: #101010"],
+[data-theme="light"] [style*="background: #101010"] {
+  background-color: var(--bg-card) !important;
+}
+
+[data-theme="light"] [style*="background-color: #0A0A0A"],
+[data-theme="light"] [style*="background-color: #000000"],
+[data-theme="light"] [style*="background: #000000"],
+[data-theme="light"] [style*="background-color: #080808"] {
+  background-color: var(--bg-app) !important;
+}
+
+/* Theme toggle label responsiveness */
+@media (max-width: 768px) {
+  .theme-toggle-label {
+    display: none;
+  }
+}
+
 
