@@ -10,6 +10,7 @@ Exposes:
 - POST /ai/feedback: Submit user rating and qualitative feedback
 """
 
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
@@ -18,12 +19,15 @@ from backend.app.core.envelope import create_response_envelope
 from backend.app.core.errors import ForbiddenException, NotFoundException
 from backend.app.database import get_db
 from backend.app.domain.ai_orchestration import AIOrchestrator
+from backend.app.models.core import User
 from backend.app.models.rag import AIConversation, AIFeedback, AIMessage
 from backend.app.routers.auth import get_current_user_id
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ai", tags=["AI Financial Assistant"])
 orchestrator = AIOrchestrator()
@@ -105,7 +109,8 @@ async def list_conversations(
     # If no conversation exists yet, bootstrap one default conversation
     if not user_convs and offset == 0:
         default_id = "conv-welcome-001"
-        now_str = datetime.now(timezone.utc).isoformat()
+        now_dt = datetime.now(timezone.utc)
+        now_str = now_dt.isoformat()
         default_c = {
             "id": default_id,
             "user_id": user_id,
@@ -130,6 +135,29 @@ async def list_conversations(
                 "correlation_id": cid or "init",
             }
         ]
+
+        # Persist default conversation into PostgreSQL
+        try:
+            from backend.app.domain.user_store import user_store
+            user_res = await db.execute(select(User).where(User.id == user_id))
+            if not user_res.scalar_one_or_none():
+                await user_store.ensure_seed_users_db(db)
+
+            c_check = await db.execute(select(AIConversation).where(AIConversation.id == default_id))
+            if not c_check.scalar_one_or_none():
+                db_c = AIConversation(
+                    id=default_id,
+                    user_id=user_id,
+                    title="SEBI Guidelines & Asset Allocation",
+                    created_at=now_dt,
+                    updated_at=now_dt,
+                    is_deleted=False,
+                )
+                db.add(db_c)
+                await db.commit()
+        except Exception as exc:
+            logger.warning(f"Could not persist default conversation to DB: {exc}")
+            await db.rollback()
 
     paginated = user_convs[offset : offset + limit]
 
@@ -167,6 +195,11 @@ async def create_conversation(
     }
 
     try:
+        from backend.app.domain.user_store import user_store
+        user_res = await db.execute(select(User).where(User.id == user_id))
+        if not user_res.scalar_one_or_none():
+            await user_store.ensure_seed_users_db(db)
+
         db_conv = AIConversation(
             id=conv_id,
             user_id=user_id,
@@ -177,8 +210,9 @@ async def create_conversation(
         )
         db.add(db_conv)
         await db.commit()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.error(f"Failed to persist conversation {conv_id} to DB: {exc}")
+        await db.rollback()
 
     _CONVERSATION_STORE[conv_id] = conv_data
     _MESSAGE_STORE[conv_id] = []
@@ -279,11 +313,31 @@ async def post_message_to_conversation(
         db_conv = conv_res.scalars().first()
         if db_conv and db_conv.user_id != user_id:
             raise ForbiddenException(message="Forbidden: You do not own this conversation.")
-        if not db_conv and conversation_id not in _CONVERSATION_STORE:
-            raise NotFoundException(message="Conversation not found.")
+        if not db_conv:
+            conv = _CONVERSATION_STORE.get(conversation_id)
+            if conv and conv.get("user_id") != user_id:
+                raise ForbiddenException(message="Forbidden: You do not own this conversation.")
+            if not conv and conversation_id != "conv-welcome-001":
+                raise NotFoundException(message="Conversation not found.")
+            # Ensure user exists before inserting conversation
+            from backend.app.domain.user_store import user_store
+            user_chk = await db.execute(select(User).where(User.id == user_id))
+            if not user_chk.scalar_one_or_none():
+                await user_store.ensure_seed_users_db(db)
+            db_conv = AIConversation(
+                id=conversation_id,
+                user_id=user_id,
+                title=conv.get("title", "Financial Research Session") if conv else "Financial Research Session",
+                created_at=now,
+                updated_at=now,
+                is_deleted=False,
+            )
+            db.add(db_conv)
+            await db.flush()
     except (ForbiddenException, NotFoundException):
         raise
-    except Exception:
+    except Exception as exc:
+        logger.warning(f"Error validating conversation in DB: {exc}")
         conv = _CONVERSATION_STORE.get(conversation_id)
         if not conv or conv.get("is_deleted", False):
             raise NotFoundException(message="Conversation not found.")
@@ -335,6 +389,26 @@ async def post_message_to_conversation(
 
     # Persist both to database
     try:
+        from backend.app.domain.user_store import user_store
+        user_chk = await db.execute(select(User).where(User.id == user_id))
+        if not user_chk.scalar_one_or_none():
+            await user_store.ensure_seed_users_db(db)
+
+        if not db_conv:
+            conv_res = await db.execute(select(AIConversation).where(AIConversation.id == conversation_id))
+            db_conv = conv_res.scalars().first()
+            if not db_conv:
+                db_conv = AIConversation(
+                    id=conversation_id,
+                    user_id=user_id,
+                    title="Financial Research Session",
+                    created_at=now,
+                    updated_at=asst_now,
+                    is_deleted=False,
+                )
+                db.add(db_conv)
+                await db.flush()
+
         db_user_msg = AIMessage(
             id=user_msg_id,
             conversation_id=conversation_id,
@@ -363,8 +437,10 @@ async def post_message_to_conversation(
         if db_conv:
             db_conv.updated_at = asst_now
         await db.commit()
-    except Exception:
-        pass
+        logger.info(f"Persisted AI messages for conversation {conversation_id} to database.")
+    except Exception as exc:
+        logger.error(f"Failed to persist AI messages to DB: {exc}", exc_info=True)
+        await db.rollback()
 
     return create_response_envelope(data={"user_message": user_msg, "assistant_message": asst_msg}, correlation_id=cid)
 
