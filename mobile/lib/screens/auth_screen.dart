@@ -25,7 +25,7 @@ class _MobileAuthScreenState extends State<MobileAuthScreen> {
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: ['email', 'openid'],
     clientId: _googleServerClientId.isNotEmpty ? _googleServerClientId : null,
-    serverClientId: _googleServerClientId.isNotEmpty ? _googleServerClientId : null,
+    serverClientId: (!kIsWeb && _googleServerClientId.isNotEmpty) ? _googleServerClientId : null,
   );
 
   Future<void> _handleDevLogin() async {
