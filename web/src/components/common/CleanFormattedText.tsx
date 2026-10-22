@@ -17,12 +17,37 @@ interface CleanFormattedTextProps {
 export const renderInlineText = (text: string): React.ReactNode => {
   if (!text) return null;
 
-  // Pattern matches: inline code, bold-italic, bold, italic
-  const tokenRegex = /(`[^`]+`|\*\*\*[^*]+\*\*\*|\*\*[^*]+\*\*|\*[^*]+\*|__[^_]+__|_[^_]+_)/g;
+  // Pattern matches:
+  // 1. Markdown link: [label](url)
+  // 2. Inline code: `code`
+  // 3. Bold italic: ***text***
+  // 4. Bold: **text** or __text__
+  // 5. Italic: *text* or _text_
+  const tokenRegex = /(\[[^\]]+\]\([^)]+\)|`[^`]+`|\*\*\*[^*]+\*\*\*|\*\*[^*]+\*\*|__[^_]+__|\*[^*]+\*|_[^_]+_)/g;
   const parts = text.split(tokenRegex);
 
   return parts.map((part, i) => {
     if (!part) return null;
+
+    // Markdown Link: [label](url)
+    const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+    if (linkMatch) {
+      return (
+        <a
+          key={i}
+          href={linkMatch[2]}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            color: '#F29A60',
+            textDecoration: 'underline',
+            textUnderlineOffset: '2px',
+          }}
+        >
+          {linkMatch[1]}
+        </a>
+      );
+    }
 
     // Inline code: `code`
     if (part.startsWith('`') && part.endsWith('`') && part.length >= 2) {
@@ -76,7 +101,9 @@ export const renderInlineText = (text: string): React.ReactNode => {
       );
     }
 
-    return part;
+    // Plain text: remove any stray unclosed markdown asterisks/underscores for visual cleanliness
+    const cleaned = part.replace(/\*\*/g, '').replace(/__/g, '');
+    return cleaned;
   });
 };
 
@@ -117,7 +144,6 @@ export const CleanFormattedText: React.FC<CleanFormattedTextProps> = ({
 
       if (tableLines.length >= 1) {
         const parseRow = (line: string): string[] => {
-          // Split by '|', skip leading/trailing empty elements
           return line
             .split('|')
             .slice(1, -1)
@@ -141,8 +167,8 @@ export const CleanFormattedText: React.FC<CleanFormattedTextProps> = ({
       }
     }
 
-    // Horizontal Rule: --- or *** or ___
-    if (/^[-*_]{3,}$/.test(trimmed)) {
+    // Horizontal Rule: --- or *** or ___ or - - -
+    if (/^([-*_]\s*){3,}$/.test(trimmed)) {
       blocks.push({ type: 'divider' });
       i++;
       continue;
@@ -170,61 +196,89 @@ export const CleanFormattedText: React.FC<CleanFormattedTextProps> = ({
       continue;
     }
 
-    // Major Step Heading: e.g. "2. Scan the Market for Potential Catalysts" or "3. Use a Two-Layer Filter..."
-    const stepMatch = trimmed.match(/^(\d+)\.\s+(\*\*|)(.+?)(\*\*|)$/);
-    if (stepMatch && (stepMatch[3].length < 80 || trimmed.length < 80) && !trimmed.endsWith('.')) {
+    // Standalone Bold Section Heading: e.g. "**How to Approach What Stocks Might Be Interesting Today?**"
+    const boldHeaderMatch = trimmed.match(/^\*\*([^*]+)\*\*$/);
+    if (boldHeaderMatch && boldHeaderMatch[1].length < 100 && !trimmed.endsWith('.')) {
       blocks.push({
-        type: 'step-heading',
-        number: stepMatch[1],
-        title: stepMatch[3].replace(/\*\*/g, ''),
+        type: 'heading',
+        level: 3,
+        text: boldHeaderMatch[1],
       });
       i++;
       continue;
     }
 
-    // Callout / Highlighted Example Box: e.g. "**Example:**", "> ...", "Note:", "Important:"
-    if (
-      trimmed.startsWith('**Example:**') ||
-      trimmed.startsWith('**Note:**') ||
-      trimmed.startsWith('**Key Takeaway:**') ||
-      trimmed.startsWith('**Important:**') ||
-      trimmed.startsWith('Example:') ||
-      trimmed.startsWith('> ')
-    ) {
-      let tag = 'Example';
-      let content = trimmed;
+    // Callout / Highlighted Example Box: e.g. "**Important Note:**", "**Warning:**", "> ...", "Note:", "Important:"
+    const calloutHeaderMatch =
+      trimmed.match(/^(\*\*|>|\b)(Important Note|Important|Note|Warning|Disclaimer|Risk Disclosure|Caution|Notice|Tip|Key Takeaway|Takeaway|Summary|Example):?(\*\*|)?\s*(.*)$/i) ||
+      (trimmed.startsWith('> ') ? [trimmed, '', 'Note', '', trimmed.replace(/^>\s*/, '')] : null);
 
-      if (trimmed.startsWith('> ')) {
-        tag = 'Note';
-        content = trimmed.replace(/^>\s*/, '');
-      } else {
-        const colonIdx = trimmed.indexOf(':');
-        if (colonIdx !== -1) {
-          tag = trimmed.slice(0, colonIdx).replace(/\*\*/g, '').trim();
-          content = trimmed.slice(colonIdx + 1).trim();
+    if (calloutHeaderMatch) {
+      const tag = (calloutHeaderMatch[2] || 'Note').replace(/\*\*/g, '').trim();
+      let content = (calloutHeaderMatch[4] || '').trim();
+
+      // If callout title was on its own line (e.g. "**Important Note:**\n\nI'm not permitted..."), grab following paragraph lines
+      if (!content) {
+        let nextIdx = i + 1;
+        while (nextIdx < lines.length && !lines[nextIdx].trim()) {
+          nextIdx++;
+        }
+        if (
+          nextIdx < lines.length &&
+          !lines[nextIdx].trim().startsWith('#') &&
+          !lines[nextIdx].trim().startsWith('|') &&
+          !lines[nextIdx].trim().startsWith('-') &&
+          !lines[nextIdx].trim().startsWith('*') &&
+          !lines[nextIdx].trim().startsWith('•') &&
+          !/^\d+[\.)]/.test(lines[nextIdx].trim()) &&
+          !/^[-*_]{3,}$/.test(lines[nextIdx].trim())
+        ) {
+          content = lines[nextIdx].trim();
+          i = nextIdx;
         }
       }
 
-      blocks.push({ type: 'callout', tag, content });
-      i++;
-      continue;
-    }
-
-    // Unordered Bullet List: - item or * item
-    if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
-      blocks.push({ type: 'bullet', text: trimmed.replace(/^[-*]\s+/, '') });
-      i++;
-      continue;
-    }
-
-    // Regular Numbered List: 1. item
-    const numListMatch = trimmed.match(/^(\d+)\.\s+(.+)$/);
-    if (numListMatch) {
       blocks.push({
-        type: 'numbered-list',
-        number: numListMatch[1],
-        text: numListMatch[2],
+        type: 'callout',
+        tag: tag.toUpperCase(),
+        content: content || tag,
       });
+      i++;
+      continue;
+    }
+
+    // Numbered List / Major Step Heading: e.g. "1. **Start with a Market-wide View**" or "1. Simple item"
+    const numMatch = trimmed.match(/^(\d+)[\.)]\s+(.*)$/);
+    if (numMatch) {
+      const num = numMatch[1];
+      const rest = numMatch[2].trim();
+
+      // Check if this is a major section title (e.g., "1. **Start with a Market-wide View**" or short title without ending punctuation)
+      const isHeaderLike =
+        (rest.startsWith('**') && rest.endsWith('**')) ||
+        (rest.length < 80 && !rest.endsWith('.') && !rest.includes(': '));
+
+      if (isHeaderLike) {
+        blocks.push({
+          type: 'step-heading',
+          number: num,
+          title: rest.replace(/^\*\*|\*\*$/g, '').replace(/\*\*/g, ''),
+        });
+      } else {
+        blocks.push({
+          type: 'numbered-list',
+          number: num,
+          text: rest,
+        });
+      }
+      i++;
+      continue;
+    }
+
+    // Unordered Bullet List: • item, - item, * item, + item, · item, ▪ item
+    const bulletMatch = trimmed.match(/^([•\-\*\+·▪▫])\s+(.*)$/);
+    if (bulletMatch) {
+      blocks.push({ type: 'bullet', text: bulletMatch[2] });
       i++;
       continue;
     }
@@ -418,9 +472,23 @@ export const CleanFormattedText: React.FC<CleanFormattedTextProps> = ({
                       color: '#F29A60',
                       textTransform: 'uppercase',
                       letterSpacing: '0.05em',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px',
                     }}
                   >
-                    💡 {block.tag}
+                    <span>
+                      {block.tag.includes('WARNING') || block.tag.includes('CAUTION') || block.tag.includes('RISK')
+                        ? '⚠️'
+                        : block.tag.includes('NOTE') || block.tag.includes('IMPORTANT') || block.tag.includes('NOTICE')
+                        ? '📌'
+                        : block.tag.includes('TIP') || block.tag.includes('INSIGHT')
+                        ? '💡'
+                        : block.tag.includes('SUMMARY') || block.tag.includes('TAKEAWAY')
+                        ? '🎯'
+                        : '💡'}
+                    </span>
+                    <span>{block.tag}</span>
                   </div>
                 )}
                 <div style={{ fontSize: compact ? '12px' : '13px', color: '#E5E5EA', lineHeight: '1.5' }}>
