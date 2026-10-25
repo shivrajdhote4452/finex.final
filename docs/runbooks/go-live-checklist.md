@@ -98,6 +98,7 @@ Angel One JWT tokens expire every 24 hours. The application handles authenticati
 - [x] **ADR Scope Decisions Closed (PR #19):** ADR-006 (Flutter mobile packaging) and ADR-007 (Databricks Delta Lake) formally marked `DECIDED (DEFER)` to post-demo, guaranteeing 100% focus on web terminal stability.
 - [x] **Synthesizer Option B Implemented (PR #19):** Cached-first fallback, demo simulation flag gate, full-width watermark banner, and honest empty state.
 - [x] **Demo-Blocker Issues Pruned (PR #21):** Pruned to 3 genuinely open issues (branch protection, cached-mode rehearsal, clean-machine verification), 2 done, 1 stale. Split issue files prepared in `docs/issues/`.
+- [x] **Clean-Machine Rehearsal Verified (CORR-9):** Cloned into fresh isolated directory from docs alone, installed strictly from `backend/requirements.lock`, migrated fresh database to head (revisions 001–007), verified 62.33% coverage, passed 10/10 AI tests and 30/30 prompt evals, built web bundle in 2.61s, and confirmed all HTTP and WebSocket endpoints ([`docs/clean-machine-rehearsal-report.md`](../clean-machine-rehearsal-report.md)).
 - [x] **CI Pipeline Fully Green (PR #18):** `pytest -m "not live"` with `--cov-fail-under=60` baseline floor. All 168 backend tests, 10 AI tests, and 30 AI evaluation cases passing.
 - [x] **Dependencies Pinned:** Locked dependencies in `backend/requirements.lock`.
 
