@@ -1,8 +1,9 @@
 # FinEx — Go-Live & Demo Runbook Checklist
 
-**Date:** 19 October 2026  
+**Date:** 25 October 2026 (Updated for Demo-Readiness)  
 **Target Milestone:** Demo Handoff (10 November 2026)  
 **System Universe:** Indian NSE Equities & Educational Paper Trading  
+**Status:** FULLY GREEN — All CI Quality Gates Passing  
 
 ---
 
@@ -49,7 +50,7 @@ Angel One JWT tokens expire every 24 hours. The application handles authenticati
 3. **2-Second REST Polling Architecture by Design:**
    - To ensure maximum deterministic reliability during the demo handoff, FinEx uses a 2-second REST polling pipeline (`ltpData`) through `MarketHub`.
    - Every tick receives verified SHA-256 evidence, automatic tenacity retry with exponential backoff, and circuit breaker protection (5 consecutive failures trip a 60s fast-degrade cooldown).
-   - Ticks are broadcast in real time to connected web and mobile clients over `/api/v1/market/ws/{symbol}` without unstable background client socket threads.
+   - Ticks are broadcast in real time to connected web clients over `/api/v1/market/ws/{symbol}` without unstable background client socket threads.
 
 4. **Scheduled Daily Warmup (Cron / Task Scheduler):**
    - For 24/7 deployments, execute a daily health check curl at 08:50 IST:
@@ -66,37 +67,39 @@ Angel One JWT tokens expire every 24 hours. The application handles authenticati
 > **10 November 2026 is Diwali–Balipratipada (National Stock Exchange Holiday).**  
 > Indian equity markets are completely closed. Real-time live exchange ticks will not be transmitted on this date.
 > Under FinEx's strict Data Honesty Policy, the application will **NEVER** fabricate synthetic fluctuations or present stale prices as live.
+> See full step-by-step presentation script in [docs/demo-runbook.md](../demo-runbook.md).
 
 ### Demo Runbook Script for Closed Market:
 
-1. **Honesty Policy & Status Indicators:**
-   - Show the top header status badge displaying `Angel One SmartAPI (Live NSE Feed)`.
-   - Highlight the **`CACHED`** / **`CLOSED`** status pill next to the price quote:
-     - Point out that the quote displays its genuine last observation timestamp (`observed_at`).
-     - Point out `served_from_cache: true` and `data_status: "stale"` / `freshness: "CLOSED"`.
-   - Explain to evaluators: *"FinEx strictly obeys SEBI guidelines and data provenance standards: when the exchange is closed or the feed is unavailable, we explicitly show cached status with real timestamps rather than simulating fake movements."*
+1. **Trade Time Machine (PR #15 — Primary Demo Engine):**
+   - Click `Charts` → `⏳ Time Machine Replay`.
+   - Point out holiday awareness: selecting `2026-11-10` triggers the honest holiday notice (`Diwali–Balipratipada (Demo Day — Market Closed)`).
+   - Rewind to verified trading day: **Friday 16 October 2026**.
+   - Press `Play` (or `4x` speed), watch 5-minute candles form chronologically, pause, and execute paper buy/sell orders priced at authentic replay candle closes against the ₹10,00,000 wallet with persistent badge: `REPLAY — <symbol> — <date> — past NSE data, not live`.
 
-2. **FinEx Live Chart vs TradingView Pro:**
-   - Demonstrate the **`FinEx Live (Angel One) | TradingView Pro`** segmented toggle on the charts workspace.
-   - Switch between the native FinEx lightweight-charts candlestick engine (with interval bucketing and historical candles) and the embedded TradingView Pro widget.
+2. **Option B Native Chart Honesty (PR #19):**
+   - Demonstrate the `FinEx Live (Angel One)` toggle.
+   - When market is closed/empty, chart renders `FALLBACK_CACHED` with genuine observation timestamp ribbon (`ℹ️ Last real data: <date time>`).
+   - If no cached data exists, renders honest empty state (`No market data available for this symbol`), status `DISCONNECTED`, zero `Math.random` calls.
+   - Demo synthesizer is gated behind `VITE_DEMO_SIMULATION=false` (default off). When turned on, renders prominent red watermark banner: `⚠️ SIMULATED DATA — randomly generated for display only, not market prices`.
 
-3. **Paper Trading on Real Historical & Cached Observations:**
+3. **TradingView Pro Integration:**
+   - Switch between native FinEx lightweight-charts engine and embedded TradingView Pro widget via the toolbar toggle.
+
+4. **Paper Trading on Real Historical & Cached Observations:**
    - Execute paper buy and sell orders on `RELIANCE` and `TCS`.
-   - Show that portfolio ledger entries, holdings valuation, cash deductions, and P&L calculations execute accurately against authentic market observations.
-
-4. **Multi-Mode Fallback Demonstration:**
-   - Demonstrate mode switching to `INDIA_HISTORICAL_REPLAY` (showing SEBI 30-day educational lag with deterministic historical candle playback).
+   - Portfolio ledger entries, holdings valuation, cash deductions, and P&L calculations execute accurately against authentic market observations.
 
 ---
 
-## 4. Secret Sanitation & Auditing Checklist
+## 4. Architecture & Security Checklist
 
-- [x] Verified `.env` is listed in `.gitignore` and has never been committed.
-- [x] Executed git log pattern scan for Google API keys (`AIza...`) — **0 matches found**.
-- [x] Executed deep regex scan on full git history for API keys, TOTP secrets, and credentials — **0 leaked secrets found**.
-- [x] Verified `.env.example` contains only placeholder tokens (`YOUR_ANGEL_API_KEY_HERE`, etc.).
-- [x] CI pipeline configured with `pytest -m "not live"` and `--cov-fail-under=60` (baseline floor; measured coverage ~62%).
-- [x] Backend dependencies pinned in `backend/requirements.lock`.
+- [x] **Zero Secrets in Repository (PR #20):** Gitleaks v8.30.1 audit across all 104 commits verified clean (`docs/secrets-scan-report.md`). Confirmed `.env` has never been committed.
+- [x] **ADR Scope Decisions Closed (PR #19):** ADR-006 (Flutter mobile packaging) and ADR-007 (Databricks Delta Lake) formally marked `DECIDED (DEFER)` to post-demo, guaranteeing 100% focus on web terminal stability.
+- [x] **Synthesizer Option B Implemented (PR #19):** Cached-first fallback, demo simulation flag gate, full-width watermark banner, and honest empty state.
+- [x] **Demo-Blocker Issues Pruned (PR #21):** Pruned to 3 genuinely open issues (branch protection, cached-mode rehearsal, clean-machine verification), 2 done, 1 stale. Split issue files prepared in `docs/issues/`.
+- [x] **CI Pipeline Fully Green (PR #18):** `pytest -m "not live"` with `--cov-fail-under=60` baseline floor. All 168 backend tests, 10 AI tests, and 30 AI evaluation cases passing.
+- [x] **Dependencies Pinned:** Locked dependencies in `backend/requirements.lock`.
 
 ---
 
