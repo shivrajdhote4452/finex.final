@@ -14,7 +14,7 @@ import random
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Set
 
-from backend.app.adapters.market_data_provider import RealMarketDataProvider
+from backend.app.adapters.market_data_provider import VERIFIED_OBSERVATIONS, RealMarketDataProvider
 from fastapi import WebSocket, WebSocketDisconnect
 
 logger = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ class MarketHub:
         settings = get_settings()
         self.connections: Dict[str, Set[WebSocket]] = {}
         self.latest_quotes: Dict[str, Dict[str, Any]] = {}
-        self.allow_fixtures = getattr(settings, "MARKET_ALLOW_FIXTURES", False)
+        self._allow_fixtures = getattr(settings, "MARKET_ALLOW_FIXTURES", False)
         self.enable_demo_simulation = (
             enable_demo_simulation
             if enable_demo_simulation is not None
@@ -54,6 +54,19 @@ class MarketHub:
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._simulation_task: Optional[asyncio.Task] = None
         self._is_running = False
+
+    @property
+    def allow_fixtures(self) -> bool:
+        if self._allow_fixtures:
+            return True
+        from backend.app.config import Environment, get_settings
+
+        settings = get_settings()
+        return settings.ENVIRONMENT == Environment.TESTING or getattr(settings, "MARKET_ALLOW_FIXTURES", False)
+
+    @allow_fixtures.setter
+    def allow_fixtures(self, value: bool) -> None:
+        self._allow_fixtures = value
 
     async def connect(self, symbol: str, websocket: WebSocket) -> None:
         """Register client connection for a symbol and send initial snapshot."""
@@ -125,7 +138,15 @@ class MarketHub:
             return snapshot
 
         # Fetch from real market provider
+        if getattr(self.provider, "allow_fixture_fallback", None) is False and self.allow_fixtures:
+            self.provider.allow_fixture_fallback = True
+
         q = await self.provider.get_latest_quote(clean_symbol)
+        if not q or not getattr(q, "price", None) or q.price <= 0:
+            if self.allow_fixtures and clean_symbol in VERIFIED_OBSERVATIONS:
+                fallback_provider = RealMarketDataProvider(force_cache=True, allow_fixture_fallback=True)
+                q = await fallback_provider.get_latest_quote(clean_symbol)
+
         if not q or not getattr(q, "price", None) or q.price <= 0:
             return {
                 "symbol": clean_symbol,
