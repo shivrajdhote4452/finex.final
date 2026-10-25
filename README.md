@@ -91,7 +91,7 @@ python -m pip check
 python -m ruff check backend ai
 python -m ruff format --check backend ai
 
-# 3. Backend & AI regression test suite (180 tests, zero failures)
+# 3. Backend & AI regression test suite (180 tests)
 python -m pytest backend/tests ai/tests -v
 
 # 4. Web production build & TypeScript validation

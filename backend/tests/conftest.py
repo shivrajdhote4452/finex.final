@@ -12,7 +12,13 @@ from backend.app.routers.auth import create_access_token
 
 
 @pytest.fixture(autouse=True)
-def reset_settings_cache():
+def configure_test_environment(monkeypatch):
+    """Ensure consistent isolated test environment without external dependencies."""
+    monkeypatch.setenv("ENVIRONMENT", "testing")
+    monkeypatch.setenv("MARKET_ALLOW_FIXTURES", "true")
+    monkeypatch.setenv("GEMINI_API_KEY", "")
+    monkeypatch.setenv("GROQ_API_KEY", "")
+    monkeypatch.setenv("LLM_PROVIDER", "offline")
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()

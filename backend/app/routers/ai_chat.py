@@ -139,6 +139,7 @@ async def list_conversations(
         # Persist default conversation into PostgreSQL
         try:
             from backend.app.domain.user_store import user_store
+
             user_res = await db.execute(select(User).where(User.id == user_id))
             if not user_res.scalar_one_or_none():
                 await user_store.ensure_seed_users_db(db)
@@ -196,6 +197,7 @@ async def create_conversation(
 
     try:
         from backend.app.domain.user_store import user_store
+
         user_res = await db.execute(select(User).where(User.id == user_id))
         if not user_res.scalar_one_or_none():
             await user_store.ensure_seed_users_db(db)
@@ -321,6 +323,7 @@ async def post_message_to_conversation(
                 raise NotFoundException(message="Conversation not found.")
             # Ensure user exists before inserting conversation
             from backend.app.domain.user_store import user_store
+
             user_chk = await db.execute(select(User).where(User.id == user_id))
             if not user_chk.scalar_one_or_none():
                 await user_store.ensure_seed_users_db(db)
@@ -390,6 +393,7 @@ async def post_message_to_conversation(
     # Persist both to database
     try:
         from backend.app.domain.user_store import user_store
+
         user_chk = await db.execute(select(User).where(User.id == user_id))
         if not user_chk.scalar_one_or_none():
             await user_store.ensure_seed_users_db(db)
