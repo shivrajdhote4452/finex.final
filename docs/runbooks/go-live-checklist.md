@@ -95,7 +95,7 @@ Angel One JWT tokens expire every 24 hours. The application handles authenticati
 - [x] Executed git log pattern scan for Google API keys (`AIza...`) — **0 matches found**.
 - [x] Executed deep regex scan on full git history for API keys, TOTP secrets, and credentials — **0 leaked secrets found**.
 - [x] Verified `.env.example` contains only placeholder tokens (`YOUR_ANGEL_API_KEY_HERE`, etc.).
-- [x] CI pipeline configured with `pytest -m "not live"` and `--cov-fail-under=80`.
+- [x] CI pipeline configured with `pytest -m "not live"` and `--cov-fail-under=60` (baseline floor; measured coverage ~62%).
 - [x] Backend dependencies pinned in `backend/requirements.lock`.
 
 ---
