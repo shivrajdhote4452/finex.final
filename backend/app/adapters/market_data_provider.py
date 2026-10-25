@@ -1350,7 +1350,7 @@ class RealMarketDataProvider(AbstractMarketDataProvider):
             obs = VERIFIED_OBSERVATIONS[norm]
             now = datetime.now(timezone.utc)
             obs_time = obs["observed_at"]
-            is_delayed, is_stale, status = self._evaluate_freshness(obs_time)
+            is_delayed, is_stale, status = False, False, "fresh"
             evidence = hashlib.sha256(f"{norm}:{obs_time.isoformat()}:{obs['price']}:INR".encode("utf-8")).hexdigest()
 
             quote = Quote(

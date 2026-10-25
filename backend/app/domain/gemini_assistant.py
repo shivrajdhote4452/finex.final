@@ -204,12 +204,27 @@ class AssistantMessageResponse(BaseModel):
 
 class GeminiInvestmentAssistant:
     def __init__(self, engine: Optional[PaperTradingEngine] = None, provider: Optional[RealMarketDataProvider] = None):
-        self.settings = get_settings()
-        self.provider = provider or RealMarketDataProvider(
+        self._provider = provider
+        self._engine = engine
+        self._verified_working = False
+
+    @property
+    def settings(self):
+        return get_settings()
+
+    @property
+    def provider(self) -> RealMarketDataProvider:
+        if self._provider is not None:
+            return self._provider
+        return RealMarketDataProvider(
             force_cache=False, allow_fixture_fallback=getattr(self.settings, "MARKET_ALLOW_FIXTURES", False)
         )
-        self.engine = engine or PaperTradingEngine(market_provider=self.provider)
-        self._verified_working = False
+
+    @property
+    def engine(self) -> PaperTradingEngine:
+        if self._engine is not None:
+            return self._engine
+        return PaperTradingEngine(market_provider=self.provider)
 
     def is_groq_api_ready(self) -> bool:
         """Verify if a valid GROQ_API_KEY is configured."""

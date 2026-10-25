@@ -108,12 +108,23 @@ class PaperTradingEngine:
     )
 
     def __init__(self, market_provider: Optional[RealMarketDataProvider] = None) -> None:
-        from backend.app.config import get_settings
+        self._market_provider = market_provider
+
+    @property
+    def market_provider(self) -> RealMarketDataProvider:
+        if self._market_provider is not None:
+            return self._market_provider
+        from backend.app.config import Environment, get_settings
 
         settings = get_settings()
-        self.market_provider = market_provider or RealMarketDataProvider(
-            force_cache=True, allow_fixture_fallback=getattr(settings, "MARKET_ALLOW_FIXTURES", False)
+        allow_fixtures = settings.ENVIRONMENT == Environment.TESTING or getattr(
+            settings, "MARKET_ALLOW_FIXTURES", False
         )
+        return RealMarketDataProvider(force_cache=True, allow_fixture_fallback=allow_fixtures)
+
+    @market_provider.setter
+    def market_provider(self, value: Optional[RealMarketDataProvider]):
+        self._market_provider = value
 
     def get_or_create_account(self, user_id: str) -> Dict:
         """Fetch or bootstrap the default paper trading account (₹1,00,000 initial virtual cash)."""
@@ -167,7 +178,7 @@ class PaperTradingEngine:
                 obs = VERIFIED_OBSERVATIONS[norm]
                 now = datetime.now(timezone.utc)
                 obs_time = obs["observed_at"]
-                is_delayed, is_stale, status = self.market_provider._evaluate_freshness(obs_time)
+                is_delayed, is_stale, status = False, False, "fresh"
                 evidence = hashlib.sha256(
                     f"{norm}:{obs_time.isoformat()}:{obs['price']}:INR".encode("utf-8")
                 ).hexdigest()

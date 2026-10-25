@@ -139,10 +139,23 @@ class RegulatoryDocumentRetriever(AbstractDocumentRetriever):
     def __init__(
         self,
         chunks: Optional[List[DocumentChunk]] = None,
-        allow_fixture_fallback: bool = False,
+        allow_fixture_fallback: Optional[bool] = None,
     ):
         self._chunks = chunks
-        self.allow_fixture_fallback = allow_fixture_fallback
+        self._allow_fixture_fallback = allow_fixture_fallback
+
+    @property
+    def allow_fixture_fallback(self) -> bool:
+        if self._allow_fixture_fallback is not None:
+            return self._allow_fixture_fallback
+        from backend.app.config import Environment, get_settings
+
+        settings = get_settings()
+        return settings.ENVIRONMENT == Environment.TESTING or getattr(settings, "MARKET_ALLOW_FIXTURES", False)
+
+    @allow_fixture_fallback.setter
+    def allow_fixture_fallback(self, value: Optional[bool]):
+        self._allow_fixture_fallback = value
 
     async def _fetch_db_chunks(self, db: Optional[AsyncSession] = None) -> List[DocumentChunk]:
         """Fetch active document chunks from PostgreSQL database."""
