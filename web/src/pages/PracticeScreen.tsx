@@ -606,6 +606,21 @@ export const PracticeScreen: React.FC = () => {
                     <span className={l.type === 'BUY' ? 'badge badge-profit' : l.type === 'SELL' ? 'badge badge-loss' : 'badge badge-virtual'} style={{ fontSize: '9px' }}>
                       {l.type}
                     </span>
+                    {((l as any).isReplay || l.notes?.includes('REPLAY')) && (
+                      <span
+                        style={{
+                          backgroundColor: 'rgba(245, 158, 11, 0.2)',
+                          color: '#FBBF24',
+                          border: '1px solid rgba(245, 158, 11, 0.4)',
+                          borderRadius: '3px',
+                          padding: '1px 5px',
+                          fontSize: '9px',
+                          fontWeight: 800,
+                        }}
+                      >
+                        REPLAY
+                      </span>
+                    )}
                     <strong style={{ color: '#FFFFFF' }}>{l.symbol}</strong>
                     <span style={{ color: 'var(--text-muted)' }}>({l.shares} sh)</span>
                   </div>

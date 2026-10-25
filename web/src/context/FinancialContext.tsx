@@ -30,6 +30,8 @@ export interface LedgerEntry {
   cashAfter: number;
   status: 'FILLED' | 'SETTLED' | 'PENDING' | 'REJECTED';
   notes?: string;
+  isReplay?: boolean;
+  replayDate?: string;
 }
 
 export interface AlertNotification {
@@ -91,7 +93,9 @@ interface FinancialContextType {
     type: 'BUY' | 'SELL' | 'SIP',
     shares: number,
     orderType?: OrderExecutionType,
-    customPrice?: number
+    customPrice?: number,
+    isReplay?: boolean,
+    replayDate?: string
   ) => Promise<{ success: boolean; receipt?: LedgerEntry; error?: string }>;
   depositFunds: (amount: number) => Promise<void>;
   resetAccount: () => Promise<void>;
@@ -527,10 +531,84 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
     type: 'BUY' | 'SELL' | 'SIP',
     shares: number,
     orderType: OrderExecutionType = 'MARKET',
-    customPrice?: number
+    customPrice?: number,
+    isReplay?: boolean,
+    replayDate?: string
   ): Promise<{ success: boolean; receipt?: LedgerEntry; error?: string }> => {
     const side = type === 'BUY' || type === 'SIP' ? 'BUY' : 'SELL';
     const idempotencyKey = `web-ord-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+    if (isReplay && customPrice !== undefined && customPrice > 0) {
+      const fill = customPrice;
+      const gross = fill * shares;
+      if (side === 'BUY' && gross > virtualCash) {
+        return {
+          success: false,
+          error: `Insufficient virtual cash balance (₹${virtualCash.toLocaleString('en-IN')}) for replay trade of ₹${gross.toLocaleString('en-IN')}.`,
+        };
+      }
+      const cashAfter = side === 'BUY' ? Math.max(0, virtualCash - gross) : virtualCash + gross;
+      updateVirtualCash(cashAfter);
+
+      setHoldings((prev) => {
+        const existing = prev.find((h) => h.symbol === symbol);
+        if (side === 'BUY') {
+          if (existing) {
+            const totalShares = existing.shares + shares;
+            const avgCost = (existing.shares * existing.avgPrice + gross) / totalShares;
+            return prev.map((h) => (h.symbol === symbol ? { ...h, shares: totalShares, avgPrice: avgCost } : h));
+          } else {
+            const meta = INSTRUMENT_METADATA[symbol] || { name: symbol, sector: 'Equities', color: '#F29A60' };
+            return [
+              ...prev,
+              {
+                symbol,
+                name: meta.name,
+                shares,
+                avgPrice: fill,
+                currentPrice: fill,
+                dayChangePct: 0,
+                assetClass: meta.sector,
+                color: meta.color,
+              },
+            ];
+          }
+        } else {
+          if (!existing) return prev;
+          if (existing.shares <= shares) return prev.filter((h) => h.symbol !== symbol);
+          return prev.map((h) => (h.symbol === symbol ? { ...h, shares: h.shares - shares } : h));
+        }
+      });
+
+      const receipt: LedgerEntry = {
+        id: `ord-rep-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        timestamp: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'medium' }),
+        type: side,
+        orderType,
+        symbol,
+        name: INSTRUMENT_METADATA[symbol]?.name || symbol,
+        shares,
+        fillPrice: fill,
+        total: gross,
+        brokerageFee: 0,
+        regulatoryFees: 0,
+        cashAfter,
+        status: 'FILLED',
+        notes: `[REPLAY - ${replayDate || 'Past NSE'}] Executed via Trade Time Machine at ₹${fill.toLocaleString('en-IN')}`,
+        isReplay: true,
+        replayDate: replayDate || 'Past NSE',
+      };
+
+      setLedger((prev) => [receipt, ...prev]);
+
+      addNotification(
+        'Replay Order Executed',
+        `[REPLAY] ${side === 'BUY' ? 'Bought' : 'Sold'} ${shares} shares of ${symbol} at ₹${fill.toLocaleString('en-IN')} (${replayDate || 'Past NSE'})`,
+        'execution'
+      );
+
+      return { success: true, receipt };
+    }
 
     try {
       if (apiClient.isAuthenticated()) {
