@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ThemeProvider } from './context/ThemeContext';
 import { FinancialProvider } from './context/FinancialContext';
+import { ToastProvider } from './context/ToastContext';
 import { AppShell, NavigationTab } from './components/layout/AppShell';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { WelcomeScreen } from './pages/WelcomeScreen';
@@ -188,7 +189,9 @@ export const App: React.FC = () => {
   return (
     <ThemeProvider>
       <FinancialProvider>
-        <AppContent />
+        <ToastProvider>
+          <AppContent />
+        </ToastProvider>
       </FinancialProvider>
     </ThemeProvider>
   );

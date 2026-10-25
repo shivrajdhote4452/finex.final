@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { useFinancial, LedgerEntry } from '../context/FinancialContext';
+import { useFinancial } from '../context/FinancialContext';
 import { NavigationTab } from '../components/layout/AppShell';
+import { RecentTransactions } from '../components/trading/RecentTransactions';
+import { CardSkeleton, TableSkeleton } from '../components/common/Skeleton';
 
 interface OverviewScreenProps {
   onNavigate: (tab: NavigationTab) => void;
@@ -21,18 +23,17 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ onNavigate }) =>
   const {
     virtualCash,
     holdings,
-    ledger,
     totalHoldingsValue,
     totalPortfolioValue,
     unrealizedPnL,
     marketQuotes,
     openQuickTrade,
     depositFunds,
+    isAccountLoading,
   } = useFinancial();
 
   const [hoveredPoint, setHoveredPoint] = useState<{ month: string; value: number } | null>(null);
   const [chartView, setChartView] = useState<'line' | 'candle'>('line');
-  const [selectedSlip, setSelectedSlip] = useState<LedgerEntry | null>(null);
 
   const pnlPct = ((unrealizedPnL / (totalHoldingsValue - unrealizedPnL || 1)) * 100).toFixed(2);
   const isProfit = unrealizedPnL >= 0;
@@ -49,6 +50,15 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ onNavigate }) =>
   const equityPct = Math.round((totalHoldingsValue / (totalPortfolioValue || 1)) * 100);
   const cashPct = 100 - equityPct;
   const greeting = getTimeOfDayGreeting('Shivraj');
+
+  if (isAccountLoading && holdings.length === 0 && virtualCash === 0) {
+    return (
+      <div style={{ maxWidth: '1440px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px', width: '100%', boxSizing: 'border-box' }}>
+        <CardSkeleton count={4} />
+        <TableSkeleton rows={4} columns={5} />
+      </div>
+    );
+  }
 
   return (
     <div style={{ maxWidth: '1440px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
@@ -451,7 +461,7 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ onNavigate }) =>
             </button>
           </div>
 
-          <div style={{ overflowX: 'auto' }}>
+          <div className="table-scroll-wrapper" style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-faint)', fontSize: '11px', textTransform: 'uppercase' }}>
@@ -463,7 +473,14 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ onNavigate }) =>
                 </tr>
               </thead>
               <tbody>
-                {holdings.map((h) => {
+                {holdings.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                      No active holdings. Trade any Indian equity to initiate paper positions.
+                    </td>
+                  </tr>
+                ) : (
+                  holdings.map((h) => {
                   const val = h.shares * h.currentPrice;
                   const isPos = h.dayChangePct >= 0;
                   return (
@@ -490,110 +507,19 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ onNavigate }) =>
                       </td>
                     </tr>
                   );
-                })}
+                }))}
               </tbody>
             </table>
           </div>
         </div>
 
-        {/* Recent Execution Activity with Contract Note triggers */}
-        <div className="glass-card" style={{ padding: '24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#FFFFFF' }}>Recent Order Activity</h3>
-            <button onClick={() => onNavigate('transactions')} className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '11px' }}>
-              Full Ledger ({ledger.length}) →
-            </button>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {ledger.slice(0, 4).map((entry) => (
-              <div
-                key={entry.id}
-                onClick={() => setSelectedSlip(entry)}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '12px',
-                  borderRadius: 'var(--radius-sm)',
-                  backgroundColor: 'rgba(255, 255, 255, 0.02)',
-                  border: '1px solid var(--border-subtle)',
-                  cursor: 'pointer',
-                  transition: 'background 0.15s ease',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)')}
-                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.02)')}
-                title="Click to view electronic contract note"
-              >
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span className={entry.type === 'BUY' ? 'badge badge-profit' : entry.type === 'SELL' ? 'badge badge-loss' : 'badge badge-virtual'} style={{ fontSize: '10px' }}>
-                      {entry.type}
-                    </span>
-                    <strong style={{ fontSize: '13px', color: '#FFFFFF' }}>{entry.symbol}</strong>
-                    <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>({entry.shares} sh)</span>
-                  </div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-faint)', marginTop: '2px' }}>
-                    {entry.timestamp}
-                  </div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div className="tabular-nums" style={{ fontSize: '13px', fontWeight: 600, color: '#FFFFFF' }}>
-                    ₹{entry.total.toLocaleString('en-IN')}
-                  </div>
-                  <span className="badge badge-profit" style={{ fontSize: '10px', marginTop: '2px' }}>
-                    {entry.status}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        {/* Recent Execution Activity Feed via Shared Component */}
+        <RecentTransactions
+          title="Recent Order Activity"
+          maxItems={5}
+          onNavigate={onNavigate}
+        />
       </div>
-
-      {/* Slip Modal */}
-      {selectedSlip && (
-        <div className="modal-overlay" onClick={() => setSelectedSlip(null)}>
-          <div className="modal-content contract-note" style={{ maxWidth: '520px', padding: '32px' }} onClick={(e) => e.stopPropagation()}>
-            <div className="compliance-watermark">FINEX</div>
-            <h3 style={{ fontSize: '20px', fontWeight: 700, color: '#FFFFFF', marginBottom: '8px' }}>
-              Contract Note Slip • {selectedSlip.id}
-            </h3>
-            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '20px' }}>
-              Execution confirmed on FinEx simulated matching engine.
-            </p>
-
-            <div style={{ backgroundColor: 'rgba(0,0,0,0.4)', padding: '16px', borderRadius: 'var(--radius-sm)', marginBottom: '20px', fontSize: '13px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Security:</span>
-                <strong style={{ color: '#FFFFFF' }}>{selectedSlip.symbol}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Order Type:</span>
-                <span style={{ color: '#FFFFFF' }}>{selectedSlip.type} ({selectedSlip.orderType})</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Quantity:</span>
-                <span style={{ color: '#FFFFFF' }}>{selectedSlip.shares} shares</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Gross Amount:</span>
-                <span style={{ color: '#FFFFFF', fontWeight: 700 }}>₹{selectedSlip.total.toLocaleString('en-IN')}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border-subtle)', paddingTop: '8px', marginTop: '8px' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Virtual Cash After:</span>
-                <span style={{ color: 'var(--color-virtual)', fontWeight: 700 }}>₹{selectedSlip.cashAfter.toLocaleString('en-IN')}</span>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <button onClick={() => setSelectedSlip(null)} className="btn btn-primary">
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

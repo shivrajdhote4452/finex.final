@@ -204,9 +204,8 @@ export const TransactionsScreen: React.FC = () => {
         </div>
       </div>
 
-      {/* Transaction Ledger Table */}
       <div className="glass-card" style={{ padding: '24px' }}>
-        <div style={{ overflowX: 'auto' }}>
+        <div className="table-scroll-wrapper" style={{ maxHeight: '640px', overflowY: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-faint)', fontSize: '11px', textTransform: 'uppercase' }}>

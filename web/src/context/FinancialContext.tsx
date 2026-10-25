@@ -580,6 +580,12 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
         }
       });
 
+      const existingHolding = holdings.find((h) => h.symbol === symbol);
+      const replayRealizedPnL =
+        side === 'SELL' && existingHolding
+          ? (fill - existingHolding.avgPrice) * shares
+          : undefined;
+
       const receipt: LedgerEntry = {
         id: `ord-rep-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
         timestamp: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'medium' }),
@@ -590,6 +596,7 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
         shares,
         fillPrice: fill,
         total: gross,
+        realizedPnL: replayRealizedPnL,
         brokerageFee: 0,
         regulatoryFees: 0,
         cashAfter,
@@ -706,6 +713,12 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
         }
       });
 
+      const existingHolding = holdings.find((h) => h.symbol === symbol);
+      const fallbackRealizedPnL =
+        side === 'SELL' && existingHolding
+          ? (fill - existingHolding.avgPrice) * shares
+          : undefined;
+
       const receipt: LedgerEntry = {
         id: `ord-${Date.now()}`,
         timestamp: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'medium' }),
@@ -716,6 +729,7 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
         shares,
         fillPrice: fill,
         total: gross,
+        realizedPnL: fallbackRealizedPnL,
         brokerageFee: 0,
         regulatoryFees: 0,
         cashAfter,

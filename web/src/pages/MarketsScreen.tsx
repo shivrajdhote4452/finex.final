@@ -1,6 +1,63 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useFinancial } from '../context/FinancialContext';
 import { NavigationTab } from '../components/layout/AppShell';
+import { apiClient } from '../api/client';
+import { TableSkeleton } from '../components/common/Skeleton';
+
+const computeSparklinePath = (prices: number[], width = 75, height = 20): string => {
+  if (!prices || prices.length < 2) return '';
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+  const range = max - min || 1;
+  return prices
+    .map((p, i) => {
+      const x = (i / (prices.length - 1)) * width;
+      const y = height - ((p - min) / range) * (height - 4) - 2;
+      return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(' ');
+};
+
+const MarketSparkline: React.FC<{ symbol: string; isPositive: boolean; fallbackPath?: string }> = ({
+  symbol,
+  isPositive,
+  fallbackPath,
+}) => {
+  const [svgPath, setSvgPath] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    apiClient.market
+      .getHistory(symbol, { range: '1mo' })
+      .then((res) => {
+        if (active && res && res.bars && res.bars.length >= 2) {
+          const closes = res.bars.map((b) => b.close ?? (b as any).c ?? b.open);
+          const computed = computeSparklinePath(closes, 75, 20);
+          if (computed) setSvgPath(computed);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [symbol]);
+
+  const activePath = svgPath || fallbackPath || (isPositive ? 'M0,15 L15,10 L30,16 L45,8 L60,11 L75,4' : 'M0,5 L15,8 L30,6 L45,14 L60,12 L75,18');
+  const strokeColor = isPositive ? 'var(--color-profit)' : 'var(--color-loss)';
+
+  return (
+    <svg width="75" height="20" style={{ overflow: 'visible' }}>
+      <path
+        d={activePath}
+        fill="none"
+        stroke={strokeColor}
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+};
 
 interface MarketsScreenProps {
   onNavigate: (tab: NavigationTab) => void;
@@ -900,7 +957,14 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate }) => {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((inst) => (
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={6} style={{ padding: '24px' }}>
+                    <TableSkeleton rows={5} columns={6} />
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((inst) => (
                 <tr
                   key={inst.symbol}
                   style={{
@@ -927,9 +991,9 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate }) => {
                       >
                         {inst.symbol.slice(0, 2)}
                       </div>
-                      <div>
+                      <div className="truncate-text" style={{ maxWidth: '240px' }}>
                         <strong style={{ color: '#FFFFFF', fontSize: '15px' }}>{inst.symbol}</strong>
-                        <div style={{ fontSize: '12px', color: 'var(--text-faint)' }}>{inst.name}</div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-faint)' }} className="truncate-text">{inst.name}</div>
                       </div>
                     </div>
                   </td>
@@ -943,14 +1007,11 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate }) => {
                     </span>
                   </td>
                   <td style={{ padding: '16px' }}>
-                    <svg width="75" height="20" style={{ overflow: 'visible' }}>
-                      <path
-                        d={inst.sparkline}
-                        fill="none"
-                        stroke={inst.isPositive ? 'var(--color-profit)' : 'var(--color-loss)'}
-                        strokeWidth="2"
-                      />
-                    </svg>
+                    <MarketSparkline
+                      symbol={inst.symbol}
+                      isPositive={inst.isPositive}
+                      fallbackPath={inst.sparkline}
+                    />
                   </td>
                   <td style={{ padding: '16px', textAlign: 'right' }}>
                     <div style={{ display: 'inline-flex', gap: '8px' }}>
@@ -979,7 +1040,7 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate }) => {
                     </div>
                   </td>
                 </tr>
-              ))}
+              )))}
             </tbody>
           </table>
         </div>
