@@ -1,12 +1,17 @@
 # FinEx — Demo Blocker Issues Checklist
 
-> The following 6 issues must be created in GitHub (or tracked manually) under the label `demo-blocker` for the 10 November 2026 demo checkpoint.
+> Checkpoint audit: 25 October 2026.  
+> Status Summary: **3 OPEN / 2 DONE / 1 STALE (SUPERSEDED)** ahead of the 10 November 2026 demo handoff.
 
 ---
 
+## Genuinely Open Issues (3)
+
 ### Issue 1: `[DEMO-BLOCKER] Enable Branch Protection on main`
+- **Status:** **OPEN**
 - **Labels:** `demo-blocker`
 - **Assignee:** `@shivrajdhote4452`
+- **Body Reference:** [docs/issues/issue-1-branch-protection.md](issues/issue-1-branch-protection.md)
 - **Description:**
   CI has quality gates and test suites, but direct git pushes to `main` are currently possible. Protect `main` against accidental untested pushes or forced pushes.
 - **Acceptance Criteria:**
@@ -18,36 +23,11 @@
 
 ---
 
-### Issue 2: `[DEMO-BLOCKER] Gitleaks Secrets Scan for Non-Angel Keys`
-- **Labels:** `demo-blocker`
-- **Assignee:** `@shivrajdhote4452`
-- **Description:**
-  Verify that no external credentials (Google AI/Gemini, Alpaca, OAuth client secrets, Database passwords) exist in git history across any branch.
-- **Acceptance Criteria:**
-  - [ ] Run `gitleaks detect --source . --verbose` with 0 findings.
-  - [ ] Run `git log -p --all -S "AIza" -- .` → 0 leaks found.
-  - [ ] Run `git log -p --all -S "sk-" -- .` → 0 leaks found.
-  - [ ] Any detected historical token is immediately rotated at the provider and purged using `git filter-repo`.
-
----
-
-### Issue 3: `[DEMO-BLOCKER] Live Angel One Login & Streaming Proof (Wed 21 Oct 09:15–15:30 IST)`
-- **Labels:** `demo-blocker`
-- **Assignee:** `@shivrajdhote4452`
-- **Description:**
-  NSE market opens Wednesday 21 October at 09:15 IST (following Tuesday Dussehra). Perform the official market-hours runtime verification of Angel One SmartAPI session generation and tick broadcasting.
-- **Acceptance Criteria:**
-  - [ ] Backend running with `MARKET_DATA_MODE=INDIAN_LIVE_DATA`.
-  - [ ] Backend startup log outputs: `"Angel One SmartAPI authenticated successfully"`.
-  - [ ] `get_latest_quote("NSE:RELIANCE")` returns live market-hours LTP.
-  - [ ] WebSocket `/api/v1/market/ws/RELIANCE` streams live frames to frontend `FinExLiveChart`.
-  - [ ] Capture timestamped log and tick sample in `docs/runbooks/go-live-checklist.md`.
-
----
-
 ### Issue 4: `[DEMO-BLOCKER] Cached-Mode Demo Rehearsal (Diwali Market Closed Scenario)`
+- **Status:** **OPEN**
 - **Labels:** `demo-blocker`
 - **Assignee:** `@shivrajdhote4452`
+- **Body Reference:** [docs/issues/issue-4-cached-mode-rehearsal.md](issues/issue-4-cached-mode-rehearsal.md)
 - **Description:**
   Demo day Tuesday 10 November 2026 is Diwali–Balipratipada (NSE closed). Rehearse full presentation in cached mode to guarantee no dead screens, honest timestamp labeling, and zero fake-live numbers.
 - **Acceptance Criteria:**
@@ -59,22 +39,11 @@
 
 ---
 
-### Issue 5: `[DEMO-BLOCKER] Finalize Mobile & Delta Lake Scope Decisions (ADR 006 & 007)`
-- **Labels:** `demo-blocker`
-- **Assignee:** `@shivrajdhote4452`
-- **Description:**
-  Review draft ADRs for Flutter mobile native store packaging and remote Databricks Delta Lake cloud cluster provisioning. Decide whether to defer to post-demo or fund before 31 October 2026.
-- **Acceptance Criteria:**
-  - [ ] Review [ADR 006: Mobile (Flutter) Scope Decision](architecture-decisions/adr-006-mobile-app-scope.md) and pick Option A (Defer) or Option B (Fund).
-  - [ ] Review [ADR 007: Delta Lake Analytical Scope Decision](architecture-decisions/adr-007-delta-lake-scope.md) and pick Option A (Defer) or Option B (Fund).
-  - [ ] Update ADR status from `DRAFT` to `APPROVED` on or before 31 October 2026.
-  - [ ] Update `docs/task-matrix.md` with final decision links.
-
----
-
 ### Issue 6: `[DEMO-BLOCKER] Clean-Machine Rehearsal Verification`
+- **Status:** **OPEN**
 - **Labels:** `demo-blocker`
 - **Assignee:** `@shivrajdhote4452`
+- **Body Reference:** [docs/issues/issue-6-clean-machine-rehearsal.md](issues/issue-6-clean-machine-rehearsal.md)
 - **Description:**
   Execute a clean-machine clone and runbook verification to confirm zero undocumented local dependencies or "works on my machine" issues.
 - **Acceptance Criteria:**
@@ -85,3 +54,25 @@
   - [ ] `pytest -m "not live" backend/tests` passes 100%.
   - [ ] Vertical slice verification (Search → Chart → Paper Order → Portfolio) succeeds.
   - [ ] Console execution log saved to `docs/clean_machine_rehearsal.log` and committed.
+
+---
+
+## Resolved / Closed Issues (2)
+
+### Issue 2: `[DEMO-BLOCKER] Gitleaks Secrets Scan for Non-Angel Keys`
+- **Status:** **DONE** (Resolved in [Pull Request #20](https://github.com/shivrajdhote4452/finex.final/pull/20) — merged 25 Oct 2026)
+- **Resolution:** Published [docs/secrets-scan-report.md](secrets-scan-report.md) documenting Gitleaks v8.30.1 audit across 104 commits. Verified clean with zero real non-Angel secrets in working tree or git history, and confirmed `.env` has never been committed.
+
+---
+
+### Issue 5: `[DEMO-BLOCKER] Finalize Mobile & Delta Lake Scope Decisions (ADR 006 & 007)`
+- **Status:** **DONE** (Resolved in [Pull Request #19](https://github.com/shivrajdhote4452/finex.final/pull/19) — merged 25 Oct 2026)
+- **Resolution:** Formally recorded owner decisions as `DECIDED (DEFER)` in [ADR 006](architecture-decisions/adr-006-mobile-app-scope.md) and [ADR 007](architecture-decisions/adr-007-delta-lake-scope.md), deferring mobile and Delta Lake work to post-demo (revisit after 10 Nov demo) to protect demo stability.
+
+---
+
+## Stale / Superseded Issues (1)
+
+### Issue 3: `[DEMO-BLOCKER] Live Angel One Login & Streaming Proof (Wed 21 Oct 09:15–15:30 IST)`
+- **Status:** **STALE / SUPERSEDED** (Do NOT create)
+- **Reason:** Its market-hours verification window has passed, and demo strategy has pivoted to honest cached/replay mode (Trade Time Machine, [PR #15](https://github.com/shivrajdhote4452/finex.final/pull/15)) for the 10 November Diwali market holiday.
