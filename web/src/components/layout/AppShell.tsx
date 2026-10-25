@@ -374,7 +374,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
               >
                 <div>
                   <span style={{ color: 'var(--text-muted)' }}>Virtual account: </span>
-                  <span style={{ color: 'var(--color-action)', fontWeight: 600 }}>Illustrative</span>
+                  <span style={{ color: 'var(--color-action)', fontWeight: 600 }}>Paper</span>
                 </div>
                 <div>
                   <span style={{ color: 'var(--text-muted)' }}>Holdings: </span>

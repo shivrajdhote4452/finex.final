@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ThemeProvider } from './context/ThemeContext';
 import { FinancialProvider } from './context/FinancialContext';
 import { AppShell, NavigationTab } from './components/layout/AppShell';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { WelcomeScreen } from './pages/WelcomeScreen';
 import { OnboardingScreen } from './pages/OnboardingScreen';
 import { OverviewScreen } from './pages/OverviewScreen';
@@ -159,24 +160,26 @@ export const AppContent: React.FC = () => {
 
   return (
     <AppShell currentTab={currentTab} onNavigate={handleNavigate}>
-      {currentTab === 'overview' && <OverviewScreen onNavigate={handleNavigate} />}
-      {currentTab === 'markets' && <MarketsScreen onNavigate={handleNavigate} />}
-      {currentTab === 'charts' && <ChartWorkspaceScreen onNavigate={handleNavigate} />}
-      {currentTab === 'portfolio' && <PortfolioScreen onNavigate={handleNavigate} />}
-      {currentTab === 'transactions' && <TransactionsScreen />}
-      {currentTab === 'practice' && <PracticeScreen />}
-      {currentTab === 'ask-finex' && <AskFinExScreen />}
-      {currentTab === 'alerts' && <AlertsScreen />}
-      {currentTab === 'goals' && <GoalsScreen />}
-      {currentTab === 'spending' && <SpendingScreen />}
-      {currentTab === 'settings' && (
-        <SettingsScreen
-          onSignOut={async () => {
-            await apiClient.auth.logout();
-            setAuthState('welcome');
-          }}
-        />
-      )}
+      <ErrorBoundary>
+        {currentTab === 'overview' && <OverviewScreen onNavigate={handleNavigate} />}
+        {currentTab === 'markets' && <MarketsScreen onNavigate={handleNavigate} />}
+        {currentTab === 'charts' && <ChartWorkspaceScreen onNavigate={handleNavigate} />}
+        {currentTab === 'portfolio' && <PortfolioScreen onNavigate={handleNavigate} />}
+        {currentTab === 'transactions' && <TransactionsScreen />}
+        {currentTab === 'practice' && <PracticeScreen />}
+        {currentTab === 'ask-finex' && <AskFinExScreen />}
+        {currentTab === 'alerts' && <AlertsScreen />}
+        {currentTab === 'goals' && <GoalsScreen />}
+        {currentTab === 'spending' && <SpendingScreen />}
+        {currentTab === 'settings' && (
+          <SettingsScreen
+            onSignOut={async () => {
+              await apiClient.auth.logout();
+              setAuthState('welcome');
+            }}
+          />
+        )}
+      </ErrorBoundary>
     </AppShell>
   );
 };
