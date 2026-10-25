@@ -33,6 +33,37 @@ const SYMBOL_BASE_PRICES: Record<string, number> = {
   BAJFINANCE: 7200,
 };
 
+interface CachedCandleData {
+  candles: Array<{ time: number; open: number; high: number; low: number; close: number }>;
+  observedAt: string;
+}
+
+const memoryCandleCache = new Map<string, CachedCandleData>();
+
+function getCachedCandles(cleanSymbol: string): CachedCandleData | null {
+  if (memoryCandleCache.has(cleanSymbol)) {
+    return memoryCandleCache.get(cleanSymbol)!;
+  }
+  try {
+    const raw = localStorage.getItem(`finex_candles_cache_${cleanSymbol}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.candles) && parsed.candles.length > 0) {
+        memoryCandleCache.set(cleanSymbol, parsed);
+        return parsed;
+      }
+    }
+  } catch {}
+  return null;
+}
+
+function setCachedCandles(cleanSymbol: string, data: CachedCandleData) {
+  memoryCandleCache.set(cleanSymbol, data);
+  try {
+    localStorage.setItem(`finex_candles_cache_${cleanSymbol}`, JSON.stringify(data));
+  } catch {}
+}
+
 function generateFallbackCandles(cleanSymbol: string, rangePreset: string, interval: string) {
   const basePrice = SYMBOL_BASE_PRICES[cleanSymbol] || 1500;
   const isIntraday = ['1m', '5m', '15m', '30m', '1h', 'ONE_MINUTE', 'FIVE_MINUTE', 'FIFTEEN_MINUTE'].includes(interval) || rangePreset === '1D';
@@ -111,6 +142,12 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
     asOf: '',
     lastPrice: null,
   });
+
+  const isDemoSimEnabled = (import.meta as any).env?.VITE_DEMO_SIMULATION === 'true';
+  const [isSimulated, setIsSimulated] = useState<boolean>(false);
+  const isSimulatedRef = useRef<boolean>(false);
+  const [cachedLabel, setCachedLabel] = useState<string | null>(null);
+  const [noDataAvailable, setNoDataAvailable] = useState<boolean>(false);
 
   const cleanSymbol = symbol.replace('.NS', '').replace('NSE:', '').trim().toUpperCase();
 
@@ -201,8 +238,9 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
     });
     resizeObserver.observe(container);
 
-    // Helper to start realistic simulated micro-ticks
+    // Helper to start realistic simulated micro-ticks (ONLY when explicit demo simulation is enabled)
     const startSimulatedTicks = (baseLastBar: { time: number; open: number; high: number; low: number; close: number }) => {
+      if (!isDemoSimEnabled) return;
       if (simTimerRef.current) clearInterval(simTimerRef.current);
       lastBarRef.current = { ...baseLastBar };
 
@@ -231,7 +269,7 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
       }, 3000);
     };
 
-    // 2. Fetch Historical Candles (with robust fallback)
+    // 2. Fetch Historical Candles (Option B: Cached-First, Synthesizer behind explicit demo flag)
     const fetchHistory = async () => {
       try {
         const RANGE_DAYS: Record<string, number> = {
@@ -270,31 +308,70 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
               return true;
             });
 
-          seriesRef.current.setData(formatted);
-          chart.timeScale().fitContent();
+          if (formatted.length > 0) {
+            seriesRef.current.setData(formatted);
+            chart.timeScale().fitContent();
 
-          const last = formatted[formatted.length - 1];
-          if (last) {
-            lastBarRef.current = { ...last };
-          }
-          setFreshness({
-            status: payload.freshness || 'LIVE',
-            source: payload.source || 'ANGEL_ONE_SMARTAPI',
-            asOf: payload.observed_at || new Date().toLocaleTimeString(),
-            lastPrice: last ? last.close : null,
-          });
+            const last = formatted[formatted.length - 1];
+            if (last) {
+              lastBarRef.current = { ...last };
+            }
 
-          if (last && onPriceUpdate) {
-            onPriceUpdate(last.close);
+            const observedAtStr = payload.observed_at || new Date().toLocaleString('en-IN');
+            setCachedCandles(cleanSymbol, {
+              candles: formatted,
+              observedAt: observedAtStr,
+            });
+
+            setIsSimulated(false);
+            isSimulatedRef.current = false;
+            setCachedLabel(null);
+            setNoDataAvailable(false);
+            setFreshness({
+              status: payload.freshness || 'LIVE',
+              source: payload.source || 'ANGEL_ONE_SMARTAPI',
+              asOf: payload.observed_at || new Date().toLocaleTimeString(),
+              lastPrice: last ? last.close : null,
+            });
+
+            if (last && onPriceUpdate) {
+              onPriceUpdate(last.close);
+            }
+            return;
           }
-          return;
         }
       } catch (err) {
-        console.warn(`Historical candles fetch error for ${cleanSymbol}, falling back to replay synthesizer:`, err);
+        console.warn(`Historical candles fetch error for ${cleanSymbol}:`, err);
       }
 
-      // Fallback: Synthesize realistic baseline candles so chart is NEVER blank
-      if (seriesRef.current) {
+      // Step 1: FIRST try real cached candles (the last successfully fetched historical candles)
+      const cached = getCachedCandles(cleanSymbol);
+      if (cached && cached.candles && cached.candles.length > 0 && seriesRef.current) {
+        seriesRef.current.setData(cached.candles as any);
+        chart.timeScale().fitContent();
+
+        const last = cached.candles[cached.candles.length - 1];
+        if (last) {
+          lastBarRef.current = { ...last };
+        }
+        setIsSimulated(false);
+        isSimulatedRef.current = false;
+        setNoDataAvailable(false);
+        setCachedLabel(`Last real data: ${cached.observedAt} — market data unavailable, showing last cached candles`);
+        setFreshness({
+          status: 'FALLBACK_CACHED',
+          source: `FinEx Cache (${cached.observedAt})`,
+          asOf: cached.observedAt,
+          lastPrice: last ? last.close : null,
+        });
+        if (last && onPriceUpdate) {
+          onPriceUpdate(last.close);
+        }
+        return;
+      }
+
+      // Step 2: Use generateFallbackCandles() synthesizer ONLY when VITE_DEMO_SIMULATION is enabled
+      if (isDemoSimEnabled && seriesRef.current) {
         const fallback = generateFallbackCandles(cleanSymbol, rangePreset, interval);
         seriesRef.current.setData(fallback as any);
         chart.timeScale().fitContent();
@@ -304,8 +381,12 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
           lastBarRef.current = { ...last };
           startSimulatedTicks(last);
         }
+        setIsSimulated(true);
+        isSimulatedRef.current = true;
+        setCachedLabel(null);
+        setNoDataAvailable(false);
         setFreshness({
-          status: 'SIMULATED_REPLAY',
+          status: 'SIMULATED',
           source: 'FinEx Replay Engine (NSE Baseline)',
           asOf: new Date().toLocaleTimeString(),
           lastPrice: last ? last.close : null,
@@ -313,7 +394,23 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
         if (last && onPriceUpdate) {
           onPriceUpdate(last.close);
         }
+        return;
       }
+
+      // Step 3: Flag is OFF and no cached candles exist -> honest empty state, NEVER synthesized bars
+      setIsSimulated(false);
+      isSimulatedRef.current = false;
+      setCachedLabel(null);
+      setNoDataAvailable(true);
+      if (seriesRef.current) {
+        seriesRef.current.setData([]);
+      }
+      setFreshness({
+        status: 'DISCONNECTED',
+        source: 'FinEx Market Engine',
+        asOf: '--',
+        lastPrice: null,
+      });
     };
 
     fetchHistory();
@@ -421,12 +518,17 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
       };
 
       ws.onclose = () => {
+        const simActive = isSimulatedRef.current;
         setFreshness((prev) => ({
           ...prev,
-          status: prev.status === 'STREAMING' ? 'REPLAY_SYNC' : (prev.status || 'SIMULATED_REPLAY'),
-          source: prev.source || 'FinEx Replay Engine',
+          status: prev.status === 'STREAMING'
+            ? 'REPLAY_SYNC'
+            : simActive
+            ? 'SIMULATED'
+            : (prev.status === 'CONNECTING' ? 'DISCONNECTED' : prev.status),
+          source: prev.source || (simActive ? 'FinEx Replay Engine (NSE Baseline)' : 'FinEx Market Engine'),
         }));
-        if (lastBarRef.current && !simTimerRef.current) {
+        if (isDemoSimEnabled && simActive && lastBarRef.current && !simTimerRef.current) {
           startSimulatedTicks(lastBarRef.current);
         }
       };
@@ -461,6 +563,49 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
         boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
       }}
     >
+      {/* Option A & B: Persistent Full-Width Simulation Watermark Banner */}
+      {isSimulated && (
+        <div
+          data-testid="simulated-watermark-banner"
+          style={{
+            width: '100%',
+            backgroundColor: '#DC2626',
+            color: '#FFFFFF',
+            padding: '6px 12px',
+            fontSize: 12,
+            fontWeight: 700,
+            textAlign: 'center',
+            letterSpacing: '0.04em',
+            textTransform: 'uppercase',
+            boxShadow: '0 2px 8px rgba(220, 38, 38, 0.4)',
+            zIndex: 10,
+            flexShrink: 0,
+          }}
+        >
+          SIMULATED DATA — randomly generated for display only, not market prices
+        </div>
+      )}
+
+      {/* Option B: Cached Candles Informational Notice */}
+      {!isSimulated && cachedLabel && (
+        <div
+          data-testid="cached-watermark-banner"
+          style={{
+            width: '100%',
+            backgroundColor: 'rgba(245, 158, 11, 0.15)',
+            borderBottom: '1px solid rgba(245, 158, 11, 0.3)',
+            color: '#FBBF24',
+            padding: '4px 12px',
+            fontSize: 11,
+            fontWeight: 600,
+            textAlign: 'center',
+            flexShrink: 0,
+          }}
+        >
+          ℹ️ {cachedLabel}
+        </div>
+      )}
+
       {/* Top Ticker Status Bar */}
       <div
         style={{
@@ -495,13 +640,17 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
               fontWeight: 600,
               backgroundColor: freshness.status === 'STREAMING' || freshness.status === 'LIVE'
                 ? 'rgba(16, 185, 129, 0.15)'
+                : freshness.status === 'FALLBACK_CACHED'
+                ? 'rgba(56, 189, 248, 0.15)'
                 : freshness.status.includes('REPLAY') || freshness.status.includes('SIMULATED')
-                ? 'rgba(242, 154, 96, 0.15)'
+                ? 'rgba(239, 68, 68, 0.2)'
                 : 'rgba(239, 68, 68, 0.15)',
               color: freshness.status === 'STREAMING' || freshness.status === 'LIVE'
                 ? '#34D399'
+                : freshness.status === 'FALLBACK_CACHED'
+                ? '#38BDF8'
                 : freshness.status.includes('REPLAY') || freshness.status.includes('SIMULATED')
-                ? '#F29A60'
+                ? '#F87171'
                 : '#F87171',
             }}
           >
@@ -512,8 +661,10 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
                 borderRadius: '50%',
                 backgroundColor: freshness.status === 'STREAMING' || freshness.status === 'LIVE'
                   ? '#10B981'
+                  : freshness.status === 'FALLBACK_CACHED'
+                  ? '#38BDF8'
                   : freshness.status.includes('REPLAY') || freshness.status.includes('SIMULATED')
-                  ? '#F29A60'
+                  ? '#EF4444'
                   : '#EF4444',
               }}
             />
@@ -527,12 +678,41 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
         </div>
       </div>
 
-      {/* Chart Canvas */}
+      {/* Chart Canvas Area */}
       <div
-        ref={chartContainerRef}
         style={{ width: '100%', flex: 1, minHeight: 0, position: 'relative', overflow: 'hidden' }}
-        aria-label={`Live Chart for ${cleanSymbol}`}
-      />
+      >
+        <div
+          ref={chartContainerRef}
+          style={{ width: '100%', height: '100%' }}
+          aria-label={`Live Chart for ${cleanSymbol}`}
+        />
+        {noDataAvailable && (
+          <div
+            data-testid="chart-empty-state"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: 'rgba(9, 13, 20, 0.92)',
+              backdropFilter: 'blur(3px)',
+              zIndex: 5,
+              padding: 24,
+              textAlign: 'center',
+            }}
+          >
+            <div style={{ fontSize: 15, fontWeight: 600, color: '#F1F5F9', marginBottom: 6 }}>
+              No market data available for this symbol
+            </div>
+            <div style={{ fontSize: 12, color: '#94A3B8', maxWidth: 360, lineHeight: 1.5 }}>
+              Market data is currently offline. No cached or live candles exist for {cleanSymbol}.
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

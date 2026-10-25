@@ -74,19 +74,19 @@
 ---
 
 ## ADR 006: Mobile (Flutter) Scope Decision — Defer vs. Fund
-- **Date:** 19 October 2026
-- **Status:** DRAFT (Pending Owner Decision by 31 October 2026)
-- **Draft Reference:** [docs/architecture-decisions/adr-006-mobile-app-scope.md](architecture-decisions/adr-006-mobile-app-scope.md)
+- **Date:** 25 October 2026
+- **Status:** DECIDED (DEFER — APPROVED Option A)
+- **Decision Record:** [docs/architecture-decisions/adr-006-mobile-app-scope.md](architecture-decisions/adr-006-mobile-app-scope.md)
 - **Tradeoff Summary:**
-  - **Option A (Defer to post-demo):** Focus 100% on web demo stability, zero risk of emulator crashes during presentation, native store packaging in Sprint 9+.
+  - **Option A (Defer to post-demo — Adopted):** Focus 100% on web demo stability, zero risk of emulator crashes during presentation, native store packaging in Sprint 9+. Revisit after 10 Nov demo.
   - **Option B (Fund before 31 Oct):** Allocate ~20 hours to Keystore signing and device emulators to demo a live Android APK on 10 Nov.
 
 ---
 
 ## ADR 007: Delta Lake Analytical Scope Decision — Defer vs. Fund
-- **Date:** 19 October 2026
-- **Status:** DRAFT (Pending Owner Decision by 31 October 2026)
-- **Draft Reference:** [docs/architecture-decisions/adr-007-delta-lake-scope.md](architecture-decisions/adr-007-delta-lake-scope.md)
+- **Date:** 25 October 2026
+- **Status:** DECIDED (DEFER — APPROVED Option A)
+- **Decision Record:** [docs/architecture-decisions/adr-007-delta-lake-scope.md](architecture-decisions/adr-007-delta-lake-scope.md)
 - **Tradeoff Summary:**
-  - **Option A (Defer to post-demo):** Rely on PostgreSQL + local Python runners for demo; 100% deterministic, 0 cloud cluster cost, zero network dropout risk.
+  - **Option A (Defer to post-demo — Adopted):** Rely on PostgreSQL + local Python runners for demo; 100% deterministic, 0 cloud cluster cost, zero network dropout risk. Revisit after 10 Nov demo.
   - **Option B (Fund before 31 Oct):** Provision live remote Databricks workspace/cluster before 31 Oct; requires cloud budget and adds external service latency risk.
