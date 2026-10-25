@@ -59,11 +59,11 @@ class UserStore:
         self._risk_assessments: Dict[str, Dict[str, Any]] = {}  # user_id -> latest assessment dict
         self._revoked_tokens: Set[str] = set()
 
-        # Seed pre-configured principal identity for Shivraj Dhote
+        # Seed pre-configured principal identity for Shivraj Dhote (Platform Owner)
         default_uid = "usr-shivraj-001"
         self._users[default_uid] = UserRecord(
             id=default_uid,
-            email="shivraj.dhote@finex.internal",
+            email="shivrajdhote4452@gmail.com",
             name="Shivraj Dhote",
             provider="google",
             provider_subject="google-sub-shivraj-primary",
@@ -170,12 +170,56 @@ class UserStore:
                 user_entity = res_email.scalar_one_or_none()
 
             if user_entity:
-                # Update email/provider if subject matched
                 user_id = user_entity.id
+                # Backfill missing/placeholder email on existing user without overwriting valid email with blank
+                incoming_email = email.strip() if email else ""
+                if (
+                    not user_entity.email or "@google.user" in user_entity.email or "@finex.local" in user_entity.email
+                ) and incoming_email:
+                    user_entity.email = incoming_email
+                    await session.flush()
+
+                # Check and backfill UserProfile
+                res_prof = await session.execute(select(UserProfile).where(UserProfile.user_id == user_id))
+                user_prof = res_prof.scalar_one_or_none()
+                incoming_name = name.strip() if name else ""
+
+                if not user_prof:
+                    display_name = incoming_name.split(" ")[0] if incoming_name else "Investor"
+                    user_prof = UserProfile(
+                        id=str(uuid.uuid4()),
+                        user_id=user_id,
+                        full_name=incoming_name or "Investor",
+                        display_name=display_name,
+                        country="IND",
+                        experience_level="BEGINNER",
+                        onboarding_completed=False,
+                    )
+                    session.add(user_prof)
+                    await session.flush()
+                else:
+                    if (
+                        incoming_name
+                        and incoming_name != "Investor"
+                        and (not user_prof.full_name or user_prof.full_name == "Investor")
+                    ):
+                        user_prof.full_name = incoming_name
+                        if not user_prof.display_name or user_prof.display_name == "Investor":
+                            user_prof.display_name = incoming_name.split(" ")[0]
+                        await session.flush()
+
+                if owns_session:
+                    await session.commit()
+
+                final_name = (
+                    (user_prof.full_name if user_prof and user_prof.full_name else None)
+                    or incoming_name
+                    or user_entity.email.split("@")[0]
+                )
                 user_rec = UserRecord(
                     id=user_id,
                     email=user_entity.email,
-                    name=name or user_entity.email.split("@")[0],
+                    name=final_name,
                     provider=user_entity.provider,
                     provider_subject=user_entity.provider_subject,
                     is_active=user_entity.is_active,
@@ -183,13 +227,24 @@ class UserStore:
                 )
                 self._users[user_id] = user_rec
                 self._provider_index[f"{provider}:{provider_subject}"] = user_id
+                if user_prof:
+                    self._profiles[user_id] = UserProfileRecord(
+                        user_id=user_id,
+                        full_name=user_prof.full_name or final_name,
+                        display_name=user_prof.display_name or final_name.split(" ")[0],
+                        country=user_prof.country or "IND",
+                        experience_level=user_prof.experience_level or "BEGINNER",
+                        onboarding_completed=user_prof.onboarding_completed,
+                    )
                 return user_rec
 
-            # Create new user
+            # Create new user: persist verified name and email
             uid = user_id or f"usr-{uuid.uuid4().hex[:12]}"
+            clean_email = email.strip() if email else f"{uid}@finex.local"
+            clean_name = name.strip() if name else "Investor"
             new_user = User(
                 id=uid,
-                email=email,
+                email=clean_email,
                 provider=provider,
                 provider_subject=provider_subject,
                 is_active=True,
@@ -198,12 +253,12 @@ class UserStore:
             session.add(new_user)
             await session.flush()
 
-            # Create initial profile
-            display_name = name.split(" ")[0] if name else "Investor"
+            # Create initial profile with captured name
+            display_name = clean_name.split(" ")[0] if clean_name else "Investor"
             new_profile = UserProfile(
                 id=str(uuid.uuid4()),
                 user_id=uid,
-                full_name=name,
+                full_name=clean_name,
                 display_name=display_name,
                 country="IND",
                 experience_level="BEGINNER",
@@ -215,8 +270,8 @@ class UserStore:
 
             user_rec = UserRecord(
                 id=uid,
-                email=email,
-                name=name,
+                email=clean_email,
+                name=clean_name,
                 provider=provider,
                 provider_subject=provider_subject,
                 is_active=True,
@@ -226,7 +281,7 @@ class UserStore:
             self._provider_index[f"{provider}:{provider_subject}"] = uid
             self._profiles[uid] = UserProfileRecord(
                 user_id=uid,
-                full_name=name,
+                full_name=clean_name,
                 display_name=display_name,
                 country="IND",
                 experience_level="BEGINNER",
@@ -245,6 +300,7 @@ class UserStore:
                 provider_subject=provider_subject,
                 email=email,
                 name=name,
+                user_id=user_id,
             )
         finally:
             if owns_session:
@@ -261,10 +317,15 @@ class UserStore:
             res = await session.execute(select(User).where(User.id == user_id))
             u = res.scalar_one_or_none()
             if u:
+                res_prof = await session.execute(select(UserProfile).where(UserProfile.user_id == user_id))
+                p = res_prof.scalar_one_or_none()
+                resolved_name = (p.full_name if p and p.full_name else None) or (
+                    self._users[u.id].name if u.id in self._users and self._users[u.id].name else u.email.split("@")[0]
+                )
                 rec = UserRecord(
                     id=u.id,
                     email=u.email,
-                    name=u.email.split("@")[0],
+                    name=resolved_name,
                     provider=u.provider,
                     provider_subject=u.provider_subject,
                     is_active=u.is_active,
@@ -534,30 +595,47 @@ class UserStore:
         provider_subject: str,
         email: str,
         name: str,
+        user_id: Optional[str] = None,
     ) -> UserRecord:
         index_key = f"{provider}:{provider_subject}"
         if index_key in self._provider_index:
-            user_id = self._provider_index[index_key]
-            user = self._users[user_id]
-            user.email = email
-            user.name = name
+            existing_uid = self._provider_index[index_key]
+            user = self._users[existing_uid]
+            incoming_email = email.strip() if email else ""
+            if (not user.email or "@google.user" in user.email or "@finex.local" in user.email) and incoming_email:
+                user.email = incoming_email
+            incoming_name = name.strip() if name else ""
+            if incoming_name and incoming_name != "Investor" and (not user.name or user.name == "Investor"):
+                user.name = incoming_name
+            prof = self._profiles.get(existing_uid)
+            if prof:
+                if (
+                    incoming_name
+                    and incoming_name != "Investor"
+                    and (not prof.full_name or prof.full_name == "Investor")
+                ):
+                    prof.full_name = incoming_name
+                    if not prof.display_name or prof.display_name == "Investor":
+                        prof.display_name = incoming_name.split(" ")[0]
             return user
 
-        user_id = f"usr-{uuid.uuid4().hex[:12]}"
+        uid = user_id or f"usr-{uuid.uuid4().hex[:12]}"
+        clean_email = email.strip() if email else f"{uid}@finex.local"
+        clean_name = name.strip() if name else "Investor"
         user = UserRecord(
-            id=user_id,
-            email=email,
-            name=name,
+            id=uid,
+            email=clean_email,
+            name=clean_name,
             provider=provider,
             provider_subject=provider_subject,
         )
-        self._users[user_id] = user
-        self._provider_index[index_key] = user_id
+        self._users[uid] = user
+        self._provider_index[index_key] = uid
 
-        display_name = name.split(" ")[0] if name else "Investor"
-        self._profiles[user_id] = UserProfileRecord(
-            user_id=user_id,
-            full_name=name,
+        display_name = clean_name.split(" ")[0] if clean_name else "Investor"
+        self._profiles[uid] = UserProfileRecord(
+            user_id=uid,
+            full_name=clean_name,
             display_name=display_name,
             country="IND",
             experience_level="BEGINNER",

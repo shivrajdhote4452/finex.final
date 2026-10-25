@@ -111,10 +111,18 @@ class ApiClient {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        ...options,
+        headers,
+        signal: options.signal || controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     // Handle 401 Unauthorized globally
     if (response.status === 401) {
@@ -159,7 +167,7 @@ class ApiClient {
       return res;
     },
 
-    devLogin: async (email: string = 'shivraj.dhote@finex.internal', name: string = 'Shivraj Dhote') => {
+    devLogin: async (email: string = 'shivrajdhote4452@gmail.com', name: string = 'Shivraj Dhote') => {
       const res = await this.request<{
         access_token: string;
         token_type: string;
@@ -188,6 +196,7 @@ class ApiClient {
         risk_band: string;
         composite_score: number;
         verified_identity: boolean;
+        is_owner?: boolean;
       }>('/users/me');
     },
 

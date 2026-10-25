@@ -32,7 +32,7 @@ class GoogleLoginRequest(BaseModel):
 
 class DevLoginRequest(BaseModel):
     user_id: str = "usr-shivraj-001"
-    email: str = "shivraj.dhote@finex.internal"
+    email: str = "shivrajdhote4452@gmail.com"
     name: str = "Shivraj Dhote"
 
 
@@ -74,6 +74,32 @@ def create_access_token(user_id: str, email: str, name: str) -> str:
         "iat": datetime.now(timezone.utc),
     }
     return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+
+
+def is_owner(user: object) -> bool:
+    """Check if the user is the platform owner.
+
+    Fails closed: returns False if OWNER_EMAIL is unset/empty or if user/email is missing.
+    Matches case-insensitively with leading/trailing whitespace trimmed.
+    Accepts a dict (JWT claims or profile dict), User, UserRecord, or email string.
+    """
+    settings = get_settings()
+    owner_email = (getattr(settings, "OWNER_EMAIL", None) or "").strip().lower()
+    if not owner_email:
+        return False
+
+    email: Optional[str] = None
+    if isinstance(user, str):
+        email = user
+    elif isinstance(user, dict):
+        email = user.get("email")
+    elif hasattr(user, "email"):
+        email = getattr(user, "email", None)
+
+    if not email or not isinstance(email, str):
+        return False
+
+    return email.strip().lower() == owner_email
 
 
 async def get_current_user_id(
@@ -125,6 +151,16 @@ async def get_current_user_id(
             detail="Invalid or expired access token",
             headers={"WWW-Authenticate": "Bearer"},
         ) from None
+
+
+async def require_owner(current_user: dict = Depends(get_current_user_id)) -> dict:
+    """FastAPI dependency to enforce owner-only access. Refuses non-owners with HTTP 403."""
+    if not is_owner(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Sandbox controls and accounts are restricted to the platform owner.",
+        )
+    return current_user
 
 
 @router.post("/google")
@@ -297,9 +333,11 @@ async def get_current_user_profile(
     profile = await user_store.get_profile_db(uid, db=db)
     user = await user_store.get_user_by_id_db(uid, db=db)
 
+    resolved_email = user.email if user else user_info.get("email", "investor@finex.internal")
+
     profile_data = {
         "user_id": uid,
-        "email": user.email if user else user_info.get("email", "investor@finex.internal"),
+        "email": resolved_email,
         "full_name": profile.full_name,
         "display_name": profile.display_name,
         "experience_level": profile.experience_level,
@@ -308,6 +346,7 @@ async def get_current_user_profile(
         "risk_band": profile.risk_band,
         "composite_score": profile.composite_score,
         "verified_identity": True,
+        "is_owner": is_owner(resolved_email),
     }
     return create_response_envelope(profile_data, correlation_id=cid)
 

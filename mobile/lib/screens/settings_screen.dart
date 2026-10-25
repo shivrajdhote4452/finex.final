@@ -19,6 +19,7 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
   bool _isLoading = false;
   bool _resetSuccess = false;
   bool _notificationsEnabled = true;
+  bool _isOwner = false;
 
   final _currencyFmt = NumberFormat.currency(symbol: '₹', locale: 'en_IN', decimalDigits: 2);
 
@@ -29,6 +30,14 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
   }
 
   Future<void> _loadAccount() async {
+    try {
+      final profile = await apiClient.getProfile();
+      if (mounted) {
+        setState(() {
+          _isOwner = profile['is_owner'] == true;
+        });
+      }
+    } catch (_) {}
     try {
       final acct = await apiClient.getAccount();
       if (mounted) {
@@ -81,16 +90,16 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
     return Scaffold(
       backgroundColor: TerminalColors.canvas,
       appBar: AppBar(
-        title: const Column(
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            const Text(
               "Settings & Governance",
               style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: TerminalColors.textMain),
             ),
             Text(
-              "Investor Profile · Sandbox · Compliance",
-              style: TextStyle(fontSize: 10, color: TerminalColors.textMuted),
+              "Investor Profile · ${_isOwner ? "Sandbox · " : ""}Compliance",
+              style: const TextStyle(fontSize: 10, color: TerminalColors.textMuted),
             ),
           ],
         ),
@@ -161,7 +170,7 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
               children: [
                 _buildSubTabButton("profile", "Profile"),
                 _buildSubTabButton("appearance", "Theme"),
-                _buildSubTabButton("sandbox", "Sandbox"),
+                if (_isOwner) _buildSubTabButton("sandbox", "Sandbox"),
                 _buildSubTabButton("compliance", "Legal"),
               ],
             ),
@@ -171,7 +180,7 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
           // Tab Body
           if (_activeTab == 'profile') _buildProfileSection(),
           if (_activeTab == 'appearance') _buildAppearanceSection(),
-          if (_activeTab == 'sandbox') _buildSandboxSection(),
+          if (_activeTab == 'sandbox' && _isOwner) _buildSandboxSection(),
           if (_activeTab == 'compliance') _buildComplianceSection(),
 
           const SizedBox(height: 24),

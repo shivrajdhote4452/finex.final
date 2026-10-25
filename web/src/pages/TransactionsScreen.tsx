@@ -9,6 +9,7 @@ export const TransactionsScreen: React.FC = () => {
     totalRealizedPnL,
     openQuickTrade,
     depositFunds,
+    isOwner,
   } = useFinancial();
 
 
@@ -84,9 +85,11 @@ export const TransactionsScreen: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          <button onClick={() => setShowDepositModal(true)} className="btn btn-secondary">
-            💰 Add Paper Cash
-          </button>
+          {isOwner && (
+            <button onClick={() => setShowDepositModal(true)} className="btn btn-secondary">
+              💰 Add Paper Cash
+            </button>
+          )}
           <button onClick={handleExportCSV} className="btn btn-secondary">
             📥 Export to CSV
           </button>
@@ -399,7 +402,7 @@ export const TransactionsScreen: React.FC = () => {
                 <span className="tabular-nums" style={{ color: '#FFFFFF', fontWeight: 700 }}>₹{selectedNote.total.toLocaleString('en-IN')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Brokerage (Educational Sandbox):</span>
+                <span style={{ color: 'var(--text-muted)' }}>Brokerage ({isOwner ? 'Educational Sandbox' : 'Simulated Paper'}):</span>
                 <span style={{ color: 'var(--color-profit)' }}>₹0.00 (Free)</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
@@ -428,7 +431,7 @@ export const TransactionsScreen: React.FC = () => {
       )}
 
       {/* Add Paper Cash Modal */}
-      {showDepositModal && (
+      {isOwner && showDepositModal && (
         <div className="modal-overlay" onClick={() => setShowDepositModal(false)}>
           <div
             className="modal-content"

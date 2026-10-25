@@ -96,14 +96,20 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onLoginSuccess }) 
     setLoading(true);
     setErrorMessage(null);
     try {
-      await apiClient.auth.devLogin('shivraj.dhote@finex.internal', 'Shivraj Dhote');
+      await apiClient.auth.devLogin('shivrajdhote4452@gmail.com', 'Shivraj Dhote');
       try {
         await apiClient.auth.recordConsent('v1.0');
       } catch {}
       onLoginSuccess();
     } catch (err: any) {
-      // When backend is not hosted on Vercel (404/network), gracefully establish local session
-      if (err?.status === 404 || err?.message?.includes('404') || err?.message?.includes('Failed to fetch')) {
+      if (
+        err?.status === 404 ||
+        err?.message?.includes('404') ||
+        err?.message?.includes('Failed to fetch') ||
+        err?.message?.includes('abort') ||
+        err?.name === 'AbortError' ||
+        err?.name === 'TypeError'
+      ) {
         apiClient.setToken('mock-session-shivraj-dhote');
         onLoginSuccess();
         return;
@@ -218,7 +224,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onLoginSuccess }) 
             </span>
           </label>
 
-          {/* Primary Action: Continue as Shivraj Dhote (One-Click Local Sandbox) */}
+          {/* Primary Action: Continue as Shivraj Dhote */}
           <button
             onClick={handleDevLogin}
             disabled={loading}
@@ -234,7 +240,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onLoginSuccess }) 
               marginBottom: '10px',
             }}
           >
-            <span>⚡ {loading ? 'Initializing session...' : 'Continue as Shivraj Dhote (Local Sandbox)'}</span>
+            <span>⚡ {loading ? 'Initializing session...' : 'Continue as Shivraj Dhote'}</span>
           </button>
 
           {/* Secondary Action: Continue with Google */}

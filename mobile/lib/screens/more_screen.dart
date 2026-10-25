@@ -194,7 +194,7 @@ class MobileMoreScreen extends StatelessWidget {
         _buildModuleItem(
           icon: Icons.settings_outlined,
           title: "Settings & Risk Profile",
-          subtitle: "Account, sandbox reset, consent & disclosures",
+          subtitle: "Account, simulated portfolio, consent & disclosures",
           badge: "Admin",
           badgeColor: const Color(0xFF60A5FA),
           onTap: () {
@@ -234,7 +234,7 @@ class MobileMoreScreen extends StatelessWidget {
               ),
               SizedBox(height: 4),
               Text(
-                "FinEx is an educational platform. All orders are executed in a simulated sandbox with atomic virtual ledger balances. No real-money brokerage orders are submitted.",
+                "FinEx is an educational platform. All orders are executed in an educational paper portfolio with atomic virtual ledger balances. No real-money brokerage orders are submitted.",
                 style: TextStyle(fontSize: 11, height: 1.4, color: TerminalColors.textMuted),
               ),
             ],

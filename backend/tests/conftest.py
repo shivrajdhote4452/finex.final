@@ -31,10 +31,10 @@ def app():
 
 @pytest.fixture
 def auth_headers():
-    """Valid signed JWT for primary user Shivraj Dhote."""
+    """Valid signed JWT for primary user Shivraj Dhote (Platform Owner)."""
     token = create_access_token(
         user_id="usr-shivraj-001",
-        email="shivraj.dhote@finex.internal",
+        email="shivrajdhote4452@gmail.com",
         name="Shivraj Dhote",
     )
     return {"Authorization": f"Bearer {token}"}

@@ -31,7 +31,12 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
     notifications,
     totalTradesCount,
     openQuickTrade,
+    isOwner,
+    userProfile,
   } = useFinancial();
+
+  const displayName = userProfile?.display_name || userProfile?.full_name?.split(' ')[0] || (isOwner ? 'Shivraj' : 'Investor');
+  const initialLetter = (displayName[0] || 'I').toUpperCase();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -313,7 +318,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <div className="pulse-dot" style={{ backgroundColor: 'var(--color-action)', boxShadow: '0 0 6px var(--color-action)' }} />
               <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)', letterSpacing: '-0.01em' }}>
-                Shivraj’s workspace
+                {displayName}’s workspace
               </span>
             </div>
 
@@ -372,10 +377,12 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
                   paddingRight: '18px',
                 }}
               >
-                <div>
-                  <span style={{ color: 'var(--text-muted)' }}>Virtual account: </span>
-                  <span style={{ color: 'var(--color-action)', fontWeight: 600 }}>Paper</span>
-                </div>
+                {isOwner && (
+                  <div>
+                    <span style={{ color: 'var(--text-muted)' }}>Virtual account: </span>
+                    <span style={{ color: 'var(--color-action)', fontWeight: 600 }}>Paper</span>
+                  </div>
+                )}
                 <div>
                   <span style={{ color: 'var(--text-muted)' }}>Holdings: </span>
                   <span style={{ color: '#FFFFFF', fontWeight: 600 }}>₹{(totalHoldingsValue ?? 0).toLocaleString('en-IN')}</span>
@@ -452,9 +459,9 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
                     fontSize: '11px',
                   }}
                 >
-                  S
+                  {initialLetter}
                 </div>
-                <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-main)' }}>Shivraj</span>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-main)' }}>{displayName}</span>
                 <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>↓</span>
               </div>
             </div>

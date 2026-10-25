@@ -109,7 +109,7 @@ class ApiClient {
 
   // --- Auth & Onboarding ---
   Future<Map<String, dynamic>> devLogin({
-    String email = 'shivraj.dhote@finex.internal',
+    String email = 'shivrajdhote4452@gmail.com',
     String name = 'Shivraj Dhote',
   }) async {
     if (!kDebugMode && !kIsWeb) {
