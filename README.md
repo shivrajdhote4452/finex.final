@@ -38,14 +38,17 @@ Ensure `JWT_SECRET_KEY` is configured (minimum 32 characters in production).
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 
-# Install exact declared dependencies
-python -m pip install -r backend/requirements.txt
+# Install exact pinned dependencies (lockfile guarantees reproducible installs)
+python -m pip install -r backend/requirements.lock
+# (Alternatively, for unpinned development ranges: python -m pip install -r backend/requirements.txt)
 python -m pip check
 
 # Start live backend server (hot-reload enabled)
 python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
-Interactive API Documentation will be immediately accessible at:
+Interactive API Documentation and System Health Probes will be immediately accessible at:
+- **Process Liveness Probe:** `http://127.0.0.1:8000/api/v1/health/live`
+- **Dependency Readiness Probe:** `http://127.0.0.1:8000/api/v1/health/ready`
 - **Swagger UI:** `http://127.0.0.1:8000/api/v1/docs` (or auto-redirect from `http://127.0.0.1:8000/` and `/docs`)
 - **ReDoc UI:** `http://127.0.0.1:8000/api/v1/redoc`
 - **OpenAPI Schema:** `http://127.0.0.1:8000/api/v1/openapi.json`
@@ -63,7 +66,7 @@ Accessible at `http://localhost:3000`.
 ### Database Initialization & Migrations (PostgreSQL / SQLite)
 FinEx uses Alembic migrations decoupled from mutable application metadata:
 ```powershell
-# Run all forward migrations to latest head revision (003)
+# Run all forward migrations to latest head revision (007)
 python -m alembic upgrade head
 
 # Inspect raw SQL without applying:
@@ -106,6 +109,7 @@ npm run build
 ## 4. Documentation Catalog
 
 - **Demo-Day Runbook (10 Nov 2026):** [`docs/demo-runbook.md`](docs/demo-runbook.md)
+- **Clean-Machine Rehearsal Report (CORR-9):** [`docs/clean-machine-rehearsal-report.md`](docs/clean-machine-rehearsal-report.md)
 - **Go-Live Checklist & Verification:** [`docs/runbooks/go-live-checklist.md`](docs/runbooks/go-live-checklist.md)
 - **Security Secrets Audit Report (CORR-5):** [`docs/secrets-scan-report.md`](docs/secrets-scan-report.md)
 - **Demo-Blocker Issues Checklist:** [`docs/demo-blocker-issues.md`](docs/demo-blocker-issues.md)
