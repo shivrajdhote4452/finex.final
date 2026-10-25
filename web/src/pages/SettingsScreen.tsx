@@ -7,7 +7,7 @@ interface SettingsScreenProps {
 }
 
 export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => {
-  const { virtualCash, resetAccount } = useFinancial();
+  const { virtualCash, resetAccount, isOwner, userProfile } = useFinancial();
   const [resetSuccess, setResetSuccess] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [activeSubTab, setActiveSubTab] = useState<'profile' | 'appearance' | 'sandbox' | 'compliance'>('profile');
@@ -18,12 +18,28 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
     setTimeout(() => setResetSuccess(false), 2500);
   };
 
+  const fullName = userProfile?.full_name || (isOwner ? 'Shivraj Dhote' : 'FinEx Investor');
+  const roleTitle = isOwner ? 'Sole Developer & Admin' : 'Active Investor';
+  const initials = fullName
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((s) => s[0].toUpperCase())
+    .join('') || (isOwner ? 'SD' : 'FI');
+
+  const tabs: { id: 'profile' | 'appearance' | 'sandbox' | 'compliance'; label: string }[] = [
+    { id: 'profile', label: 'Investor Profile' },
+    { id: 'appearance', label: 'Theme & Appearance' },
+    ...(isOwner ? [{ id: 'sandbox' as const, label: 'Sandbox & Trading Rules' }] : []),
+    { id: 'compliance', label: 'Consent & Regulatory' },
+  ];
+
   return (
     <div style={{ maxWidth: '1240px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '32px' }}>
       {/* Header */}
       <div>
         <span style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>
-          User Preferences & Sandbox Governance
+          {isOwner ? 'User Preferences & Sandbox Governance' : 'User Preferences & Trading Rules'}
         </span>
         <h1 style={{ fontSize: '36px', fontWeight: 700, color: '#FFFFFF', marginTop: '4px', letterSpacing: '-0.02em' }}>
           Workspace Settings
@@ -52,23 +68,18 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
               marginBottom: '20px',
             }}
           >
-            SD
+            {initials}
           </div>
 
           <h2 style={{ fontSize: '24px', fontWeight: 700, color: '#FFFFFF', margin: '0 0 4px 0' }}>
-            Shivraj Dhote
+            {fullName}
           </h2>
           <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '28px' }}>
-            Sole Developer & Admin
+            {roleTitle}
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {[
-              { id: 'profile', label: 'Investor Profile' },
-              { id: 'appearance', label: 'Theme & Appearance' },
-              { id: 'sandbox', label: 'Sandbox & Trading Rules' },
-              { id: 'compliance', label: 'Consent & Regulatory' },
-            ].map((tab) => {
+            {tabs.map((tab) => {
               const isActive = activeSubTab === tab.id;
               return (
                 <button
@@ -184,7 +195,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
             </div>
           )}
 
-          {activeSubTab === 'sandbox' && (
+          {isOwner && activeSubTab === 'sandbox' && (
             <div>
               <h3 style={{ fontSize: '18px', fontWeight: 600, color: '#FFFFFF', marginBottom: '8px' }}>
                 Paper Trading Sandbox Controls

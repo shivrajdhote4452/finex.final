@@ -19,7 +19,7 @@ from backend.app.domain.paper_trading_service import (
     OrderSubmitRequest,
     PaperTradingEngine,
 )
-from backend.app.routers.auth import get_current_user_id
+from backend.app.routers.auth import get_current_user_id, is_owner
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -139,6 +139,12 @@ async def reset_paper_account(
     db: AsyncSession = Depends(get_db),
 ):
     """Reset virtual cash balance back to ₹1,00,000 and clear simulated positions in PostgreSQL."""
+    if not is_owner(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Sandbox controls and accounts are restricted to the platform owner.",
+        )
+
     cid = getattr(request.state, "correlation_id", None)
     user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
 
@@ -165,6 +171,12 @@ async def deposit_virtual_cash(
     db: AsyncSession = Depends(get_db),
 ):
     """Credit authorized virtual paper cash to account with immutable ledger audit record in PostgreSQL."""
+    if not is_owner(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Sandbox controls and accounts are restricted to the platform owner.",
+        )
+
     cid = getattr(request.state, "correlation_id", None)
     user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
 

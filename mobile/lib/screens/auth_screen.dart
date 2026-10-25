@@ -108,7 +108,7 @@ class _MobileAuthScreenState extends State<MobileAuthScreen> {
             errText.contains("clientId") ||
             errText.contains("origin")) {
           displayMsg =
-              "Google OAuth requires localhost:8085 in Google Cloud Console. Please tap '⚡ CONTINUE AS SHIVRAJ DHOTE (DEV SANDBOX)' above.";
+              "Google OAuth requires localhost:8085 in Google Cloud Console. Please tap '⚡ CONTINUE AS SHIVRAJ DHOTE' above.";
         }
         setState(() {
           _errorMessage = displayMsg;
@@ -193,7 +193,7 @@ class _MobileAuthScreenState extends State<MobileAuthScreen> {
                       ),
                       onPressed: _isLoading ? null : _handleDevLogin,
                       child: Text(
-                        _isLoading ? "AUTHENTICATING..." : "⚡ CONTINUE AS SHIVRAJ DHOTE (DEV SANDBOX)",
+                        _isLoading ? "AUTHENTICATING..." : "⚡ CONTINUE AS SHIVRAJ DHOTE",
                         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 0.5),
                       ),
                     ),

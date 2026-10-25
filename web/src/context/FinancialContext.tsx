@@ -69,6 +69,14 @@ export interface MarketQuote {
   lastTick?: 'up' | 'down' | 'none';
 }
 
+export interface UserProfileData {
+  id?: string;
+  email?: string;
+  full_name?: string;
+  display_name?: string;
+  is_owner?: boolean;
+}
+
 interface FinancialContextType {
   virtualCash: number;
   holdings: HoldingItem[];
@@ -78,6 +86,8 @@ interface FinancialContextType {
   marketQuotes: Record<string, MarketQuote>;
   isAccountLoading: boolean;
   accountError: string | null;
+  isOwner: boolean;
+  userProfile: UserProfileData | null;
   totalHoldingsValue: number;
   totalPortfolioValue: number;
   unrealizedPnL: number;
@@ -153,6 +163,8 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
   const [spendingItems, setSpendingItems] = useState<SpendingItem[]>([]);
   const [isAccountLoading, setIsAccountLoading] = useState<boolean>(apiClient.isAuthenticated());
   const [accountError, setAccountError] = useState<string | null>(null);
+  const [isOwner, setIsOwner] = useState<boolean>(false);
+  const [userProfile, setUserProfile] = useState<UserProfileData | null>(null);
 
   const sessionGenerationRef = useRef<number>(0);
 
@@ -194,6 +206,8 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
     setNotifications([]);
     setSpendingItems([]);
     setAccountError(null);
+    setIsOwner(false);
+    setUserProfile(null);
     setIsAccountLoading(false);
   }, []);
 
@@ -208,6 +222,22 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
     setIsAccountLoading(true);
     setAccountError(null);
     try {
+      try {
+        const me = await apiClient.auth.getMe();
+        if (thisGen === sessionGenerationRef.current && me) {
+          setIsOwner(Boolean(me.is_owner));
+          setUserProfile({
+            id: me.user_id,
+            email: me.email,
+            full_name: me.full_name,
+            display_name: me.display_name,
+            is_owner: Boolean(me.is_owner),
+          });
+        }
+      } catch {
+        // In local offline mode or unauthenticated fallback, fail closed (isOwner remains false)
+      }
+
       const acct = await apiClient.paperTrading.getAccount();
       if (thisGen !== sessionGenerationRef.current) return;
       if (acct) {
@@ -458,6 +488,10 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
       addNotification('Invalid Amount', 'Please specify a positive deposit amount.', 'execution');
       return;
     }
+    if (!isOwner) {
+      addNotification('Action Denied', 'Paper trading sandbox controls are restricted to the platform owner.', 'execution');
+      return;
+    }
     try {
       if (apiClient.isAuthenticated()) {
         await apiClient.paperTrading.deposit(amount);
@@ -485,7 +519,7 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
     setLedger((prev) => [depositEntry, ...prev]);
     addNotification(
       'Funds Deposited',
-      `Credited ₹${amount.toLocaleString('en-IN')} virtual cash to your sandbox account`,
+      `Credited ₹${amount.toLocaleString('en-IN')} virtual cash to your ${isOwner ? 'sandbox' : 'paper'} account`,
       'execution'
     );
   };
@@ -493,6 +527,10 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
   const resetAccount = async () => {
     if (!apiClient.isAuthenticated()) {
       addNotification('Reset Failed', 'Authentication required. Please sign in to reset account.', 'execution');
+      return;
+    }
+    if (!isOwner) {
+      addNotification('Action Denied', 'Paper trading sandbox controls are restricted to the platform owner.', 'execution');
       return;
     }
     try {
@@ -759,6 +797,8 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
         marketQuotes,
         isAccountLoading,
         accountError,
+        isOwner,
+        userProfile,
         totalHoldingsValue,
         totalPortfolioValue,
         unrealizedPnL,
