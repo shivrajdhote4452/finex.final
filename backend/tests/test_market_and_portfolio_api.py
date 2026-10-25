@@ -80,6 +80,7 @@ async def test_market_quote_success(app):
             "nse_official_report",
             "nse_official_baseline_snapshot",
             "angel_smartapi",
+            "test_fixture_baseline_snapshot",
         )
         assert "source_evidence" in data
 
