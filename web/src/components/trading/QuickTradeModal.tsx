@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useFinancial, OrderExecutionType, LedgerEntry } from '../../context/FinancialContext';
+import { useToast } from '../../context/ToastContext';
 
 export const QuickTradeModal: React.FC = () => {
   const {
@@ -11,6 +12,7 @@ export const QuickTradeModal: React.FC = () => {
     holdings,
     executeOrder,
   } = useFinancial();
+  const { showToast } = useToast();
 
   const [symbol, setSymbol] = useState(quickTradeSymbol || 'RELIANCE');
   const [tradeType, setTradeType] = useState<'BUY' | 'SELL'>('BUY');
@@ -71,11 +73,24 @@ export const QuickTradeModal: React.FC = () => {
 
       if (res.success && res.receipt) {
         setReceipt(res.receipt);
+        const actionVerb = tradeType === 'BUY' ? 'Bought' : 'Sold';
+        const fillFormatted = res.receipt.fillPrice.toLocaleString('en-IN', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
+        showToast(
+          `${actionVerb} ${shares} ${symbol} @ ₹${fillFormatted}`,
+          'success',
+          'Order Executed'
+        );
       } else if (res.error) {
         setErrorMessage(res.error);
+        showToast(res.error, 'error', 'Trade Failed');
       }
     } catch (err: any) {
-      setErrorMessage(err?.message || 'Order execution failed.');
+      const msg = err?.message || 'Order execution failed.';
+      setErrorMessage(msg);
+      showToast(msg, 'error', 'Trade Failed');
     } finally {
       setIsSubmitting(false);
     }

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useFinancial } from '../context/FinancialContext';
 import { NavigationTab } from '../components/layout/AppShell';
+import { RecentTransactions } from '../components/trading/RecentTransactions';
+import { CardSkeleton, TableSkeleton } from '../components/common/Skeleton';
 
 interface PortfolioScreenProps {
   onNavigate: (tab: NavigationTab) => void;
@@ -13,12 +15,52 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
     totalHoldingsValue,
     unrealizedPnL,
     totalPortfolioValue,
+    isAccountLoading,
     openQuickTrade,
     depositFunds,
   } = useFinancial();
 
   const [showRebalanceModal, setShowRebalanceModal] = useState(false);
   const isProfit = unrealizedPnL >= 0;
+
+  // Day P&L computed client-side from holdings dayChangePct
+  const dayPnL = holdings.reduce((sum, h) => {
+    const curVal = (Number(h.shares) || 0) * (Number(h.currentPrice) || 0);
+    const dayPct = Number(h.dayChangePct) || 0;
+    const prevVal = curVal / (1 + dayPct / 100);
+    return sum + (curVal - prevVal);
+  }, 0);
+
+  const prevPortfolioValue = totalPortfolioValue - dayPnL;
+  const dayPnLPct = prevPortfolioValue > 0 ? (dayPnL / prevPortfolioValue) * 100 : 0;
+  const isDayProfit = dayPnL >= 0;
+
+  // Donut chart segments (circumference = 2 * PI * 50 = 314.159)
+  const circumference = 314.159;
+  let accumulatedPct = 0;
+  const donutSegments = holdings.map((h) => {
+    const holdingVal = (Number(h.shares) || 0) * (Number(h.currentPrice) || 0);
+    const pct = totalHoldingsValue > 0 ? (holdingVal / totalHoldingsValue) * 100 : 0;
+    const dash = (pct / 100) * circumference;
+    const offset = -(accumulatedPct / 100) * circumference;
+    accumulatedPct += pct;
+    return {
+      symbol: h.symbol,
+      pct,
+      dash,
+      offset,
+      color: h.color || 'var(--color-primary)',
+    };
+  });
+
+  if (isAccountLoading && holdings.length === 0 && virtualCash === 0) {
+    return (
+      <div style={{ maxWidth: '1440px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px', width: '100%', boxSizing: 'border-box' }}>
+        <CardSkeleton count={4} />
+        <TableSkeleton rows={5} columns={7} />
+      </div>
+    );
+  }
 
   return (
     <div style={{ maxWidth: '1440px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
@@ -83,89 +125,224 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
         </div>
       )}
 
-      {/* Metrics Row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px' }}>
-        <div className="glass-card" style={{ padding: '24px' }}>
-          <span style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600 }}>
-            Holdings Valuation
-          </span>
-          <div className="tabular-nums" style={{ fontSize: '32px', fontWeight: 700, color: '#FFFFFF', marginTop: '8px' }}>
-            ₹{totalHoldingsValue.toLocaleString('en-IN')}
+      {/* Portfolio Hero Upgrade Card */}
+      <div
+        className="glass-card"
+        style={{
+          padding: '28px',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+          gap: '32px',
+          alignItems: 'center',
+          boxSizing: 'border-box',
+          width: '100%',
+        }}
+      >
+        {/* Left Column: Total Value, Day P&L, Key Sub-Metrics */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', minWidth: 0 }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+              <span
+                style={{
+                  fontSize: '11px',
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  color: 'var(--text-muted)',
+                  fontWeight: 600,
+                }}
+              >
+                Total Portfolio Valuation
+              </span>
+              <span className="badge badge-cyan" style={{ fontSize: '10px' }}>
+                100% Reconciled
+              </span>
+            </div>
+            <div
+              className="tabular-nums"
+              style={{
+                fontSize: 'clamp(30px, 4vw, 40px)',
+                fontWeight: 800,
+                color: '#FFFFFF',
+                letterSpacing: '-0.02em',
+                lineHeight: 1.1,
+              }}
+            >
+              ₹{totalPortfolioValue.toLocaleString('en-IN')}
+            </div>
           </div>
-          <span style={{ fontSize: '12px', color: 'var(--text-faint)' }}>{holdings.length} Active Positions</span>
-        </div>
 
-        <div className="glass-card" style={{ padding: '24px' }}>
-          <span style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600 }}>
-            Unrealized Gain / Loss
-          </span>
-          <div className="tabular-nums" style={{ fontSize: '32px', fontWeight: 700, color: isProfit ? 'var(--color-profit)' : 'var(--color-loss)', marginTop: '8px' }}>
-            {isProfit ? '+' : ''}₹{unrealizedPnL.toLocaleString('en-IN')}
+          {/* Day P&L & Total ROI Badge Row */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            <span
+              className={isDayProfit ? 'badge badge-profit' : 'badge badge-loss'}
+              style={{ fontSize: '12.5px', padding: '4px 10px', fontWeight: 700 }}
+            >
+              {isDayProfit ? '▲ +' : '▼ '}₹{Math.abs(dayPnL).toLocaleString('en-IN', { maximumFractionDigits: 2 })} ({isDayProfit ? '+' : ''}{dayPnLPct.toFixed(2)}% today)
+            </span>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+              Overall Return:{' '}
+              <strong style={{ color: isProfit ? 'var(--color-profit)' : 'var(--color-loss)' }}>
+                {isProfit ? '+' : ''}₹{unrealizedPnL.toLocaleString('en-IN')}
+              </strong>
+            </span>
           </div>
-          <span className={isProfit ? 'badge badge-profit' : 'badge badge-loss'} style={{ marginTop: '4px' }}>
-            {isProfit ? '+' : ''}{((unrealizedPnL / (totalHoldingsValue - unrealizedPnL || 1)) * 100).toFixed(2)}% Return
-          </span>
-        </div>
 
-        <div className="glass-card" style={{ padding: '24px' }}>
-          <span style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600 }}>
-            Virtual Cash Reserve
-          </span>
-          <div className="tabular-nums" style={{ fontSize: '32px', fontWeight: 700, color: 'var(--color-virtual)', marginTop: '8px' }}>
-            ₹{virtualCash.toLocaleString('en-IN')}
-          </div>
-          <span style={{ fontSize: '12px', color: 'var(--text-faint)' }}>Available for trade simulation</span>
-        </div>
-
-        <div className="glass-card" style={{ padding: '24px' }}>
-          <span style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600 }}>
-            Total Account Equity
-          </span>
-          <div className="tabular-nums" style={{ fontSize: '32px', fontWeight: 700, color: '#FFFFFF', marginTop: '8px' }}>
-            ₹{totalPortfolioValue.toLocaleString('en-IN')}
-          </div>
-          <span style={{ fontSize: '12px', color: 'var(--color-accent-cyan)' }}>100% Reconciled</span>
-        </div>
-      </div>
-
-      {/* Allocation Segment Strip */}
-      <div className="glass-card" style={{ padding: '24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-          <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#FFFFFF' }}>Asset Distribution</h3>
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Excludes Liquid Cash</span>
-        </div>
-
-        {/* Dynamic Horizontal Allocation Bar */}
-        <div style={{ display: 'flex', height: '14px', borderRadius: '4px', overflow: 'hidden', marginBottom: '16px' }}>
-          {holdings.map((h) => {
-            const pct = ((h.shares * h.currentPrice) / (totalHoldingsValue || 1)) * 100;
-            return (
-              <div
-                key={h.symbol}
-                style={{ width: `${pct}%`, backgroundColor: h.color }}
-                title={`${h.symbol}: ${pct.toFixed(1)}%`}
-              />
-            );
-          })}
-        </div>
-
-        {/* Legend */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '24px', fontSize: '12px' }}>
-          {holdings.map((h) => {
-            const pct = ((h.shares * h.currentPrice) / (totalHoldingsValue || 1)) * 100;
-            return (
-              <div key={h.symbol} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ color: h.color, fontSize: '14px' }}>●</span>
-                <span style={{ color: '#FFFFFF', fontWeight: 500 }}>{h.symbol}</span>
-                <span style={{ color: 'var(--text-faint)' }}>({pct.toFixed(1)}%)</span>
+          {/* 3-Column Sub-Metrics Grid */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: '12px',
+              marginTop: '4px',
+              paddingTop: '16px',
+              borderTop: '1px solid var(--border-subtle)',
+            }}
+          >
+            <div>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block' }}>
+                Invested Equity
+              </span>
+              <div className="tabular-nums" style={{ fontSize: '15px', fontWeight: 700, color: '#FFFFFF', marginTop: '2px' }}>
+                ₹{totalHoldingsValue.toLocaleString('en-IN')}
               </div>
-            );
-          })}
+              <span style={{ fontSize: '11px', color: 'var(--text-faint)' }}>
+                {holdings.length} Active Positions
+              </span>
+            </div>
+            <div>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block' }}>
+                Liquid Cash
+              </span>
+              <div className="tabular-nums" style={{ fontSize: '15px', fontWeight: 700, color: 'var(--color-virtual)', marginTop: '2px' }}>
+                ₹{virtualCash.toLocaleString('en-IN')}
+              </div>
+              <span style={{ fontSize: '11px', color: 'var(--text-faint)' }}>
+                Paper Reserve
+              </span>
+            </div>
+            <div>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block' }}>
+                Unrealized Gain
+              </span>
+              <div
+                className="tabular-nums"
+                style={{
+                  fontSize: '15px',
+                  fontWeight: 700,
+                  color: isProfit ? 'var(--color-profit)' : 'var(--color-loss)',
+                  marginTop: '2px',
+                }}
+              >
+                {isProfit ? '+' : ''}₹{unrealizedPnL.toLocaleString('en-IN')}
+              </div>
+              <span style={{ fontSize: '11px', color: 'var(--text-faint)' }}>
+                {((unrealizedPnL / (totalHoldingsValue - unrealizedPnL || 1)) * 100).toFixed(2)}% Return
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column: Allocation Donut Chart (Client-side SVG) */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '24px',
+            backgroundColor: 'rgba(255, 255, 255, 0.015)',
+            padding: '18px 20px',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--border-subtle)',
+            minWidth: 0,
+          }}
+        >
+          {/* Donut SVG */}
+          <div style={{ position: 'relative', width: '124px', height: '124px', flexShrink: 0 }}>
+            <svg viewBox="0 0 140 140" width="124" height="124" style={{ transform: 'rotate(-90deg)' }}>
+              {/* Background ring */}
+              <circle cx="70" cy="70" r="50" fill="none" stroke="rgba(255, 255, 255, 0.05)" strokeWidth="16" />
+              {/* Colored Segments */}
+              {donutSegments.map((seg) => (
+                <circle
+                  key={seg.symbol}
+                  cx="70"
+                  cy="70"
+                  r="50"
+                  fill="none"
+                  stroke={seg.color}
+                  strokeWidth="16"
+                  strokeDasharray={`${seg.dash} 314.159`}
+                  strokeDashoffset={seg.offset}
+                  strokeLinecap="butt"
+                />
+              ))}
+            </svg>
+            {/* Center label */}
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                pointerEvents: 'none',
+              }}
+            >
+              <span style={{ fontSize: '17px', fontWeight: 800, color: '#FFFFFF' }}>
+                {holdings.length}
+              </span>
+              <span style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                Positions
+              </span>
+            </div>
+          </div>
+
+          {/* Donut Legend */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '120px' }}>
+            <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+              Equity Weights
+            </span>
+            {holdings.slice(0, 4).map((h) => {
+              const pct = totalHoldingsValue > 0 ? ((h.shares * h.currentPrice) / totalHoldingsValue) * 100 : 0;
+              return (
+                <div key={h.symbol} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', fontSize: '11.5px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: h.color, display: 'inline-block' }} />
+                    <span style={{ color: '#FFFFFF', fontWeight: 500 }}>{h.symbol}</span>
+                  </div>
+                  <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>{pct.toFixed(1)}%</span>
+                </div>
+              );
+            })}
+            {holdings.length > 4 && (
+              <span style={{ fontSize: '10.5px', color: 'var(--text-faint)' }}>
+                +{holdings.length - 4} other positions
+              </span>
+            )}
+            {holdings.length === 0 && (
+              <span style={{ fontSize: '11px', color: 'var(--text-faint)' }}>
+                No active equity positions
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Holdings Detailed Table */}
       <div className="glass-card" style={{ padding: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#FFFFFF', margin: 0 }}>
+            Active Holdings Ledger
+          </h3>
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+            {holdings.length} Positions Reconciled
+          </span>
+        </div>
+
         <div className="table-scroll-wrapper">
           <div className="table-swipe-hint">← Swipe horizontally to view full holdings data →</div>
           <table style={{ width: '100%', minWidth: '760px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
@@ -182,45 +359,55 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
               </tr>
             </thead>
             <tbody>
-              {holdings.map((h) => {
-                const curVal = h.shares * h.currentPrice;
-                const costVal = h.shares * h.avgPrice;
-                const pnl = curVal - costVal;
-                const isPos = pnl >= 0;
+              {holdings.length === 0 ? (
+                <tr>
+                  <td colSpan={8} style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    No active holdings. Trade any Indian equity to initiate paper positions.
+                  </td>
+                </tr>
+              ) : (
+                holdings.map((h) => {
+                  const curVal = h.shares * h.currentPrice;
+                  const costVal = h.shares * h.avgPrice;
+                  const pnl = curVal - costVal;
+                  const isPos = pnl >= 0;
 
-                return (
-                  <tr
-                    key={h.symbol}
-                    style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}
-                  >
-                    <td style={{ padding: '14px' }}>
-                      <strong style={{ color: '#FFFFFF', fontSize: '14px' }}>{h.symbol}</strong>
-                      <div style={{ fontSize: '11px', color: 'var(--text-faint)' }}>{h.name}</div>
-                    </td>
-                    <td style={{ padding: '14px', color: 'var(--text-muted)' }}>{h.assetClass}</td>
-                    <td style={{ padding: '14px' }} className="tabular-nums">{h.shares}</td>
-                    <td style={{ padding: '14px' }} className="tabular-nums">₹{h.avgPrice.toLocaleString('en-IN')}</td>
-                    <td style={{ padding: '14px' }} className="tabular-nums">₹{h.currentPrice.toLocaleString('en-IN')}</td>
-                    <td style={{ padding: '14px', fontWeight: 600 }} className="tabular-nums">
-                      ₹{curVal.toLocaleString('en-IN')}
-                    </td>
-                    <td style={{ padding: '14px', textAlign: 'right' }}>
-                      <span className={isPos ? 'badge badge-profit' : 'badge badge-loss'}>
-                        {isPos ? '+' : ''}₹{pnl.toLocaleString('en-IN')}
-                      </span>
-                    </td>
-                    <td style={{ padding: '14px', textAlign: 'right' }}>
-                      <button
-                        onClick={() => openQuickTrade(h.symbol)}
-                        className="btn-emerald"
-                        style={{ padding: '5px 12px', fontSize: '11px', borderRadius: 'var(--radius-xs)', cursor: 'pointer' }}
-                      >
-                        Trade
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
+                  return (
+                    <tr
+                      key={h.symbol}
+                      style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}
+                    >
+                      <td style={{ padding: '14px' }}>
+                        <div className="truncate-text" style={{ maxWidth: '160px' }}>
+                          <strong style={{ color: '#FFFFFF', fontSize: '14px' }}>{h.symbol}</strong>
+                          <div style={{ fontSize: '11px', color: 'var(--text-faint)' }}>{h.name}</div>
+                        </div>
+                      </td>
+                      <td style={{ padding: '14px', color: 'var(--text-muted)' }}>{h.assetClass}</td>
+                      <td style={{ padding: '14px' }} className="tabular-nums">{h.shares}</td>
+                      <td style={{ padding: '14px' }} className="tabular-nums">₹{h.avgPrice.toLocaleString('en-IN')}</td>
+                      <td style={{ padding: '14px' }} className="tabular-nums">₹{h.currentPrice.toLocaleString('en-IN')}</td>
+                      <td style={{ padding: '14px', fontWeight: 600 }} className="tabular-nums">
+                        ₹{curVal.toLocaleString('en-IN')}
+                      </td>
+                      <td style={{ padding: '14px', textAlign: 'right' }}>
+                        <span className={isPos ? 'badge badge-profit' : 'badge badge-loss'}>
+                          {isPos ? '+' : ''}₹{pnl.toLocaleString('en-IN')}
+                        </span>
+                      </td>
+                      <td style={{ padding: '14px', textAlign: 'right' }}>
+                        <button
+                          onClick={() => openQuickTrade(h.symbol)}
+                          className="btn-emerald"
+                          style={{ padding: '5px 12px', fontSize: '11px', borderRadius: 'var(--radius-xs)', cursor: 'pointer' }}
+                        >
+                          Trade
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
@@ -250,6 +437,13 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
           <span className="badge badge-profit" style={{ flexShrink: 0 }}>Zero Discrepancy</span>
         </div>
       </div>
+
+      {/* Recent Paper-Trading Transactions Ledger Feed (Below Holdings) */}
+      <RecentTransactions
+        title="Recent Portfolio Transactions"
+        onNavigate={onNavigate}
+        maxItems={8}
+      />
 
       {/* Rebalance Simulator Modal */}
       {showRebalanceModal && (
@@ -305,3 +499,5 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
     </div>
   );
 };
+
+export default PortfolioScreen;
