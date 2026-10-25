@@ -10,6 +10,7 @@ import {
 import { apiClient } from '../api/client';
 import { useFinancial, MarketQuote, OrderExecutionType } from '../context/FinancialContext';
 import { FinExLiveChart } from '../components/market/FinExLiveChart';
+import { TradeTimeMachine } from '../components/market/TradeTimeMachine';
 import { CleanFormattedText } from '../components/common/CleanFormattedText';
 
 export interface ChartWorkspaceProps {
@@ -95,7 +96,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
   const [timeframe, setTimeframe] = useState<string>('1D');
   const [chartType, setChartType] = useState<ChartType>('candlestick');
   const [layout, setLayout] = useState<WorkspaceLayout>('single');
-  const [chartEngine, setChartEngine] = useState<'finex_live' | 'tradingview'>('finex_live');
+  const [chartEngine, setChartEngine] = useState<'finex_live' | 'tradingview' | 'time_machine'>('finex_live');
 
   // Indicators
   const [activeIndicators, setActiveIndicators] = useState<{
@@ -1241,6 +1242,26 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
             >
               📈 TradingView Pro
             </button>
+            <button
+              onClick={() => setChartEngine('time_machine')}
+              title="Switch to Trade Time Machine (Historical Day Candle-by-Candle Replay)"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '4px 10px',
+                borderRadius: '4px',
+                fontSize: '11px',
+                fontWeight: 700,
+                border: 'none',
+                cursor: 'pointer',
+                backgroundColor: chartEngine === 'time_machine' ? '#F59E0B' : 'transparent',
+                color: chartEngine === 'time_machine' ? '#000000' : '#94A3B8',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              ⏳ Time Machine Replay
+            </button>
           </div>
         </div>
       </div>
@@ -1454,7 +1475,17 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
 
         {/* 2. Center Chart Area */}
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
-          {chartEngine === 'finex_live' ? (
+          {chartEngine === 'time_machine' ? (
+            <div style={{ flex: 1, width: '100%', minHeight: 0, backgroundColor: '#090D14', position: 'relative', display: 'flex', overflow: 'hidden' }}>
+              <TradeTimeMachine
+                key={`time-machine-${selectedSymbol}`}
+                initialSymbol={selectedSymbol}
+                onPriceUpdate={(p) => {
+                  setActiveQuote((prev: MarketQuote | null) => (prev ? { ...prev, price: p } : prev));
+                }}
+              />
+            </div>
+          ) : chartEngine === 'finex_live' ? (
             <div style={{ flex: 1, width: '100%', minHeight: 0, backgroundColor: '#090D14', position: 'relative', display: 'flex', overflow: 'hidden' }}>
               <FinExLiveChart
                 key={`finex-live-${selectedSymbol}-${timeframe}-${rangePreset}`}
@@ -1776,6 +1807,23 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                               }}
                             >
                               {l.type}
+                              {((l as any).isReplay || l.notes?.includes('REPLAY')) && (
+                                <span
+                                  style={{
+                                    backgroundColor: 'rgba(245, 158, 11, 0.2)',
+                                    color: '#FBBF24',
+                                    border: '1px solid rgba(245, 158, 11, 0.4)',
+                                    borderRadius: '3px',
+                                    padding: '1px 5px',
+                                    fontSize: '9px',
+                                    fontWeight: 800,
+                                    marginLeft: '4px',
+                                    display: 'inline-block',
+                                  }}
+                                >
+                                  REPLAY
+                                </span>
+                              )}
                             </td>
                             <td style={{ padding: '6px 4px', fontWeight: 600 }}>{l.symbol}</td>
                             <td style={{ padding: '6px 4px' }}>{l.shares}</td>
