@@ -4,6 +4,9 @@ import { NavigationTab } from '../components/layout/AppShell';
 import { apiClient } from '../api/client';
 import { TableSkeleton } from '../components/common/Skeleton';
 import { FinExLiveChart } from '../components/market/FinExLiveChart';
+import { OptionChainView } from '../components/market/OptionChainView';
+import { OptionTradeModal } from '../components/trading/OptionTradeModal';
+import { OptionContractData } from '../api/client';
 
 const computeSparklinePath = (prices: number[], width = 75, height = 20): string => {
   if (!prices || prices.length < 2) return '';
@@ -439,12 +442,14 @@ const FALLBACK_INDICES: MarketIndexItem[] = [
 
 interface MarketsScreenProps {
   onNavigate: (tab: NavigationTab) => void;
-  initialView?: 'equities' | 'indices';
+  initialView?: 'equities' | 'indices' | 'options';
 }
 
 export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate, initialView }) => {
   const { marketQuotes, openQuickTrade } = useFinancial();
-  const [marketView, setMarketView] = useState<'equities' | 'indices'>(initialView || 'equities');
+  const [marketView, setMarketView] = useState<'equities' | 'indices' | 'options'>(initialView || 'equities');
+  const [selectedOptionContract, setSelectedOptionContract] = useState<OptionContractData | null>(null);
+  const [optionSpot, setOptionSpot] = useState<number>(0);
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [selectedSector, setSelectedSector] = useState<string>('ALL');
   const [indexCategoryFilter, setIndexCategoryFilter] = useState<'ALL' | 'HEADLINE' | 'SECTORAL'>('ALL');
@@ -1518,9 +1523,36 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate, initia
         >
           <span>🌐</span> Benchmark & Sectoral Indices ({indicesList.length})
         </button>
+        <button
+          id="markets-tab-options"
+          onClick={() => { setMarketView('options'); setSelectedSymbol(null); }}
+          style={{
+            padding: '8px 18px',
+            borderRadius: 'var(--radius-xs)',
+            background: marketView === 'options' ? 'var(--color-primary)' : 'transparent',
+            color: marketView === 'options' ? '#FFFFFF' : 'var(--text-muted)',
+            fontWeight: 600,
+            fontSize: '13px',
+            border: 'none',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            transition: 'all var(--transition-fast)',
+          }}
+        >
+          <span>⚡</span> Options Chain
+        </button>
       </div>
 
-      {marketView === 'indices' ? (
+      {marketView === 'options' ? (
+        <OptionChainView
+          onOpenTrade={(contract, spot) => {
+            setSelectedOptionContract(contract);
+            setOptionSpot(spot);
+          }}
+        />
+      ) : marketView === 'indices' ? (
         <>
           {/* Indices Header */}
           <div className="markets-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap', width: '100%', minWidth: 0 }}>
@@ -1867,6 +1899,15 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate, initia
             </div>
           </div>
         </>
+      )}
+
+      {selectedOptionContract && (
+        <OptionTradeModal
+          contract={selectedOptionContract}
+          underlyingSpot={optionSpot}
+          onClose={() => setSelectedOptionContract(null)}
+          onSuccess={() => setSelectedOptionContract(null)}
+        />
       )}
     </div>
   );

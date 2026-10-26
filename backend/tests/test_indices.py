@@ -24,8 +24,8 @@ from httpx import ASGITransport, AsyncClient
 
 
 def test_index_registry_structure_and_tiers():
-    """Verify registry has at least 18 indices across Tier 1 and Tier 2."""
-    assert len(INDEX_REGISTRY) >= 18
+    """Verify registry has 24 indices across Tier 1, Tier 2, and Tier 3."""
+    assert len(INDEX_REGISTRY) == 24
 
     tier1 = [idx for idx in INDEX_REGISTRY if idx["tier"] == "1"]
     assert len(tier1) == 8
@@ -41,6 +41,16 @@ def test_index_registry_structure_and_tiers():
     assert "NIFTY IT" in tier2_symbols
     assert "NIFTY AUTO" in tier2_symbols
     assert "NIFTY PHARMA" in tier2_symbols
+
+    tier3 = [idx for idx in INDEX_REGISTRY if idx["tier"] == "3"]
+    assert len(tier3) == 6
+    tier3_symbols = {idx["symbol"] for idx in tier3}
+    assert "NIFTY INFRASTRUCTURE" in tier3_symbols
+    assert "NIFTY MNC" in tier3_symbols
+    assert "NIFTY PSE" in tier3_symbols
+    assert "NIFTY SERVICES SECTOR" in tier3_symbols
+    assert "NIFTY CPSE" in tier3_symbols
+    assert "NIFTY DIVIDEND OPPORTUNITIES 50" in tier3_symbols
 
 
 def test_index_lookup_helper():

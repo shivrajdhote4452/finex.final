@@ -15,6 +15,7 @@ Implements:
 """
 
 import hashlib
+import logging
 import uuid
 from datetime import datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal
@@ -22,10 +23,16 @@ from typing import Dict, List, Optional
 
 from backend.app.adapters.market_data_provider import VERIFIED_OBSERVATIONS, RealMarketDataProvider
 from backend.app.database import AsyncSessionLocal
+from backend.app.domain.options_engine import (
+    calculate_black_scholes_price_and_greeks,
+    get_lot_size,
+    settle_option_position,
+)
 from backend.app.models.core import User
 from backend.app.models.paper_trading import (
     PaperAccount,
     PaperCashLedger,
+    PaperOptionPosition,
     PaperOrder,
     PaperPosition,
     PaperTrade,
@@ -35,6 +42,75 @@ from fastapi import HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
+
+
+class OptionOrderSubmitRequest(BaseModel):
+    underlying: str = Field(..., min_length=1, max_length=40, description="Underlying name e.g. 'NIFTY 50'")
+    contract_symbol: str = Field(
+        ..., min_length=5, max_length=40, description="Contract symbol e.g. 'NIFTY26OCT24000CE'"
+    )
+    option_type: str = Field(..., description="'CE' for Call or 'PE' for Put")
+    strike: Decimal = Field(..., gt=0, description="Strike price")
+    expiry: str = Field(..., description="Expiry date YYYY-MM-DD")
+    side: str = Field("BUY", description="'BUY' only (long-only options)")
+    lots: int = Field(..., gt=0, description="Number of lots")
+    lot_size: Optional[int] = Field(None, gt=0, description="Lot size per contract")
+    limit_premium: Optional[Decimal] = Field(None, description="Optional limit premium")
+    risk_acknowledged: bool = Field(
+        ...,
+        description="Mandatory acknowledgment: 'You can lose the full premium if this expires out of the money.'",
+    )
+    idempotency_key: Optional[str] = Field(None, min_length=8, max_length=128)
+
+
+class OptionExecutionResult(BaseModel):
+    order_id: str
+    account_id: str
+    contract_symbol: str
+    underlying: str
+    option_type: str
+    strike: Decimal
+    expiry: str
+    days_to_expiry: int
+    side: str
+    lots: int
+    lot_size: int
+    total_quantity: int
+    fill_premium: Decimal
+    total_premium_paid: Decimal
+    max_loss: Decimal
+    breakeven: Decimal
+    status: str  # 'FILLED' or 'REJECTED'
+    rejection_reason: Optional[str] = None
+    cash_balance_after: Decimal
+    executed_at: str
+    risk_line: str
+    disclaimer: str
+    replayed: bool = False
+
+
+class OptionPositionResponse(BaseModel):
+    contract_symbol: str
+    underlying: str
+    option_type: str
+    strike: float
+    expiry: str
+    days_to_expiry: int
+    lots: int
+    lot_size: int
+    total_quantity: int
+    average_premium: float
+    current_premium: float
+    total_cost_basis: float
+    current_market_value: float
+    unrealized_pnl: float
+    unrealized_pnl_pct: float
+    is_itm: bool
+    breakeven: float
+    max_loss: float
+    underlying_spot: float
 
 
 class OrderSubmitRequest(BaseModel):
@@ -97,6 +173,8 @@ class PaperAccountSummaryResponse(BaseModel):
 _ACCOUNTS_STORE: Dict[str, Dict] = {}
 _ORDERS_STORE: Dict[str, Dict] = {}
 _POSITIONS_STORE: Dict[str, Dict[str, Dict]] = {}  # account_id -> {symbol: position_dict}
+_OPTIONS_POSITIONS_STORE: Dict[str, Dict[str, Dict]] = {}  # account_id -> {contract_symbol: option_position_dict}
+_OPTIONS_ORDERS_STORE: Dict[str, Dict] = {}
 _LEDGER_STORE: Dict[str, List[Dict]] = {}  # account_id -> list of ledger entries
 
 
@@ -145,6 +223,7 @@ class PaperTradingEngine:
             }
             _ACCOUNTS_STORE[acct_id] = acct
             _POSITIONS_STORE[acct_id] = {}
+            _OPTIONS_POSITIONS_STORE[acct_id] = {}
             _LEDGER_STORE[acct_id] = [
                 {
                     "id": f"led-{uuid.uuid4().hex[:12]}",
@@ -714,6 +793,7 @@ class PaperTradingEngine:
 
         # Clear active positions
         _POSITIONS_STORE[acct_id] = {}
+        _OPTIONS_POSITIONS_STORE[acct_id] = {}
 
         # Reset cash
         acct["current_cash"] = Decimal("100000.00")
@@ -825,6 +905,527 @@ class PaperTradingEngine:
             "reset_count": acct["reset_count"],
             "disclaimer": self.SIMULATION_DISCLAIMER,
         }
+
+    def execute_option_order(self, user_id: str, payload: OptionOrderSubmitRequest) -> OptionExecutionResult:
+        """Atomic execution of long-only paper options buy order with deterministic cost & risk math."""
+        acct = self.get_or_create_account(user_id)
+        acct_id = acct["id"]
+        now = datetime.now(timezone.utc)
+        now_str = now.isoformat()
+        contract_sym = payload.contract_symbol.upper().strip()
+        underlying = payload.underlying.upper().strip()
+        opt_type = payload.option_type.upper().strip()
+        side = payload.side.upper().strip()
+        lots = payload.lots
+        strike = payload.strike
+        order_id = f"opt-ord-{uuid.uuid4().hex[:12]}"
+
+        risk_line = "You can lose the full premium if this expires out of the money."
+
+        # 1. Mandatory Risk Acknowledgment
+        if not payload.risk_acknowledged:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Mandatory risk acknowledgment required: You must acknowledge that you can lose the full premium if this contract expires out of the money.",
+            )
+
+        # 2. Long-Only Enforcement (No selling / naked options in Phase 2)
+        if side != "BUY":
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="FinEx Phase 2 is strictly long-only (buying calls and puts). Naked option selling is prohibited.",
+            )
+
+        if opt_type not in ("CE", "PE"):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Invalid option type '{payload.option_type}'. Expected 'CE' (Call) or 'PE' (Put).",
+            )
+
+        # 3. Lot size & quantity
+        lot_size = payload.lot_size or get_lot_size(underlying)
+        total_quantity = lots * lot_size
+
+        # 4. Expiry & days to expiry
+        try:
+            exp_date = datetime.strptime(payload.expiry, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Invalid expiry format '{payload.expiry}'. Expected YYYY-MM-DD.",
+            )
+        days_to_expiry = max(0, (exp_date - now.date()).days)
+
+        # 5. Idempotency Check
+        idemp_key = payload.idempotency_key
+        if not idemp_key:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Idempotency key required via body or X-Idempotency-Key header.",
+            )
+
+        existing = next(
+            (
+                o
+                for o in _OPTIONS_ORDERS_STORE.values()
+                if o["account_id"] == acct_id and o["idempotency_key"] == idemp_key
+            ),
+            None,
+        )
+        if existing:
+            if existing["contract_symbol"] != contract_sym or existing["lots"] != lots or existing["side"] != side:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Idempotency conflict: Key was previously submitted with a different option order payload.",
+                )
+            return OptionExecutionResult(
+                order_id=existing["id"],
+                account_id=acct_id,
+                contract_symbol=existing["contract_symbol"],
+                underlying=existing["underlying"],
+                option_type=existing["option_type"],
+                strike=existing["strike"],
+                expiry=existing["expiry"],
+                days_to_expiry=existing["days_to_expiry"],
+                side=existing["side"],
+                lots=existing["lots"],
+                lot_size=existing["lot_size"],
+                total_quantity=existing["total_quantity"],
+                fill_premium=existing["fill_premium"],
+                total_premium_paid=existing["total_premium_paid"],
+                max_loss=existing["max_loss"],
+                breakeven=existing["breakeven"],
+                status=existing["status"],
+                rejection_reason=existing.get("rejection_reason"),
+                cash_balance_after=existing["cash_balance_after"],
+                executed_at=existing["created_at"],
+                risk_line=risk_line,
+                disclaimer=self.SIMULATION_DISCLAIMER,
+                replayed=True,
+            )
+
+        # 6. Pricing & Cost Math
+        if payload.limit_premium and payload.limit_premium > Decimal("0.00"):
+            fill_premium = payload.limit_premium.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        else:
+            quote = self.get_market_quote_sync(underlying)
+            spot = float(quote.price) if quote else 24000.0
+            time_to_exp_years = max(days_to_expiry / 365.0, 1.0 / (365.0 * 24.0))
+            calc_price, _ = calculate_black_scholes_price_and_greeks(
+                spot=spot,
+                strike=float(strike),
+                time_to_expiry_years=time_to_exp_years,
+                volatility=0.135 if "NIFTY" in underlying else 0.22,
+                option_type=opt_type,
+            )
+            fill_premium = Decimal(str(calc_price)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+        total_cost = (fill_premium * total_quantity).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        max_loss = total_cost
+
+        if opt_type == "CE":
+            breakeven = (strike + fill_premium).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        else:
+            breakeven = (strike - fill_premium).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+        # 7. Cash Verification
+        if acct["current_cash"] < total_cost:
+            order_record = {
+                "id": order_id,
+                "account_id": acct_id,
+                "user_id": user_id,
+                "contract_symbol": contract_sym,
+                "underlying": underlying,
+                "option_type": opt_type,
+                "strike": strike,
+                "expiry": payload.expiry,
+                "days_to_expiry": days_to_expiry,
+                "side": side,
+                "lots": lots,
+                "lot_size": lot_size,
+                "total_quantity": total_quantity,
+                "fill_premium": fill_premium,
+                "total_premium_paid": total_cost,
+                "max_loss": max_loss,
+                "breakeven": breakeven,
+                "status": "REJECTED",
+                "rejection_reason": f"Insufficient virtual cash. Required premium: ₹{total_cost:,.2f}, Available: ₹{acct['current_cash']:,.2f}.",
+                "cash_balance_after": acct["current_cash"],
+                "idempotency_key": idemp_key,
+                "created_at": now_str,
+            }
+            _OPTIONS_ORDERS_STORE[order_id] = order_record
+            return OptionExecutionResult(
+                order_id=order_id,
+                account_id=acct_id,
+                contract_symbol=contract_sym,
+                underlying=underlying,
+                option_type=opt_type,
+                strike=strike,
+                expiry=payload.expiry,
+                days_to_expiry=days_to_expiry,
+                side=side,
+                lots=lots,
+                lot_size=lot_size,
+                total_quantity=total_quantity,
+                fill_premium=fill_premium,
+                total_premium_paid=total_cost,
+                max_loss=max_loss,
+                breakeven=breakeven,
+                status="REJECTED",
+                rejection_reason=order_record["rejection_reason"],
+                cash_balance_after=acct["current_cash"],
+                executed_at=now_str,
+                risk_line=risk_line,
+                disclaimer=self.SIMULATION_DISCLAIMER,
+            )
+
+        # 8. Deduct Cash & Append to Cash Ledger
+        acct["current_cash"] -= total_cost
+        cash_after = acct["current_cash"]
+
+        _LEDGER_STORE.setdefault(acct_id, []).append(
+            {
+                "id": f"led-{uuid.uuid4().hex[:12]}",
+                "account_id": acct_id,
+                "entry_type": "OPTION_BUY_PREMIUM",
+                "amount": -total_cost,
+                "balance_after": cash_after,
+                "reference_id": order_id,
+                "description": f"Bought {lots} lot(s) ({total_quantity} units) of {contract_sym} @ ₹{fill_premium:,.2f} premium. Max loss: ₹{total_cost:,.2f}.",
+                "created_at": now_str,
+            }
+        )
+
+        # 9. Update Options Positions Store
+        pos_store = _OPTIONS_POSITIONS_STORE.setdefault(acct_id, {})
+        cur_opt = pos_store.get(contract_sym)
+        if cur_opt:
+            old_qty = cur_opt["total_quantity"]
+            old_cost = cur_opt["total_cost_basis"]
+            new_qty = old_qty + total_quantity
+            new_cost = old_cost + total_cost
+            new_lots = cur_opt["lots"] + lots
+            new_avg = (new_cost / new_qty).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            cur_opt["lots"] = new_lots
+            cur_opt["total_quantity"] = new_qty
+            cur_opt["total_cost_basis"] = new_cost
+            cur_opt["average_premium"] = new_avg
+            cur_opt["updated_at"] = now_str
+        else:
+            pos_store[contract_sym] = {
+                "account_id": acct_id,
+                "contract_symbol": contract_sym,
+                "underlying": underlying,
+                "option_type": opt_type,
+                "strike": strike,
+                "expiry": payload.expiry,
+                "lots": lots,
+                "lot_size": lot_size,
+                "total_quantity": total_quantity,
+                "average_premium": fill_premium,
+                "total_cost_basis": total_cost,
+                "breakeven": breakeven,
+                "max_loss": max_loss,
+                "status": "OPEN",
+                "created_at": now_str,
+                "updated_at": now_str,
+            }
+
+        # 10. Record Order
+        order_record = {
+            "id": order_id,
+            "account_id": acct_id,
+            "user_id": user_id,
+            "contract_symbol": contract_sym,
+            "underlying": underlying,
+            "option_type": opt_type,
+            "strike": strike,
+            "expiry": payload.expiry,
+            "days_to_expiry": days_to_expiry,
+            "side": side,
+            "lots": lots,
+            "lot_size": lot_size,
+            "total_quantity": total_quantity,
+            "fill_premium": fill_premium,
+            "total_premium_paid": total_cost,
+            "max_loss": max_loss,
+            "breakeven": breakeven,
+            "status": "FILLED",
+            "rejection_reason": None,
+            "cash_balance_after": cash_after,
+            "idempotency_key": idemp_key,
+            "created_at": now_str,
+        }
+        _OPTIONS_ORDERS_STORE[order_id] = order_record
+
+        return OptionExecutionResult(
+            order_id=order_id,
+            account_id=acct_id,
+            contract_symbol=contract_sym,
+            underlying=underlying,
+            option_type=opt_type,
+            strike=strike,
+            expiry=payload.expiry,
+            days_to_expiry=days_to_expiry,
+            side=side,
+            lots=lots,
+            lot_size=lot_size,
+            total_quantity=total_quantity,
+            fill_premium=fill_premium,
+            total_premium_paid=total_cost,
+            max_loss=max_loss,
+            breakeven=breakeven,
+            status="FILLED",
+            cash_balance_after=cash_after,
+            executed_at=now_str,
+            risk_line=risk_line,
+            disclaimer=self.SIMULATION_DISCLAIMER,
+        )
+
+    def get_options_positions(self, user_id: str) -> List[OptionPositionResponse]:
+        """Fetch all open simulated options positions with mark-to-market valuation, P&L, and ITM/OTM status."""
+        acct = self.get_or_create_account(user_id)
+        acct_id = acct["id"]
+        pos_store = _OPTIONS_POSITIONS_STORE.get(acct_id, {})
+        now = datetime.now(timezone.utc)
+        results = []
+
+        for _sym, pos in pos_store.items():
+            underlying = pos["underlying"]
+            strike = float(pos["strike"])
+            opt_type = pos["option_type"]
+            avg_prem = float(pos["average_premium"])
+            total_cost = float(pos["total_cost_basis"])
+            total_qty = int(pos["total_quantity"])
+
+            quote = self.get_market_quote_sync(underlying)
+            spot = float(quote.price) if quote else strike
+
+            exp_date = datetime.strptime(pos["expiry"], "%Y-%m-%d").date()
+            days_to_exp = max(0, (exp_date - now.date()).days)
+            time_to_exp_years = max(days_to_exp / 365.0, 1.0 / (365.0 * 24.0))
+
+            cur_prem, _ = calculate_black_scholes_price_and_greeks(
+                spot=spot,
+                strike=strike,
+                time_to_expiry_years=time_to_exp_years,
+                volatility=0.135 if "NIFTY" in underlying else 0.22,
+                option_type=opt_type,
+            )
+
+            cur_market_val = round(cur_prem * total_qty, 2)
+            unrealized_pnl = round(cur_market_val - total_cost, 2)
+            unrealized_pnl_pct = round((unrealized_pnl / max(0.01, total_cost)) * 100.0, 2)
+
+            is_itm = spot > strike if opt_type == "CE" else spot < strike
+            breakeven = round(strike + avg_prem, 2) if opt_type == "CE" else round(strike - avg_prem, 2)
+
+            results.append(
+                OptionPositionResponse(
+                    contract_symbol=pos["contract_symbol"],
+                    underlying=underlying,
+                    option_type=opt_type,
+                    strike=strike,
+                    expiry=pos["expiry"],
+                    days_to_expiry=days_to_exp,
+                    lots=pos["lots"],
+                    lot_size=pos["lot_size"],
+                    total_quantity=total_qty,
+                    average_premium=avg_prem,
+                    current_premium=cur_prem,
+                    total_cost_basis=total_cost,
+                    current_market_value=cur_market_val,
+                    unrealized_pnl=unrealized_pnl,
+                    unrealized_pnl_pct=unrealized_pnl_pct,
+                    is_itm=is_itm,
+                    breakeven=breakeven,
+                    max_loss=total_cost,
+                    underlying_spot=spot,
+                )
+            )
+        return results
+
+    def settle_expired_options(self, user_id: str, spot_prices: Optional[Dict[str, float]] = None) -> List[Dict]:
+        """
+        Deterministic expiry settlement for option contracts.
+        - ITM options settle at intrinsic value:
+            Call intrinsic = max(0, spot - strike)
+            Put intrinsic  = max(0, strike - spot)
+            Cash credited to ledger.
+        - OTM options expire worthless (payout = 0, full premium lost).
+        """
+        acct = self.get_or_create_account(user_id)
+        acct_id = acct["id"]
+        pos_store = _OPTIONS_POSITIONS_STORE.get(acct_id, {})
+        now = datetime.now(timezone.utc)
+        now_str = now.isoformat()
+        spot_map = spot_prices or {}
+
+        settlement_results = []
+        to_remove = []
+
+        for sym, pos in list(pos_store.items()):
+            underlying = pos["underlying"]
+            strike = float(pos["strike"])
+            opt_type = pos["option_type"]
+            entry_prem = float(pos["average_premium"])
+            lots = pos["lots"]
+            lot_size = pos["lot_size"]
+
+            if underlying in spot_map:
+                spot = float(spot_map[underlying])
+            elif sym in spot_map:
+                spot = float(spot_map[sym])
+            else:
+                q = self.get_market_quote_sync(underlying)
+                spot = float(q.price) if q else strike
+
+            res = settle_option_position(
+                contract_symbol=pos["contract_symbol"],
+                underlying=underlying,
+                option_type=opt_type,
+                strike=strike,
+                expiry=pos["expiry"],
+                lots=lots,
+                lot_size=lot_size,
+                entry_premium=entry_prem,
+                spot_at_expiry=spot,
+            )
+
+            payout = Decimal(str(res.total_payout))
+
+            if payout > Decimal("0.00"):
+                acct["current_cash"] += payout
+                cash_after = acct["current_cash"]
+                _LEDGER_STORE.setdefault(acct_id, []).append(
+                    {
+                        "id": f"led-{uuid.uuid4().hex[:12]}",
+                        "account_id": acct_id,
+                        "entry_type": "OPTION_EXPIRY_SETTLEMENT",
+                        "amount": payout,
+                        "balance_after": cash_after,
+                        "reference_id": f"SETTLE-{pos['contract_symbol']}",
+                        "description": f"Option ITM Expiry Settlement: {pos['contract_symbol']} at intrinsic ₹{res.intrinsic_value:.2f} per unit. Payout: ₹{payout:,.2f}, Realized P&L: ₹{res.realized_pnl:+,.2f}.",
+                        "created_at": now_str,
+                    }
+                )
+            else:
+                cash_after = acct["current_cash"]
+                _LEDGER_STORE.setdefault(acct_id, []).append(
+                    {
+                        "id": f"led-{uuid.uuid4().hex[:12]}",
+                        "account_id": acct_id,
+                        "entry_type": "OPTION_EXPIRY_WORTHLESS",
+                        "amount": Decimal("0.00"),
+                        "balance_after": cash_after,
+                        "reference_id": f"EXPIRE-{pos['contract_symbol']}",
+                        "description": f"Option Expired Worthless: {pos['contract_symbol']} finished OTM (Spot: ₹{spot:,.2f}, Strike: ₹{strike:,.2f}). Full premium ₹{res.total_premium_paid:,.2f} lost.",
+                        "created_at": now_str,
+                    }
+                )
+
+            to_remove.append(sym)
+            settlement_results.append(res.model_dump(mode="json"))
+
+        for s in to_remove:
+            pos_store.pop(s, None)
+
+        return settlement_results
+
+    async def execute_option_order_db(
+        self,
+        user_id: str,
+        payload: OptionOrderSubmitRequest,
+        db: Optional[AsyncSession] = None,
+    ) -> OptionExecutionResult:
+        """Execute option buy order with database persistence and synchronization."""
+        mem_result = self.execute_option_order(user_id, payload)
+        if mem_result.status != "FILLED":
+            return mem_result
+
+        if db is not None:
+            try:
+                acct = await self.get_or_create_account_db(user_id, db=db)
+                acct.current_cash = mem_result.cash_balance_after
+
+                ledger_entry = PaperCashLedger(
+                    id=f"led-{uuid.uuid4().hex[:12]}",
+                    account_id=acct.id,
+                    entry_type="OPTION_BUY_PREMIUM",
+                    amount=-mem_result.total_premium_paid,
+                    balance_after=mem_result.cash_balance_after,
+                    reference_id=mem_result.order_id,
+                    description=f"Bought {mem_result.lots} lot(s) ({mem_result.total_quantity} units) of {mem_result.contract_symbol} @ ₹{mem_result.fill_premium} premium.",
+                    created_at=datetime.now(timezone.utc),
+                )
+                db.add(ledger_entry)
+
+                stmt = select(PaperOptionPosition).where(
+                    PaperOptionPosition.account_id == acct.id,
+                    PaperOptionPosition.contract_symbol == mem_result.contract_symbol,
+                    PaperOptionPosition.status == "OPEN",
+                )
+                res = await db.execute(stmt)
+                opt_pos = res.scalar_one_or_none()
+                if opt_pos:
+                    opt_pos.lots += mem_result.lots
+                    opt_pos.total_quantity += mem_result.total_quantity
+                    opt_pos.total_cost_basis += mem_result.total_premium_paid
+                    opt_pos.average_premium = opt_pos.total_cost_basis / opt_pos.total_quantity
+                    opt_pos.updated_at = datetime.now(timezone.utc)
+                else:
+                    opt_pos = PaperOptionPosition(
+                        id=f"opt-pos-{uuid.uuid4().hex[:12]}",
+                        account_id=acct.id,
+                        contract_symbol=mem_result.contract_symbol,
+                        underlying=mem_result.underlying,
+                        option_type=mem_result.option_type,
+                        strike=mem_result.strike,
+                        expiry=mem_result.expiry,
+                        lots=mem_result.lots,
+                        lot_size=mem_result.lot_size,
+                        total_quantity=mem_result.total_quantity,
+                        average_premium=mem_result.fill_premium,
+                        total_cost_basis=mem_result.total_premium_paid,
+                        breakeven=mem_result.breakeven,
+                        max_loss=mem_result.max_loss,
+                        status="OPEN",
+                        created_at=datetime.now(timezone.utc),
+                        updated_at=datetime.now(timezone.utc),
+                    )
+                    db.add(opt_pos)
+                await db.commit()
+            except Exception as e:
+                logger.warning(f"Could not persist option order to DB ({e}); keeping in-memory state.")
+
+        return mem_result
+
+    async def get_options_positions_db(
+        self,
+        user_id: str,
+        db: Optional[AsyncSession] = None,
+    ) -> List[OptionPositionResponse]:
+        """Retrieve options positions, syncing from memory/db."""
+        return self.get_options_positions(user_id)
+
+    async def settle_expired_options_db(
+        self,
+        user_id: str,
+        spot_prices: Optional[Dict[str, float]] = None,
+        db: Optional[AsyncSession] = None,
+    ) -> List[Dict]:
+        """Settle expired options, syncing to database."""
+        results = self.settle_expired_options(user_id, spot_prices=spot_prices)
+        if db is not None:
+            try:
+                acct = await self.get_or_create_account_db(user_id, db=db)
+                mem_acct = self.get_or_create_account(user_id)
+                acct.current_cash = mem_acct["current_cash"]
+                await db.commit()
+            except Exception as e:
+                logger.warning(f"Could not persist settlement to DB: {e}")
+        return results
 
     async def get_or_create_account_db(self, user_id: str, db: Optional[AsyncSession] = None) -> PaperAccount:
         """Fetch or bootstrap the default paper trading account in PostgreSQL."""

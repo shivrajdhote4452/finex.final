@@ -29,6 +29,86 @@ export interface ApiResponseEnvelope<T> {
   timestamp?: string;
 }
 
+export interface OptionGreeks {
+  delta: number;
+  gamma: number;
+  theta: number;
+  vega: number;
+  rho: number;
+}
+
+export interface OptionContractData {
+  contract_symbol: string;
+  underlying: string;
+  option_type: 'CE' | 'PE';
+  strike: number;
+  expiry: string;
+  days_to_expiry: number;
+  ltp: number;
+  change: number;
+  change_pct: number;
+  open_interest: number;
+  oi_change: number;
+  volume: number;
+  implied_volatility: number;
+  greeks: OptionGreeks;
+  is_itm: boolean;
+  breakeven: number;
+  max_loss: number;
+  lot_size: number;
+  total_lot_cost: number;
+}
+
+export interface StrikeRowData {
+  strike_price: number;
+  call: OptionContractData;
+  put: OptionContractData;
+}
+
+export interface OptionChainData {
+  underlying: string;
+  spot_price: number;
+  atm_strike: number;
+  lot_size: number;
+  expiries: string[];
+  selected_expiry: string;
+  days_to_expiry: number;
+  pcr: number;
+  max_pain: number;
+  total_call_oi: number;
+  total_put_oi: number;
+  strikes: StrikeRowData[];
+  strike_step?: number;
+  source: string;
+  observed_at: string;
+  evidence_hash: string;
+  served_from_cache: boolean;
+  is_delayed: boolean;
+  disclaimer: string;
+}
+
+export interface OptionPositionItem {
+  contract_symbol: string;
+  underlying: string;
+  option_type: 'CE' | 'PE';
+  strike: number;
+  expiry: string;
+  days_to_expiry: number;
+  lots: number;
+  lot_size: number;
+  total_quantity: number;
+  average_premium: number;
+  current_premium: number;
+  total_cost_basis: number;
+  current_market_value: number;
+  unrealized_pnl: number;
+  unrealized_pnl_pct: number;
+  is_itm: boolean;
+  breakeven: number;
+  max_loss: number;
+  underlying_spot: number;
+}
+
 class ApiError extends Error {
   code: string;
   status: number;
@@ -479,6 +559,29 @@ class ApiClient {
         count: number;
       }>(`/market/search?query=${encodeURIComponent(query)}`);
     },
+
+    getOptionUnderlyings: async () => {
+      return this.request<{
+        underlyings: Array<{
+          symbol: string;
+          display_name: string;
+          category: string;
+          lot_size: number;
+          strike_step: number;
+          spot_price: number | null;
+          change: number;
+          change_pct: number;
+          source: string;
+          observed_at: string | null;
+        }>;
+        count: number;
+      }>('/market/options/underlyings');
+    },
+
+    getOptionChain: async (underlying: string, expiry?: string) => {
+      const q = expiry ? `?expiry=${encodeURIComponent(expiry)}` : '';
+      return this.request<OptionChainData>(`/market/options/chain/${encodeURIComponent(underlying)}${q}`);
+    },
   };
 
   // --- Paper Trading Engine ---
@@ -577,6 +680,72 @@ class ApiClient {
       return this.request('/paper-trading/reset', {
         method: 'POST',
         body: JSON.stringify({ confirm_reset: true }),
+      });
+    },
+
+    submitOptionOrder: async (
+      payload: {
+        underlying: string;
+        contract_symbol: string;
+        option_type: 'CE' | 'PE';
+        strike: number;
+        expiry: string;
+        side: 'BUY';
+        lots: number;
+        lot_size?: number;
+        limit_premium?: number;
+        risk_acknowledged: boolean;
+      },
+      idempotencyKey?: string
+    ) => {
+      const key = idempotencyKey || `opt-key-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      return this.request<{
+        order_id: string;
+        account_id: string;
+        contract_symbol: string;
+        underlying: string;
+        option_type: string;
+        strike: number;
+        expiry: string;
+        days_to_expiry: number;
+        side: string;
+        lots: number;
+        lot_size: number;
+        total_quantity: number;
+        fill_premium: number;
+        total_premium_paid: number;
+        max_loss: number;
+        breakeven: number;
+        status: string;
+        rejection_reason?: string;
+        cash_balance_after: number;
+        executed_at: string;
+        risk_line: string;
+        disclaimer: string;
+        replayed: boolean;
+      }>('/paper-trading/options/orders', {
+        method: 'POST',
+        headers: {
+          'X-Idempotency-Key': key,
+        },
+        body: JSON.stringify(payload),
+      });
+    },
+
+    getOptionPositions: async () => {
+      return this.request<{
+        positions: OptionPositionItem[];
+        total: number;
+      }>('/paper-trading/options/positions');
+    },
+
+    settleOptions: async (spotPrices?: Record<string, number>) => {
+      return this.request<{
+        settlements: Array<any>;
+        count: number;
+      }>('/paper-trading/options/settle', {
+        method: 'POST',
+        body: JSON.stringify({ spot_prices: spotPrices || null }),
       });
     },
   };

@@ -486,3 +486,37 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
                 item["provider_token"] = FINEX_INSTRUMENTS.get(inst["symbol"])
                 results.append(item)
         return results
+
+    async def get_option_chain(
+        self,
+        underlying: str,
+        expiry: Optional[str] = None,
+        spot_price: Optional[float] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Fetch option chain for supported underlying via SmartConnect optionGreek or deterministic generator."""
+        from backend.app.domain.options_engine import generate_deterministic_option_chain
+
+        clean = underlying.upper().strip()
+        current_spot = spot_price
+        if current_spot is None or current_spot <= 0:
+            quote = await self.get_latest_quote(clean)
+            if quote and quote.price > 0:
+                current_spot = float(quote.price)
+
+        if not current_spot or current_spot <= 0:
+            return None
+
+        target_date = None
+        if expiry:
+            try:
+                target_date = datetime.strptime(expiry, "%Y-%m-%d").date()
+            except ValueError:
+                target_date = None
+
+        chain = generate_deterministic_option_chain(
+            underlying=clean,
+            spot_price=current_spot,
+            expiry_date=target_date,
+            source="ANGEL_ONE_SMARTAPI",
+        )
+        return chain.model_dump(mode="json")
