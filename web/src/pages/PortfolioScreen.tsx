@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useFinancial } from '../context/FinancialContext';
 import { NavigationTab } from '../components/layout/AppShell';
 import { RecentTransactions } from '../components/trading/RecentTransactions';
 import { CardSkeleton, TableSkeleton } from '../components/common/Skeleton';
+import { apiClient, OptionPositionItem } from '../api/client';
+import { useToast } from '../context/ToastContext';
 
 interface PortfolioScreenProps {
   onNavigate: (tab: NavigationTab) => void;
@@ -18,9 +20,59 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
     isAccountLoading,
     openQuickTrade,
     depositFunds,
+    refreshAccount,
   } = useFinancial();
+  const { showToast } = useToast();
 
   const [showRebalanceModal, setShowRebalanceModal] = useState(false);
+  const [positionsTab, setPositionsTab] = useState<'EQUITIES' | 'OPTIONS'>('EQUITIES');
+  const [optionsPositions, setOptionsPositions] = useState<OptionPositionItem[]>([]);
+  const [isOptionsLoading, setIsOptionsLoading] = useState<boolean>(false);
+  const [isSettling, setIsSettling] = useState<boolean>(false);
+
+  const loadOptionsPositions = () => {
+    setIsOptionsLoading(true);
+    apiClient.paperTrading
+      .getOptionPositions()
+      .then((res) => {
+        if (res && res.positions) {
+          setOptionsPositions(res.positions);
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to load option positions:', err);
+      })
+      .finally(() => {
+        setIsOptionsLoading(false);
+      });
+  };
+
+  useEffect(() => {
+    loadOptionsPositions();
+  }, []);
+
+  const handleSettleOptions = async () => {
+    setIsSettling(true);
+    try {
+      const res = await apiClient.paperTrading.settleOptions();
+      if (res && res.count > 0) {
+        showToast(
+          `Settled ${res.count} option contract(s). In-the-money intrinsic values credited to cash balance.`,
+          'success',
+          'Options Settlement Complete'
+        );
+      } else {
+        showToast('No option positions have reached expiry date.', 'info', 'Settlement Status');
+      }
+      loadOptionsPositions();
+      await refreshAccount();
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to settle options.', 'error', 'Settlement Failed');
+    } finally {
+      setIsSettling(false);
+    }
+  };
+
   const isProfit = unrealizedPnL >= 0;
 
   // Day P&L computed client-side from holdings dayChangePct
@@ -332,110 +384,309 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
         </div>
       </div>
 
-      {/* Holdings Detailed Table */}
+      {/* Holdings & Options Positions Card */}
       <div className="glass-card" style={{ padding: '24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#FFFFFF', margin: 0 }}>
-            Active Holdings Ledger
-          </h3>
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-            {holdings.length} Positions Reconciled
-          </span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+          <div style={{ display: 'flex', gap: '8px', background: 'rgba(255, 255, 255, 0.03)', padding: '3px', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-subtle)' }}>
+            <button
+              id="portfolio-subtab-equities"
+              type="button"
+              onClick={() => setPositionsTab('EQUITIES')}
+              style={{
+                padding: '6px 14px',
+                borderRadius: 'var(--radius-xs)',
+                background: positionsTab === 'EQUITIES' ? 'var(--color-primary)' : 'transparent',
+                color: positionsTab === 'EQUITIES' ? '#FFFFFF' : 'var(--text-muted)',
+                fontWeight: 600,
+                fontSize: '12.5px',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                transition: 'all var(--transition-fast)',
+              }}
+            >
+              <span>📈</span> Equity Holdings ({holdings.length})
+            </button>
+            <button
+              id="portfolio-subtab-options"
+              type="button"
+              onClick={() => setPositionsTab('OPTIONS')}
+              style={{
+                padding: '6px 14px',
+                borderRadius: 'var(--radius-xs)',
+                background: positionsTab === 'OPTIONS' ? 'var(--color-primary)' : 'transparent',
+                color: positionsTab === 'OPTIONS' ? '#FFFFFF' : 'var(--text-muted)',
+                fontWeight: 600,
+                fontSize: '12.5px',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                transition: 'all var(--transition-fast)',
+              }}
+            >
+              <span>⚡</span> Options Contracts ({optionsPositions.length})
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {positionsTab === 'OPTIONS' ? (
+              <button
+                type="button"
+                onClick={handleSettleOptions}
+                disabled={isSettling || optionsPositions.length === 0}
+                className="btn btn-secondary"
+                style={{ fontSize: '12px', padding: '6px 14px', cursor: optionsPositions.length === 0 ? 'not-allowed' : 'pointer' }}
+              >
+                {isSettling ? 'Settling Contracts...' : '⚡ Settle Expired Contracts'}
+              </button>
+            ) : (
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                {holdings.length} Positions Reconciled
+              </span>
+            )}
+          </div>
         </div>
 
-        <div className="table-scroll-wrapper">
-          <div className="table-swipe-hint">← Swipe horizontally to view full holdings data →</div>
-          <table style={{ width: '100%', minWidth: '760px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-faint)', fontSize: '11px', textTransform: 'uppercase' }}>
-                <th style={{ padding: '12px 14px' }}>Holding</th>
-                <th style={{ padding: '12px 14px' }}>Sector</th>
-                <th style={{ padding: '12px 14px' }}>Shares</th>
-                <th style={{ padding: '12px 14px' }}>Avg Cost</th>
-                <th style={{ padding: '12px 14px' }}>Market Price</th>
-                <th style={{ padding: '12px 14px' }}>Current Value</th>
-                <th style={{ padding: '12px 14px', textAlign: 'right' }}>Total Return</th>
-                <th style={{ padding: '12px 14px', textAlign: 'right' }}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {holdings.length === 0 ? (
-                <tr>
-                  <td colSpan={8} style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                    No active holdings. Trade any Indian equity to initiate paper positions.
-                  </td>
-                </tr>
-              ) : (
-                holdings.map((h) => {
-                  const curVal = h.shares * h.currentPrice;
-                  const costVal = h.shares * h.avgPrice;
-                  const pnl = curVal - costVal;
-                  const isPos = pnl >= 0;
+        {positionsTab === 'EQUITIES' ? (
+          <>
+            <div className="table-scroll-wrapper">
+              <div className="table-swipe-hint">← Swipe horizontally to view full holdings data →</div>
+              <table style={{ width: '100%', minWidth: '760px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-faint)', fontSize: '11px', textTransform: 'uppercase' }}>
+                    <th style={{ padding: '12px 14px' }}>Holding</th>
+                    <th style={{ padding: '12px 14px' }}>Sector</th>
+                    <th style={{ padding: '12px 14px' }}>Shares</th>
+                    <th style={{ padding: '12px 14px' }}>Avg Cost</th>
+                    <th style={{ padding: '12px 14px' }}>Market Price</th>
+                    <th style={{ padding: '12px 14px' }}>Current Value</th>
+                    <th style={{ padding: '12px 14px', textAlign: 'right' }}>Total Return</th>
+                    <th style={{ padding: '12px 14px', textAlign: 'right' }}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {holdings.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                        No active holdings. Trade any Indian equity to initiate paper positions.
+                      </td>
+                    </tr>
+                  ) : (
+                    holdings.map((h) => {
+                      const curVal = h.shares * h.currentPrice;
+                      const costVal = h.shares * h.avgPrice;
+                      const pnl = curVal - costVal;
+                      const isPos = pnl >= 0;
 
-                  return (
-                    <tr
-                      key={h.symbol}
-                      style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}
-                    >
-                      <td style={{ padding: '14px' }}>
-                        <div className="truncate-text" style={{ maxWidth: '160px' }}>
-                          <strong style={{ color: '#FFFFFF', fontSize: '14px' }}>{h.symbol}</strong>
-                          <div style={{ fontSize: '11px', color: 'var(--text-faint)' }}>{h.name}</div>
-                        </div>
-                      </td>
-                      <td style={{ padding: '14px', color: 'var(--text-muted)' }}>{h.assetClass}</td>
-                      <td style={{ padding: '14px' }} className="tabular-nums">{h.shares}</td>
-                      <td style={{ padding: '14px' }} className="tabular-nums">₹{h.avgPrice.toLocaleString('en-IN')}</td>
-                      <td style={{ padding: '14px' }} className="tabular-nums">₹{h.currentPrice.toLocaleString('en-IN')}</td>
-                      <td style={{ padding: '14px', fontWeight: 600 }} className="tabular-nums">
-                        ₹{curVal.toLocaleString('en-IN')}
-                      </td>
-                      <td style={{ padding: '14px', textAlign: 'right' }}>
-                        <span className={isPos ? 'badge badge-profit' : 'badge badge-loss'}>
-                          {isPos ? '+' : ''}₹{pnl.toLocaleString('en-IN')}
-                        </span>
-                      </td>
-                      <td style={{ padding: '14px', textAlign: 'right' }}>
-                        <button
-                          onClick={() => openQuickTrade(h.symbol)}
-                          className="btn-emerald"
-                          style={{ padding: '5px 12px', fontSize: '11px', borderRadius: 'var(--radius-xs)', cursor: 'pointer' }}
+                      return (
+                        <tr
+                          key={h.symbol}
+                          style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}
                         >
-                          Trade
+                          <td style={{ padding: '14px' }}>
+                            <div className="truncate-text" style={{ maxWidth: '160px' }}>
+                              <strong style={{ color: '#FFFFFF', fontSize: '14px' }}>{h.symbol}</strong>
+                              <div style={{ fontSize: '11px', color: 'var(--text-faint)' }}>{h.name}</div>
+                            </div>
+                          </td>
+                          <td style={{ padding: '14px', color: 'var(--text-muted)' }}>{h.assetClass}</td>
+                          <td style={{ padding: '14px' }} className="tabular-nums">{h.shares}</td>
+                          <td style={{ padding: '14px' }} className="tabular-nums">₹{h.avgPrice.toLocaleString('en-IN')}</td>
+                          <td style={{ padding: '14px' }} className="tabular-nums">₹{h.currentPrice.toLocaleString('en-IN')}</td>
+                          <td style={{ padding: '14px', fontWeight: 600 }} className="tabular-nums">
+                            ₹{curVal.toLocaleString('en-IN')}
+                          </td>
+                          <td style={{ padding: '14px', textAlign: 'right' }}>
+                            <span className={isPos ? 'badge badge-profit' : 'badge badge-loss'}>
+                              {isPos ? '+' : ''}₹{pnl.toLocaleString('en-IN')}
+                            </span>
+                          </td>
+                          <td style={{ padding: '14px', textAlign: 'right' }}>
+                            <button
+                              onClick={() => openQuickTrade(h.symbol)}
+                              className="btn-emerald"
+                              style={{ padding: '5px 12px', fontSize: '11px', borderRadius: 'var(--radius-xs)', cursor: 'pointer' }}
+                            >
+                              Trade
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Ledger Reconciliation Note */}
+            <div
+              title={`Ledger Proof: Holdings (₹${totalHoldingsValue.toLocaleString('en-IN')}) + Cash (₹${virtualCash.toLocaleString('en-IN')}) = Account Total (₹${totalPortfolioValue.toLocaleString('en-IN')})`}
+              style={{
+                marginTop: '24px',
+                padding: '12px 16px',
+                borderRadius: 'var(--radius-sm)',
+                backgroundColor: 'rgba(255, 255, 255, 0.02)',
+                border: '1px solid var(--border-subtle)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '12px',
+                flexWrap: 'wrap',
+                fontSize: '12px',
+                color: 'var(--text-muted)',
+                lineHeight: 1.5,
+              }}
+            >
+              <span style={{ flex: '1 1 auto', minWidth: '220px', wordBreak: 'break-word', whiteSpace: 'normal', overflow: 'visible' }}>
+                Ledger Proof: Holdings (<strong>₹{totalHoldingsValue.toLocaleString('en-IN')}</strong>) + Cash (<strong>₹{virtualCash.toLocaleString('en-IN')}</strong>) = Account Total (<strong>₹{totalPortfolioValue.toLocaleString('en-IN')}</strong>)
+              </span>
+              <span className="badge badge-profit" style={{ flexShrink: 0 }}>Zero Discrepancy</span>
+            </div>
+          </>
+        ) : (
+          /* Options Positions Table */
+          <>
+            <div className="table-scroll-wrapper">
+              <div className="table-swipe-hint">← Swipe horizontally to view full options positions data →</div>
+              <table style={{ width: '100%', minWidth: '820px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-faint)', fontSize: '11px', textTransform: 'uppercase' }}>
+                    <th style={{ padding: '12px 14px' }}>Contract</th>
+                    <th style={{ padding: '12px 14px' }}>Expiry & Countdown</th>
+                    <th style={{ padding: '12px 14px' }}>Lots (Units)</th>
+                    <th style={{ padding: '12px 14px' }}>Avg Premium</th>
+                    <th style={{ padding: '12px 14px' }}>Current Premium</th>
+                    <th style={{ padding: '12px 14px' }}>Cost Basis</th>
+                    <th style={{ padding: '12px 14px' }}>Current Value</th>
+                    <th style={{ padding: '12px 14px' }}>Moneyness</th>
+                    <th style={{ padding: '12px 14px', textAlign: 'right' }}>Unrealized Return</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {isOptionsLoading ? (
+                    <tr>
+                      <td colSpan={9} style={{ padding: '24px' }}>
+                        <TableSkeleton rows={3} columns={9} />
+                      </td>
+                    </tr>
+                  ) : optionsPositions.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                        <div>No open paper options positions.</div>
+                        <button
+                          onClick={() => onNavigate('markets')}
+                          className="btn-emerald"
+                          style={{ marginTop: '12px', padding: '6px 14px', fontSize: '12px', cursor: 'pointer' }}
+                        >
+                          Explore Options Chain →
                         </button>
                       </td>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                  ) : (
+                    optionsPositions.map((opt) => {
+                      const isPos = opt.unrealized_pnl >= 0;
+                      const isCall = opt.option_type === 'CE';
 
-        {/* Ledger Reconciliation Note */}
-        <div
-          title={`Ledger Proof: Holdings (₹${totalHoldingsValue.toLocaleString('en-IN')}) + Cash (₹${virtualCash.toLocaleString('en-IN')}) = Account Total (₹${totalPortfolioValue.toLocaleString('en-IN')})`}
-          style={{
-            marginTop: '24px',
-            padding: '12px 16px',
-            borderRadius: 'var(--radius-sm)',
-            backgroundColor: 'rgba(255, 255, 255, 0.02)',
-            border: '1px solid var(--border-subtle)',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            gap: '12px',
-            flexWrap: 'wrap',
-            fontSize: '12px',
-            color: 'var(--text-muted)',
-            lineHeight: 1.5,
-          }}
-        >
-          <span style={{ flex: '1 1 auto', minWidth: '220px', wordBreak: 'break-word', whiteSpace: 'normal', overflow: 'visible' }}>
-            Ledger Proof: Holdings (<strong>₹{totalHoldingsValue.toLocaleString('en-IN')}</strong>) + Cash (<strong>₹{virtualCash.toLocaleString('en-IN')}</strong>) = Account Total (<strong>₹{totalPortfolioValue.toLocaleString('en-IN')}</strong>)
-          </span>
-          <span className="badge badge-profit" style={{ flexShrink: 0 }}>Zero Discrepancy</span>
-        </div>
+                      return (
+                        <tr
+                          key={opt.contract_symbol}
+                          style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}
+                        >
+                          <td style={{ padding: '14px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span
+                                style={{
+                                  fontSize: '10px',
+                                  fontWeight: 700,
+                                  padding: '2px 6px',
+                                  borderRadius: '3px',
+                                  backgroundColor: isCall ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                                  color: isCall ? 'var(--color-profit)' : 'var(--color-loss)',
+                                }}
+                              >
+                                {isCall ? 'CE' : 'PE'}
+                              </span>
+                              <div>
+                                <strong style={{ color: '#FFFFFF', fontSize: '13px' }}>{opt.contract_symbol}</strong>
+                                <div style={{ fontSize: '11px', color: 'var(--text-faint)' }}>{opt.underlying}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td style={{ padding: '14px' }}>
+                            <div style={{ color: '#FFFFFF', fontSize: '13px' }}>{opt.expiry}</div>
+                            <span style={{ fontSize: '11px', color: opt.days_to_expiry <= 2 ? 'var(--color-loss)' : 'var(--color-action)' }}>
+                              {opt.days_to_expiry} days to expiry
+                            </span>
+                          </td>
+                          <td style={{ padding: '14px' }} className="tabular-nums">
+                            <strong>{opt.lots} Lot{opt.lots > 1 ? 's' : ''}</strong>
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{opt.total_quantity} units</div>
+                          </td>
+                          <td style={{ padding: '14px' }} className="tabular-nums">
+                            ₹{opt.average_premium.toFixed(2)}
+                          </td>
+                          <td style={{ padding: '14px' }} className="tabular-nums">
+                            ₹{opt.current_premium.toFixed(2)}
+                          </td>
+                          <td style={{ padding: '14px', fontWeight: 600 }} className="tabular-nums">
+                            ₹{opt.total_cost_basis.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td style={{ padding: '14px', fontWeight: 600 }} className="tabular-nums">
+                            ₹{opt.current_market_value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td style={{ padding: '14px' }}>
+                            <span
+                              style={{
+                                fontSize: '11px',
+                                fontWeight: 700,
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                backgroundColor: opt.is_itm ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                                color: opt.is_itm ? 'var(--color-profit)' : 'var(--text-muted)',
+                              }}
+                            >
+                              {opt.is_itm ? 'ITM (Intrinsic)' : 'OTM (Extrinsic)'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '14px', textAlign: 'right' }}>
+                            <span className={isPos ? 'badge badge-profit' : 'badge badge-loss'}>
+                              {isPos ? '+' : ''}₹{opt.unrealized_pnl.toLocaleString('en-IN', { minimumFractionDigits: 2 })} ({isPos ? '+' : ''}{opt.unrealized_pnl_pct.toFixed(2)}%)
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Educational Options Risk Notice */}
+            <div
+              style={{
+                marginTop: '20px',
+                padding: '12px 16px',
+                borderRadius: 'var(--radius-sm)',
+                backgroundColor: 'rgba(239, 68, 68, 0.05)',
+                border: '1px solid rgba(239, 68, 68, 0.2)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                fontSize: '12px',
+                color: '#FCA5A5',
+              }}
+            >
+              <span>⚠️</span>
+              <span>
+                <strong>Educational Notice:</strong> Options positions are isolated from equity holdings. Long calls and puts lose time value daily (theta decay) and expire worthless if spot finishes out of the money at expiry. Maximum risk is strictly capped at the premium paid.
+              </span>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Recent Paper-Trading Transactions Ledger Feed (Below Holdings) */}

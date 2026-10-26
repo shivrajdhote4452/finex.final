@@ -16,6 +16,7 @@ from typing import Optional
 from backend.app.core.envelope import create_response_envelope
 from backend.app.database import get_db
 from backend.app.domain.paper_trading_service import (
+    OptionOrderSubmitRequest,
     OrderSubmitRequest,
     PaperTradingEngine,
 )
@@ -182,3 +183,76 @@ async def deposit_virtual_cash(
 
     result = await engine.deposit_funds_db(user_id, payload.amount, db=db)
     return create_response_envelope(data=result, correlation_id=cid)
+
+
+# =============================================================================
+# Options Paper Trading Endpoints (Phase 2 Long-Only)
+# =============================================================================
+@router.post("/options/orders")
+async def submit_paper_option_order(
+    request: Request,
+    payload: OptionOrderSubmitRequest,
+    x_idempotency_key: Optional[str] = Header(None, alias="X-Idempotency-Key"),
+    current_user: dict = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Execute simulated long-only options buy order with deterministic cost & risk math."""
+    cid = getattr(request.state, "correlation_id", None)
+    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+
+    key = payload.idempotency_key or x_idempotency_key
+    if not key:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Idempotency key required via body or X-Idempotency-Key header",
+        )
+    payload.idempotency_key = key
+
+    result = await engine.execute_option_order_db(user_id, payload, db=db)
+    return create_response_envelope(data=result.model_dump(mode="json"), correlation_id=cid)
+
+
+@router.get("/options/positions")
+async def list_paper_option_positions(
+    request: Request,
+    current_user: dict = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Fetch all open simulated options positions with mark-to-market valuation, P&L, and ITM/OTM status."""
+    cid = getattr(request.state, "correlation_id", None)
+    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+
+    positions = await engine.get_options_positions_db(user_id, db=db)
+    return create_response_envelope(
+        data={"positions": [p.model_dump(mode="json") for p in positions], "total": len(positions)},
+        correlation_id=cid,
+    )
+
+
+class SettleOptionsRequest(BaseModel):
+    spot_prices: Optional[dict] = Field(
+        None, description="Optional map of underlying symbol to final expiry spot price"
+    )
+
+
+@router.post("/options/settle")
+async def settle_expired_options_endpoint(
+    request: Request,
+    payload: Optional[SettleOptionsRequest] = None,
+    current_user: dict = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Trigger deterministic settlement of expired option contracts.
+    - ITM options settle at intrinsic value with virtual cash credit.
+    - OTM options expire worthless with 100% loss of virtual premium paid.
+    """
+    cid = getattr(request.state, "correlation_id", None)
+    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+
+    spot_prices = payload.spot_prices if payload else None
+    settlement_results = await engine.settle_expired_options_db(user_id, spot_prices=spot_prices, db=db)
+    return create_response_envelope(
+        data={"settlements": settlement_results, "count": len(settlement_results)},
+        correlation_id=cid,
+    )

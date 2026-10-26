@@ -39,6 +39,7 @@ class PaperAccount(Base):
     orders = relationship("PaperOrder", back_populates="account", cascade="all, delete-orphan")
     trades = relationship("PaperTrade", back_populates="account", cascade="all, delete-orphan")
     positions = relationship("PaperPosition", back_populates="account", cascade="all, delete-orphan")
+    option_positions = relationship("PaperOptionPosition", back_populates="account", cascade="all, delete-orphan")
     ledger_entries = relationship("PaperCashLedger", back_populates="account", cascade="all, delete-orphan")
 
 
@@ -140,3 +141,29 @@ class PaperProposal(Base):
     attempt_count = Column(Integer, nullable=False, default=1)
 
     account = relationship("PaperAccount")
+
+
+class PaperOptionPosition(Base):
+    __tablename__ = "paper_option_positions"
+
+    id = Column(String(64), primary_key=True)
+    account_id = Column(String(64), ForeignKey("paper_accounts.id", ondelete="CASCADE"), nullable=False)
+    contract_symbol = Column(String(64), nullable=False)
+    underlying = Column(String(30), nullable=False)
+    option_type = Column(String(5), nullable=False)  # CE or PE
+    strike = Column(Numeric(14, 2), nullable=False)
+    expiry = Column(String(20), nullable=False)  # YYYY-MM-DD
+    lots = Column(Integer, nullable=False)
+    lot_size = Column(Integer, nullable=False)
+    total_quantity = Column(Integer, nullable=False)
+    average_premium = Column(Numeric(14, 2), nullable=False)
+    total_cost_basis = Column(Numeric(14, 2), nullable=False)
+    breakeven = Column(Numeric(14, 2), nullable=False)
+    max_loss = Column(Numeric(14, 2), nullable=False)
+    status = Column(String(20), nullable=False, default="OPEN")  # OPEN, SETTLED_ITM, EXPIRED_WORTHLESS
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    account = relationship("PaperAccount", back_populates="option_positions")
+
+    __table_args__ = (UniqueConstraint("account_id", "contract_symbol", name="uq_paper_option_position_contract"),)

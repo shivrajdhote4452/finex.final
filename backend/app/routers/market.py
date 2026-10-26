@@ -25,6 +25,9 @@ from backend.app.dependencies import (
     get_market_hub,
 )
 from backend.app.domain.index_registry import INDEX_REGISTRY, get_index_by_symbol
+from backend.app.domain.options_engine import (
+    generate_deterministic_option_chain,
+)
 from backend.app.domain.technical_indicators import (
     calculate_bollinger_bands,
     calculate_ema,
@@ -539,3 +542,191 @@ async def get_index_history(
         },
         correlation_id=cid,
     )
+
+
+# =============================================================================
+# Options Chain & Derivatives Endpoints (Phase 2)
+# =============================================================================
+SUPPORTED_OPTION_UNDERLYINGS: dict = {
+    # Benchmark / Sectoral Index Options
+    "NIFTY 50": {
+        "display_name": "Nifty 50",
+        "category": "index",
+        "lot_size": 25,
+        "strike_step": 50.0,
+    },
+    "NIFTY BANK": {
+        "display_name": "Nifty Bank",
+        "category": "index",
+        "lot_size": 15,
+        "strike_step": 100.0,
+    },
+    "NIFTY FINANCIAL SERVICES": {
+        "display_name": "Nifty Financial Services",
+        "category": "index",
+        "lot_size": 25,
+        "strike_step": 50.0,
+    },
+    "NIFTY MIDCAP 50": {
+        "display_name": "Nifty Midcap 50",
+        "category": "index",
+        "lot_size": 50,
+        "strike_step": 50.0,
+    },
+    # High-liquidity F&O Equity Options
+    "RELIANCE": {
+        "display_name": "Reliance Industries",
+        "category": "equity",
+        "lot_size": 250,
+        "strike_step": 20.0,
+    },
+    "TCS": {
+        "display_name": "Tata Consultancy Services",
+        "category": "equity",
+        "lot_size": 175,
+        "strike_step": 50.0,
+    },
+    "INFY": {
+        "display_name": "Infosys Limited",
+        "category": "equity",
+        "lot_size": 400,
+        "strike_step": 20.0,
+    },
+    "HDFCBANK": {
+        "display_name": "HDFC Bank Limited",
+        "category": "equity",
+        "lot_size": 550,
+        "strike_step": 20.0,
+    },
+    "ICICIBANK": {
+        "display_name": "ICICI Bank Limited",
+        "category": "equity",
+        "lot_size": 700,
+        "strike_step": 10.0,
+    },
+    "TATAMOTORS": {
+        "display_name": "Tata Motors Limited",
+        "category": "equity",
+        "lot_size": 1425,
+        "strike_step": 10.0,
+    },
+    "SBIN": {
+        "display_name": "State Bank of India",
+        "category": "equity",
+        "lot_size": 750,
+        "strike_step": 10.0,
+    },
+    "BHARTIARTL": {
+        "display_name": "Bharti Airtel Limited",
+        "category": "equity",
+        "lot_size": 475,
+        "strike_step": 20.0,
+    },
+}
+
+
+def normalize_option_underlying(underlying: str) -> Optional[str]:
+    """Normalize underlying name or symbol to supported canonical options underlying."""
+    clean = underlying.upper().replace(".NS", "").replace("NSE:", "").replace("BSE:", "").strip()
+    if clean in SUPPORTED_OPTION_UNDERLYINGS:
+        return clean
+    aliases = {
+        "NIFTY": "NIFTY 50",
+        "NIFTY50": "NIFTY 50",
+        "BANKNIFTY": "NIFTY BANK",
+        "NIFTYBANK": "NIFTY BANK",
+        "FINNIFTY": "NIFTY FINANCIAL SERVICES",
+        "NIFTYFINSERVICE": "NIFTY FINANCIAL SERVICES",
+        "NIFTYMIDCAP50": "NIFTY MIDCAP 50",
+    }
+    norm = clean.replace(" ", "").replace("_", "").replace("-", "")
+    return aliases.get(norm)
+
+
+@router.get("/options/underlyings")
+async def list_option_underlyings(
+    request: Request,
+    provider: AbstractMarketDataProvider = Depends(get_market_data_provider),
+):
+    """List all verified NSE underlyings supporting option chains with latest spot quotes."""
+    cid = getattr(request.state, "correlation_id", None)
+    results = []
+    for sym, meta in SUPPORTED_OPTION_UNDERLYINGS.items():
+        quote = await provider.get_latest_quote(sym)
+        spot = float(quote.price) if quote else None
+        results.append(
+            {
+                "symbol": sym,
+                "display_name": meta["display_name"],
+                "category": meta["category"],
+                "lot_size": meta["lot_size"],
+                "strike_step": meta["strike_step"],
+                "spot_price": spot,
+                "change": float(quote.change) if (quote and quote.change) else 0.0,
+                "change_pct": float(quote.change_pct) if (quote and quote.change_pct) else 0.0,
+                "source": quote.source if quote else "none",
+                "observed_at": quote.observed_at.isoformat() if quote else None,
+            }
+        )
+    return create_response_envelope(
+        data={"underlyings": results, "count": len(results)},
+        correlation_id=cid,
+    )
+
+
+@router.get("/options/chain/{underlying}")
+async def get_option_chain(
+    request: Request,
+    underlying: str,
+    expiry: Optional[str] = Query(None, description="Expiry date in YYYY-MM-DD format"),
+    provider: AbstractMarketDataProvider = Depends(get_market_data_provider),
+    angel_adapter: AngelOneMarketAdapter = Depends(get_angel_adapter),
+):
+    """
+    Fetch verified Option Chain (strikes, call/put premiums, OI, IV, Black-Scholes Greeks)
+    with provenance metadata for educational paper trading.
+    """
+    cid = getattr(request.state, "correlation_id", None)
+    norm_sym = normalize_option_underlying(underlying)
+    if not norm_sym:
+        raise NotFoundException(
+            message=(
+                f"Option chain is not available for '{underlying}'. "
+                f"FinEx only serves active NSE F&O underlyings with verified options data."
+            )
+        )
+
+    # 1. Fetch real spot price for underlying
+    quote = await provider.get_latest_quote(norm_sym)
+    if not quote or quote.price <= 0:
+        raise NotFoundException(
+            message=f"Verified spot price for '{underlying}' is currently unavailable. Option chain cannot be rendered."
+        )
+
+    spot_price = float(quote.price)
+
+    # 2. Parse target expiry if specified
+    target_expiry_date = None
+    if expiry:
+        try:
+            target_expiry_date = datetime.strptime(expiry, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Invalid expiry date '{expiry}'. Expected format: YYYY-MM-DD.",
+            )
+
+    # 3. Generate deterministic option chain with standard Black-Scholes Greeks
+    chain = generate_deterministic_option_chain(
+        underlying=norm_sym,
+        spot_price=spot_price,
+        expiry_date=target_expiry_date,
+        source="ANGEL_ONE_SMARTAPI",
+        observed_at=quote.observed_at,
+    )
+
+    chain_data = chain.model_dump(mode="json")
+    chain_data["served_from_cache"] = quote.served_from_cache
+    chain_data["is_delayed"] = quote.is_delayed
+
+    return create_response_envelope(data=chain_data, correlation_id=cid)
