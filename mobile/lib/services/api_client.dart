@@ -10,6 +10,8 @@ class ApiClient {
 
   static const FlutterSecureStorage _storage = FlutterSecureStorage();
   static const String _tokenStorageKey = 'finex_auth_token';
+  static const String _profileStorageKey = 'finex_user_profile';
+  static const String defaultOwnerEmail = 'shivrajdhote4452@gmail.com';
 
   static String normalizeBaseUrl(String url) {
     var trimmed = url.trim();
@@ -41,6 +43,11 @@ class ApiClient {
 
   String baseUrl = normalizeBaseUrl(_defaultUrl);
   String? _token;
+  Map<String, dynamic>? _currentUserProfile;
+
+  /// Observable feed for real-time ledger updates across screens
+  final ValueNotifier<List<Map<String, dynamic>>> recentOrdersNotifier =
+      ValueNotifier<List<Map<String, dynamic>>>([]);
 
   void setBaseUrl(String url) {
     baseUrl = normalizeBaseUrl(url);
@@ -48,12 +55,20 @@ class ApiClient {
 
   static final Map<String, String> _testStorage = {};
 
-  /// Initialize and restore stored session from secure storage
+  /// Initialize and restore stored session and profile from secure storage
   Future<void> initSession() async {
     try {
       _token = await _storage.read(key: _tokenStorageKey).timeout(const Duration(milliseconds: 300));
+      final rawProfile = await _storage.read(key: _profileStorageKey).timeout(const Duration(milliseconds: 300));
+      if (rawProfile != null && rawProfile.isNotEmpty) {
+        _currentUserProfile = Map<String, dynamic>.from(jsonDecode(rawProfile));
+      }
     } catch (_) {
       _token = _testStorage[_tokenStorageKey];
+      final raw = _testStorage[_profileStorageKey];
+      if (raw != null && raw.isNotEmpty) {
+        _currentUserProfile = Map<String, dynamic>.from(jsonDecode(raw));
+      }
     }
   }
 
@@ -73,6 +88,39 @@ class ApiClient {
     } catch (_) {}
   }
 
+  Future<void> setProfile(Map<String, dynamic>? profile) async {
+    if (profile == null) {
+      _currentUserProfile = null;
+      _testStorage.remove(_profileStorageKey);
+      try {
+        await _storage.delete(key: _profileStorageKey).timeout(const Duration(milliseconds: 300));
+      } catch (_) {}
+      return;
+    }
+
+    final existing = _currentUserProfile ?? {};
+    final updated = Map<String, dynamic>.from(existing);
+
+    profile.forEach((key, value) {
+      if (value != null) {
+        if (value is String) {
+          if (value.trim().isNotEmpty) {
+            updated[key] = value.trim();
+          }
+        } else {
+          updated[key] = value;
+        }
+      }
+    });
+
+    _currentUserProfile = updated;
+    final encoded = jsonEncode(updated);
+    _testStorage[_profileStorageKey] = encoded;
+    try {
+      await _storage.write(key: _profileStorageKey, value: encoded).timeout(const Duration(milliseconds: 300));
+    } catch (_) {}
+  }
+
   Future<void> logout() async {
     try {
       if (_token != null) {
@@ -87,11 +135,62 @@ class ApiClient {
       // Safe fallback on network failure
     } finally {
       await setToken(null);
+      await setProfile(null);
+      recentOrdersNotifier.value = [];
     }
   }
 
   String? get token => _token;
   bool get isAuthenticated => _token != null && _token!.isNotEmpty;
+
+  Map<String, dynamic>? get currentUserProfile => _currentUserProfile;
+
+  String get userEmail => (_currentUserProfile?['email'] as String? ?? '').trim();
+
+  String get userName {
+    final name = _currentUserProfile?['full_name'] ??
+        _currentUserProfile?['display_name'] ??
+        _currentUserProfile?['name'] as String?;
+    return (name ?? '').trim();
+  }
+
+  String get displayName {
+    final name = userName;
+    if (name.isEmpty) return '';
+    return name.split(' ').first;
+  }
+
+  String get userInitials {
+    final name = userName;
+    if (name.isEmpty) return 'FI';
+    final parts = name.split(' ').where((p) => p.isNotEmpty).toList();
+    if (parts.length >= 2) {
+      return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
+    }
+    return parts.first.substring(0, parts.first.length.clamp(1, 2)).toUpperCase();
+  }
+
+  bool get isOwner {
+    if (!isAuthenticated) return false;
+    final email = userEmail.toLowerCase();
+    if (email.isEmpty) return false;
+    final isOwnerFlag = _currentUserProfile?['is_owner'] == true;
+    return isOwnerFlag || email == defaultOwnerEmail;
+  }
+
+  static String getTimeOfDayGreeting([String? name]) {
+    final hour = DateTime.now().hour;
+    final timeGreeting = (hour >= 5 && hour < 12)
+        ? 'Good morning'
+        : (hour >= 12 && hour < 17)
+            ? 'Good afternoon'
+            : 'Good evening';
+    final trimmed = name?.trim();
+    if (trimmed != null && trimmed.isNotEmpty) {
+      return '$timeGreeting, $trimmed';
+    }
+    return timeGreeting;
+  }
 
   Map<String, String> _headers([Map<String, String>? extra]) {
     final headers = <String, String>{
@@ -109,28 +208,47 @@ class ApiClient {
 
   // --- Auth & Onboarding ---
   Future<Map<String, dynamic>> devLogin({
-    String email = 'shivrajdhote4452@gmail.com',
-    String name = 'Shivraj Dhote',
+    String email = defaultOwnerEmail,
+    String? name,
   }) async {
     if (!kDebugMode && !kIsWeb) {
       throw Exception('Developer sandbox sign-in is disabled in production builds.');
     }
     final url = Uri.parse('$baseUrl/auth/dev-login');
+    final effectiveName = name ?? (email == defaultOwnerEmail ? 'Shivraj Dhote' : '');
     final response = await http.post(
       url,
       headers: _headers(),
-      body: jsonEncode({'email': email, 'name': name, 'user_id': 'usr-shivraj-001'}),
+      body: jsonEncode({
+        'email': email,
+        'name': effectiveName,
+        'user_id': 'usr-${email.hashCode.abs()}',
+      }),
     );
     final data = jsonDecode(response.body);
     if (response.statusCode == 200 && data['data'] != null) {
       final token = data['data']['access_token'] as String?;
       await setToken(token);
+      final initialProfile = {
+        'email': data['data']['email'] ?? email,
+        'full_name': data['data']['name'] ?? effectiveName,
+        'display_name': (data['data']['name'] ?? effectiveName).toString().split(' ').first,
+        'is_owner': email.toLowerCase() == defaultOwnerEmail,
+      };
+      await setProfile(initialProfile);
+      try {
+        await getProfile();
+      } catch (_) {}
       return data['data'];
     }
     throw Exception(data['error']?['message'] ?? 'Login failed');
   }
 
-  Future<Map<String, dynamic>> loginWithGoogle(String idToken) async {
+  Future<Map<String, dynamic>> loginWithGoogle(
+    String idToken, {
+    String? email,
+    String? name,
+  }) async {
     final url = Uri.parse('$baseUrl/auth/google');
     final response = await http.post(
       url,
@@ -141,6 +259,23 @@ class ApiClient {
     if (response.statusCode == 200 && data['data'] != null) {
       final token = data['data']['access_token'] as String?;
       await setToken(token);
+      final initialProfile = <String, dynamic>{};
+      if (email != null && email.isNotEmpty) initialProfile['email'] = email;
+      if (name != null && name.isNotEmpty) {
+        initialProfile['full_name'] = name;
+        initialProfile['display_name'] = name.split(' ').first;
+      }
+      if (data['data']['email'] != null) initialProfile['email'] = data['data']['email'];
+      if (data['data']['name'] != null) {
+        initialProfile['full_name'] = data['data']['name'];
+        initialProfile['display_name'] = (data['data']['name'] as String).split(' ').first;
+      }
+      if (initialProfile.isNotEmpty) {
+        await setProfile(initialProfile);
+      }
+      try {
+        await getProfile();
+      } catch (_) {}
       return data['data'];
     }
     throw Exception(data['error']?['message'] ?? 'Google authentication failed');
@@ -151,7 +286,9 @@ class ApiClient {
     final response = await http.get(url, headers: _headers());
     final data = jsonDecode(response.body);
     if (response.statusCode == 200 && data['data'] != null) {
-      return Map<String, dynamic>.from(data['data']);
+      final profile = Map<String, dynamic>.from(data['data']);
+      await setProfile(profile);
+      return profile;
     }
     throw Exception(data['error']?['message'] ?? 'Failed to load profile');
   }
@@ -271,7 +408,27 @@ class ApiClient {
     );
     final data = jsonDecode(response.body);
     if (response.statusCode == 200 && data['data'] != null) {
-      return Map<String, dynamic>.from(data['data']);
+      final orderRes = Map<String, dynamic>.from(data['data']);
+      final execPrice = (orderRes['fill_price'] as num?)?.toDouble() ??
+          (orderRes['price'] as num?)?.toDouble() ??
+          limitPrice ??
+          0.0;
+      final newEntry = <String, dynamic>{
+        'id': orderRes['order_id'] ?? orderRes['id'] ?? 'ord-${DateTime.now().millisecondsSinceEpoch}',
+        'order_id': orderRes['order_id'] ?? orderRes['id'] ?? 'ord-${DateTime.now().millisecondsSinceEpoch}',
+        'symbol': symbol,
+        'side': side.toUpperCase(),
+        'order_type': orderType,
+        'quantity': quantity,
+        'price': execPrice,
+        'fill_price': execPrice,
+        'status': orderRes['status'] ?? 'FILLED',
+        'realized_pnl': (orderRes['realized_pnl'] as num?)?.toDouble(),
+        'created_at': DateTime.now().toIso8601String(),
+        'is_replay': orderRes['is_replay'] == true,
+      };
+      recentOrdersNotifier.value = [newEntry, ...recentOrdersNotifier.value];
+      return orderRes;
     }
     throw Exception(data['error']?['message'] ?? 'Order submission failed');
   }
@@ -281,9 +438,56 @@ class ApiClient {
     final response = await http.get(url, headers: _headers());
     final data = jsonDecode(response.body);
     if (response.statusCode == 200 && data['data'] != null) {
-      return List<Map<String, dynamic>>.from(data['data']['orders'] ?? []);
+      final orders = List<Map<String, dynamic>>.from(data['data']['orders'] ?? []);
+      recentOrdersNotifier.value = orders;
+      return orders;
     }
-    return [];
+    return recentOrdersNotifier.value;
+  }
+
+  // --- Indian Market Indices (Phase 1 Parity) ---
+  Future<Map<String, dynamic>> getIndices({String? category, String? tier}) async {
+    final queryParams = <String, String>{};
+    if (category != null && category.isNotEmpty) queryParams['category'] = category.toLowerCase();
+    if (tier != null && tier.isNotEmpty) queryParams['tier'] = tier;
+    final uri = Uri.parse('$baseUrl/market/indices').replace(
+      queryParameters: queryParams.isNotEmpty ? queryParams : null,
+    );
+    final response = await http.get(uri, headers: _headers());
+    final data = jsonDecode(response.body);
+    if (response.statusCode == 200 && data['data'] != null) {
+      return Map<String, dynamic>.from(data['data']);
+    }
+    return {'indices': [], 'count': 0};
+  }
+
+  Future<Map<String, dynamic>?> getIndexQuote(String symbol) async {
+    final uri = Uri.parse('$baseUrl/market/indices/${Uri.encodeComponent(symbol)}/quote');
+    final response = await http.get(uri, headers: _headers());
+    final data = jsonDecode(response.body);
+    if (response.statusCode == 200 && data['data'] != null) {
+      return Map<String, dynamic>.from(data['data']);
+    }
+    return null;
+  }
+
+  Future<Map<String, dynamic>> getIndexHistory(
+    String symbol, {
+    String? interval,
+    String? range,
+  }) async {
+    final queryParams = <String, String>{};
+    if (interval != null) queryParams['interval'] = interval;
+    if (range != null) queryParams['range'] = range;
+    final uri = Uri.parse('$baseUrl/market/indices/${Uri.encodeComponent(symbol)}/history').replace(
+      queryParameters: queryParams.isNotEmpty ? queryParams : null,
+    );
+    final response = await http.get(uri, headers: _headers());
+    final data = jsonDecode(response.body);
+    if (response.statusCode == 200 && data['data'] != null) {
+      return Map<String, dynamic>.from(data['data']);
+    }
+    return {'symbol': symbol, 'bars': []};
   }
 
   Future<Map<String, dynamic>> resetAccount({bool confirmReset = true}) async {

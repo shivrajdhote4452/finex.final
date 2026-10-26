@@ -1,7 +1,9 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../services/api_client.dart';
 import '../theme/terminal_theme.dart';
 import '../widgets/quick_trade_modal.dart';
+import '../widgets/skeleton_loader.dart';
 import 'chart_screen.dart';
 
 class MobileMarketsScreen extends StatefulWidget {
@@ -12,10 +14,15 @@ class MobileMarketsScreen extends StatefulWidget {
 }
 
 class _MobileMarketsScreenState extends State<MobileMarketsScreen> {
+  String _marketMode = 'equities'; // 'equities' | 'indices'
   String _searchQuery = '';
   int _selectedTab = 0; // 0 = Watchlist, 1 = All Instruments
   String _selectedSector = 'ALL';
   final String _selectedSort = 'DEFAULT'; // DEFAULT, GAINERS, LOSERS, PRICE_HIGH, VOLUME
+  String _selectedIndexCategory = 'ALL'; // 'ALL' | 'HEADLINE' | 'SECTORAL'
+
+  bool _indicesLoading = false;
+  List<Map<String, dynamic>> _indicesList = [];
 
   // User-owned pinned watchlist set
   final Set<String> _pinnedWatchlist = {'RELIANCE', 'TCS', 'INFY', 'HDFCBANK'};
@@ -819,6 +826,437 @@ class _MobileMarketsScreenState extends State<MobileMarketsScreen> {
     },
   ];
 
+  static final List<Map<String, dynamic>> _fallbackIndices = [
+    // --- Tier 1: Headline Indices (8) ---
+    {
+      'symbol': 'NIFTY 50',
+      'display_name': 'NIFTY 50',
+      'canonical_id': 'NSE_INDEX_NIFTY50',
+      'exchange': 'NSE',
+      'category': 'headline',
+      'tier': 'tier1',
+      'description': 'Flagship benchmark index representing 50 top blue-chip Indian companies',
+      'price': 24180.80,
+      'change': 120.40,
+      'change_pct': 0.50,
+      'is_positive': true,
+      'open_price': 24100.0,
+      'high_price': 24220.5,
+      'low_price': 24050.0,
+      'close_price': 24060.4,
+      'source': 'ANGEL_ONE_SMARTAPI',
+      'sparkline': [24100.0, 24140.0, 24120.0, 24190.0, 24170.0, 24180.80],
+      'served_from_cache': true,
+      'observed_at': 'Market Close',
+    },
+    {
+      'symbol': 'SENSEX',
+      'display_name': 'BSE SENSEX',
+      'canonical_id': 'BSE_INDEX_SENSEX',
+      'exchange': 'BSE',
+      'category': 'headline',
+      'tier': 'tier1',
+      'description': 'Benchmark index of 30 well-established and financially sound companies on BSE',
+      'price': 79402.29,
+      'change': 362.45,
+      'change_pct': 0.46,
+      'is_positive': true,
+      'open_price': 79200.0,
+      'high_price': 79550.0,
+      'low_price': 79100.0,
+      'close_price': 79039.84,
+      'source': 'ANGEL_ONE_SMARTAPI',
+      'sparkline': [79200.0, 79350.0, 79280.0, 79450.0, 79390.0, 79402.29],
+      'served_from_cache': true,
+      'observed_at': 'Market Close',
+    },
+    {
+      'symbol': 'NIFTY BANK',
+      'display_name': 'NIFTY BANK',
+      'canonical_id': 'NSE_INDEX_NIFTYBANK',
+      'exchange': 'NSE',
+      'category': 'headline',
+      'tier': 'tier1',
+      'description': 'Banking sector benchmark covering top Indian public and private commercial banks',
+      'price': 51230.15,
+      'change': 285.60,
+      'change_pct': 0.56,
+      'is_positive': true,
+      'open_price': 51000.0,
+      'high_price': 51380.0,
+      'low_price': 50920.0,
+      'close_price': 50944.55,
+      'source': 'ANGEL_ONE_SMARTAPI',
+      'sparkline': [51000.0, 51150.0, 51080.0, 51290.0, 51210.0, 51230.15],
+      'served_from_cache': true,
+      'observed_at': 'Market Close',
+    },
+    {
+      'symbol': 'NIFTY NEXT 50',
+      'display_name': 'NIFTY NEXT 50',
+      'canonical_id': 'NSE_INDEX_NIFTYNEXT50',
+      'exchange': 'NSE',
+      'category': 'headline',
+      'tier': 'tier1',
+      'description': 'Top 50 companies after Nifty 50, representing future large-cap contenders',
+      'price': 68950.40,
+      'change': -145.20,
+      'change_pct': -0.21,
+      'is_positive': false,
+      'open_price': 69150.0,
+      'high_price': 69280.0,
+      'low_price': 68820.0,
+      'close_price': 69095.6,
+      'source': 'ANGEL_ONE_SMARTAPI',
+      'sparkline': [69150.0, 69020.0, 69100.0, 68920.0, 68980.0, 68950.40],
+      'served_from_cache': true,
+      'observed_at': 'Market Close',
+    },
+    {
+      'symbol': 'NIFTY MIDCAP 50',
+      'display_name': 'NIFTY MIDCAP 50',
+      'canonical_id': 'NSE_INDEX_NIFTYMIDCAP50',
+      'exchange': 'NSE',
+      'category': 'headline',
+      'tier': 'tier1',
+      'description': 'Top 50 mid-sized Indian companies with active derivative contracts',
+      'price': 15640.25,
+      'change': 98.40,
+      'change_pct': 0.63,
+      'is_positive': true,
+      'open_price': 15550.0,
+      'high_price': 15690.0,
+      'low_price': 15510.0,
+      'close_price': 15541.85,
+      'source': 'ANGEL_ONE_SMARTAPI',
+      'sparkline': [15550.0, 15590.0, 15570.0, 15650.0, 15620.0, 15640.25],
+      'served_from_cache': true,
+      'observed_at': 'Market Close',
+    },
+    {
+      'symbol': 'NIFTY SMALLCAP 100',
+      'display_name': 'NIFTY SMALLCAP 100',
+      'canonical_id': 'NSE_INDEX_NIFTYSMALLCAP100',
+      'exchange': 'NSE',
+      'category': 'headline',
+      'tier': 'tier1',
+      'description': 'Top 100 small-cap growth companies in India by market capitalization',
+      'price': 18450.90,
+      'change': 142.10,
+      'change_pct': 0.78,
+      'is_positive': true,
+      'open_price': 18320.0,
+      'high_price': 18510.0,
+      'low_price': 18280.0,
+      'close_price': 18308.8,
+      'source': 'ANGEL_ONE_SMARTAPI',
+      'sparkline': [18320.0, 18380.0, 18350.0, 18470.0, 18430.0, 18450.90],
+      'served_from_cache': true,
+      'observed_at': 'Market Close',
+    },
+    {
+      'symbol': 'NIFTY 100',
+      'display_name': 'NIFTY 100',
+      'canonical_id': 'NSE_INDEX_NIFTY100',
+      'exchange': 'NSE',
+      'category': 'headline',
+      'tier': 'tier1',
+      'description': 'Top 100 large-cap Indian companies across all major economic sectors',
+      'price': 25120.35,
+      'change': 110.80,
+      'change_pct': 0.44,
+      'is_positive': true,
+      'open_price': 25030.0,
+      'high_price': 25170.0,
+      'low_price': 24980.0,
+      'close_price': 25009.55,
+      'source': 'ANGEL_ONE_SMARTAPI',
+      'sparkline': [25030.0, 25080.0, 25050.0, 25140.0, 25100.0, 25120.35],
+      'served_from_cache': true,
+      'observed_at': 'Market Close',
+    },
+    {
+      'symbol': 'NIFTY 500',
+      'display_name': 'NIFTY 500',
+      'canonical_id': 'NSE_INDEX_NIFTY500',
+      'exchange': 'NSE',
+      'category': 'headline',
+      'tier': 'tier1',
+      'description': 'Broad market index representing 96% of free-float capitalization on NSE',
+      'price': 22680.10,
+      'change': 85.30,
+      'change_pct': 0.38,
+      'is_positive': true,
+      'open_price': 22600.0,
+      'high_price': 22720.0,
+      'low_price': 22560.0,
+      'close_price': 22594.8,
+      'source': 'ANGEL_ONE_SMARTAPI',
+      'sparkline': [22600.0, 22640.0, 22620.0, 22690.0, 22670.0, 22680.10],
+      'served_from_cache': true,
+      'observed_at': 'Market Close',
+    },
+
+    // --- Tier 2: Sectoral Indices (10) ---
+    {
+      'symbol': 'NIFTY IT',
+      'display_name': 'NIFTY IT',
+      'canonical_id': 'NSE_INDEX_NIFTYIT',
+      'exchange': 'NSE',
+      'category': 'sectoral',
+      'tier': 'tier2',
+      'description': 'Information Technology giants driving Indian software & digital services',
+      'price': 37820.60,
+      'change': -210.50,
+      'change_pct': -0.55,
+      'is_positive': false,
+      'open_price': 38100.0,
+      'high_price': 38220.0,
+      'low_price': 37750.0,
+      'close_price': 38031.1,
+      'source': 'ANGEL_ONE_SMARTAPI',
+      'sparkline': [38100.0, 37950.0, 38020.0, 37800.0, 37860.0, 37820.60],
+      'served_from_cache': true,
+      'observed_at': 'Market Close',
+    },
+    {
+      'symbol': 'NIFTY AUTO',
+      'display_name': 'NIFTY AUTO',
+      'canonical_id': 'NSE_INDEX_NIFTYAUTO',
+      'exchange': 'NSE',
+      'category': 'sectoral',
+      'tier': 'tier2',
+      'description': 'Automobile manufacturers, EV pioneers, and component leaders in India',
+      'price': 23410.75,
+      'change': 185.20,
+      'change_pct': 0.80,
+      'is_positive': true,
+      'open_price': 23250.0,
+      'high_price': 23480.0,
+      'low_price': 23200.0,
+      'close_price': 23225.55,
+      'source': 'ANGEL_ONE_SMARTAPI',
+      'sparkline': [23250.0, 23320.0, 23300.0, 23430.0, 23390.0, 23410.75],
+      'served_from_cache': true,
+      'observed_at': 'Market Close',
+    },
+    {
+      'symbol': 'NIFTY PHARMA',
+      'display_name': 'NIFTY PHARMA',
+      'canonical_id': 'NSE_INDEX_NIFTYPHARMA',
+      'exchange': 'NSE',
+      'category': 'sectoral',
+      'tier': 'tier2',
+      'description': 'Pharmaceutical & healthcare majors driving drug discovery & formulations',
+      'price': 21890.30,
+      'change': 115.40,
+      'change_pct': 0.53,
+      'is_positive': true,
+      'open_price': 21790.0,
+      'high_price': 21950.0,
+      'low_price': 21740.0,
+      'close_price': 21774.9,
+      'source': 'ANGEL_ONE_SMARTAPI',
+      'sparkline': [21790.0, 21840.0, 21820.0, 21910.0, 21870.0, 21890.30],
+      'served_from_cache': true,
+      'observed_at': 'Market Close',
+    },
+    {
+      'symbol': 'NIFTY FMCG',
+      'display_name': 'NIFTY FMCG',
+      'canonical_id': 'NSE_INDEX_NIFTYFMCG',
+      'exchange': 'NSE',
+      'category': 'sectoral',
+      'tier': 'tier2',
+      'description': 'Fast Moving Consumer Goods manufacturers, household goods & food majors',
+      'price': 57420.80,
+      'change': 195.10,
+      'change_pct': 0.34,
+      'is_positive': true,
+      'open_price': 57250.0,
+      'high_price': 57550.0,
+      'low_price': 57180.0,
+      'close_price': 57225.7,
+      'source': 'ANGEL_ONE_SMARTAPI',
+      'sparkline': [57250.0, 57320.0, 57290.0, 57450.0, 57400.0, 57420.80],
+      'served_from_cache': true,
+      'observed_at': 'Market Close',
+    },
+    {
+      'symbol': 'NIFTY METAL',
+      'display_name': 'NIFTY METAL',
+      'canonical_id': 'NSE_INDEX_NIFTYMETAL',
+      'exchange': 'NSE',
+      'category': 'sectoral',
+      'tier': 'tier2',
+      'description': 'Mining, steel, aluminum and non-ferrous metal producers in India',
+      'price': 9140.20,
+      'change': 105.80,
+      'change_pct': 1.17,
+      'is_positive': true,
+      'open_price': 9040.0,
+      'high_price': 9180.0,
+      'low_price': 9010.0,
+      'close_price': 9034.4,
+      'source': 'ANGEL_ONE_SMARTAPI',
+      'sparkline': [9040.0, 9080.0, 9060.0, 9150.0, 9120.0, 9140.20],
+      'served_from_cache': true,
+      'observed_at': 'Market Close',
+    },
+    {
+      'symbol': 'NIFTY ENERGY',
+      'display_name': 'NIFTY ENERGY',
+      'canonical_id': 'NSE_INDEX_NIFTYENERGY',
+      'exchange': 'NSE',
+      'category': 'sectoral',
+      'tier': 'tier2',
+      'description': 'Petroleum, gas, power utilities and renewable energy providers',
+      'price': 38920.45,
+      'change': 240.10,
+      'change_pct': 0.62,
+      'is_positive': true,
+      'open_price': 38700.0,
+      'high_price': 39050.0,
+      'low_price': 38650.0,
+      'close_price': 38680.35,
+      'source': 'ANGEL_ONE_SMARTAPI',
+      'sparkline': [38700.0, 38800.0, 38760.0, 38950.0, 38900.0, 38920.45],
+      'served_from_cache': true,
+      'observed_at': 'Market Close',
+    },
+    {
+      'symbol': 'NIFTY PSU BANK',
+      'display_name': 'NIFTY PSU BANK',
+      'canonical_id': 'NSE_INDEX_NIFTYPSUBANK',
+      'exchange': 'NSE',
+      'category': 'sectoral',
+      'tier': 'tier2',
+      'description': 'State-owned and public sector banks across India',
+      'price': 6780.90,
+      'change': 72.30,
+      'change_pct': 1.08,
+      'is_positive': true,
+      'open_price': 6715.0,
+      'high_price': 6810.0,
+      'low_price': 6695.0,
+      'close_price': 6708.6,
+      'source': 'ANGEL_ONE_SMARTAPI',
+      'sparkline': [6715.0, 6740.0, 6730.0, 6790.0, 6770.0, 6780.90],
+      'served_from_cache': true,
+      'observed_at': 'Market Close',
+    },
+    {
+      'symbol': 'NIFTY REALTY',
+      'display_name': 'NIFTY REALTY',
+      'canonical_id': 'NSE_INDEX_NIFTYREALTY',
+      'exchange': 'NSE',
+      'category': 'sectoral',
+      'tier': 'tier2',
+      'description': 'Residential, commercial real estate and construction developers',
+      'price': 985.40,
+      'change': 12.80,
+      'change_pct': 1.32,
+      'is_positive': true,
+      'open_price': 974.0,
+      'high_price': 992.0,
+      'low_price': 970.0,
+      'close_price': 972.6,
+      'source': 'ANGEL_ONE_SMARTAPI',
+      'sparkline': [974.0, 978.0, 976.0, 988.0, 982.0, 985.40],
+      'served_from_cache': true,
+      'observed_at': 'Market Close',
+    },
+    {
+      'symbol': 'NIFTY MEDIA',
+      'display_name': 'NIFTY MEDIA',
+      'canonical_id': 'NSE_INDEX_NIFTYMEDIA',
+      'exchange': 'NSE',
+      'category': 'sectoral',
+      'tier': 'tier2',
+      'description': 'Media, broadcast, entertainment and publication companies',
+      'price': 1980.20,
+      'change': -14.60,
+      'change_pct': -0.73,
+      'is_positive': false,
+      'open_price': 2000.0,
+      'high_price': 2010.0,
+      'low_price': 1970.0,
+      'close_price': 1994.8,
+      'source': 'ANGEL_ONE_SMARTAPI',
+      'sparkline': [2000.0, 1990.0, 1995.0, 1975.0, 1985.0, 1980.20],
+      'served_from_cache': true,
+      'observed_at': 'Market Close',
+    },
+    {
+      'symbol': 'NIFTY FINANCIAL SERVICES',
+      'display_name': 'NIFTY FINANCIAL SERVICES',
+      'canonical_id': 'NSE_INDEX_NIFTYFINSERVICE',
+      'exchange': 'NSE',
+      'category': 'sectoral',
+      'tier': 'tier2',
+      'description': 'Banks, NBFCs, insurance, housing finance, and asset management companies',
+      'price': 23680.50,
+      'change': 145.20,
+      'change_pct': 0.62,
+      'is_positive': true,
+      'open_price': 23550.0,
+      'high_price': 23740.0,
+      'low_price': 23500.0,
+      'close_price': 23535.3,
+      'source': 'ANGEL_ONE_SMARTAPI',
+      'sparkline': [23550.0, 23610.0, 23580.0, 23700.0, 23660.0, 23680.50],
+      'served_from_cache': true,
+      'observed_at': 'Market Close',
+    },
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _indicesList = List.from(_fallbackIndices);
+    _loadIndices();
+  }
+
+  Future<void> _loadIndices() async {
+    setState(() => _indicesLoading = true);
+    try {
+      final res = await apiClient.getIndices();
+      final liveList = List<Map<String, dynamic>>.from(res['indices'] ?? []);
+      if (liveList.isNotEmpty && mounted) {
+        final updated = _indicesList.map((fallback) {
+          final live = liveList.firstWhere(
+            (i) => i['symbol'] == fallback['symbol'],
+            orElse: () => <String, dynamic>{},
+          );
+          if (live.isNotEmpty) {
+            final price = (live['price'] ?? live['last_price'] as num?)?.toDouble() ?? fallback['price'];
+            final change = (live['change'] as num?)?.toDouble() ?? fallback['change'];
+            final changePct = (live['change_pct'] as num?)?.toDouble() ?? fallback['change_pct'];
+            return {
+              ...fallback,
+              ...live,
+              'price': price,
+              'change': change,
+              'change_pct': changePct,
+              'is_positive': change >= 0,
+              'served_from_cache': live['served_from_cache'] ?? false,
+              'observed_at': live['observed_at'] ?? 'Real-time',
+            };
+          }
+          return fallback;
+        }).toList();
+        setState(() {
+          _indicesList = updated;
+          _indicesLoading = false;
+        });
+      } else {
+        if (mounted) setState(() => _indicesLoading = false);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _indicesLoading = false);
+    }
+  }
+
   void _toggleWatchlist(String symbol) {
     setState(() {
       if (_pinnedWatchlist.contains(symbol)) {
@@ -1137,11 +1575,31 @@ class _MobileMarketsScreenState extends State<MobileMarketsScreen> {
 
     return Column(
       children: [
-        // Top Search Bar
+        // Top Market Mode Switcher: Equities vs Indices
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
           child: Container(
-            height: 42,
+            height: 36,
+            padding: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              color: TerminalColors.input,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: TerminalColors.borderSubtle),
+            ),
+            child: Row(
+              children: [
+                _buildMarketModeTab("Equities (${_instruments.length})", 'equities'),
+                _buildMarketModeTab("Indices (${_indicesList.length})", 'indices'),
+              ],
+            ),
+          ),
+        ),
+
+        // Shared Search Bar
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Container(
+            height: 40,
             decoration: BoxDecoration(
               color: TerminalColors.input,
               borderRadius: BorderRadius.circular(6),
@@ -1151,7 +1609,9 @@ class _MobileMarketsScreenState extends State<MobileMarketsScreen> {
               onChanged: (v) => setState(() => _searchQuery = v),
               style: const TextStyle(fontSize: 13, color: TerminalColors.textMain),
               decoration: InputDecoration(
-                hintText: "Search by symbol or company name...",
+                hintText: _marketMode == 'equities'
+                    ? "Search stocks, symbols, or sectors..."
+                    : "Search index name or symbol (e.g. NIFTY 50, Bank)...",
                 hintStyle: const TextStyle(fontSize: 12, color: TerminalColors.textMuted),
                 prefixIcon: const Icon(Icons.search, size: 18, color: TerminalColors.textMuted),
                 suffixIcon: _searchQuery.isNotEmpty
@@ -1161,12 +1621,15 @@ class _MobileMarketsScreenState extends State<MobileMarketsScreen> {
                       )
                     : null,
                 border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                contentPadding: const EdgeInsets.symmetric(vertical: 9),
               ),
             ),
           ),
         ),
 
+        if (_marketMode == 'indices')
+          _buildIndicesView()
+        else ...[
         // Filter Tabs: My Watchlist vs All Instruments
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1431,7 +1894,577 @@ class _MobileMarketsScreenState extends State<MobileMarketsScreen> {
                   },
                 ),
         ),
+        ],
       ],
+    );
+  }
+
+  Widget _buildMarketModeTab(String label, String mode) {
+    final isSelected = _marketMode == mode;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() {
+          _marketMode = mode;
+          _searchQuery = '';
+        }),
+        child: Container(
+          decoration: BoxDecoration(
+            color: isSelected ? TerminalColors.surface : Colors.transparent,
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: isSelected ? TerminalColors.action : Colors.transparent),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+              color: isSelected ? TerminalColors.action : TerminalColors.textMuted,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildIndexCategoryChip(String label, String categoryKey) {
+    final isSelected = _selectedIndexCategory == categoryKey;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedIndexCategory = categoryKey),
+      child: Container(
+        margin: const EdgeInsets.only(right: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: isSelected ? TerminalColors.action.withValues(alpha: 0.2) : TerminalColors.panel,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: isSelected ? TerminalColors.action : TerminalColors.borderSubtle),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            color: isSelected ? TerminalColors.action : TerminalColors.textMuted,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildIndicesView() {
+    final query = _searchQuery.toLowerCase().trim();
+    final filtered = _indicesList.where((idx) {
+      final sym = (idx['symbol'] as String? ?? '').toLowerCase();
+      final name = (idx['display_name'] as String? ?? '').toLowerCase();
+      final desc = (idx['description'] as String? ?? '').toLowerCase();
+      final cat = (idx['category'] as String? ?? '').toUpperCase();
+
+      final matchesSearch = query.isEmpty || sym.contains(query) || name.contains(query) || desc.contains(query);
+      final matchesCat = _selectedIndexCategory == 'ALL' || cat == _selectedIndexCategory;
+      return matchesSearch && matchesCat;
+    }).toList();
+
+    final headlineCount = _indicesList.where((i) => i['category'] == 'headline').length;
+    final sectoralCount = _indicesList.where((i) => i['category'] == 'sectoral').length;
+
+    return Expanded(
+      child: Column(
+        children: [
+          // Informational Banner
+          Container(
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0x10F29A60),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: const Color(0x30F29A60)),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.info_outline, size: 14, color: TerminalColors.action),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    "Official NSE & BSE benchmark observations. Indices represent basket calculations and cannot be bought or sold directly as equity shares.",
+                    style: TextStyle(fontSize: 10, color: TerminalColors.textMuted, height: 1.3),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Indices Category Ribbon
+          Container(
+            height: 32,
+            margin: const EdgeInsets.only(bottom: 8),
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              children: [
+                _buildIndexCategoryChip("All Indices (${_indicesList.length})", 'ALL'),
+                _buildIndexCategoryChip("Headline Benchmarks ($headlineCount)", 'HEADLINE'),
+                _buildIndexCategoryChip("Sectoral Indices ($sectoralCount)", 'SECTORAL'),
+              ],
+            ),
+          ),
+
+          // Indices List
+          Expanded(
+            child: _indicesLoading && _indicesList.isEmpty
+                ? const MarketsSkeleton()
+                : filtered.isEmpty
+                    ? const Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.show_chart, size: 36, color: TerminalColors.textMuted),
+                            SizedBox(height: 8),
+                            Text(
+                              "No indices match your query",
+                              style: TextStyle(fontSize: 13, color: TerminalColors.textMuted),
+                            ),
+                          ],
+                        ),
+                      )
+                    : RefreshIndicator(
+                        color: TerminalColors.action,
+                        backgroundColor: TerminalColors.surface,
+                        onRefresh: _loadIndices,
+                        child: ListView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          itemCount: filtered.length,
+                          itemBuilder: (context, idx) {
+                            return _buildIndexCard(filtered[idx]);
+                          },
+                        ),
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIndexCard(Map<String, dynamic> item) {
+    final sym = item['symbol'] as String;
+    final name = item['display_name'] as String? ?? sym;
+    final price = (item['price'] as num?)?.toDouble() ?? 0.0;
+    final chg = (item['change'] as num?)?.toDouble() ?? 0.0;
+    final chgPct = (item['change_pct'] as num?)?.toDouble() ?? 0.0;
+    final isPos = item['is_positive'] as bool? ?? (chg >= 0);
+    final category = (item['category'] as String? ?? 'headline').toUpperCase();
+    final exchange = item['exchange'] as String? ?? 'NSE';
+    final isCached = item['served_from_cache'] == true;
+    final desc = item['description'] as String? ?? '';
+    final sparklinePoints = List<double>.from(
+      item['sparkline'] ?? [price * 0.99, price * 1.005, price],
+    );
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: TerminalColors.surface,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: TerminalColors.borderSubtle),
+      ),
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => MobileChartScreen(
+                initialSymbol: sym,
+                isIndex: true,
+              ),
+            ),
+          );
+        },
+        borderRadius: BorderRadius.circular(6),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Top Row: Symbol, Exchange, Category & Honesty Badge
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        sym,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          fontFamily: 'monospace',
+                          color: TerminalColors.textMain,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                        decoration: BoxDecoration(
+                          color: TerminalColors.panel,
+                          borderRadius: BorderRadius.circular(3),
+                          border: Border.all(color: TerminalColors.borderSubtle),
+                        ),
+                        child: Text(
+                          exchange,
+                          style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: TerminalColors.textMuted),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                        decoration: BoxDecoration(
+                          color: category == 'HEADLINE'
+                              ? const Color(0x22F29A60)
+                              : const Color(0x2260A5FA),
+                          borderRadius: BorderRadius.circular(3),
+                          border: Border.all(
+                            color: category == 'HEADLINE'
+                                ? TerminalColors.action.withValues(alpha: 0.5)
+                                : const Color(0x6060A5FA),
+                          ),
+                        ),
+                        child: Text(
+                          category,
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            color: category == 'HEADLINE' ? TerminalColors.action : const Color(0xFF60A5FA),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  // Honesty Badge: LIVE vs CACHED
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: isCached
+                          ? const Color(0x15F29A60)
+                          : TerminalColors.positiveBg,
+                      borderRadius: BorderRadius.circular(3),
+                      border: Border.all(
+                        color: isCached ? const Color(0x40F29A60) : TerminalColors.positive,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 5,
+                          height: 5,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: isCached ? TerminalColors.action : TerminalColors.positive,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          isCached ? "CACHED" : "LIVE",
+                          style: TextStyle(
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.4,
+                            color: isCached ? TerminalColors.action : TerminalColors.positive,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+
+              // Description / Subtitle
+              Text(
+                desc.isNotEmpty ? desc : name,
+                style: const TextStyle(fontSize: 11, color: TerminalColors.textMuted),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 10),
+
+              // Price, Change & Mini Sparkline Row
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "₹ ${price.toStringAsFixed(2)}",
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          fontFamily: 'monospace',
+                          color: TerminalColors.textMain,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        "${isPos ? '+' : ''}${chg.toStringAsFixed(2)} (${isPos ? '+' : ''}${chgPct.toStringAsFixed(2)}%)",
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          fontFamily: 'monospace',
+                          color: isPos ? TerminalColors.positive : TerminalColors.negative,
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(
+                    width: 75,
+                    height: 22,
+                    child: CustomPaint(
+                      painter: _MiniSparklinePainter(
+                        points: sparklinePoints,
+                        isPositive: isPos,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+
+              // Bottom Actions: View Chart & Constituents
+              Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => MobileChartScreen(
+                              initialSymbol: sym,
+                              isIndex: true,
+                            ),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        decoration: BoxDecoration(
+                          color: TerminalColors.panel,
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: TerminalColors.borderSubtle),
+                        ),
+                        alignment: Alignment.center,
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.show_chart, size: 13, color: TerminalColors.action),
+                            SizedBox(width: 4),
+                            Text(
+                              "Open Index Chart",
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: TerminalColors.action),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () => _showIndexDetails(item),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: TerminalColors.panel,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: TerminalColors.borderSubtle),
+                      ),
+                      child: const Text("Info →", style: TextStyle(fontSize: 11, color: TerminalColors.textMuted)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showIndexDetails(Map<String, dynamic> item) {
+    final sym = item['symbol'] as String;
+    final name = item['display_name'] as String? ?? sym;
+    final price = (item['price'] as num?)?.toDouble() ?? 0.0;
+    final chg = (item['change'] as num?)?.toDouble() ?? 0.0;
+    final chgPct = (item['change_pct'] as num?)?.toDouble() ?? 0.0;
+    final isPos = item['is_positive'] as bool? ?? (chg >= 0);
+    final category = (item['category'] as String? ?? 'headline').toUpperCase();
+    final exchange = item['exchange'] as String? ?? 'NSE';
+    final isCached = item['served_from_cache'] == true;
+    final observedAt = item['observed_at'] as String? ?? 'Market Close';
+    final desc = item['description'] as String? ?? '';
+    final openP = (item['open_price'] as num?)?.toDouble() ?? price;
+    final highP = (item['high_price'] as num?)?.toDouble() ?? price;
+    final lowP = (item['low_price'] as num?)?.toDouble() ?? price;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: TerminalColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(sym, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: TerminalColors.textMain)),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: TerminalColors.panel,
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                            child: Text(exchange, style: const TextStyle(fontSize: 10, color: TerminalColors.textMuted)),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: category == 'HEADLINE' ? const Color(0x22F29A60) : const Color(0x2260A5FA),
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                            child: Text(
+                              category,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: category == 'HEADLINE' ? TerminalColors.action : const Color(0xFF60A5FA),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(name, style: const TextStyle(fontSize: 12, color: TerminalColors.textMuted)),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 20, color: TerminalColors.textMuted),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: TerminalColors.panel,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: TerminalColors.borderSubtle),
+                ),
+                child: Text(
+                  desc,
+                  style: const TextStyle(fontSize: 12, height: 1.4, color: TerminalColors.textMain),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildDetailMetric("LAST OBSERVED", "₹ ${price.toStringAsFixed(2)}"),
+                  ),
+                  Expanded(
+                    child: _buildDetailMetric(
+                      "DAY CHANGE",
+                      "${isPos ? '+' : ''}${chg.toStringAsFixed(2)} (${isPos ? '+' : ''}${chgPct.toStringAsFixed(2)}%)",
+                      color: isPos ? TerminalColors.positive : TerminalColors.negative,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(child: _buildDetailMetric("DAY OPEN", "₹ ${openP.toStringAsFixed(2)}")),
+                  Expanded(child: _buildDetailMetric("DAY HIGH", "₹ ${highP.toStringAsFixed(2)}")),
+                  Expanded(child: _buildDetailMetric("DAY LOW", "₹ ${lowP.toStringAsFixed(2)}")),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0x10FFFFFF),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text("DATA FRESHNESS: ${isCached ? 'CACHED REPLAY' : 'LIVE GATEWAY'}", style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: TerminalColors.textMuted)),
+                    Text(observedAt, style: const TextStyle(fontSize: 10, fontFamily: 'monospace', color: TerminalColors.textMuted)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: TerminalColors.action,
+                    foregroundColor: Colors.black,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  icon: const Icon(Icons.show_chart, size: 16),
+                  label: const Text("Launch Canvas Candle Chart", style: TextStyle(fontWeight: FontWeight.bold)),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => MobileChartScreen(
+                          initialSymbol: sym,
+                          isIndex: true,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailMetric(String label, String value, {Color? color}) {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      margin: const EdgeInsets.only(right: 6),
+      decoration: BoxDecoration(
+        color: TerminalColors.panel,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: TerminalColors.borderSubtle),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: TerminalColors.textMuted)),
+          const SizedBox(height: 2),
+          Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, fontFamily: 'monospace', color: color ?? TerminalColors.textMain)),
+        ],
+      ),
     );
   }
 

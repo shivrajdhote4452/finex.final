@@ -3,6 +3,8 @@ import 'package:intl/intl.dart';
 import '../services/api_client.dart';
 import '../theme/terminal_theme.dart';
 import '../widgets/quick_trade_modal.dart';
+import '../widgets/recent_transactions_feed.dart';
+import '../widgets/skeleton_loader.dart';
 import 'portfolio_screen.dart';
 import 'transactions_screen.dart';
 import 'ask_finex_screen.dart';
@@ -106,6 +108,10 @@ class _MobileOverviewScreenState extends State<MobileOverviewScreen> {
         ? ((_unrealizedPnl / (_totalPortfolioValue - _unrealizedPnl)) * 100).toStringAsFixed(2)
         : '0.00';
 
+    if (_isLoading && _positions.isEmpty) {
+      return const OverviewSkeleton();
+    }
+
     return RefreshIndicator(
       color: TerminalColors.action,
       backgroundColor: TerminalColors.surface,
@@ -135,9 +141,9 @@ class _MobileOverviewScreenState extends State<MobileOverviewScreen> {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    const Text(
-                      "Good afternoon, Shivraj",
-                      style: TextStyle(
+                    Text(
+                      ApiClient.getTimeOfDayGreeting(apiClient.displayName),
+                      style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w800,
                         letterSpacing: -0.5,
@@ -737,6 +743,22 @@ class _MobileOverviewScreenState extends State<MobileOverviewScreen> {
                 ),
               );
             }),
+          const SizedBox(height: 20),
+
+          // Shared Recent Transactions Feed (Web PR #28 Parity)
+          RecentTransactionsFeed(
+            title: "ACTIVITY & RECENT EXECUTIONS",
+            maxItems: 5,
+            showFilters: true,
+            onNavigateToPractice: () => _openInstantTrade('RELIANCE'),
+            onNavigateToAudit: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const MobileTransactionsScreen()),
+              );
+            },
+          ),
+          const SizedBox(height: 20),
         ],
       ),
     );

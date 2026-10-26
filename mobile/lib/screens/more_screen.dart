@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/api_client.dart';
 import '../theme/terminal_theme.dart';
 import '../widgets/mobile_theme_toggle.dart';
 import 'chart_screen.dart';
@@ -38,19 +39,31 @@ class MobileMoreScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(4),
                 ),
                 alignment: Alignment.center,
-                child: const Text(
-                  "SD",
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.black),
+                child: Text(
+                  apiClient.userInitials,
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.black),
                 ),
               ),
               const SizedBox(width: 14),
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text("Shivraj Dhote", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: TerminalColors.textMain)),
-                  SizedBox(height: 2),
-                  Text("Personal Workspace · Pure Black Edition", style: TextStyle(fontSize: 11, color: TerminalColors.textMuted)),
-                ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      apiClient.userName.isNotEmpty ? apiClient.userName : "FinEx Investor",
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: TerminalColors.textMain),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      apiClient.isOwner
+                          ? "Platform Owner · Pure Black Edition"
+                          : "Personal Workspace · Pure Black Edition",
+                      style: const TextStyle(fontSize: 11, color: TerminalColors.textMuted),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -195,7 +208,7 @@ class MobileMoreScreen extends StatelessWidget {
           icon: Icons.settings_outlined,
           title: "Settings & Risk Profile",
           subtitle: "Account, simulated portfolio, consent & disclosures",
-          badge: "Admin",
+          badge: apiClient.isOwner ? "Admin" : null,
           badgeColor: const Color(0xFF60A5FA),
           onTap: () {
             Navigator.push(

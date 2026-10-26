@@ -1,8 +1,11 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../services/api_client.dart';
 import '../theme/terminal_theme.dart';
 import '../widgets/quick_trade_modal.dart';
+import '../widgets/recent_transactions_feed.dart';
+import '../widgets/skeleton_loader.dart';
 import 'transactions_screen.dart';
 
 class MobilePortfolioScreen extends StatefulWidget {
@@ -17,6 +20,8 @@ class _MobilePortfolioScreenState extends State<MobilePortfolioScreen> {
   double _totalHoldingsValue = 0.0;
   double _totalPortfolioValue = 100000.0;
   double _unrealizedPnL = 0.0;
+  double _dayPnL = 0.0;
+  double _dayPnLPct = 0.0;
   List<Map<String, dynamic>> _holdings = [];
   bool _isLoading = false;
 
@@ -38,6 +43,7 @@ class _MobilePortfolioScreenState extends State<MobilePortfolioScreen> {
         
         double totalVal = 0.0;
         double totalPnL = 0.0;
+        double totalDayPnL = 0.0;
         final processed = rawPos.map<Map<String, dynamic>>((p) {
           final sym = p['symbol'] ?? '';
           final qty = (p['quantity'] as num?)?.toDouble() ?? 0.0;
@@ -45,8 +51,13 @@ class _MobilePortfolioScreenState extends State<MobilePortfolioScreen> {
           final curPrice = (p['current_price'] as num?)?.toDouble() ?? avgBuy;
           final mktVal = (p['market_value'] as num?)?.toDouble() ?? (qty * curPrice);
           final pnl = (p['unrealized_pnl'] as num?)?.toDouble() ?? (mktVal - (qty * avgBuy));
+          final dayPct = (p['day_change_pct'] ?? p['change_pct'] as num?)?.toDouble() ?? 0.0;
+          final prevVal = (1 + dayPct / 100) != 0 ? mktVal / (1 + dayPct / 100) : mktVal;
+          final dayPnL = mktVal - prevVal;
+
           totalVal += mktVal;
           totalPnL += pnl;
+          totalDayPnL += dayPnL;
 
           return {
             'symbol': sym,
@@ -55,14 +66,21 @@ class _MobilePortfolioScreenState extends State<MobilePortfolioScreen> {
             'currentPrice': curPrice,
             'marketValue': mktVal,
             'unrealizedPnL': pnl,
+            'dayChangePct': dayPct,
           };
         }).toList();
+
+        final totalPortfolio = cash + totalVal;
+        final prevPortfolioVal = totalPortfolio - totalDayPnL;
+        final dayReturnPct = prevPortfolioVal > 0 ? (totalDayPnL / prevPortfolioVal) * 100 : 0.0;
 
         setState(() {
           _virtualCash = cash;
           _totalHoldingsValue = totalVal;
           _unrealizedPnL = totalPnL;
-          _totalPortfolioValue = cash + totalVal;
+          _totalPortfolioValue = totalPortfolio;
+          _dayPnL = totalDayPnL;
+          _dayPnLPct = dayReturnPct;
           _holdings = processed;
           _isLoading = false;
         });
@@ -245,6 +263,193 @@ class _MobilePortfolioScreenState extends State<MobilePortfolioScreen> {
                   ],
                 ),
               ],
+            ),
+            const SizedBox(height: 16),
+
+            if (_isLoading && _holdings.isEmpty)
+              const PortfolioSkeleton()
+            else ...[
+              // Portfolio Hero Upgrade Card (Web PR #28 Parity)
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: TerminalColors.surface,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: TerminalColors.borderSubtle),
+                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'TOTAL PORTFOLIO VALUATION',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
+                          color: TerminalColors.textMuted,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0x2238BDF8),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: const Text(
+                          '100% Reconciled',
+                          style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: Color(0xFF38BDF8)),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _currencyFmt.format(_totalPortfolioValue),
+                    style: const TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                      fontFamily: 'monospace',
+                      color: TerminalColors.textMain,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Day P&L & Total ROI
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: _dayPnL >= 0 ? TerminalColors.positiveBg : TerminalColors.negativeBg,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              _dayPnL >= 0 ? '▲ +' : '▼ ',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: _dayPnL >= 0 ? TerminalColors.positive : TerminalColors.negative,
+                              ),
+                            ),
+                            Text(
+                              '${_currencyFmt.format(_dayPnL.abs())} (${_dayPnL >= 0 ? '+' : ''}${_dayPnLPct.toStringAsFixed(2)}% today)',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                fontFamily: 'monospace',
+                                color: _dayPnL >= 0 ? TerminalColors.positive : TerminalColors.negative,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          'Overall: ${isProfit ? '+' : ''}${_currencyFmt.format(_unrealizedPnL)}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: isProfit ? TerminalColors.positive : TerminalColors.negative,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  const Divider(color: TerminalColors.borderSubtle, height: 1),
+                  const SizedBox(height: 16),
+
+                  // Allocation Donut + Breakdown
+                  if (_holdings.isNotEmpty) ...[
+                    Row(
+                      children: [
+                        SizedBox(
+                          width: 84,
+                          height: 84,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              CustomPaint(
+                                size: const Size(84, 84),
+                                painter: _AllocationDonutPainter(
+                                  holdings: _holdings,
+                                  totalValue: _totalHoldingsValue,
+                                ),
+                              ),
+                              Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    '${_holdings.length}',
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w800,
+                                      color: TerminalColors.textMain,
+                                    ),
+                                  ),
+                                  const Text(
+                                    'Assets',
+                                    style: TextStyle(fontSize: 8.5, color: TerminalColors.textMuted),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'ASSET WEIGHT ALLOCATION',
+                                style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: TerminalColors.textMuted),
+                              ),
+                              const SizedBox(height: 6),
+                              Wrap(
+                                spacing: 10,
+                                runSpacing: 6,
+                                children: _holdings.take(6).map((h) {
+                                  final sym = h['symbol'] as String;
+                                  final mVal = h['marketValue'] as double;
+                                  final pct = _totalHoldingsValue > 0 ? (mVal / _totalHoldingsValue) * 100 : 0.0;
+                                  final col = _getColorForSymbol(sym);
+
+                                  return Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(width: 7, height: 7, decoration: BoxDecoration(color: col, shape: BoxShape.circle)),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '$sym ${pct.toStringAsFixed(1)}%',
+                                        style: const TextStyle(fontSize: 10.5, fontFamily: 'monospace', color: TerminalColors.textMuted),
+                                      ),
+                                    ],
+                                  );
+                                }).toList(),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ] else ...[
+                    const Text(
+                      'No open equity positions held. Execute a practice order to view asset allocation donut.',
+                      style: TextStyle(fontSize: 11, color: TerminalColors.textMuted),
+                    ),
+                  ],
+                ],
+              ),
             ),
             const SizedBox(height: 16),
 
@@ -466,6 +671,20 @@ class _MobilePortfolioScreenState extends State<MobilePortfolioScreen> {
                   ),
                 );
               }),
+            const SizedBox(height: 24),
+
+            // Shared Recent Transactions Feed (Web PR #28 Parity)
+            RecentTransactionsFeed(
+              title: "PORTFOLIO TRANSACTION AUDIT",
+              maxItems: 8,
+              showFilters: true,
+              onNavigateToPractice: () => QuickTradeModal.show(context, onTradeExecuted: _loadPortfolio),
+              onNavigateToAudit: () {
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const MobileTransactionsScreen()));
+              },
+            ),
+            const SizedBox(height: 20),
+            ],
           ],
         ),
       ),
@@ -503,5 +722,66 @@ class _MobilePortfolioScreenState extends State<MobilePortfolioScreen> {
       const Color(0xFFFBBF24), // Amber
     ];
     return colors[sym.hashCode.abs() % colors.length];
+  }
+}
+
+class _AllocationDonutPainter extends CustomPainter {
+  final List<Map<String, dynamic>> holdings;
+  final double totalValue;
+
+  _AllocationDonutPainter({required this.holdings, required this.totalValue});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = math.min(size.width, size.height) / 2;
+    const strokeWidth = 11.0;
+
+    final basePaint = Paint()
+      ..color = TerminalColors.panel
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth;
+
+    canvas.drawCircle(center, radius - strokeWidth / 2, basePaint);
+
+    if (totalValue <= 0 || holdings.isEmpty) return;
+
+    final colors = [
+      TerminalColors.action,
+      TerminalColors.positive,
+      const Color(0xFF60A5FA),
+      const Color(0xFFA78BFA),
+      const Color(0xFFF472B6),
+      const Color(0xFFFBBF24),
+    ];
+
+    double startAngle = -math.pi / 2;
+    for (int i = 0; i < holdings.length; i++) {
+      final h = holdings[i];
+      final mktVal = (h['marketValue'] as num?)?.toDouble() ?? 0.0;
+      final sweepAngle = (mktVal / totalValue) * 2 * math.pi;
+      final sym = (h['symbol'] as String?) ?? '';
+      final segColor = colors[sym.hashCode.abs() % colors.length];
+
+      final segmentPaint = Paint()
+        ..color = segColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth
+        ..strokeCap = StrokeCap.butt;
+
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius - strokeWidth / 2),
+        startAngle,
+        sweepAngle,
+        false,
+        segmentPaint,
+      );
+      startAngle += sweepAngle;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _AllocationDonutPainter oldDelegate) {
+    return oldDelegate.holdings != holdings || oldDelegate.totalValue != totalValue;
   }
 }

@@ -28,7 +28,7 @@ class _MobileAuthScreenState extends State<MobileAuthScreen> {
     serverClientId: (!kIsWeb && _googleServerClientId.isNotEmpty) ? _googleServerClientId : null,
   );
 
-  Future<void> _handleDevLogin() async {
+  Future<void> _handleDevLogin({String? email, String? name}) async {
     if (!kDebugMode && !kIsWeb) {
       setState(() {
         _errorMessage = "Developer sandbox sign-in is disabled in production builds.";
@@ -42,7 +42,7 @@ class _MobileAuthScreenState extends State<MobileAuthScreen> {
     });
 
     try {
-      await apiClient.devLogin();
+      await apiClient.devLogin(email: email ?? ApiClient.defaultOwnerEmail, name: name);
       if (mounted) {
         widget.onAuthenticated();
       }
@@ -54,6 +54,62 @@ class _MobileAuthScreenState extends State<MobileAuthScreen> {
         });
       }
     }
+  }
+
+  void _showDevPersonaSelector() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: TerminalColors.panel,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(8))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "SELECT TEST PERSONA",
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: TerminalColors.action),
+              ),
+              const SizedBox(height: 12),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.security, color: TerminalColors.action),
+                title: const Text("Platform Owner (Full Sandbox Access)", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: TerminalColors.textMain)),
+                subtitle: const Text("shivrajdhote4452@gmail.com · Shivraj Dhote", style: TextStyle(fontSize: 11, color: TerminalColors.textMuted)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _handleDevLogin(email: ApiClient.defaultOwnerEmail, name: "Shivraj Dhote");
+                },
+              ),
+              const Divider(color: TerminalColors.borderSubtle),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.person_outline, color: TerminalColors.positive),
+                title: const Text("Standard Investor (No Sandbox)", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: TerminalColors.textMain)),
+                subtitle: const Text("priya.sharma@example.com · Priya Sharma", style: TextStyle(fontSize: 11, color: TerminalColors.textMuted)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _handleDevLogin(email: "priya.sharma@example.com", name: "Priya Sharma");
+                },
+              ),
+              const Divider(color: TerminalColors.borderSubtle),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.person_off_outlined, color: TerminalColors.textMuted),
+                title: const Text("Nameless User (Generic Greetings)", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: TerminalColors.textMain)),
+                subtitle: const Text("anonymous@example.com · (No Name on Record)", style: TextStyle(fontSize: 11, color: TerminalColors.textMuted)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _handleDevLogin(email: "anonymous@example.com", name: "");
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _handleGoogleSignIn() async {
@@ -79,7 +135,7 @@ class _MobileAuthScreenState extends State<MobileAuthScreen> {
         // On Flutter Web, GoogleSignIn returns authenticated account without raw OIDC JWT
         await apiClient.devLogin(
           email: account.email,
-          name: account.displayName ?? 'Shivraj Dhote',
+          name: account.displayName,
         );
       }
 
@@ -91,8 +147,8 @@ class _MobileAuthScreenState extends State<MobileAuthScreen> {
       if (kIsWeb || kDebugMode) {
         try {
           await apiClient.devLogin(
-            email: 'shivraj.dhote@gmail.com',
-            name: 'Shivraj Dhote (Google User)',
+            email: 'dev@finex.internal',
+            name: 'Developer Account',
           );
           if (mounted) {
             widget.onAuthenticated();
@@ -108,7 +164,7 @@ class _MobileAuthScreenState extends State<MobileAuthScreen> {
             errText.contains("clientId") ||
             errText.contains("origin")) {
           displayMsg =
-              "Google OAuth requires localhost:8085 in Google Cloud Console. Please tap '⚡ CONTINUE AS SHIVRAJ DHOTE' above.";
+              "Google OAuth requires localhost:8085 in Google Cloud Console. Please tap '⚡ CONTINUE AS DEVELOPER' above.";
         }
         setState(() {
           _errorMessage = displayMsg;
@@ -191,13 +247,30 @@ class _MobileAuthScreenState extends State<MobileAuthScreen> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                         elevation: 0,
                       ),
-                      onPressed: _isLoading ? null : _handleDevLogin,
+                      onPressed: _isLoading ? null : () => _handleDevLogin(),
                       child: Text(
-                        _isLoading ? "AUTHENTICATING..." : "⚡ CONTINUE AS SHIVRAJ DHOTE",
+                        _isLoading ? "AUTHENTICATING..." : "⚡ CONTINUE AS DEVELOPER",
                         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 0.5),
                       ),
                     ),
                   ),
+                  if (kDebugMode || kIsWeb) ...[
+                    const SizedBox(height: 8),
+                    GestureDetector(
+                      onTap: _isLoading ? null : _showDevPersonaSelector,
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 4),
+                        child: Text(
+                          "⚙ Switch Persona (Owner / Non-Owner / Nameless)",
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: TerminalColors.action,
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   SizedBox(
                     width: double.infinity,
