@@ -283,10 +283,26 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
           'ALL': 3650,
         };
         const fetchDays = RANGE_DAYS[rangePreset] ?? 365;
-        const res = await apiClient.market.getHistory(cleanSymbol, {
-          interval: interval,
-          days: fetchDays,
-        } as any);
+        let res: any;
+        const isIndex = cleanSymbol.startsWith('NIFTY') || cleanSymbol === 'SENSEX' || cleanSymbol.includes('INDEX');
+        if (isIndex) {
+          try {
+            res = await apiClient.market.getIndexHistory(cleanSymbol, {
+              interval: interval,
+              days: fetchDays,
+            });
+          } catch {
+            res = await apiClient.market.getHistory(cleanSymbol, {
+              interval: interval,
+              days: fetchDays,
+            } as any);
+          }
+        } else {
+          res = await apiClient.market.getHistory(cleanSymbol, {
+            interval: interval,
+            days: fetchDays,
+          } as any);
+        }
         const payload = (res as any)?.data || res;
         const candles = payload?.candles || payload?.bars || [];
 

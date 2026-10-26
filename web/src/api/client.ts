@@ -297,6 +297,109 @@ class ApiClient {
       }>(`/market/quotes/${symbol}`);
     },
 
+    getIndices: async (options?: { category?: string; tier?: number }) => {
+      const q = new URLSearchParams();
+      if (options?.category) q.set('category', options.category);
+      if (options?.tier) q.set('tier', String(options.tier));
+      const queryStr = q.toString() ? `?${q.toString()}` : '';
+      return this.request<{
+        indices: Array<{
+          symbol: string;
+          canonical_id: string;
+          display_name: string;
+          exchange: string;
+          angel_token: string;
+          yfinance_ticker: string;
+          category: string;
+          tier: string;
+          description: string;
+          currency: string;
+          price?: number | null;
+          open_price?: number | null;
+          high_price?: number | null;
+          low_price?: number | null;
+          close_price?: number | null;
+          change?: number | null;
+          change_pct?: number | null;
+          is_positive?: boolean;
+          observed_at?: string | null;
+          source?: string;
+          source_evidence?: string | null;
+          is_delayed?: boolean;
+          is_stale?: boolean;
+          data_status?: string;
+          served_from_cache?: boolean;
+        }>;
+        count: number;
+      }>(`/market/indices${queryStr}`);
+    },
+
+    getIndexQuote: async (symbol: string) => {
+      return this.request<{
+        canonical_id: string;
+        symbol: string;
+        display_name: string;
+        category: string;
+        tier: string;
+        ltp: number;
+        price: number;
+        currency: string;
+        observed_at: string;
+        ingested_at: string;
+        source: string;
+        served_from_cache: boolean;
+        freshness: string;
+        is_delayed: boolean;
+        is_stale: boolean;
+        data_status: string;
+      }>(`/market/indices/${encodeURIComponent(symbol)}/quote`);
+    },
+
+    getIndexHistory: async (
+      symbol: string,
+      options?: { interval?: string; days?: number; start_date?: string; end_date?: string; range?: string }
+    ) => {
+      const q = new URLSearchParams();
+      if (options?.interval) q.set('interval', options.interval);
+      if (options?.days) q.set('days', String(options.days));
+      if (options?.start_date) q.set('start_date', options.start_date);
+      if (options?.end_date) q.set('end_date', options.end_date);
+      if (options?.range) q.set('range', options.range);
+      const queryStr = q.toString() ? `?${q.toString()}` : '';
+      return this.request<{
+        symbol: string;
+        canonical_id: string;
+        display_name: string;
+        category: string;
+        tier: string;
+        source: string;
+        freshness: string;
+        served_from_cache: boolean;
+        candles: Array<{
+          time: number;
+          date: string;
+          open: number;
+          high: number;
+          low: number;
+          close: number;
+          volume: number;
+        }>;
+        bars: Array<{
+          time: number;
+          date: string;
+          open: number;
+          high: number;
+          low: number;
+          close: number;
+          volume: number;
+        }>;
+        count: number;
+        interval: string;
+        start_date: string;
+        end_date: string;
+      }>(`/market/indices/${encodeURIComponent(symbol)}/history${queryStr}`);
+    },
+
     getHistory: async (
       symbol: string,
       optionsOrStartDate?: string | { interval?: string; start_date?: string; end_date?: string; range?: string; as_of?: string },
