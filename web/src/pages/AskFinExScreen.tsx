@@ -493,30 +493,6 @@ export const AskFinExScreen: React.FC = () => {
             })
           )}
         </div>
-
-        {/* Sidebar Footer: AI Model & Provider Status */}
-        <div
-          style={{
-            padding: '12px 14px',
-            borderTop: '1px solid #1A1E29',
-            backgroundColor: '#0D0F16',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '4px',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '10px', textTransform: 'uppercase', color: '#787B86', fontWeight: 600, letterSpacing: '0.05em' }}>
-              ACTIVE ENGINE
-            </span>
-            <span style={{ fontSize: '10.5px', color: '#26A69A', fontWeight: 600 }}>
-              {modelInfo.provider}
-            </span>
-          </div>
-          <span style={{ fontSize: '11px', color: '#FFFFFF', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            ⚡ {modelInfo.model}
-          </span>
-        </div>
       </div>
       )}
 
