@@ -109,16 +109,20 @@ async def test_get_index_quote_with_override():
         data_status="LIVE",
     )
     provider.set_quote_override("NIFTY 50", mock_quote)
+    app.dependency_overrides[get_market_data_provider] = lambda: provider
 
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/api/v1/market/indices/NIFTY 50/quote")
-        assert resp.status_code == 200
-        data = resp.json()["data"]
-        assert data["symbol"] == "NIFTY 50"
-        assert data["ltp"] == 24850.50
-        assert data["category"] == "headline"
-        assert data["freshness"] == "LIVE"
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/api/v1/market/indices/NIFTY 50/quote")
+            assert resp.status_code == 200
+            data = resp.json()["data"]
+            assert data["symbol"] == "NIFTY 50"
+            assert data["ltp"] == 24850.50
+            assert data["category"] == "headline"
+            assert data["freshness"] == "LIVE"
+    finally:
+        app.dependency_overrides.clear()
 
 
 @pytest.mark.asyncio

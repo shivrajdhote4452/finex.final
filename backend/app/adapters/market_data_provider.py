@@ -1174,7 +1174,7 @@ class RealMarketDataProvider(AbstractMarketDataProvider):
 
                                 return Quote(
                                     canonical_id=canonical_id,
-                                    symbol=norm,
+                                    symbol=norm if idx_info else provider_sym,
                                     price=price_dec,
                                     open_price=open_val,
                                     high_price=high_val,
