@@ -32,10 +32,10 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
     totalTradesCount,
     openQuickTrade,
     isOwner,
-    userProfile,
+    displayName: contextDisplayName,
   } = useFinancial();
 
-  const displayName = userProfile?.display_name || userProfile?.full_name?.split(' ')[0] || (isOwner ? 'Shivraj' : 'Investor');
+  const displayName = contextDisplayName || (isOwner ? 'Admin' : 'Investor');
   const initialLetter = (displayName[0] || 'I').toUpperCase();
 
   const [searchQuery, setSearchQuery] = useState('');
