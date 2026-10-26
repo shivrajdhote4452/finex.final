@@ -13,10 +13,12 @@ Validates:
 8. Zero equity regression: Equity orders and positions remain isolated.
 """
 
+from datetime import date
 from decimal import Decimal
 
 import pytest
 from backend.app.domain.options_engine import (
+    build_real_angel_option_chain,
     calculate_black_scholes_price_and_greeks,
     generate_deterministic_option_chain,
     settle_option_position,
@@ -102,7 +104,7 @@ def test_black_scholes_deep_itm_and_otm():
 # 2. Option Chain Generation & Underlyings Tests
 # =============================================================================
 def test_generate_deterministic_option_chain_nifty50():
-    """Verify Nifty 50 option chain generation produces exact strikes, PCR, and Greeks."""
+    """Verify Nifty 50 model option chain omits unmodeled fields and labels MODEL_ESTIMATED."""
     spot = 24125.50
     chain = generate_deterministic_option_chain(
         underlying="NIFTY 50",
@@ -128,12 +130,83 @@ def test_generate_deterministic_option_chain_nifty50():
         assert row.put.max_loss == round(row.put.ltp * 25, 2)
         assert row.call.breakeven == round(row.strike_price + row.call.ltp, 2)
         assert row.put.breakeven == round(row.strike_price - row.put.ltp, 2)
+        # Honest omission: unmodeled fields must be None on model chain
+        assert row.call.open_interest is None
+        assert row.put.open_interest is None
+        assert row.call.volume is None
+        assert row.put.volume is None
+        assert row.call.change is None
+        assert row.put.change is None
+        assert row.call.is_model_estimated is True
+        assert row.put.is_model_estimated is True
 
-    assert chain.pcr > 0.0
-    assert chain.max_pain > 0.0
+    # PCR, Max Pain, and Total OI cannot be modelled from spot alone
+    assert chain.pcr is None
+    assert chain.max_pain is None
+    assert chain.total_call_oi is None
+    assert chain.total_put_oi is None
     assert len(chain.expiries) >= 4
-    assert chain.source == "ANGEL_ONE_SMARTAPI"
+    assert chain.source == "MODEL_ESTIMATED"
+    assert chain.chain_type == "MODEL_ESTIMATED"
     assert len(chain.evidence_hash) == 64
+
+
+def test_build_real_angel_option_chain():
+    """Verify build_real_angel_option_chain retains real Angel Greeks, volume, and sets ANGEL_ONE_SMARTAPI source."""
+    mock_greeks = [
+        {
+            "name": "NIFTY",
+            "expiry": "27OCT2026",
+            "strikePrice": "24100.000000",
+            "optionType": "CE",
+            "delta": "0.550000",
+            "gamma": "0.001200",
+            "theta": "-45.500000",
+            "vega": "4.200000",
+            "impliedVolatility": "18.500000",
+            "tradeVolume": "500000.00",
+        },
+        {
+            "name": "NIFTY",
+            "expiry": "27OCT2026",
+            "strikePrice": "24100.000000",
+            "optionType": "PE",
+            "delta": "-0.450000",
+            "gamma": "0.001200",
+            "theta": "-40.100000",
+            "vega": "4.150000",
+            "impliedVolatility": "19.000000",
+            "tradeVolume": "450000.00",
+        },
+    ]
+
+    expiries = [date(2026, 10, 27)]
+    chain = build_real_angel_option_chain(
+        underlying="NIFTY 50",
+        spot_price=24100.0,
+        selected_expiry=date(2026, 10, 27),
+        expiries=expiries,
+        greeks_data=mock_greeks,
+        num_strikes_each_side=1,
+    )
+
+    assert chain.source == "ANGEL_ONE_SMARTAPI"
+    assert chain.chain_type == "REAL_MARKET"
+    assert chain.underlying == "NIFTY 50"
+
+    # Find the 24100 strike row
+    matched = [r for r in chain.strikes if r.strike_price == 24100.0]
+    assert len(matched) == 1
+    row = matched[0]
+    assert row.call.implied_volatility == 18.5
+    assert row.call.greeks.delta == 0.55
+    assert row.call.volume == 500000
+    assert row.call.is_model_estimated is False
+
+    assert row.put.implied_volatility == 19.0
+    assert row.put.greeks.delta == -0.45
+    assert row.put.volume == 450000
+    assert row.put.is_model_estimated is False
 
 
 # =============================================================================
@@ -239,7 +312,7 @@ def test_settle_option_position_put_otm():
 # =============================================================================
 @pytest.mark.asyncio
 async def test_get_option_chain_nifty50_api():
-    """GET /api/v1/market/options/chain/NIFTY 50 returns 200 with full strikes & Greeks envelope."""
+    """GET /api/v1/market/options/chain/NIFTY 50 returns 200 with truthful strikes & Greeks envelope."""
     app = create_app()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         res = await client.get("/api/v1/market/options/chain/NIFTY 50")
@@ -250,14 +323,56 @@ async def test_get_option_chain_nifty50_api():
         assert data["underlying"] == "NIFTY 50"
         assert data["lot_size"] == 25
         assert len(data["strikes"]) >= 15
-        assert data["source"] == "ANGEL_ONE_SMARTAPI"
+        assert data["source"] in ("ANGEL_ONE_SMARTAPI", "MODEL_ESTIMATED")
         assert "evidence_hash" in data
 
-        # Check call and put details on ATM strike
+        # Check call and put details on strike
         first_row = data["strikes"][0]
         assert "call" in first_row and "put" in first_row
         assert "greeks" in first_row["call"]
         assert "delta" in first_row["call"]["greeks"]
+
+
+@pytest.mark.asyncio
+async def test_options_chain_model_fallback_omits_unmodeled_fields():
+    """When Angel One is unconfigured or unavailable, endpoint serves MODEL_ESTIMATED chain without invented numbers."""
+    from backend.app.dependencies import get_angel_adapter
+    from backend.app.services.angel_adapter import AngelOneMarketAdapter
+
+    class DisabledAngelAdapter(AngelOneMarketAdapter):
+        def is_configured(self) -> bool:
+            return False
+
+        async def get_option_chain(self, *args, **kwargs):
+            return None
+
+    app = create_app()
+    app.dependency_overrides[get_angel_adapter] = lambda: DisabledAngelAdapter(api_key=None)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        res = await client.get("/api/v1/market/options/chain/NIFTY 50")
+        assert res.status_code == 200
+        data = res.json()["data"]
+
+        # Truthful provenance: strictly MODEL_ESTIMATED, never claims ANGEL_ONE_SMARTAPI
+        assert data["source"] == "MODEL_ESTIMATED"
+        assert data["chain_type"] == "MODEL_ESTIMATED"
+
+        # Truthful field gating: unmodeled fields MUST be None
+        assert data["pcr"] is None
+        assert data["max_pain"] is None
+        assert data["total_call_oi"] is None
+        assert data["total_put_oi"] is None
+
+        for row in data["strikes"]:
+            assert row["call"]["open_interest"] is None
+            assert row["put"]["open_interest"] is None
+            assert row["call"]["volume"] is None
+            assert row["put"]["volume"] is None
+            assert row["call"]["change"] is None
+            assert row["put"]["change"] is None
+            assert row["call"]["is_model_estimated"] is True
+            assert row["put"]["is_model_estimated"] is True
 
 
 @pytest.mark.asyncio

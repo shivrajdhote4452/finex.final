@@ -74,6 +74,9 @@ def test_is_owner_helper_truth_table(monkeypatch):
     get_settings.cache_clear()
     assert is_owner("shivrajdhote4452@gmail.com") is False
 
+    monkeypatch.undo()
+    get_settings.cache_clear()
+
 
 @pytest.mark.asyncio
 async def test_new_customer_registration_captures_name_and_email(app):

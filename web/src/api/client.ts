@@ -45,18 +45,19 @@ export interface OptionContractData {
   expiry: string;
   days_to_expiry: number;
   ltp: number;
-  change: number;
-  change_pct: number;
-  open_interest: number;
-  oi_change: number;
-  volume: number;
-  implied_volatility: number;
+  change?: number | null;
+  change_pct?: number | null;
+  open_interest?: number | null;
+  oi_change?: number | null;
+  volume?: number | null;
+  implied_volatility?: number | null;
   greeks: OptionGreeks;
   is_itm: boolean;
   breakeven: number;
   max_loss: number;
   lot_size: number;
   total_lot_cost: number;
+  is_model_estimated?: boolean;
 }
 
 export interface StrikeRowData {
@@ -73,13 +74,14 @@ export interface OptionChainData {
   expiries: string[];
   selected_expiry: string;
   days_to_expiry: number;
-  pcr: number;
-  max_pain: number;
-  total_call_oi: number;
-  total_put_oi: number;
+  pcr?: number | null;
+  max_pain?: number | null;
+  total_call_oi?: number | null;
+  total_put_oi?: number | null;
   strikes: StrikeRowData[];
   strike_step?: number;
   source: string;
+  chain_type?: string;
   observed_at: string;
   evidence_hash: string;
   served_from_cache: boolean;
