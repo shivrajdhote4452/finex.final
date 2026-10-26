@@ -161,7 +161,7 @@ async def test_new_customer_registration_via_google_captures_name_and_email(app)
 async def test_existing_customer_backfills_missing_fields_via_google(app):
     """Task 1: Existing customer missing name or email backfills on Google OAuth login without overwriting."""
     uid = "usr-legacy-incomplete-01"
-    user_store.get_or_create_user(
+    await user_store.get_or_create_user_db(
         provider="google",
         provider_subject=f"google-sub-{uid}",
         email="",
