@@ -8,9 +8,17 @@ import 'screens/markets_screen.dart';
 import 'screens/chart_screen.dart';
 import 'screens/ask_finex_screen.dart';
 import 'screens/more_screen.dart';
+import 'widgets/error_boundary.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  ErrorWidget.builder = (FlutterErrorDetails details) {
+    return ErrorFallbackView(
+      onTryAgain: () {},
+      onRefresh: () {},
+      error: details.exception,
+    );
+  };
   await themeController.init();
   runApp(const FinExMobileApp());
 }
@@ -184,9 +192,11 @@ class _MainMobileNavigationShellState extends State<MainMobileNavigationShell> {
                           ),
                         ),
                         const SizedBox(width: 6),
-                        const Text(
-                          "Shivraj's workspace",
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: TerminalColors.textMain),
+                        Text(
+                          apiClient.displayName.isNotEmpty
+                              ? "${apiClient.displayName}'s workspace"
+                              : "Trading workspace",
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: TerminalColors.textMain),
                         ),
                       ],
                     ),
@@ -210,8 +220,13 @@ class _MainMobileNavigationShellState extends State<MainMobileNavigationShell> {
                 ),
               ),
             ),
-            // Active Tab View
-            Expanded(child: screens[_currentIndex]),
+            // Active Tab View wrapped with Error Boundary (Web PR #27 Parity)
+            Expanded(
+              child: FinExErrorBoundary(
+                screenName: ['Home', 'Markets', 'Charts', 'Ask', 'More'][_currentIndex],
+                child: screens[_currentIndex],
+              ),
+            ),
           ],
         ),
       ),

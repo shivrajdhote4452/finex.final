@@ -26,15 +26,19 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
   @override
   void initState() {
     super.initState();
+    _isOwner = apiClient.isOwner;
     _loadAccount();
   }
 
   Future<void> _loadAccount() async {
     try {
-      final profile = await apiClient.getProfile();
+      await apiClient.getProfile();
       if (mounted) {
         setState(() {
-          _isOwner = profile['is_owner'] == true;
+          _isOwner = apiClient.isOwner;
+          if (!_isOwner && _activeTab == 'sandbox') {
+            _activeTab = 'profile';
+          }
         });
       }
     } catch (_) {}
@@ -131,25 +135,39 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
                     borderRadius: BorderRadius.circular(4),
                   ),
                   alignment: Alignment.center,
-                  child: const Text(
-                    "SD",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.black),
+                  child: Text(
+                    apiClient.userInitials.isNotEmpty ? apiClient.userInitials : "FE",
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.black),
                   ),
                 ),
                 const SizedBox(width: 14),
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          Text("Shivraj Dhote", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: TerminalColors.textMain)),
-                          SizedBox(width: 8),
-                          _MiniBadge(label: "ADMIN", color: TerminalColors.action),
+                          Flexible(
+                            child: Text(
+                              apiClient.userName.isNotEmpty ? apiClient.userName : "FinEx Investor",
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: TerminalColors.textMain),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          _isOwner
+                              ? const _MiniBadge(label: "OWNER", color: TerminalColors.action)
+                              : const _MiniBadge(label: "INVESTOR", color: TerminalColors.positive),
                         ],
                       ),
-                      SizedBox(height: 2),
-                      Text("Sole Developer & Investor · Pure Black Terminal", style: TextStyle(fontSize: 11, color: TerminalColors.textMuted)),
+                      const SizedBox(height: 2),
+                      Text(
+                        _isOwner
+                            ? "Platform Owner & Administrator · Pure Black Terminal"
+                            : (apiClient.userEmail.isNotEmpty ? apiClient.userEmail : "Paper Trading Investor · Standard Access"),
+                        style: const TextStyle(fontSize: 11, color: TerminalColors.textMuted),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ],
                   ),
                 ),
@@ -267,10 +285,20 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
         _buildInfoCard(
           title: "INVESTOR PROFILE & RISK PARAMETERS",
           items: [
-            const _InfoRow(
+            _InfoRow(
               label: "Display Name",
-              value: "Shivraj Dhote",
-              trailing: _MiniBadge(label: "Primary Admin", color: TerminalColors.positive),
+              value: apiClient.userName.isNotEmpty ? apiClient.userName : "Not set (Anonymous)",
+              trailing: _isOwner
+                  ? const _MiniBadge(label: "Primary Owner", color: TerminalColors.action)
+                  : const _MiniBadge(label: "Standard User", color: TerminalColors.positive),
+            ),
+            const Divider(color: TerminalColors.borderSubtle, height: 20),
+            _InfoRow(
+              label: "Account Email",
+              value: apiClient.userEmail.isNotEmpty ? apiClient.userEmail : "Unset (Guest)",
+              trailing: _isOwner
+                  ? const _MiniBadge(label: "Verified Owner", color: TerminalColors.action)
+                  : null,
             ),
             const Divider(color: TerminalColors.borderSubtle, height: 20),
             const _InfoRow(

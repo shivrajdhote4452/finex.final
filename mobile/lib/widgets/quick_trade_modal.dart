@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../services/api_client.dart';
 import '../theme/terminal_theme.dart';
+import 'app_toast.dart';
 
 class QuickTradeModal extends StatefulWidget {
   final String? initialSymbol;
@@ -94,7 +96,7 @@ class _QuickTradeModalState extends State<QuickTradeModal> {
     });
 
     try {
-      await apiClient.submitOrder(
+      final res = await apiClient.submitOrder(
         symbol: _symbol,
         side: _side,
         quantity: _quantity.toDouble(),
@@ -104,31 +106,27 @@ class _QuickTradeModalState extends State<QuickTradeModal> {
 
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: TerminalColors.surface,
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle_outline, color: TerminalColors.positive, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Order Executed: $_side $_quantity shares of $_symbol @ ₹${_currentPrice.toStringAsFixed(2)}',
-                    style: const TextStyle(fontSize: 12, color: TerminalColors.textMain),
-                  ),
-                ),
-              ],
-            ),
-          ),
+        final verb = _side.toUpperCase() == 'BUY' ? 'Bought' : 'Sold';
+        final fillPrice = (res['fill_price'] as num?)?.toDouble() ?? _currentPrice;
+        final priceFmt = NumberFormat.currency(symbol: '₹', locale: 'en_IN', decimalDigits: 2).format(fillPrice);
+        AppToast.success(
+          context,
+          '$verb $_quantity $_symbol @ $priceFmt',
         );
         widget.onTradeExecuted?.call();
       }
     } catch (e) {
       if (mounted) {
+        final err = e.toString().replaceFirst('Exception: ', '');
         setState(() {
-          _errorMessage = e.toString().replaceFirst('Exception: ', '');
+          _errorMessage = err;
           _isLoading = false;
         });
+        AppToast.error(
+          context,
+          err,
+          title: 'Trade Failed',
+        );
       }
     }
   }
