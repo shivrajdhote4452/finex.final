@@ -140,7 +140,7 @@ async def reset_paper_account(
     db: AsyncSession = Depends(get_db),
 ):
     """Reset virtual cash balance back to ₹1,00,000 and clear simulated positions in PostgreSQL."""
-    if not is_owner(current_user):
+    if current_user.get("provider") != "google" or not is_owner(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Forbidden: Sandbox controls and accounts are restricted to the platform owner.",
@@ -172,7 +172,7 @@ async def deposit_virtual_cash(
     db: AsyncSession = Depends(get_db),
 ):
     """Credit authorized virtual paper cash to account with immutable ledger audit record in PostgreSQL."""
-    if not is_owner(current_user):
+    if current_user.get("provider") != "google" or not is_owner(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Forbidden: Sandbox controls and accounts are restricted to the platform owner.",

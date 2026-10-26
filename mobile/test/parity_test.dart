@@ -51,17 +51,21 @@ void main() {
       await apiClient.setProfile(null);
       expect(apiClient.isOwner, isFalse);
 
-      // Authenticated with non-owner email fails closed
+      // Authenticated with non-owner profile fails closed
       await apiClient.setToken('test-token');
-      await apiClient.setProfile({'name': 'Regular User', 'email': 'regular@example.com'});
+      await apiClient.setProfile({'name': 'Regular User', 'email': 'regular@example.com', 'is_owner': false});
       expect(apiClient.isOwner, isFalse);
 
       // Authenticated with null/empty email fails closed
-      await apiClient.setProfile({'name': 'Anonymous', 'email': ''});
+      await apiClient.setProfile({'name': 'Anonymous', 'email': '', 'is_owner': false});
       expect(apiClient.isOwner, isFalse);
 
-      // Authenticated with owner email succeeds
-      await apiClient.setProfile({'name': 'Owner User', 'email': 'shivrajdhote4452@gmail.com'});
+      // Authenticated with typed owner email but backend is_owner=false fails closed (no client-side comparison)
+      await apiClient.setProfile({'name': 'Owner User', 'email': 'shivrajdhote4452@gmail.com', 'is_owner': false});
+      expect(apiClient.isOwner, isFalse);
+
+      // Authenticated with verified backend session reporting is_owner=true succeeds
+      await apiClient.setProfile({'name': 'Owner User', 'email': 'shivrajdhote4452@gmail.com', 'is_owner': true});
       expect(apiClient.isOwner, isTrue);
 
       // Reset

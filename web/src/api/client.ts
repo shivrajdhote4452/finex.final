@@ -249,22 +249,6 @@ class ApiClient {
       return res;
     },
 
-    devLogin: async (email: string = 'shivrajdhote4452@gmail.com', name: string = 'Shivraj Dhote') => {
-      const res = await this.request<{
-        access_token: string;
-        token_type: string;
-        expires_in: number;
-        user_id: string;
-        email: string;
-        name: string;
-      }>('/auth/dev-login', {
-        method: 'POST',
-        body: JSON.stringify({ email, name, user_id: 'usr-shivraj-001' }),
-      });
-      this.setToken(res.access_token);
-      return res;
-    },
-
 
     getMe: async () => {
       return this.request<{
