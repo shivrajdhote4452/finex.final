@@ -22,6 +22,7 @@ import { apiClient } from './api/client';
 const VALID_TABS: NavigationTab[] = [
   'overview',
   'markets',
+  'indices',
   'charts',
   'portfolio',
   'transactions',
@@ -163,7 +164,8 @@ export const AppContent: React.FC = () => {
     <AppShell currentTab={currentTab} onNavigate={handleNavigate}>
       <ErrorBoundary>
         {currentTab === 'overview' && <OverviewScreen onNavigate={handleNavigate} />}
-        {currentTab === 'markets' && <MarketsScreen onNavigate={handleNavigate} />}
+        {currentTab === 'markets' && <MarketsScreen onNavigate={handleNavigate} initialView="equities" />}
+        {currentTab === 'indices' && <MarketsScreen onNavigate={handleNavigate} initialView="indices" />}
         {currentTab === 'charts' && <ChartWorkspaceScreen onNavigate={handleNavigate} />}
         {currentTab === 'portfolio' && <PortfolioScreen onNavigate={handleNavigate} />}
         {currentTab === 'transactions' && <TransactionsScreen />}

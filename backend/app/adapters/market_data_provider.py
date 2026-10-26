@@ -11,6 +11,7 @@ from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
+from backend.app.domain.index_registry import get_index_by_symbol
 from backend.app.ports.market_data import AbstractMarketDataProvider, HistoricalBar, Quote
 
 # Canonical instrument registry for approved demonstration equities
@@ -1072,7 +1073,10 @@ class RealMarketDataProvider(AbstractMarketDataProvider):
 
     def _normalize_symbol(self, symbol: str) -> str:
         s = symbol.upper().strip()
-        if s.startswith("NSE:"):
+        idx = get_index_by_symbol(s)
+        if idx:
+            return idx["symbol"]
+        if s.startswith("NSE:") or s.startswith("BSE:"):
             return s.split(":", 1)[1]
         if s.endswith(".NS"):
             return s.split(".", 1)[0]
@@ -1099,14 +1103,22 @@ class RealMarketDataProvider(AbstractMarketDataProvider):
         if self._simulated_outage:
             return None
 
-        # Find provider symbol
-        provider_sym = f"{norm}.NS"
-        for inst in INSTRUMENT_REGISTRY:
-            if inst["symbol"] == norm:
-                provider_sym = inst.get("provider_symbol", f"{norm}.NS")
-                break
+        # Check index registry first
+        idx_info = get_index_by_symbol(norm)
+        if idx_info:
+            provider_sym = idx_info["yfinance_ticker"]
+            canonical_id = idx_info["canonical_id"]
+        else:
+            provider_sym = f"{norm}.NS"
+            canonical_id = f"NSE:{norm}"
+            for inst in INSTRUMENT_REGISTRY:
+                if inst["symbol"] == norm:
+                    provider_sym = inst.get("provider_symbol", f"{norm}.NS")
+                    canonical_id = inst.get("canonical_id", f"NSE:{norm}")
+                    break
 
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{provider_sym}?interval=1d&range=1d"
+        encoded_sym = provider_sym.replace("^", "%5E")
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{encoded_sym}?interval=1d&range=1d"
         headers = {
             "User-Agent": "FinEx-Terminal/1.0 (Educational Financial Simulator; contact@finex.internal)",
             "Accept": "application/json",
@@ -1135,10 +1147,41 @@ class RealMarketDataProvider(AbstractMarketDataProvider):
                                 )
                                 now = datetime.now(timezone.utc)
                                 is_delayed, is_stale, status = self._evaluate_freshness(obs_time)
+
+                                prev_close = meta.get("previousClose") or meta.get("chartPreviousClose")
+                                open_val = (
+                                    Decimal(str(round(meta["regularMarketOpen"], 2)))
+                                    if meta.get("regularMarketOpen") is not None
+                                    else None
+                                )
+                                high_val = (
+                                    Decimal(str(round(meta["regularMarketDayHigh"], 2)))
+                                    if meta.get("regularMarketDayHigh") is not None
+                                    else None
+                                )
+                                low_val = (
+                                    Decimal(str(round(meta["regularMarketDayLow"], 2)))
+                                    if meta.get("regularMarketDayLow") is not None
+                                    else None
+                                )
+                                close_val = Decimal(str(round(prev_close, 2))) if prev_close is not None else None
+                                change_val = (price_dec - close_val) if close_val is not None else None
+                                change_pct_val = (
+                                    (change_val / close_val * Decimal("100.00"))
+                                    if (close_val and change_val is not None)
+                                    else None
+                                )
+
                                 return Quote(
-                                    canonical_id=f"NSE:{norm}",
-                                    symbol=provider_sym,
+                                    canonical_id=canonical_id,
+                                    symbol=norm,
                                     price=price_dec,
+                                    open_price=open_val,
+                                    high_price=high_val,
+                                    low_price=low_val,
+                                    close_price=close_val,
+                                    change=change_val,
+                                    change_pct=change_pct_val,
                                     currency=meta.get("currency", "INR"),
                                     observed_at=obs_time,
                                     ingested_at=now,
@@ -1168,11 +1211,16 @@ class RealMarketDataProvider(AbstractMarketDataProvider):
         if self._simulated_outage:
             return []
 
-        provider_sym = f"{norm}.NS"
-        for inst in INSTRUMENT_REGISTRY:
-            if inst["symbol"] == norm:
-                provider_sym = inst.get("provider_symbol", f"{norm}.NS")
-                break
+        # Check index registry first
+        idx_info = get_index_by_symbol(norm)
+        if idx_info:
+            provider_sym = idx_info["yfinance_ticker"]
+        else:
+            provider_sym = f"{norm}.NS"
+            for inst in INSTRUMENT_REGISTRY:
+                if inst["symbol"] == norm:
+                    provider_sym = inst.get("provider_symbol", f"{norm}.NS")
+                    break
 
         # Map interval for Yahoo Finance
         interval_map = {
@@ -1217,7 +1265,8 @@ class RealMarketDataProvider(AbstractMarketDataProvider):
             except Exception:
                 range_query = "range=1y"
 
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{provider_sym}?interval={yf_interval}&{range_query}"
+        encoded_sym = provider_sym.replace("^", "%5E")
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{encoded_sym}?interval={yf_interval}&{range_query}"
         headers = {
             "User-Agent": "FinEx-Terminal/1.0 (Educational Financial Simulator; contact@finex.internal)",
             "Accept": "application/json",

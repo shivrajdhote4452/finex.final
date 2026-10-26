@@ -24,6 +24,7 @@ from backend.app.dependencies import (
     get_market_data_provider,
     get_market_hub,
 )
+from backend.app.domain.index_registry import INDEX_REGISTRY, get_index_by_symbol
 from backend.app.domain.technical_indicators import (
     calculate_bollinger_bands,
     calculate_ema,
@@ -349,6 +350,188 @@ async def get_instrument_indicators(
             "interval": interval,
             "series": calc_results,
             "count": len(calc_results),
+        },
+        correlation_id=cid,
+    )
+
+
+# =============================================================================
+# Indian Market Benchmark & Sectoral Indices Endpoints (Phase 1)
+# =============================================================================
+
+
+@router.get("/indices")
+async def list_market_indices(
+    request: Request,
+    category: Optional[str] = Query(None, description="Filter by category: headline, sectoral"),
+    tier: Optional[int] = Query(None, description="Filter by tier: 1 (Headline), 2 (Sectoral)"),
+    provider: AbstractMarketDataProvider = Depends(get_market_data_provider),
+):
+    """List supported Indian benchmark & sectoral indices with live/cached quotes and day changes."""
+    cid = getattr(request.state, "correlation_id", None)
+    indices = INDEX_REGISTRY
+    if category:
+        indices = [idx for idx in indices if idx.get("category") == category.lower()]
+    if tier:
+        indices = [idx for idx in indices if idx.get("tier") == str(tier)]
+
+    results = []
+    for idx in indices:
+        sym = idx["symbol"]
+        quote = await provider.get_latest_quote(sym)
+        item = dict(idx)
+        if quote:
+            item["price"] = float(quote.price)
+            item["open_price"] = float(quote.open_price) if quote.open_price else None
+            item["high_price"] = float(quote.high_price) if quote.high_price else None
+            item["low_price"] = float(quote.low_price) if quote.low_price else None
+            item["close_price"] = float(quote.close_price) if quote.close_price else None
+            item["change"] = float(quote.change) if quote.change is not None else 0.0
+            item["change_pct"] = float(quote.change_pct) if quote.change_pct is not None else 0.0
+            item["is_positive"] = (quote.change or 0) >= 0
+            item["observed_at"] = quote.observed_at.isoformat()
+            item["source"] = quote.source
+            item["source_evidence"] = quote.source_evidence
+            item["is_delayed"] = quote.is_delayed
+            item["is_stale"] = quote.is_stale
+            item["data_status"] = quote.data_status
+            item["served_from_cache"] = quote.served_from_cache
+        else:
+            item["price"] = None
+            item["change"] = None
+            item["change_pct"] = None
+            item["is_positive"] = True
+            item["observed_at"] = None
+            item["source"] = "none"
+            item["source_evidence"] = None
+            item["is_delayed"] = False
+            item["is_stale"] = True
+            item["data_status"] = "disconnected"
+            item["served_from_cache"] = False
+        results.append(item)
+
+    return create_response_envelope(
+        data={"indices": results, "count": len(results)},
+        correlation_id=cid,
+    )
+
+
+@router.get("/indices/{symbol}/quote")
+async def get_index_quote(
+    request: Request,
+    symbol: str,
+    provider: AbstractMarketDataProvider = Depends(get_market_data_provider),
+):
+    """Fetch verified quote for a specific index with provenance metadata."""
+    cid = getattr(request.state, "correlation_id", None)
+    idx_info = get_index_by_symbol(symbol)
+    if not idx_info:
+        raise NotFoundException(message=f"Index '{symbol}' not found in registry.")
+
+    quote = await provider.get_latest_quote(idx_info["symbol"])
+    if not quote:
+        raise NotFoundException(
+            message=f"Index '{symbol}' quote is currently unavailable. No synthetic price generated."
+        )
+
+    data = quote.model_dump(mode="json")
+    data["symbol"] = idx_info["symbol"]
+    data["display_name"] = idx_info["display_name"]
+    data["category"] = idx_info["category"]
+    data["tier"] = idx_info["tier"]
+    data["ltp"] = float(quote.price)
+    data["freshness"] = "LIVE" if quote.data_status == "LIVE" else "END_OF_DAY"
+    data["served_from_cache"] = quote.served_from_cache
+
+    return create_response_envelope(data=data, correlation_id=cid)
+
+
+@router.get("/indices/{symbol}/history")
+async def get_index_history(
+    request: Request,
+    symbol: str,
+    interval: str = Query("1D", description="Candle interval e.g. 1m, 5m, 15m, 1h, 1D, 1W, 1M"),
+    days: Optional[int] = Query(None, description="Lookback days"),
+    start_date: Optional[str] = Query(None, description="Start date YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="End date YYYY-MM-DD"),
+    range: Optional[str] = Query(None, description="Preset range: 1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, max"),
+    as_of: Optional[str] = Query(None, description="Simulated replay clock ISO timestamp"),
+    angel_adapter: AngelOneMarketAdapter = Depends(get_angel_adapter),
+    provider: AbstractMarketDataProvider = Depends(get_market_data_provider),
+):
+    """Fetch historical candle bars for a market index with multi-tier provider fallback."""
+    cid = getattr(request.state, "correlation_id", None)
+    idx_info = get_index_by_symbol(symbol)
+    if not idx_info:
+        raise NotFoundException(message=f"Index '{symbol}' not found in registry.")
+
+    now_utc = datetime.now(timezone.utc)
+    s_date = start_date
+    e_date = end_date or now_utc.strftime("%Y-%m-%d")
+
+    if days:
+        s_date = (now_utc - timedelta(days=days)).strftime("%Y-%m-%d")
+    elif not s_date:
+        s_date = (now_utc - timedelta(days=365)).strftime("%Y-%m-%d")
+
+    candles = []
+    source = "ANGEL_ONE_SMARTAPI"
+    served_from_cache = False
+
+    # 1. Try Angel One if configured
+    if angel_adapter and angel_adapter.is_configured():
+        try:
+            candles = angel_adapter.get_historical_candles(
+                symbol=idx_info["symbol"],
+                interval=interval,
+                from_date=f"{s_date} 09:15",
+                to_date=f"{e_date} 15:30",
+            )
+        except Exception as e:
+            logger.info(f"Angel One candle fetch bypassed for index {idx_info['symbol']}: {e}")
+
+    # 2. Fallback to public provider (Yahoo Finance)
+    if not candles:
+        source = "YAHOO_FINANCE_VERIFIED"
+        try:
+            bars = await provider.get_historical_bars(
+                symbol=idx_info["symbol"],
+                start_date=s_date,
+                end_date=e_date,
+                interval=interval,
+                range_param=range,
+            )
+            candles = [
+                {
+                    "time": int(b.timestamp.timestamp()),
+                    "date": b.timestamp.strftime("%Y-%m-%d"),
+                    "open": float(b.open),
+                    "high": float(b.high),
+                    "low": float(b.low),
+                    "close": float(b.close),
+                    "volume": b.volume,
+                }
+                for b in bars
+            ]
+        except Exception as e:
+            logger.warning(f"Public provider historical candle error for index {idx_info['symbol']}: {e}")
+
+    return create_response_envelope(
+        data={
+            "symbol": idx_info["symbol"],
+            "canonical_id": idx_info["canonical_id"],
+            "display_name": idx_info["display_name"],
+            "category": idx_info["category"],
+            "tier": idx_info["tier"],
+            "source": source,
+            "freshness": "END_OF_DAY",
+            "served_from_cache": served_from_cache,
+            "candles": candles,
+            "bars": candles,
+            "count": len(candles),
+            "interval": interval,
+            "start_date": s_date,
+            "end_date": e_date,
         },
         correlation_id=cid,
     )

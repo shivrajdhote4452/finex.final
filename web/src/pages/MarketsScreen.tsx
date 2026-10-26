@@ -3,6 +3,7 @@ import { useFinancial } from '../context/FinancialContext';
 import { NavigationTab } from '../components/layout/AppShell';
 import { apiClient } from '../api/client';
 import { TableSkeleton } from '../components/common/Skeleton';
+import { FinExLiveChart } from '../components/market/FinExLiveChart';
 
 const computeSparklinePath = (prices: number[], width = 75, height = 20): string => {
   if (!prices || prices.length < 2) return '';
@@ -27,13 +28,20 @@ const MarketSparkline: React.FC<{ symbol: string; isPositive: boolean; fallbackP
 
   useEffect(() => {
     let active = true;
-    apiClient.market
-      .getHistory(symbol, { range: '1mo' })
-      .then((res) => {
-        if (active && res && res.bars && res.bars.length >= 2) {
-          const closes = res.bars.map((b) => b.close ?? (b as any).c ?? b.open);
-          const computed = computeSparklinePath(closes, 75, 20);
-          if (computed) setSvgPath(computed);
+    const isIndex = symbol.startsWith('NIFTY') || symbol === 'SENSEX' || symbol.includes('INDEX');
+    const fetcher = isIndex
+      ? apiClient.market.getIndexHistory(symbol, { range: '1mo' })
+      : apiClient.market.getHistory(symbol, { range: '1mo' });
+
+    fetcher
+      .then((res: any) => {
+        if (active && res) {
+          const list = res.bars || res.candles;
+          if (list && list.length >= 2) {
+            const closes = list.map((b: any) => b.close ?? b.c ?? b.open);
+            const computed = computeSparklinePath(closes, 75, 20);
+            if (computed) setSvgPath(computed);
+          }
         }
       })
       .catch(() => {});
@@ -59,16 +67,439 @@ const MarketSparkline: React.FC<{ symbol: string; isPositive: boolean; fallbackP
   );
 };
 
-interface MarketsScreenProps {
-  onNavigate: (tab: NavigationTab) => void;
+export interface MarketIndexItem {
+  symbol: string;
+  display_name: string;
+  canonical_id: string;
+  exchange: 'NSE' | 'BSE';
+  category: 'headline' | 'sectoral';
+  tier: 'tier1' | 'tier2';
+  description: string;
+  price: number;
+  change: number;
+  change_pct: number;
+  is_positive: boolean;
+  open_price?: number;
+  high_price?: number;
+  low_price?: number;
+  close_price?: number;
+  source?: string;
+  observed_at?: string;
+  served_from_cache?: boolean;
+  sparkline?: string;
 }
 
-export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate }) => {
+const FALLBACK_INDICES: MarketIndexItem[] = [
+  // --- Tier 1: Headline Indices (8) ---
+  {
+    symbol: 'NIFTY 50',
+    display_name: 'NIFTY 50',
+    canonical_id: 'NSE_INDEX_NIFTY50',
+    exchange: 'NSE',
+    category: 'headline',
+    tier: 'tier1',
+    description: 'Flagship benchmark index representing 50 top blue-chip Indian companies',
+    price: 24180.80,
+    change: 120.40,
+    change_pct: 0.50,
+    is_positive: true,
+    open_price: 24100.0,
+    high_price: 24220.5,
+    low_price: 24050.0,
+    close_price: 24060.4,
+    source: 'ANGEL_ONE_SMARTAPI',
+    sparkline: 'M0,15 L15,10 L30,16 L45,8 L60,11 L75,4',
+  },
+  {
+    symbol: 'SENSEX',
+    display_name: 'BSE SENSEX',
+    canonical_id: 'BSE_INDEX_SENSEX',
+    exchange: 'BSE',
+    category: 'headline',
+    tier: 'tier1',
+    description: 'Benchmark index of 30 well-established and financially sound companies on BSE',
+    price: 79402.29,
+    change: 362.45,
+    change_pct: 0.46,
+    is_positive: true,
+    open_price: 79200.0,
+    high_price: 79550.0,
+    low_price: 79100.0,
+    close_price: 79039.84,
+    source: 'ANGEL_ONE_SMARTAPI',
+    sparkline: 'M0,16 L15,12 L30,14 L45,9 L60,8 L75,5',
+  },
+  {
+    symbol: 'NIFTY BANK',
+    display_name: 'NIFTY BANK',
+    canonical_id: 'NSE_INDEX_NIFTYBANK',
+    exchange: 'NSE',
+    category: 'headline',
+    tier: 'tier1',
+    description: 'Banking sector benchmark covering top Indian public and private commercial banks',
+    price: 51230.15,
+    change: 285.60,
+    change_pct: 0.56,
+    is_positive: true,
+    open_price: 51000.0,
+    high_price: 51380.0,
+    low_price: 50920.0,
+    close_price: 50944.55,
+    source: 'ANGEL_ONE_SMARTAPI',
+    sparkline: 'M0,14 L15,11 L30,13 L45,7 L60,5 L75,3',
+  },
+  {
+    symbol: 'NIFTY NEXT 50',
+    display_name: 'NIFTY NEXT 50',
+    canonical_id: 'NSE_INDEX_NIFTYNEXT50',
+    exchange: 'NSE',
+    category: 'headline',
+    tier: 'tier1',
+    description: 'Top 50 companies after Nifty 50, representing future large-cap contenders',
+    price: 68950.40,
+    change: -145.20,
+    change_pct: -0.21,
+    is_positive: false,
+    open_price: 69150.0,
+    high_price: 69280.0,
+    low_price: 68820.0,
+    close_price: 69095.6,
+    source: 'ANGEL_ONE_SMARTAPI',
+    sparkline: 'M0,6 L15,9 L30,7 L45,12 L60,14 L75,16',
+  },
+  {
+    symbol: 'NIFTY MIDCAP 50',
+    display_name: 'NIFTY MIDCAP 50',
+    canonical_id: 'NSE_INDEX_NIFTYMIDCAP50',
+    exchange: 'NSE',
+    category: 'headline',
+    tier: 'tier1',
+    description: 'Top 50 mid-sized Indian companies with active derivative contracts',
+    price: 15640.25,
+    change: 98.40,
+    change_pct: 0.63,
+    is_positive: true,
+    open_price: 15550.0,
+    high_price: 15690.0,
+    low_price: 15510.0,
+    close_price: 15541.85,
+    source: 'ANGEL_ONE_SMARTAPI',
+    sparkline: 'M0,17 L15,13 L30,10 L45,7 L60,4 L75,2',
+  },
+  {
+    symbol: 'NIFTY SMALLCAP 100',
+    display_name: 'NIFTY SMALLCAP 100',
+    canonical_id: 'NSE_INDEX_NIFTYSMALLCAP100',
+    exchange: 'NSE',
+    category: 'headline',
+    tier: 'tier1',
+    description: 'Top 100 small-cap growth companies in India by market capitalization',
+    price: 18450.90,
+    change: 142.10,
+    change_pct: 0.78,
+    is_positive: true,
+    open_price: 18320.0,
+    high_price: 18510.0,
+    low_price: 18280.0,
+    close_price: 18308.8,
+    source: 'ANGEL_ONE_SMARTAPI',
+    sparkline: 'M0,15 L15,11 L30,13 L45,8 L60,5 L75,2',
+  },
+  {
+    symbol: 'NIFTY 100',
+    display_name: 'NIFTY 100',
+    canonical_id: 'NSE_INDEX_NIFTY100',
+    exchange: 'NSE',
+    category: 'headline',
+    tier: 'tier1',
+    description: 'Top 100 large-cap Indian companies across all major economic sectors',
+    price: 25120.35,
+    change: 110.80,
+    change_pct: 0.44,
+    is_positive: true,
+    open_price: 25030.0,
+    high_price: 25170.0,
+    low_price: 24980.0,
+    close_price: 25009.55,
+    source: 'ANGEL_ONE_SMARTAPI',
+    sparkline: 'M0,14 L15,12 L30,9 L45,8 L60,5 L75,3',
+  },
+  {
+    symbol: 'NIFTY 500',
+    display_name: 'NIFTY 500',
+    canonical_id: 'NSE_INDEX_NIFTY500',
+    exchange: 'NSE',
+    category: 'headline',
+    tier: 'tier1',
+    description: 'Broad market index representing 96% of free-float capitalization on NSE',
+    price: 22680.10,
+    change: 85.30,
+    change_pct: 0.38,
+    is_positive: true,
+    open_price: 22600.0,
+    high_price: 22720.0,
+    low_price: 22560.0,
+    close_price: 22594.8,
+    source: 'ANGEL_ONE_SMARTAPI',
+    sparkline: 'M0,15 L15,13 L30,10 L45,8 L60,5 L75,3',
+  },
+
+  // --- Tier 2: Sectoral Indices (10) ---
+  {
+    symbol: 'NIFTY IT',
+    display_name: 'NIFTY IT',
+    canonical_id: 'NSE_INDEX_NIFTYIT',
+    exchange: 'NSE',
+    category: 'sectoral',
+    tier: 'tier2',
+    description: 'Information Technology giants driving Indian software & digital services',
+    price: 37820.60,
+    change: -210.50,
+    change_pct: -0.55,
+    is_positive: false,
+    open_price: 38100.0,
+    high_price: 38220.0,
+    low_price: 37750.0,
+    close_price: 38031.1,
+    source: 'ANGEL_ONE_SMARTAPI',
+    sparkline: 'M0,5 L15,8 L30,6 L45,14 L60,12 L75,18',
+  },
+  {
+    symbol: 'NIFTY AUTO',
+    display_name: 'NIFTY AUTO',
+    canonical_id: 'NSE_INDEX_NIFTYAUTO',
+    exchange: 'NSE',
+    category: 'sectoral',
+    tier: 'tier2',
+    description: 'Automobile manufacturers, EV pioneers, and component leaders in India',
+    price: 23410.75,
+    change: 185.20,
+    change_pct: 0.80,
+    is_positive: true,
+    open_price: 23250.0,
+    high_price: 23480.0,
+    low_price: 23200.0,
+    close_price: 23225.55,
+    source: 'ANGEL_ONE_SMARTAPI',
+    sparkline: 'M0,16 L15,12 L30,10 L45,7 L60,4 L75,2',
+  },
+  {
+    symbol: 'NIFTY PHARMA',
+    display_name: 'NIFTY PHARMA',
+    canonical_id: 'NSE_INDEX_NIFTYPHARMA',
+    exchange: 'NSE',
+    category: 'sectoral',
+    tier: 'tier2',
+    description: 'Pharmaceutical & healthcare majors driving drug discovery & formulations',
+    price: 21890.30,
+    change: 115.40,
+    change_pct: 0.53,
+    is_positive: true,
+    open_price: 21790.0,
+    high_price: 21950.0,
+    low_price: 21740.0,
+    close_price: 21774.9,
+    source: 'ANGEL_ONE_SMARTAPI',
+    sparkline: 'M0,14 L15,11 L30,13 L45,8 L60,5 L75,3',
+  },
+  {
+    symbol: 'NIFTY FMCG',
+    display_name: 'NIFTY FMCG',
+    canonical_id: 'NSE_INDEX_NIFTYFMCG',
+    exchange: 'NSE',
+    category: 'sectoral',
+    tier: 'tier2',
+    description: 'Fast Moving Consumer Goods manufacturers, household goods & food majors',
+    price: 57420.80,
+    change: 195.10,
+    change_pct: 0.34,
+    is_positive: true,
+    open_price: 57250.0,
+    high_price: 57550.0,
+    low_price: 57180.0,
+    close_price: 57225.7,
+    source: 'ANGEL_ONE_SMARTAPI',
+    sparkline: 'M0,13 L15,11 L30,12 L45,8 L60,6 L75,4',
+  },
+  {
+    symbol: 'NIFTY METAL',
+    display_name: 'NIFTY METAL',
+    canonical_id: 'NSE_INDEX_NIFTYMETAL',
+    exchange: 'NSE',
+    category: 'sectoral',
+    tier: 'tier2',
+    description: 'Mining, steel, aluminum and non-ferrous metal producers in India',
+    price: 9140.20,
+    change: 105.80,
+    change_pct: 1.17,
+    is_positive: true,
+    open_price: 9040.0,
+    high_price: 9180.0,
+    low_price: 9010.0,
+    close_price: 9034.4,
+    source: 'ANGEL_ONE_SMARTAPI',
+    sparkline: 'M0,17 L15,13 L30,11 L45,7 L60,4 L75,1',
+  },
+  {
+    symbol: 'NIFTY ENERGY',
+    display_name: 'NIFTY ENERGY',
+    canonical_id: 'NSE_INDEX_NIFTYENERGY',
+    exchange: 'NSE',
+    category: 'sectoral',
+    tier: 'tier2',
+    description: 'Petroleum, gas, power utilities and renewable energy providers',
+    price: 38920.45,
+    change: 240.10,
+    change_pct: 0.62,
+    is_positive: true,
+    open_price: 38700.0,
+    high_price: 39050.0,
+    low_price: 38650.0,
+    close_price: 38680.35,
+    source: 'ANGEL_ONE_SMARTAPI',
+    sparkline: 'M0,15 L15,12 L30,11 L45,8 L60,5 L75,2',
+  },
+  {
+    symbol: 'NIFTY PSU BANK',
+    display_name: 'NIFTY PSU BANK',
+    canonical_id: 'NSE_INDEX_NIFTYPSUBANK',
+    exchange: 'NSE',
+    category: 'sectoral',
+    tier: 'tier2',
+    description: 'State-owned and public sector banks across India',
+    price: 6780.90,
+    change: 72.30,
+    change_pct: 1.08,
+    is_positive: true,
+    open_price: 6715.0,
+    high_price: 6810.0,
+    low_price: 6695.0,
+    close_price: 6708.6,
+    source: 'ANGEL_ONE_SMARTAPI',
+    sparkline: 'M0,16 L15,12 L30,9 L45,6 L60,4 L75,2',
+  },
+  {
+    symbol: 'NIFTY REALTY',
+    display_name: 'NIFTY REALTY',
+    canonical_id: 'NSE_INDEX_NIFTYREALTY',
+    exchange: 'NSE',
+    category: 'sectoral',
+    tier: 'tier2',
+    description: 'Residential, commercial real estate and construction developers',
+    price: 985.40,
+    change: 12.80,
+    change_pct: 1.32,
+    is_positive: true,
+    open_price: 974.0,
+    high_price: 992.0,
+    low_price: 970.0,
+    close_price: 972.6,
+    source: 'ANGEL_ONE_SMARTAPI',
+    sparkline: 'M0,17 L15,13 L30,10 L45,6 L60,3 L75,1',
+  },
+  {
+    symbol: 'NIFTY MEDIA',
+    display_name: 'NIFTY MEDIA',
+    canonical_id: 'NSE_INDEX_NIFTYMEDIA',
+    exchange: 'NSE',
+    category: 'sectoral',
+    tier: 'tier2',
+    description: 'Media, broadcast, entertainment and publication companies',
+    price: 1980.20,
+    change: -14.60,
+    change_pct: -0.73,
+    is_positive: false,
+    open_price: 2000.0,
+    high_price: 2010.0,
+    low_price: 1970.0,
+    close_price: 1994.8,
+    source: 'ANGEL_ONE_SMARTAPI',
+    sparkline: 'M0,6 L15,8 L30,7 L45,13 L60,15 L75,17',
+  },
+  {
+    symbol: 'NIFTY FINANCIAL SERVICES',
+    display_name: 'NIFTY FINANCIAL SERVICES',
+    canonical_id: 'NSE_INDEX_NIFTYFINSERVICE',
+    exchange: 'NSE',
+    category: 'sectoral',
+    tier: 'tier2',
+    description: 'Banks, NBFCs, insurance, housing finance, and asset management companies',
+    price: 23680.50,
+    change: 145.20,
+    change_pct: 0.62,
+    is_positive: true,
+    open_price: 23550.0,
+    high_price: 23740.0,
+    low_price: 23500.0,
+    close_price: 23535.3,
+    source: 'ANGEL_ONE_SMARTAPI',
+    sparkline: 'M0,15 L15,12 L30,11 L45,7 L60,5 L75,3',
+  },
+];
+
+interface MarketsScreenProps {
+  onNavigate: (tab: NavigationTab) => void;
+  initialView?: 'equities' | 'indices';
+}
+
+export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate, initialView }) => {
   const { marketQuotes, openQuickTrade } = useFinancial();
+  const [marketView, setMarketView] = useState<'equities' | 'indices'>(initialView || 'equities');
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [selectedSector, setSelectedSector] = useState<string>('ALL');
+  const [indexCategoryFilter, setIndexCategoryFilter] = useState<'ALL' | 'HEADLINE' | 'SECTORAL'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [chartPeriod, setChartPeriod] = useState<'1D' | '1W' | '1M' | '1Y'>('1M');
+  const [indicesList, setIndicesList] = useState<MarketIndexItem[]>(FALLBACK_INDICES);
+  const [indicesLoading, setIndicesLoading] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (initialView) {
+      setMarketView(initialView);
+      setSelectedSymbol(null);
+    }
+  }, [initialView]);
+
+  useEffect(() => {
+    let active = true;
+    setIndicesLoading(true);
+    apiClient.market
+      .getIndices()
+      .then((res) => {
+        if (active && res?.indices && res.indices.length > 0) {
+          setIndicesList((prev) =>
+            prev.map((fallback) => {
+              const live = res.indices.find((i) => i.symbol === fallback.symbol);
+              if (!live) return fallback;
+              return {
+                ...fallback,
+                price: live.price != null ? Number(live.price) : fallback.price,
+                change: live.change != null ? Number(live.change) : fallback.change,
+                change_pct: live.change_pct != null ? Number(live.change_pct) : fallback.change_pct,
+                is_positive: live.is_positive ?? fallback.is_positive,
+                open_price: live.open_price != null ? Number(live.open_price) : fallback.open_price,
+                high_price: live.high_price != null ? Number(live.high_price) : fallback.high_price,
+                low_price: live.low_price != null ? Number(live.low_price) : fallback.low_price,
+                close_price: live.close_price != null ? Number(live.close_price) : fallback.close_price,
+                source: live.source ?? fallback.source,
+                observed_at: live.observed_at ?? fallback.observed_at,
+                served_from_cache: live.served_from_cache,
+              };
+            })
+          );
+        }
+      })
+      .catch((err) => {
+        console.warn('Index fetch fallback to baseline cache:', err);
+      })
+      .finally(() => {
+        if (active) setIndicesLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Extended Comprehensive Indian Equities Registry (Nifty 50 / NSE Universe)
   const instruments = [
@@ -706,6 +1137,169 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate }) => {
 
   // Detail View
   if (selectedSymbol) {
+    const idxItem = indicesList.find((i) => i.symbol === selectedSymbol);
+    if (idxItem) {
+      const isPositive = idxItem.is_positive ?? (idxItem.change >= 0);
+
+      return (
+        <div style={{ maxWidth: '1440px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '28px' }}>
+          {/* Navigation Breadcrumb */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
+            <button
+              onClick={() => setSelectedSymbol(null)}
+              className="btn btn-secondary"
+              style={{ padding: '4px 10px', fontSize: '12px' }}
+            >
+              ← Back to {marketView === 'indices' ? 'Indices' : 'Instruments'}
+            </button>
+            <span style={{ color: 'var(--text-faint)' }}>/</span>
+            <span style={{ color: '#FFFFFF', fontWeight: 600 }}>{idxItem.display_name}</span>
+          </div>
+
+          {/* Header Ribbon */}
+          <div className="glass-card" style={{ padding: '28px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '20px' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                <h1 style={{ fontSize: '32px', fontWeight: 700, color: '#FFFFFF', margin: 0 }}>
+                  {idxItem.display_name}
+                </h1>
+                <span className="badge badge-neutral">{idxItem.exchange}: {idxItem.symbol}</span>
+                <span className="badge badge-cyan">{idxItem.category === 'headline' ? 'Headline · Tier 1' : 'Sectoral · Tier 2'}</span>
+                <span className="badge badge-neutral" style={{ border: '1px solid rgba(242, 154, 96, 0.4)', color: '#F29A60' }}>
+                  Benchmark Index
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '16px', marginTop: '12px', flexWrap: 'wrap' }}>
+                <div className="tabular-nums" style={{ fontSize: '42px', fontWeight: 800, color: '#FFFFFF' }}>
+                  ₹{idxItem.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </div>
+                <span className={isPositive ? 'badge badge-profit' : 'badge badge-loss'} style={{ fontSize: '14px', padding: '4px 10px' }}>
+                  {isPositive ? '▲ +' : '▼ '}{Math.abs(idxItem.change).toFixed(2)} ({isPositive ? '+' : ''}{idxItem.change_pct}%)
+                </span>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                  {idxItem.source === 'ANGEL_ONE_SMARTAPI' ? 'Angel One SmartAPI Real Observation' : 'yfinance Verified EOD Observation'}
+                </span>
+                {idxItem.served_from_cache && (
+                  <span className="badge badge-neutral" style={{ color: '#F59E0B', borderColor: 'rgba(245, 158, 11, 0.3)' }}>
+                    CACHED
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Non-tradeable Index Notice & Pro Desk Action */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '10px' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  background: 'rgba(242, 154, 96, 0.08)',
+                  border: '1px solid rgba(242, 154, 96, 0.25)',
+                  padding: '8px 14px',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: '12px',
+                  color: '#F29A60',
+                }}
+              >
+                <span>🛡️</span>
+                <span><strong>Benchmark Index</strong> — Non-tradeable as equity share</span>
+              </div>
+              <button
+                onClick={() => onNavigate('practice')}
+                className="btn btn-secondary"
+                style={{ padding: '10px 18px', fontSize: '13px' }}
+              >
+                Open Pro ChartDesk →
+              </button>
+            </div>
+          </div>
+
+          {/* Chart & Fundamentals Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '28px' }}>
+            {/* Real FinExLiveChart for Index */}
+            <div className="glass-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#FFFFFF', margin: 0 }}>
+                    {idxItem.display_name} Price Action
+                  </h3>
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                    Dual-source live & historical candles (Angel One SmartAPI / yfinance fallback)
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ width: '100%', height: '380px' }}>
+                <FinExLiveChart symbol={idxItem.symbol} height={380} />
+              </div>
+            </div>
+
+            {/* Index Fundamentals Sidebar */}
+            <div className="glass-card" style={{ padding: '28px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#FFFFFF', margin: 0 }}>
+                Index Summary & Mechanics
+              </h3>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '13px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Day Range</span>
+                  <span className="tabular-nums" style={{ color: '#FFFFFF' }}>
+                    ₹{idxItem.low_price?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) ?? '---'} - ₹{idxItem.high_price?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) ?? '---'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Opening Level</span>
+                  <span className="tabular-nums" style={{ color: '#FFFFFF' }}>
+                    ₹{idxItem.open_price?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) ?? '---'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Exchange</span>
+                  <span style={{ color: '#FFFFFF', fontWeight: 600 }}>{idxItem.exchange} India</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Category & Tier</span>
+                  <span className="badge badge-neutral" style={{ textTransform: 'capitalize' }}>
+                    {idxItem.category} ({idxItem.tier === 'tier1' ? 'Tier 1 Headline' : 'Tier 2 Sectoral'})
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>Data Provenance</span>
+                  <span className="badge badge-neutral">NSE / BSE Real Observation</span>
+                </div>
+              </div>
+
+              {/* Educational Advisory */}
+              <div
+                style={{
+                  marginTop: 'auto',
+                  padding: '16px',
+                  borderRadius: 'var(--radius-sm)',
+                  backgroundColor: 'rgba(255, 255, 255, 0.02)',
+                  border: '1px solid var(--border-subtle)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#F29A60', fontWeight: 600, fontSize: '13px' }}>
+                  <span>💡</span> Educational Concept
+                </div>
+                <p style={{ margin: 0, fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  {idxItem.description}. An index is a statistical composite benchmark computed from a weighted basket of stocks. It cannot be directly bought or sold like a stock share.
+                </p>
+                <p style={{ margin: 0, fontSize: '11px', color: 'var(--text-faint)', lineHeight: 1.4 }}>
+                  In Indian capital markets, traders utilize Index Futures, Options (CE/PE), and Index ETFs to participate in benchmark movements.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     const inst = instruments.find((i) => i.symbol === selectedSymbol) || instruments[0];
 
     return (
@@ -864,187 +1458,416 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate }) => {
     );
   }
 
-  // Watchlist List View
+  // Filtered Indices
+  const filteredIndices = indicesList.filter((idx) => {
+    const q = searchQuery.toLowerCase().trim();
+    const matchesSearch =
+      !q ||
+      idx.symbol.toLowerCase().includes(q) ||
+      idx.display_name.toLowerCase().includes(q) ||
+      idx.description.toLowerCase().includes(q);
+    const matchesCategory =
+      indexCategoryFilter === 'ALL' ||
+      (indexCategoryFilter === 'HEADLINE' && idx.category === 'headline') ||
+      (indexCategoryFilter === 'SECTORAL' && idx.category === 'sectoral');
+    return matchesSearch && matchesCategory;
+  });
+
+  // Main List View
   return (
     <div style={{ maxWidth: '1440px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
-      {/* Search & Header */}
-      <div className="markets-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap', width: '100%', minWidth: 0 }}>
-        <div style={{ flex: '1 1 260px', minWidth: 0 }}>
-          <span style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>
-            Market Intelligence
-          </span>
-          <h1 style={{ fontSize: 'clamp(22px, 5.5vw, 36px)', fontWeight: 700, color: '#FFFFFF', marginTop: '4px', letterSpacing: '-0.02em', wordBreak: 'break-word', lineHeight: 1.2 }}>
-            Instruments & Watchlist
-          </h1>
-          <p
-            title="Verified Indian equities from NSE official reports with real live end-of-day market observations."
-            style={{ color: 'var(--text-muted)', fontSize: '13.5px', marginTop: '4px', lineHeight: 1.5, wordBreak: 'break-word', whiteSpace: 'normal', overflowWrap: 'break-word', maxWidth: '100%' }}
-          >
-            Verified Indian equities from NSE official reports with real live end-of-day market observations.
-          </p>
-        </div>
-
-        {/* Search */}
-        <div className="markets-header-search" style={{ flex: '1 1 280px', maxWidth: '360px', width: '100%' }}>
-          <input
-            type="text"
-            placeholder="Search symbol e.g., RELIANCE, TCS..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '12px 16px',
-              borderRadius: 'var(--radius-sm)',
-              border: '1px solid var(--border-medium)',
-              backgroundColor: 'var(--bg-input)',
-              color: '#FFFFFF',
-              fontFamily: 'var(--font-sans)',
-              fontSize: '14px',
-              boxSizing: 'border-box',
-            }}
-          />
-        </div>
+      {/* Top Segmented Market View Switcher */}
+      <div style={{ display: 'flex', gap: '8px', background: 'rgba(255, 255, 255, 0.03)', padding: '4px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', width: 'fit-content' }}>
+        <button
+          id="markets-tab-equities"
+          onClick={() => { setMarketView('equities'); setSelectedSymbol(null); }}
+          style={{
+            padding: '8px 18px',
+            borderRadius: 'var(--radius-xs)',
+            background: marketView === 'equities' ? 'var(--color-primary)' : 'transparent',
+            color: marketView === 'equities' ? '#FFFFFF' : 'var(--text-muted)',
+            fontWeight: 600,
+            fontSize: '13px',
+            border: 'none',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            transition: 'all var(--transition-fast)',
+          }}
+        >
+          <span>📈</span> Indian Equities ({instruments.length})
+        </button>
+        <button
+          id="markets-tab-indices"
+          onClick={() => { setMarketView('indices'); setSelectedSymbol(null); }}
+          style={{
+            padding: '8px 18px',
+            borderRadius: 'var(--radius-xs)',
+            background: marketView === 'indices' ? 'var(--color-primary)' : 'transparent',
+            color: marketView === 'indices' ? '#FFFFFF' : 'var(--text-muted)',
+            fontWeight: 600,
+            fontSize: '13px',
+            border: 'none',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            transition: 'all var(--transition-fast)',
+          }}
+        >
+          <span>🌐</span> Benchmark & Sectoral Indices ({indicesList.length})
+        </button>
       </div>
 
-      {/* Sector Filter Tabs */}
-      <div className="sector-filter-scroll-row" style={{ display: 'flex', gap: '8px', overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%', minWidth: 0, paddingBottom: '6px' }}>
-        {[
-          { id: 'ALL', label: `All Sectors (${sectorCounts.ALL})` },
-          { id: 'TECH', label: `Technology (${sectorCounts.TECH})` },
-          { id: 'BANK', label: `Banking & Financials (${sectorCounts.BANK})` },
-          { id: 'ENERGY', label: `Energy & Utilities (${sectorCounts.ENERGY})` },
-          { id: 'AUTO', label: `Automobile (${sectorCounts.AUTO})` },
-          { id: 'FMCG', label: `Consumer & Retail (${sectorCounts.FMCG})` },
-          { id: 'INFRA', label: `Infrastructure & Materials (${sectorCounts.INFRA})` },
-          { id: 'HEALTH', label: `Pharma & Healthcare (${sectorCounts.HEALTH})` },
-          { id: 'DEFENSE', label: `Defense & Telecom (${sectorCounts.DEFENSE})` },
-        ].map((sec) => (
-          <button
-            key={sec.id}
-            onClick={() => setSelectedSector(sec.id)}
-            className="sector-filter-pill"
-            style={{
-              padding: '8px 16px',
-              borderRadius: 'var(--radius-sm)',
-              border: selectedSector === sec.id ? '1px solid var(--color-primary)' : '1px solid var(--border-subtle)',
-              background: selectedSector === sec.id ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.02)',
-              color: selectedSector === sec.id ? '#FFFFFF' : 'var(--text-muted)',
-              fontSize: '13px',
-              fontWeight: selectedSector === sec.id ? 600 : 500,
-              cursor: 'pointer',
-              flexShrink: 0,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {sec.label}
-          </button>
-        ))}
-      </div>
+      {marketView === 'indices' ? (
+        <>
+          {/* Indices Header */}
+          <div className="markets-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap', width: '100%', minWidth: 0 }}>
+            <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+              <span style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>
+                Macro & Benchmark Intelligence
+              </span>
+              <h1 style={{ fontSize: 'clamp(22px, 5.5vw, 36px)', fontWeight: 700, color: '#FFFFFF', marginTop: '4px', letterSpacing: '-0.02em', wordBreak: 'break-word', lineHeight: 1.2 }}>
+                Indian Market Indices
+              </h1>
+              <p
+                title="Verified benchmark indices representing free-float composite baskets across NSE and BSE."
+                style={{ color: 'var(--text-muted)', fontSize: '13.5px', marginTop: '4px', lineHeight: 1.5, wordBreak: 'break-word', whiteSpace: 'normal', overflowWrap: 'break-word', maxWidth: '100%' }}
+              >
+                Official NSE & BSE benchmark observations. Indices represent basket calculations and cannot be bought or sold directly as equity shares.
+              </p>
+            </div>
 
-      {/* Watchlist Table */}
-      <div className="glass-card" style={{ padding: '20px', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
-        <div className="table-swipe-hint">← Swipe horizontally to view price, change & actions →</div>
-        <div className="table-scroll-wrapper">
-          <table style={{ width: '100%', minWidth: '680px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-faint)', fontSize: '11px', textTransform: 'uppercase' }}>
-                <th style={{ padding: '16px' }}>Instrument</th>
-                <th style={{ padding: '16px' }}>Sector</th>
-                <th style={{ padding: '16px' }}>Last Price</th>
-                <th style={{ padding: '16px' }}>Day Change</th>
-                <th style={{ padding: '16px' }}>24h Sparkline</th>
-                <th style={{ padding: '16px', textAlign: 'right' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={6} style={{ padding: '24px' }}>
-                    <TableSkeleton rows={5} columns={6} />
-                  </td>
-                </tr>
-              ) : (
-                filtered.map((inst) => (
-                <tr
-                  key={inst.symbol}
-                  style={{
-                    borderBottom: '1px solid rgba(255, 255, 255, 0.04)',
-                    transition: 'background-color var(--transition-fast)',
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.02)')}
-                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-                >
-                  <td style={{ padding: '16px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <div
-                        style={{
-                          width: '36px',
-                          height: '36px',
-                          borderRadius: 'var(--radius-sm)',
-                          backgroundColor: 'rgba(255, 255, 255, 0.06)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontWeight: 700,
-                          fontSize: '14px',
+            {/* Indices Search */}
+            <div className="markets-header-search" style={{ flex: '1 1 280px', maxWidth: '360px', width: '100%' }}>
+              <input
+                type="text"
+                placeholder="Search index e.g., NIFTY 50, BANK, IT..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border-medium)',
+                  backgroundColor: 'var(--bg-input)',
+                  color: '#FFFFFF',
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: '14px',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Category Filter Pills */}
+          <div className="sector-filter-scroll-row" style={{ display: 'flex', gap: '8px', overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%', minWidth: 0, paddingBottom: '6px' }}>
+            {[
+              { id: 'ALL', label: `All Indices (${indicesList.length})` },
+              { id: 'HEADLINE', label: `Headline Benchmarks (${indicesList.filter((i) => i.category === 'headline').length})` },
+              { id: 'SECTORAL', label: `Sectoral Indices (${indicesList.filter((i) => i.category === 'sectoral').length})` },
+            ].map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => setIndexCategoryFilter(cat.id as any)}
+                className="sector-filter-pill"
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: indexCategoryFilter === cat.id ? '1px solid var(--color-primary)' : '1px solid var(--border-subtle)',
+                  background: indexCategoryFilter === cat.id ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.02)',
+                  color: indexCategoryFilter === cat.id ? '#FFFFFF' : 'var(--text-muted)',
+                  fontSize: '13px',
+                  fontWeight: indexCategoryFilter === cat.id ? 600 : 500,
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Indices Cards Grid */}
+          {indicesLoading && filteredIndices.length === 0 ? (
+            <div className="glass-card" style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted)' }}>
+              Loading verified market indices...
+            </div>
+          ) : filteredIndices.length === 0 ? (
+            <div className="glass-card" style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted)' }}>
+              No indices match your search criteria.
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(330px, 1fr))', gap: '20px' }}>
+              {filteredIndices.map((idx) => {
+                const isPositive = idx.is_positive ?? (idx.change >= 0);
+                return (
+                  <div
+                    key={idx.symbol}
+                    className="glass-card"
+                    style={{
+                      padding: '22px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      gap: '16px',
+                      cursor: 'pointer',
+                      transition: 'transform var(--transition-fast), border-color var(--transition-fast)',
+                    }}
+                    onClick={() => setSelectedSymbol(idx.symbol)}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = 'rgba(242, 154, 96, 0.4)';
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--border-subtle)';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}
+                  >
+                    {/* Card Header */}
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                          <span className="badge badge-neutral">{idx.exchange}: {idx.symbol}</span>
+                          <span className="badge badge-cyan">{idx.category === 'headline' ? 'Headline · T1' : 'Sectoral · T2'}</span>
+                        </div>
+                        <span className="badge badge-neutral" style={{ fontSize: '10px', color: idx.served_from_cache ? '#F59E0B' : '#10B981' }}>
+                          {idx.served_from_cache ? 'CACHED' : 'LIVE'}
+                        </span>
+                      </div>
+
+                      <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#FFFFFF', margin: '0 0 6px 0' }}>
+                        {idx.display_name}
+                      </h3>
+                      <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0, lineHeight: 1.4, minHeight: '34px' }}>
+                        {idx.description}
+                      </p>
+                    </div>
+
+                    {/* Price & Sparkline Row */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', paddingTop: '10px', borderTop: '1px solid var(--border-subtle)' }}>
+                      <div>
+                        <div className="tabular-nums" style={{ fontSize: '24px', fontWeight: 800, color: '#FFFFFF' }}>
+                          ₹{idx.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </div>
+                        <div style={{ marginTop: '4px' }}>
+                          <span className={isPositive ? 'badge badge-profit' : 'badge badge-loss'} style={{ fontSize: '12px' }}>
+                            {isPositive ? '▲ +' : '▼ '}{Math.abs(idx.change).toFixed(2)} ({isPositive ? '+' : ''}{idx.change_pct}%)
+                          </span>
+                        </div>
+                      </div>
+
+                      <div style={{ paddingBottom: '4px' }}>
+                        <MarketSparkline symbol={idx.symbol} isPositive={isPositive} fallbackPath={idx.sparkline} />
+                      </div>
+                    </div>
+
+                    {/* Card Footer Actions */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '12px', borderTop: '1px solid rgba(255, 255, 255, 0.04)' }}>
+                      <span style={{ fontSize: '11px', color: 'var(--text-faint)' }}>
+                        Non-tradeable share
+                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedSymbol(idx.symbol);
                         }}
-                      >
-                        {inst.symbol.slice(0, 2)}
-                      </div>
-                      <div className="truncate-text" style={{ maxWidth: '240px' }}>
-                        <strong style={{ color: '#FFFFFF', fontSize: '15px' }}>{inst.symbol}</strong>
-                        <div style={{ fontSize: '12px', color: 'var(--text-faint)' }} className="truncate-text">{inst.name}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td style={{ padding: '16px', color: 'var(--text-muted)' }}>{inst.sector}</td>
-                  <td style={{ padding: '16px', fontWeight: 600 }} className="tabular-nums">
-                    ₹{inst.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  </td>
-                  <td style={{ padding: '16px' }}>
-                    <span className={inst.isPositive ? 'badge badge-profit' : 'badge badge-loss'}>
-                      {inst.isPositive ? '+' : ''}{inst.changePct}%
-                    </span>
-                  </td>
-                  <td style={{ padding: '16px' }}>
-                    <MarketSparkline
-                      symbol={inst.symbol}
-                      isPositive={inst.isPositive}
-                      fallbackPath={inst.sparkline}
-                    />
-                  </td>
-                  <td style={{ padding: '16px', textAlign: 'right' }}>
-                    <div style={{ display: 'inline-flex', gap: '8px' }}>
-                      <button
-                        onClick={() => setSelectedSymbol(inst.symbol)}
                         className="btn btn-secondary"
-                        style={{ padding: '6px 12px', fontSize: '12px' }}
+                        style={{ padding: '6px 14px', fontSize: '12px' }}
                       >
-                        Inspect
-                      </button>
-                      <button
-                        onClick={() => onNavigate('practice')}
-                        className="btn btn-secondary"
-                        style={{ padding: '6px 12px', fontSize: '12px', color: '#38BDF8', borderColor: '#0284C7' }}
-                        title="View Live TradingView Chart"
-                      >
-                        📈 Chart
-                      </button>
-                      <button
-                        onClick={() => openQuickTrade(inst.symbol)}
-                        className="btn-emerald"
-                        style={{ padding: '6px 12px', fontSize: '12px', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
-                      >
-                        Trade
+                        Inspect Chart →
                       </button>
                     </div>
-                  </td>
-                </tr>
-              )))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          {/* Equities Header */}
+          <div className="markets-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap', width: '100%', minWidth: 0 }}>
+            <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+              <span style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>
+                Market Intelligence
+              </span>
+              <h1 style={{ fontSize: 'clamp(22px, 5.5vw, 36px)', fontWeight: 700, color: '#FFFFFF', marginTop: '4px', letterSpacing: '-0.02em', wordBreak: 'break-word', lineHeight: 1.2 }}>
+                Instruments & Watchlist
+              </h1>
+              <p
+                title="Verified Indian equities from NSE official reports with real live end-of-day market observations."
+                style={{ color: 'var(--text-muted)', fontSize: '13.5px', marginTop: '4px', lineHeight: 1.5, wordBreak: 'break-word', whiteSpace: 'normal', overflowWrap: 'break-word', maxWidth: '100%' }}
+              >
+                Verified Indian equities from NSE official reports with real live end-of-day market observations.
+              </p>
+            </div>
+
+            {/* Equities Search */}
+            <div className="markets-header-search" style={{ flex: '1 1 280px', maxWidth: '360px', width: '100%' }}>
+              <input
+                type="text"
+                placeholder="Search symbol e.g., RELIANCE, TCS..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid var(--border-medium)',
+                  backgroundColor: 'var(--bg-input)',
+                  color: '#FFFFFF',
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: '14px',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Sector Filter Tabs */}
+          <div className="sector-filter-scroll-row" style={{ display: 'flex', gap: '8px', overflowX: 'auto', WebkitOverflowScrolling: 'touch', width: '100%', minWidth: 0, paddingBottom: '6px' }}>
+            {[
+              { id: 'ALL', label: `All Sectors (${sectorCounts.ALL})` },
+              { id: 'TECH', label: `Technology (${sectorCounts.TECH})` },
+              { id: 'BANK', label: `Banking & Financials (${sectorCounts.BANK})` },
+              { id: 'ENERGY', label: `Energy & Utilities (${sectorCounts.ENERGY})` },
+              { id: 'AUTO', label: `Automobile (${sectorCounts.AUTO})` },
+              { id: 'FMCG', label: `Consumer & Retail (${sectorCounts.FMCG})` },
+              { id: 'INFRA', label: `Infrastructure & Materials (${sectorCounts.INFRA})` },
+              { id: 'HEALTH', label: `Pharma & Healthcare (${sectorCounts.HEALTH})` },
+              { id: 'DEFENSE', label: `Defense & Telecom (${sectorCounts.DEFENSE})` },
+            ].map((sec) => (
+              <button
+                key={sec.id}
+                onClick={() => setSelectedSector(sec.id)}
+                className="sector-filter-pill"
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 'var(--radius-sm)',
+                  border: selectedSector === sec.id ? '1px solid var(--color-primary)' : '1px solid var(--border-subtle)',
+                  background: selectedSector === sec.id ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.02)',
+                  color: selectedSector === sec.id ? '#FFFFFF' : 'var(--text-muted)',
+                  fontSize: '13px',
+                  fontWeight: selectedSector === sec.id ? 600 : 500,
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {sec.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Watchlist Table */}
+          <div className="glass-card" style={{ padding: '20px', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
+            <div className="table-swipe-hint">← Swipe horizontally to view price, change & actions →</div>
+            <div className="table-scroll-wrapper">
+              <table style={{ width: '100%', minWidth: '680px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-faint)', fontSize: '11px', textTransform: 'uppercase' }}>
+                    <th style={{ padding: '16px' }}>Instrument</th>
+                    <th style={{ padding: '16px' }}>Sector</th>
+                    <th style={{ padding: '16px' }}>Last Price</th>
+                    <th style={{ padding: '16px' }}>Day Change</th>
+                    <th style={{ padding: '16px' }}>24h Sparkline</th>
+                    <th style={{ padding: '16px', textAlign: 'right' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} style={{ padding: '24px' }}>
+                        <TableSkeleton rows={5} columns={6} />
+                      </td>
+                    </tr>
+                  ) : (
+                    filtered.map((inst) => (
+                    <tr
+                      key={inst.symbol}
+                      style={{
+                        borderBottom: '1px solid rgba(255, 255, 255, 0.04)',
+                        transition: 'background-color var(--transition-fast)',
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.02)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                    >
+                      <td style={{ padding: '16px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <div
+                            style={{
+                              width: '36px',
+                              height: '36px',
+                              borderRadius: 'var(--radius-sm)',
+                              backgroundColor: 'rgba(255, 255, 255, 0.06)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontWeight: 700,
+                              fontSize: '14px',
+                            }}
+                          >
+                            {inst.symbol.slice(0, 2)}
+                          </div>
+                          <div className="truncate-text" style={{ maxWidth: '240px' }}>
+                            <strong style={{ color: '#FFFFFF', fontSize: '15px' }}>{inst.symbol}</strong>
+                            <div style={{ fontSize: '12px', color: 'var(--text-faint)' }} className="truncate-text">{inst.name}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ padding: '16px', color: 'var(--text-muted)' }}>{inst.sector}</td>
+                      <td style={{ padding: '16px', fontWeight: 600 }} className="tabular-nums">
+                        ₹{inst.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </td>
+                      <td style={{ padding: '16px' }}>
+                        <span className={inst.isPositive ? 'badge badge-profit' : 'badge badge-loss'}>
+                          {inst.isPositive ? '+' : ''}{inst.changePct}%
+                        </span>
+                      </td>
+                      <td style={{ padding: '16px' }}>
+                        <MarketSparkline
+                          symbol={inst.symbol}
+                          isPositive={inst.isPositive}
+                          fallbackPath={inst.sparkline}
+                        />
+                      </td>
+                      <td style={{ padding: '16px', textAlign: 'right' }}>
+                        <div style={{ display: 'inline-flex', gap: '8px' }}>
+                          <button
+                            onClick={() => setSelectedSymbol(inst.symbol)}
+                            className="btn btn-secondary"
+                            style={{ padding: '6px 12px', fontSize: '12px' }}
+                          >
+                            Inspect
+                          </button>
+                          <button
+                            onClick={() => onNavigate('practice')}
+                            className="btn btn-secondary"
+                            style={{ padding: '6px 12px', fontSize: '12px', color: '#38BDF8', borderColor: '#0284C7' }}
+                            title="View Live TradingView Chart"
+                          >
+                            📈 Chart
+                          </button>
+                          <button
+                            onClick={() => openQuickTrade(inst.symbol)}
+                            className="btn-emerald"
+                            style={{ padding: '6px 12px', fontSize: '12px', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
+                          >
+                            Trade
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 };

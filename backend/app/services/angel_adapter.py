@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional
 import pyotp
 from backend.app.adapters.market_data_provider import INSTRUMENT_REGISTRY, RealMarketDataProvider
 from backend.app.config import get_settings
+from backend.app.domain.index_registry import get_index_by_symbol
 from backend.app.ports.market_data import AbstractMarketDataProvider, HistoricalBar, Quote
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -232,10 +233,16 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
             res = self.smart_api.ltpData(exchange, tradingsymbol, symboltoken)
         return res
 
+    def set_quote_override(self, symbol: str, quote: Quote) -> None:
+        """Inject an explicit quote into cache for testing or manual provider override."""
+        clean = symbol.upper().replace(".NS", "").replace("NSE:", "").replace("BSE:", "").strip()
+        self._cache[clean] = quote
+
     async def get_latest_quote(self, symbol: str) -> Optional[Quote]:
         """Fetch latest verified quote for symbol from Angel One SmartAPI."""
-        clean = symbol.upper().replace(".NS", "").replace("NSE:", "").strip()
-        if clean not in FINEX_INSTRUMENTS:
+        clean = symbol.upper().replace(".NS", "").replace("NSE:", "").replace("BSE:", "").strip()
+        idx_info = get_index_by_symbol(clean)
+        if not idx_info and clean not in FINEX_INSTRUMENTS:
             return None
 
         # Check circuit breaker before hitting network
@@ -252,8 +259,21 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
             if cache_age < 3.0:
                 return cached.model_copy(update={"served_from_cache": True})
 
-        token = FINEX_INSTRUMENTS[clean]
-        tradingsymbol = f"{clean}-EQ"
+        idx_info = get_index_by_symbol(clean)
+        if idx_info:
+            token = idx_info["angel_token"]
+            tradingsymbol = idx_info["display_name"]
+            exchange = idx_info["exchange"]
+            canonical_id = idx_info["canonical_id"]
+            symbol_label = idx_info["symbol"]
+        elif clean in FINEX_INSTRUMENTS:
+            token = FINEX_INSTRUMENTS[clean]
+            tradingsymbol = f"{clean}-EQ"
+            exchange = "NSE"
+            canonical_id = f"NSE:{clean}"
+            symbol_label = f"{clean}.NS"
+        else:
+            return None
 
         if not self.jwt_token:
             try:
@@ -268,7 +288,7 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
             return None
 
         try:
-            res = await asyncio.to_thread(self._fetch_ltp_with_retry, "NSE", tradingsymbol, token)
+            res = await asyncio.to_thread(self._fetch_ltp_with_retry, exchange, tradingsymbol, token)
         except Exception as e:
             self._record_failure()
             logger.warning(f"Error fetching LTP for {clean} from Angel One: {e}")
@@ -289,7 +309,7 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
 
         price_dec = Decimal(str(ltp))
         now = datetime.now(timezone.utc)
-        evidence = hashlib.sha256(f"NSE:{clean}:{now.isoformat()}:{price_dec}:INR".encode("utf-8")).hexdigest()
+        evidence = hashlib.sha256(f"{exchange}:{clean}:{now.isoformat()}:{price_dec}:INR".encode("utf-8")).hexdigest()
 
         open_val = Decimal(str(data["open"])) if data.get("open") is not None else None
         high_val = Decimal(str(data["high"])) if data.get("high") is not None else None
@@ -299,8 +319,8 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
         change_pct_val = (change_val / close_val * Decimal("100.00")) if (close_val and change_val) else None
 
         quote = Quote(
-            canonical_id=f"NSE:{clean}",
-            symbol=f"{clean}.NS",
+            canonical_id=canonical_id,
+            symbol=symbol_label,
             price=price_dec,
             open_price=open_val,
             high_price=high_val,
@@ -312,7 +332,7 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
             observed_at=now,
             ingested_at=now,
             source="angel_smartapi",
-            source_uri=f"urn:angel:nse:{token}",
+            source_uri=f"urn:angel:{exchange.lower()}:{token}",
             source_evidence=evidence,
             served_from_cache=False,
             is_delayed=False,
@@ -337,9 +357,16 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
         to_date: str,
     ) -> List[Dict[str, Any]]:
         """Fetch historical OHLCV candle data from Angel One SmartAPI."""
-        clean_symbol = symbol.upper().replace(".NS", "").replace("NSE:", "").strip()
-        if clean_symbol not in FINEX_INSTRUMENTS:
-            raise ValueError(f"Symbol '{symbol}' not supported by Angel One NSE registry.")
+        clean_symbol = symbol.upper().replace(".NS", "").replace("NSE:", "").replace("BSE:", "").strip()
+        idx_info = get_index_by_symbol(clean_symbol)
+        if idx_info:
+            token = idx_info["angel_token"]
+            exchange = idx_info["exchange"]
+        elif clean_symbol in FINEX_INSTRUMENTS:
+            token = FINEX_INSTRUMENTS[clean_symbol]
+            exchange = "NSE"
+        else:
+            raise ValueError(f"Symbol '{symbol}' not supported by Angel One registry.")
 
         if not self.jwt_token:
             self.authenticate()
@@ -347,11 +374,10 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
         if not self.smart_api:
             raise RuntimeError("SmartAPI client not initialized.")
 
-        token = FINEX_INSTRUMENTS[clean_symbol]
         smart_interval = INTERVAL_MAP.get(interval, "ONE_DAY")
 
         params = {
-            "exchange": "NSE",
+            "exchange": exchange,
             "symboltoken": token,
             "interval": smart_interval,
             "fromdate": self._format_date(from_date, "09:15"),

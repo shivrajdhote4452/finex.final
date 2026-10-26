@@ -6,6 +6,7 @@ import { ThemeToggle } from '../common/ThemeToggle';
 export type NavigationTab =
   | 'overview'
   | 'markets'
+  | 'indices'
   | 'charts'
   | 'portfolio'
   | 'transactions'
@@ -47,6 +48,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
   const navItems: { id: NavigationTab; label: string; badge?: string | number }[] = [
     { id: 'overview', label: 'Overview' },
     { id: 'markets', label: 'Markets' },
+    { id: 'indices', label: 'Indices' },
     { id: 'charts', label: 'Charts' },
     { id: 'portfolio', label: 'Portfolio' },
     { id: 'ask-finex', label: 'Ask FinEx' },
