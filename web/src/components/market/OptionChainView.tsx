@@ -91,6 +91,7 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
 
   const spot = chainData?.spot_price || 0;
   const atm = chainData?.atm_strike || 0;
+  const isModelChain = chainData ? chainData.source !== 'ANGEL_ONE_SMARTAPI' : false;
 
   // Filter strikes if NEAR_ATM is selected (e.g. 10 strikes above and below ATM)
   const displayStrikes: StrikeRowData[] = React.useMemo(() => {
@@ -133,6 +134,20 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
               <span className="badge badge-neutral" style={{ fontSize: '10px' }}>
                 Long-Only Paper Options
               </span>
+              {chainData && (
+                <span
+                  className="badge"
+                  style={{
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    backgroundColor: isModelChain ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                    color: isModelChain ? '#F59E0B' : '#10B981',
+                    borderColor: isModelChain ? 'rgba(245, 158, 11, 0.3)' : 'rgba(16, 185, 129, 0.3)',
+                  }}
+                >
+                  {isModelChain ? 'MODEL-ESTIMATED CHAIN' : 'ANGEL ONE SMARTAPI LIVE'}
+                </span>
+              )}
               {chainData?.served_from_cache && (
                 <span className="badge badge-neutral" style={{ fontSize: '10px', color: '#F59E0B', borderColor: 'rgba(245, 158, 11, 0.3)' }}>
                   CACHED REPLAY
@@ -143,7 +158,9 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
               Option Chain — {selectedUnderlying}
             </h2>
             <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
-              Real Angel One derivatives chain with deterministic Black-Scholes Greeks. Click any contract to open the pre-filled paper trade ticket.
+              {isModelChain
+                ? 'Model-estimated derivatives chain using Black-Scholes pricing. Click any contract to open the pre-filled paper trade ticket.'
+                : 'Live Angel One SmartAPI derivatives chain with verified market Greeks. Click any contract to open the pre-filled paper trade ticket.'}
             </p>
           </div>
 
@@ -205,6 +222,52 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
           ))}
         </div>
       </div>
+
+      {/* Truthful Chain Source Banner */}
+      {chainData && isModelChain && (
+        <div
+          className="glass-card"
+          style={{
+            padding: '14px 18px',
+            border: '1px solid rgba(245, 158, 11, 0.4)',
+            backgroundColor: 'rgba(245, 158, 11, 0.08)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+          }}
+        >
+          <span style={{ fontSize: '20px' }}>⚠️</span>
+          <div>
+            <h4 style={{ margin: '0 0 2px 0', color: '#FCD34D', fontSize: '14px', fontWeight: 700 }}>
+              Model-Estimated Option Chain
+            </h4>
+            <p style={{ margin: 0, fontSize: '12px', color: '#FDE68A', lineHeight: '1.4' }}>
+              Model-estimated chain — premiums and Greeks are Black-Scholes estimates, not live market premiums. Open Interest, volume, change, PCR, and max pain are hidden because they cannot be modelled honestly from spot alone.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {chainData && !isModelChain && (
+        <div
+          className="glass-card"
+          style={{
+            padding: '12px 18px',
+            border: '1px solid rgba(16, 185, 129, 0.4)',
+            backgroundColor: 'rgba(16, 185, 129, 0.08)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+          }}
+        >
+          <span style={{ fontSize: '18px' }}>🟢</span>
+          <div>
+            <span style={{ color: '#6EE7B7', fontSize: '13px', fontWeight: 600 }}>
+              Live Angel One SmartAPI derivatives feed ({chainData.source}) • Real market implied volatility and Greeks.
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Error or Honest Unavailable State */}
       {errorMessage && (
@@ -298,18 +361,20 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
             </span>
           </div>
 
-          {/* Put-Call Ratio (PCR) */}
-          <div className="glass-card" style={{ padding: '14px 18px' }}>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-              Put-Call Ratio (PCR)
-            </span>
-            <div className="tabular-nums" style={{ fontSize: '20px', fontWeight: 800, color: '#FFFFFF', marginTop: '2px' }}>
-              {chainData.pcr}
+          {/* Put-Call Ratio (PCR) - only when real Open Interest is available */}
+          {chainData.pcr != null && (
+            <div className="glass-card" style={{ padding: '14px 18px' }}>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                Put-Call Ratio (PCR)
+              </span>
+              <div className="tabular-nums" style={{ fontSize: '20px', fontWeight: 800, color: '#FFFFFF', marginTop: '2px' }}>
+                {chainData.pcr}
+              </div>
+              <span style={{ fontSize: '11px', color: chainData.pcr >= 1 ? 'var(--color-profit)' : 'var(--color-loss)' }}>
+                {chainData.pcr >= 1.2 ? 'Bullish Sentiment' : chainData.pcr <= 0.8 ? 'Bearish Sentiment' : 'Neutral Range'}
+              </span>
             </div>
-            <span style={{ fontSize: '11px', color: chainData.pcr >= 1 ? 'var(--color-profit)' : 'var(--color-loss)' }}>
-              {chainData.pcr >= 1.2 ? 'Bullish Sentiment' : chainData.pcr <= 0.8 ? 'Bearish Sentiment' : 'Neutral Range'}
-            </span>
-          </div>
+          )}
 
           {/* Lot Size */}
           <div className="glass-card" style={{ padding: '14px 18px' }}>
@@ -324,18 +389,20 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
             </span>
           </div>
 
-          {/* Max Pain */}
-          <div className="glass-card" style={{ padding: '14px 18px' }}>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-              Max Pain Strike
-            </span>
-            <div className="tabular-nums" style={{ fontSize: '20px', fontWeight: 800, color: '#FFFFFF', marginTop: '2px' }}>
-              ₹{chainData.max_pain.toLocaleString('en-IN')}
+          {/* Max Pain - only when real Open Interest is available */}
+          {chainData.max_pain != null && (
+            <div className="glass-card" style={{ padding: '14px 18px' }}>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+                Max Pain Strike
+              </span>
+              <div className="tabular-nums" style={{ fontSize: '20px', fontWeight: 800, color: '#FFFFFF', marginTop: '2px' }}>
+                ₹{chainData.max_pain.toLocaleString('en-IN')}
+              </div>
+              <span style={{ fontSize: '11px', color: 'var(--text-faint)' }}>
+                Least loss expiry level
+              </span>
             </div>
-            <span style={{ fontSize: '11px', color: 'var(--text-faint)' }}>
-              Least loss expiry level
-            </span>
-          </div>
+          )}
         </div>
       )}
 
@@ -422,7 +489,7 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
                 {/* Top Section Header: CALLS vs PUTS */}
                 <tr style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                   <th
-                    colSpan={4}
+                    colSpan={isModelChain ? 3 : 4}
                     style={{
                       padding: '10px',
                       backgroundColor: 'rgba(16, 185, 129, 0.08)',
@@ -450,7 +517,7 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
                     STRIKE
                   </th>
                   <th
-                    colSpan={4}
+                    colSpan={isModelChain ? 3 : 4}
                     style={{
                       padding: '10px',
                       backgroundColor: 'rgba(239, 68, 68, 0.08)',
@@ -475,9 +542,9 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
                   }}
                 >
                   {/* Call Columns */}
-                  <th style={{ padding: '10px', textAlign: 'left' }}>OI</th>
-                  <th style={{ padding: '10px' }}>IV %</th>
-                  <th style={{ padding: '10px' }}>LTP Premium</th>
+                  {!isModelChain && <th style={{ padding: '10px', textAlign: 'left' }}>OI</th>}
+                  <th style={{ padding: '10px' }}>{isModelChain ? 'Model IV %' : 'IV %'}</th>
+                  <th style={{ padding: '10px' }}>{isModelChain ? 'Model Est. Premium' : 'LTP Premium'}</th>
                   <th style={{ padding: '10px', borderRight: '1px solid var(--border-subtle)' }}>Action</th>
 
                   {/* Center Strike Column */}
@@ -494,9 +561,9 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
 
                   {/* Put Columns */}
                   <th style={{ padding: '10px', borderLeft: '1px solid var(--border-subtle)' }}>Action</th>
-                  <th style={{ padding: '10px' }}>LTP Premium</th>
-                  <th style={{ padding: '10px' }}>IV %</th>
-                  <th style={{ padding: '10px', textAlign: 'right' }}>OI</th>
+                  <th style={{ padding: '10px' }}>{isModelChain ? 'Model Est. Premium' : 'LTP Premium'}</th>
+                  <th style={{ padding: '10px' }}>{isModelChain ? 'Model IV %' : 'IV %'}</th>
+                  {!isModelChain && <th style={{ padding: '10px', textAlign: 'right' }}>OI</th>}
                 </tr>
               </thead>
               <tbody>
@@ -521,19 +588,21 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
                       }}
                     >
                       {/* CALL SIDE */}
-                      {/* Call OI */}
-                      <td
-                        style={{
-                          padding: '12px 10px',
-                          textAlign: 'left',
-                          backgroundColor: isCallItm ? 'rgba(16, 185, 129, 0.04)' : 'transparent',
-                        }}
-                        className="tabular-nums"
-                      >
-                        <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
-                          {row.call.open_interest.toLocaleString('en-IN')}
-                        </span>
-                      </td>
+                      {/* Call OI - hidden on model chain */}
+                      {!isModelChain && (
+                        <td
+                          style={{
+                            padding: '12px 10px',
+                            textAlign: 'left',
+                            backgroundColor: isCallItm ? 'rgba(16, 185, 129, 0.04)' : 'transparent',
+                          }}
+                          className="tabular-nums"
+                        >
+                          <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
+                            {row.call.open_interest != null ? row.call.open_interest.toLocaleString('en-IN') : '—'}
+                          </span>
+                        </td>
+                      )}
 
                       {/* Call IV */}
                       <td
@@ -544,7 +613,7 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
                         className="tabular-nums"
                       >
                         <span style={{ color: 'var(--text-faint)', fontSize: '12px' }}>
-                          {row.call.implied_volatility}%
+                          {row.call.implied_volatility != null ? `${row.call.implied_volatility}%` : '—'}
                         </span>
                       </td>
 
@@ -566,16 +635,20 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
                           >
                             ₹{row.call.ltp.toFixed(2)}
                           </span>
-                          <span
-                            className="tabular-nums"
-                            style={{
-                              fontSize: '10px',
-                              color: row.call.change >= 0 ? 'var(--color-profit)' : 'var(--color-loss)',
-                            }}
-                          >
-                            {row.call.change >= 0 ? '+' : ''}
-                            {row.call.change.toFixed(2)} ({row.call.change_pct}%)
-                          </span>
+                          {row.call.change != null ? (
+                            <span
+                              className="tabular-nums"
+                              style={{
+                                fontSize: '10px',
+                                color: row.call.change >= 0 ? 'var(--color-profit)' : 'var(--color-loss)',
+                              }}
+                            >
+                              {row.call.change >= 0 ? '+' : ''}
+                              {row.call.change.toFixed(2)} ({row.call.change_pct}%)
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: '10px', color: 'var(--text-faint)' }}>Model est.</span>
+                          )}
                         </div>
                       </td>
 
@@ -687,16 +760,20 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
                           >
                             ₹{row.put.ltp.toFixed(2)}
                           </span>
-                          <span
-                            className="tabular-nums"
-                            style={{
-                              fontSize: '10px',
-                              color: row.put.change >= 0 ? 'var(--color-profit)' : 'var(--color-loss)',
-                            }}
-                          >
-                            {row.put.change >= 0 ? '+' : ''}
-                            {row.put.change.toFixed(2)} ({row.put.change_pct}%)
-                          </span>
+                          {row.put.change != null ? (
+                            <span
+                              className="tabular-nums"
+                              style={{
+                                fontSize: '10px',
+                                color: row.put.change >= 0 ? 'var(--color-profit)' : 'var(--color-loss)',
+                              }}
+                            >
+                              {row.put.change >= 0 ? '+' : ''}
+                              {row.put.change.toFixed(2)} ({row.put.change_pct}%)
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: '10px', color: 'var(--text-faint)' }}>Model est.</span>
+                          )}
                         </div>
                       </td>
 
@@ -709,23 +786,25 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
                         className="tabular-nums"
                       >
                         <span style={{ color: 'var(--text-faint)', fontSize: '12px' }}>
-                          {row.put.implied_volatility}%
+                          {row.put.implied_volatility != null ? `${row.put.implied_volatility}%` : '—'}
                         </span>
                       </td>
 
-                      {/* Put OI */}
-                      <td
-                        style={{
-                          padding: '12px 10px',
-                          textAlign: 'right',
-                          backgroundColor: isPutItm ? 'rgba(239, 68, 68, 0.04)' : 'transparent',
-                        }}
-                        className="tabular-nums"
-                      >
-                        <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
-                          {row.put.open_interest.toLocaleString('en-IN')}
-                        </span>
-                      </td>
+                      {/* Put OI - hidden on model chain */}
+                      {!isModelChain && (
+                        <td
+                          style={{
+                            padding: '12px 10px',
+                            textAlign: 'right',
+                            backgroundColor: isPutItm ? 'rgba(239, 68, 68, 0.04)' : 'transparent',
+                          }}
+                          className="tabular-nums"
+                        >
+                          <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
+                            {row.put.open_interest != null ? row.put.open_interest.toLocaleString('en-IN') : '—'}
+                          </span>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}

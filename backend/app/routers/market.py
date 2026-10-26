@@ -683,8 +683,9 @@ async def get_option_chain(
     angel_adapter: AngelOneMarketAdapter = Depends(get_angel_adapter),
 ):
     """
-    Fetch verified Option Chain (strikes, call/put premiums, OI, IV, Black-Scholes Greeks)
-    with provenance metadata for educational paper trading.
+    Fetch Option Chain (strikes, call/put premiums, OI, IV, Greeks) with provenance metadata.
+    Serves real Angel One SmartAPI option chain when available; falls back transparently
+    to a model-estimated chain (with unmodeled fields omitted) if provider is unconfigured.
     """
     cid = getattr(request.state, "correlation_id", None)
     norm_sym = normalize_option_underlying(underlying)
@@ -716,16 +717,31 @@ async def get_option_chain(
                 detail=f"Invalid expiry date '{expiry}'. Expected format: YYYY-MM-DD.",
             )
 
-    # 3. Generate deterministic option chain with standard Black-Scholes Greeks
-    chain = generate_deterministic_option_chain(
-        underlying=norm_sym,
-        spot_price=spot_price,
-        expiry_date=target_expiry_date,
-        source="ANGEL_ONE_SMARTAPI",
-        observed_at=quote.observed_at,
-    )
+    # 3. Attempt to fetch verified real option chain from Angel One SmartAPI
+    chain_data = None
+    if angel_adapter and angel_adapter.is_configured() and not angel_adapter.is_circuit_open:
+        try:
+            chain_data = await angel_adapter.get_option_chain(
+                underlying=norm_sym,
+                expiry=expiry,
+                spot_price=spot_price,
+                observed_at=quote.observed_at,
+            )
+        except Exception as exc:
+            logger.warning(f"Live Angel One option chain fetch bypassed for {norm_sym}: {exc}")
+            chain_data = None
 
-    chain_data = chain.model_dump(mode="json")
+    # 4. Transparent, honest fallback: generate model-estimated chain with unmodeled fields omitted
+    if not chain_data:
+        chain = generate_deterministic_option_chain(
+            underlying=norm_sym,
+            spot_price=spot_price,
+            expiry_date=target_expiry_date,
+            source="MODEL_ESTIMATED",
+            observed_at=quote.observed_at,
+        )
+        chain_data = chain.model_dump(mode="json")
+
     chain_data["served_from_cache"] = quote.served_from_cache
     chain_data["is_delayed"] = quote.is_delayed
 

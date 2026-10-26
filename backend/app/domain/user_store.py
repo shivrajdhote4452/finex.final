@@ -169,12 +169,20 @@ class UserStore:
                 res_email = await session.execute(select(User).where(User.email == email))
                 user_entity = res_email.scalar_one_or_none()
 
+            if not user_entity and user_id:
+                # Also check by explicit user_id
+                res_id = await session.execute(select(User).where(User.id == user_id))
+                user_entity = res_id.scalar_one_or_none()
+
             if user_entity:
                 user_id = user_entity.id
                 # Backfill missing/placeholder email on existing user without overwriting valid email with blank
                 incoming_email = email.strip() if email else ""
                 if (
-                    not user_entity.email or "@google.user" in user_entity.email or "@finex.local" in user_entity.email
+                    not user_entity.email
+                    or "@google.user" in user_entity.email
+                    or "@finex.local" in user_entity.email
+                    or "@finex.internal" in user_entity.email
                 ) and incoming_email:
                     user_entity.email = incoming_email
                     await session.flush()

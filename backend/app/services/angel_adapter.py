@@ -15,7 +15,7 @@ import logging
 import time
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import pyotp
 from backend.app.adapters.market_data_provider import INSTRUMENT_REGISTRY, RealMarketDataProvider
@@ -151,6 +151,7 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
         self.feed_token: Optional[str] = None
         self.refresh_token: Optional[str] = None
         self._cache: Dict[str, Quote] = {}
+        self._option_chain_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
 
         # Circuit Breaker state (trips after 5 consecutive failures, short-circuits for 60s)
         self._consecutive_failures: int = 0
@@ -233,6 +234,24 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
             res = self.smart_api.ltpData(exchange, tradingsymbol, symboltoken)
         return res
 
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5, min=0.5, max=2.0), reraise=True)
+    def _fetch_option_greeks_with_retry(self, name: str, expirydate: str) -> Dict[str, Any]:
+        """Fetch option Greeks via SmartConnect optionGreek with tenacity retries and 401 recovery."""
+        if not self.smart_api:
+            if not self.authenticate():
+                return {}
+        if not self.jwt_token:
+            self.authenticate()
+
+        res = self.smart_api.optionGreek({"name": name, "expirydate": expirydate})
+        if isinstance(res, dict) and (
+            res.get("errorcode") in ("AG8001", "AG8002", "401") or "Invalid Token" in str(res.get("message", ""))
+        ):
+            logger.info("Angel One token expired or invalid (401). Regenerating session...")
+            self.authenticate()
+            res = self.smart_api.optionGreek({"name": name, "expirydate": expirydate})
+        return res
+
     def set_quote_override(self, symbol: str, quote: Quote) -> None:
         """Inject an explicit quote into cache for testing or manual provider override."""
         clean = symbol.upper().replace(".NS", "").replace("NSE:", "").replace("BSE:", "").strip()
@@ -256,7 +275,7 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
         if clean in self._cache:
             cached = self._cache[clean]
             cache_age = (now - cached.ingested_at).total_seconds()
-            if cache_age < 3.0:
+            if cache_age < 60.0:
                 return cached.model_copy(update={"served_from_cache": True})
 
         idx_info = get_index_by_symbol(clean)
@@ -492,11 +511,25 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
         underlying: str,
         expiry: Optional[str] = None,
         spot_price: Optional[float] = None,
+        observed_at: Optional[datetime] = None,
     ) -> Optional[Dict[str, Any]]:
-        """Fetch option chain for supported underlying via SmartConnect optionGreek or deterministic generator."""
-        from backend.app.domain.options_engine import generate_deterministic_option_chain
+        """Fetch verified real option chain from Angel One SmartAPI optionGreek feed."""
+        from backend.app.domain.options_engine import (
+            build_real_angel_option_chain,
+            get_upcoming_nse_expiries,
+        )
 
         clean = underlying.upper().strip()
+        cache_key = f"{clean}_{expiry or 'DEFAULT'}"
+        now_ts = time.time()
+        if cache_key in self._option_chain_cache:
+            cached_ts, cached_payload = self._option_chain_cache[cache_key]
+            if now_ts - cached_ts < 15.0:
+                return cached_payload
+
+        if self.is_circuit_open or not self.is_configured():
+            return None
+
         current_spot = spot_price
         if current_spot is None or current_spot <= 0:
             quote = await self.get_latest_quote(clean)
@@ -506,6 +539,22 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
         if not current_spot or current_spot <= 0:
             return None
 
+        # Normalize underlying name for Angel One SmartAPI optionGreek
+        raw_sym = clean.replace(".NS", "").replace("NSE:", "").replace("BSE:", "").strip()
+        if raw_sym in ("NIFTY 50", "NIFTY50", "^NSEI"):
+            angel_name = "NIFTY"
+        elif raw_sym in ("NIFTY BANK", "BANKNIFTY", "^NSEBANK"):
+            angel_name = "BANKNIFTY"
+        elif raw_sym in ("NIFTY FINANCIAL SERVICES", "FINNIFTY"):
+            angel_name = "FINNIFTY"
+        elif raw_sym in ("NIFTY MIDCAP 50", "NIFTYMID50", "MIDCPNIFTY"):
+            angel_name = "MIDCPNIFTY"
+        else:
+            angel_name = raw_sym
+
+        obs_dt = observed_at or datetime.now(timezone.utc)
+        upcoming = get_upcoming_nse_expiries(count=4, reference_date=obs_dt.date())
+
         target_date = None
         if expiry:
             try:
@@ -513,10 +562,50 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
             except ValueError:
                 target_date = None
 
-        chain = generate_deterministic_option_chain(
+        if not target_date:
+            target_date = upcoming[0] if upcoming else obs_dt.date()
+
+        # Build candidate expiry dates to handle NSE weekly shifts and trading holidays
+        candidates = [target_date]
+        if target_date.weekday() == 3:  # Thursday -> also try Tuesday and Wednesday
+            candidates.extend([target_date - timedelta(days=2), target_date - timedelta(days=1)])
+        elif target_date.weekday() == 1:  # Tuesday -> also try Thursday
+            candidates.extend([target_date + timedelta(days=2)])
+
+        greeks_data = None
+        resolved_date = target_date
+
+        for cand in candidates:
+            exp_code = cand.strftime("%d%b%Y").upper()
+            try:
+                res = await asyncio.to_thread(self._fetch_option_greeks_with_retry, angel_name, exp_code)
+                if isinstance(res, dict) and res.get("status") and res.get("data"):
+                    greeks_data = res["data"]
+                    resolved_date = cand
+                    break
+            except Exception as exc:
+                logger.warning(f"Error querying optionGreek for {angel_name} {exp_code}: {exc}")
+                continue
+
+        if not greeks_data:
+            logger.info(
+                f"No Angel One option Greeks available for {angel_name} "
+                f"(candidates: {[c.strftime('%d%b%Y') for c in candidates]})."
+            )
+            return None
+
+        self._record_success()
+
+        # Construct verified real option chain
+        chain = build_real_angel_option_chain(
             underlying=clean,
             spot_price=current_spot,
-            expiry_date=target_date,
-            source="ANGEL_ONE_SMARTAPI",
+            selected_expiry=resolved_date,
+            expiries=upcoming,
+            greeks_data=greeks_data,
+            quotes_data=None,
+            observed_at=obs_dt,
         )
-        return chain.model_dump(mode="json")
+        payload = chain.model_dump(mode="json")
+        self._option_chain_cache[cache_key] = (now_ts, payload)
+        return payload
