@@ -11,7 +11,6 @@ class ApiClient {
   static const FlutterSecureStorage _storage = FlutterSecureStorage();
   static const String _tokenStorageKey = 'finex_auth_token';
   static const String _profileStorageKey = 'finex_user_profile';
-  static const String defaultOwnerEmail = 'shivrajdhote4452@gmail.com';
 
   static String normalizeBaseUrl(String url) {
     var trimmed = url.trim();
@@ -172,10 +171,7 @@ class ApiClient {
 
   bool get isOwner {
     if (!isAuthenticated) return false;
-    final email = userEmail.toLowerCase();
-    if (email.isEmpty) return false;
-    final isOwnerFlag = _currentUserProfile?['is_owner'] == true;
-    return isOwnerFlag || email == defaultOwnerEmail;
+    return _currentUserProfile?['is_owner'] == true;
   }
 
   static String getTimeOfDayGreeting([String? name]) {
@@ -206,43 +202,6 @@ class ApiClient {
     return headers;
   }
 
-  // --- Auth & Onboarding ---
-  Future<Map<String, dynamic>> devLogin({
-    String email = defaultOwnerEmail,
-    String? name,
-  }) async {
-    if (!kDebugMode && !kIsWeb) {
-      throw Exception('Developer sandbox sign-in is disabled in production builds.');
-    }
-    final url = Uri.parse('$baseUrl/auth/dev-login');
-    final effectiveName = name ?? (email == defaultOwnerEmail ? 'Shivraj Dhote' : '');
-    final response = await http.post(
-      url,
-      headers: _headers(),
-      body: jsonEncode({
-        'email': email,
-        'name': effectiveName,
-        'user_id': 'usr-${email.hashCode.abs()}',
-      }),
-    );
-    final data = jsonDecode(response.body);
-    if (response.statusCode == 200 && data['data'] != null) {
-      final token = data['data']['access_token'] as String?;
-      await setToken(token);
-      final initialProfile = {
-        'email': data['data']['email'] ?? email,
-        'full_name': data['data']['name'] ?? effectiveName,
-        'display_name': (data['data']['name'] ?? effectiveName).toString().split(' ').first,
-        'is_owner': email.toLowerCase() == defaultOwnerEmail,
-      };
-      await setProfile(initialProfile);
-      try {
-        await getProfile();
-      } catch (_) {}
-      return data['data'];
-    }
-    throw Exception(data['error']?['message'] ?? 'Login failed');
-  }
 
   Future<Map<String, dynamic>> loginWithGoogle(
     String idToken, {

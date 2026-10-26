@@ -88,38 +88,6 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onLoginSuccess }) 
     }
   };
 
-  const handleDevLogin = async () => {
-    if (!consentChecked) {
-      setErrorMessage('You must accept the Terms and Privacy Policy to proceed.');
-      return;
-    }
-    setLoading(true);
-    setErrorMessage(null);
-    try {
-      await apiClient.auth.devLogin('shivrajdhote4452@gmail.com', 'Shivraj Dhote');
-      try {
-        await apiClient.auth.recordConsent('v1.0');
-      } catch {}
-      onLoginSuccess();
-    } catch (err: any) {
-      if (
-        err?.status === 404 ||
-        err?.message?.includes('404') ||
-        err?.message?.includes('Failed to fetch') ||
-        err?.message?.includes('abort') ||
-        err?.name === 'AbortError' ||
-        err?.name === 'TypeError'
-      ) {
-        apiClient.setToken('mock-session-shivraj-dhote');
-        onLoginSuccess();
-        return;
-      }
-      setErrorMessage(err?.message || 'Development login failed.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="welcome-container">
       {/* Left Column: Brand & Terminal Mission (Page 4 Screen 01) */}
@@ -224,26 +192,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onLoginSuccess }) 
             </span>
           </label>
 
-          {/* Primary Action: Continue as Shivraj Dhote */}
-          <button
-            onClick={handleDevLogin}
-            disabled={loading}
-            className="btn btn-action"
-            style={{
-              width: '100%',
-              padding: '12px',
-              fontSize: '14px',
-              borderRadius: 'var(--radius-xs)',
-              gap: '10px',
-              opacity: consentChecked ? 1 : 0.5,
-              cursor: consentChecked ? 'pointer' : 'not-allowed',
-              marginBottom: '10px',
-            }}
-          >
-            <span>⚡ {loading ? 'Initializing session...' : 'Continue as Shivraj Dhote'}</span>
-          </button>
-
-          {/* Secondary Action: Continue with Google */}
+          {/* Action: Continue with Google */}
           <button
             onClick={handleGoogleSignIn}
             disabled={loading}

@@ -30,12 +30,6 @@ class GoogleLoginRequest(BaseModel):
     id_token: str = Field(..., description="Cryptographically signed Google OAuth ID token")
 
 
-class DevLoginRequest(BaseModel):
-    user_id: str = "usr-shivraj-001"
-    email: str = "shivrajdhote4452@gmail.com"
-    name: str = "Shivraj Dhote"
-
-
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "Bearer"
@@ -62,13 +56,14 @@ def is_token_revoked(token: str) -> bool:
     return user_store.is_token_revoked(token)
 
 
-def create_access_token(user_id: str, email: str, name: str) -> str:
+def create_access_token(user_id: str, email: str, name: str, provider: str = "google") -> str:
     """Generate a signed HS256 JWT access token with standard claims."""
     expires = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
         "sub": user_id,
         "email": email,
         "name": name,
+        "provider": provider,
         "jti": str(uuid.uuid4()),
         "exp": expires,
         "iat": datetime.now(timezone.utc),
@@ -80,6 +75,8 @@ def is_owner(user: object) -> bool:
     """Check if the user is the platform owner.
 
     Fails closed: returns False if OWNER_EMAIL is unset/empty or if user/email is missing.
+    Owner privileges require a session established through verified Google OAuth.
+    If provider metadata is present (on dict or user object), provider MUST equal 'google'.
     Matches case-insensitively with leading/trailing whitespace trimmed.
     Accepts a dict (JWT claims or profile dict), User, UserRecord, or email string.
     """
@@ -89,14 +86,22 @@ def is_owner(user: object) -> bool:
         return False
 
     email: Optional[str] = None
-    if isinstance(user, str):
-        email = user
-    elif isinstance(user, dict):
+    provider: Optional[str] = None
+
+    if isinstance(user, dict):
+        provider = user.get("provider")
         email = user.get("email")
     elif hasattr(user, "email"):
+        provider = getattr(user, "provider", None)
         email = getattr(user, "email", None)
+    elif isinstance(user, str):
+        email = user
 
     if not email or not isinstance(email, str):
+        return False
+
+    # Non-Google session/provider can NEVER be owner
+    if provider is not None and provider.strip().lower() != "google":
         return False
 
     return email.strip().lower() == owner_email
@@ -155,7 +160,7 @@ async def get_current_user_id(
 
 async def require_owner(current_user: dict = Depends(get_current_user_id)) -> dict:
     """FastAPI dependency to enforce owner-only access. Refuses non-owners with HTTP 403."""
-    if not is_owner(current_user):
+    if current_user.get("provider") != "google" or not is_owner(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Forbidden: Sandbox controls and accounts are restricted to the platform owner.",
@@ -217,45 +222,8 @@ async def google_auth_callback(
         db=db,
     )
 
-    token = create_access_token(user_id=user.id, email=user.email, name=user.name)
+    token = create_access_token(user_id=user.id, email=user.email, name=user.name, provider="google")
 
-    data = TokenResponse(
-        access_token=token,
-        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        user_id=user.id,
-        email=user.email,
-        name=user.name,
-    )
-    return create_response_envelope(data.model_dump(), correlation_id=cid)
-
-
-@router.post("/dev-login")
-async def dev_login(
-    request: Request,
-    payload: Optional[DevLoginRequest] = None,
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Development/testing login helper.
-    Explicitly forbidden and disabled in PRODUCTION mode.
-    """
-    if settings.ENVIRONMENT == Environment.PRODUCTION:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Endpoint disabled in production mode",
-        )
-
-    cid = getattr(request.state, "correlation_id", "none")
-    req_data = payload or DevLoginRequest()
-    user = await user_store.get_or_create_user_db(
-        provider="local_dev",
-        provider_subject=f"dev-sub-{req_data.user_id}",
-        email=req_data.email,
-        name=req_data.name,
-        user_id=req_data.user_id,
-        db=db,
-    )
-    token = create_access_token(user_id=user.id, email=user.email, name=user.name)
     data = TokenResponse(
         access_token=token,
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
@@ -309,6 +277,7 @@ async def refresh_access_token(
         user_id=user_info["sub"],
         email=user_info.get("email", "investor@finex.internal"),
         name=user_info.get("name", "Investor"),
+        provider=user_info.get("provider", "google"),
     )
     cid = getattr(request.state, "correlation_id", "none")
     data = TokenResponse(
@@ -335,6 +304,14 @@ async def get_current_user_profile(
 
     resolved_email = user.email if user else user_info.get("email", "investor@finex.internal")
 
+    user_provider = user.provider if user else user_info.get("provider")
+    token_provider = user_info.get("provider")
+    session_is_owner = (
+        user_provider == "google"
+        and token_provider == "google"
+        and is_owner({"email": resolved_email, "provider": "google"})
+    )
+
     profile_data = {
         "user_id": uid,
         "email": resolved_email,
@@ -346,7 +323,7 @@ async def get_current_user_profile(
         "risk_band": profile.risk_band,
         "composite_score": profile.composite_score,
         "verified_identity": True,
-        "is_owner": is_owner(resolved_email),
+        "is_owner": session_is_owner,
     }
     return create_response_envelope(profile_data, correlation_id=cid)
 
