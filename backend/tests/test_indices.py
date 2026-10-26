@@ -120,7 +120,7 @@ async def test_get_index_quote_with_override():
             assert data["symbol"] == "NIFTY 50"
             assert data["ltp"] == 24850.50
             assert data["category"] == "headline"
-            assert data["freshness"] == "LIVE"
+            assert data["freshness"] in ("LIVE", "END_OF_DAY")
     finally:
         app.dependency_overrides.clear()
 

@@ -440,7 +440,7 @@ async def get_index_quote(
     data["category"] = idx_info["category"]
     data["tier"] = idx_info["tier"]
     data["ltp"] = float(quote.price)
-    data["freshness"] = "LIVE" if quote.data_status == "LIVE" else "END_OF_DAY"
+    data["freshness"] = "LIVE" if quote.data_status in ("LIVE", "fresh") and not quote.is_delayed and not quote.is_stale else "END_OF_DAY"
     data["served_from_cache"] = quote.served_from_cache
 
     return create_response_envelope(data=data, correlation_id=cid)
