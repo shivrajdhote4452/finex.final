@@ -88,6 +88,7 @@ interface FinancialContextType {
   accountError: string | null;
   isOwner: boolean;
   userProfile: UserProfileData | null;
+  displayName: string;
   totalHoldingsValue: number;
   totalPortfolioValue: number;
   unrealizedPnL: number;
@@ -165,6 +166,8 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
   const [accountError, setAccountError] = useState<string | null>(null);
   const [isOwner, setIsOwner] = useState<boolean>(false);
   const [userProfile, setUserProfile] = useState<UserProfileData | null>(null);
+
+  const displayName = userProfile?.display_name || userProfile?.full_name?.split(' ')[0] || '';
 
   const sessionGenerationRef = useRef<number>(0);
 
@@ -799,6 +802,7 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
         accountError,
         isOwner,
         userProfile,
+        displayName,
         totalHoldingsValue,
         totalPortfolioValue,
         unrealizedPnL,

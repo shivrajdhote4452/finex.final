@@ -8,15 +8,16 @@ interface OverviewScreenProps {
   onNavigate: (tab: NavigationTab) => void;
 }
 
-export function getTimeOfDayGreeting(name: string = 'Shivraj'): string {
+export function getTimeOfDayGreeting(name?: string): string {
   const hour = new Date().getHours();
+  let timeGreeting = 'Good evening';
   if (hour >= 5 && hour < 12) {
-    return `Good morning, ${name}`;
+    timeGreeting = 'Good morning';
   } else if (hour >= 12 && hour < 17) {
-    return `Good afternoon, ${name}`;
-  } else {
-    return `Good evening, ${name}`;
+    timeGreeting = 'Good afternoon';
   }
+  const trimmed = name?.trim();
+  return trimmed ? `${timeGreeting}, ${trimmed}` : timeGreeting;
 }
 
 export const OverviewScreen: React.FC<OverviewScreenProps> = ({ onNavigate }) => {
@@ -30,6 +31,7 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ onNavigate }) =>
     openQuickTrade,
     depositFunds,
     isAccountLoading,
+    displayName,
   } = useFinancial();
 
   const [hoveredPoint, setHoveredPoint] = useState<{ month: string; value: number } | null>(null);
@@ -49,7 +51,7 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ onNavigate }) =>
 
   const equityPct = Math.round((totalHoldingsValue / (totalPortfolioValue || 1)) * 100);
   const cashPct = 100 - equityPct;
-  const greeting = getTimeOfDayGreeting('Shivraj');
+  const greeting = getTimeOfDayGreeting(displayName);
 
   if (isAccountLoading && holdings.length === 0 && virtualCash === 0) {
     return (

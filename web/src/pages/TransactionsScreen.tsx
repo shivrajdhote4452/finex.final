@@ -10,8 +10,18 @@ export const TransactionsScreen: React.FC = () => {
     openQuickTrade,
     depositFunds,
     isOwner,
+    userProfile,
   } = useFinancial();
 
+  const clientName = userProfile?.full_name?.trim() || userProfile?.display_name?.trim() || '';
+  const clientInitials = clientName
+    ? clientName.split(/\s+/).filter(Boolean).map((s) => s[0].toUpperCase()).join('').substring(0, 3) || 'CL'
+    : '';
+  const clientIdentifier = clientName
+    ? `${clientName} (FINEX-${clientInitials}-01)`
+    : isOwner
+      ? 'Platform Owner (FINEX-ADM-01)'
+      : 'FinEx Investor (FINEX-INV-01)';
 
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'BUY' | 'SELL' | 'SIP' | 'DEPOSIT'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
@@ -367,7 +377,7 @@ export const TransactionsScreen: React.FC = () => {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px', fontSize: '13px' }}>
               <div>
                 <span style={{ color: 'var(--text-faint)', fontSize: '11px', textTransform: 'uppercase' }}>Client Identifier</span>
-                <div style={{ color: '#FFFFFF', fontWeight: 600 }}>Shivraj Dhote (FINEX-SD-01)</div>
+                <div style={{ color: '#FFFFFF', fontWeight: 600 }}>{clientIdentifier}</div>
               </div>
               <div>
                 <span style={{ color: 'var(--text-faint)', fontSize: '11px', textTransform: 'uppercase' }}>Execution Timestamp</span>

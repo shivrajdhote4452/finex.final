@@ -28,8 +28,13 @@ interface ConversationItem {
 }
 
 import { CleanFormattedText } from '../components/common/CleanFormattedText';
+import { useFinancial } from '../context/FinancialContext';
 
 export const AskFinExScreen: React.FC = () => {
+  const { displayName } = useFinancial();
+  const trimmedName = displayName?.trim();
+  const greeting = trimmedName ? `Namaste, ${trimmedName}` : 'Namaste';
+
   // Conversation Sessions (Chat History) State
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
@@ -735,7 +740,7 @@ export const AskFinExScreen: React.FC = () => {
                   FinEx Financial Intelligence
                 </span>
                 <h1 style={{ fontSize: '32px', fontWeight: 700, color: '#FFFFFF', marginTop: '6px', letterSpacing: '-0.02em' }}>
-                  Namaste, Shivraj
+                  {greeting}
                 </h1>
                 <p style={{ color: '#A1A1AA', fontSize: '14px', marginTop: '6px', lineHeight: 1.5 }}>
                   Ask questions grounded in live NSE market quotes, verified technical momentum indicators, and SEBI regulatory publications.

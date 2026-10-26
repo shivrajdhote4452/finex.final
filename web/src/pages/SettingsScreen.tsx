@@ -18,14 +18,14 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
     setTimeout(() => setResetSuccess(false), 2500);
   };
 
-  const fullName = userProfile?.full_name || (isOwner ? 'Shivraj Dhote' : 'FinEx Investor');
+  const fullName = userProfile?.full_name || userProfile?.display_name || (isOwner ? 'Platform Owner' : 'FinEx Investor');
   const roleTitle = isOwner ? 'Sole Developer & Admin' : 'Active Investor';
   const initials = fullName
     .split(' ')
     .filter(Boolean)
     .slice(0, 2)
     .map((s) => s[0].toUpperCase())
-    .join('') || (isOwner ? 'SD' : 'FI');
+    .join('') || (isOwner ? 'PO' : 'FI');
 
   const tabs: { id: 'profile' | 'appearance' | 'sandbox' | 'compliance'; label: string }[] = [
     { id: 'profile', label: 'Investor Profile' },
@@ -136,9 +136,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
                 <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '16px', borderBottom: '1px solid var(--border-subtle)' }}>
                   <div>
                     <div style={{ fontSize: '14px', fontWeight: 600, color: '#FFFFFF' }}>Display Name</div>
-                    <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Shivraj Dhote</div>
+                    <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{fullName}</div>
                   </div>
-                  <span className="badge badge-neutral">Primary Admin</span>
+                  <span className="badge badge-neutral">{isOwner ? 'Primary Admin' : 'Active Investor'}</span>
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '16px', borderBottom: '1px solid var(--border-subtle)' }}>
