@@ -585,3 +585,144 @@ async def test_angel_smartapi_live_quote_market_hours():
     assert quote.canonical_id == "NSE:RELIANCE"
     assert quote.price > 0
     assert quote.source == "angel_smartapi"
+
+
+# =============================================================================
+# Diagnostic & Provenance Tests (Fix Verification)
+# =============================================================================
+
+def test_angel_adapter_diagnostic_status_reporting():
+    """Verify diagnostic status reports missing/placeholder fields without revealing secrets."""
+    # Incomplete credentials
+    incomplete_adapter = AngelOneMarketAdapter(
+        api_key="your_api_key_here",
+        client_id="SHIV001",
+        mpin="",
+        totp_secret="placeholder_secret",
+    )
+    status = incomplete_adapter.get_configuration_status()
+    assert status["is_configured"] is False
+    assert "ANGEL_API_KEY" in status["missing_fields"]
+    assert "ANGEL_MPIN" in status["missing_fields"]
+    assert "ANGEL_TOTP_SECRET" in status["missing_fields"]
+    assert "ANGEL_CLIENT_ID" not in status["missing_fields"]
+    # Verify no secret values are returned in status dictionary
+    for k, v in status.items():
+        assert not isinstance(v, str) or ("your_" not in v and "placeholder" not in v)
+
+    # Valid mock credentials
+    valid_adapter = AngelOneMarketAdapter(
+        api_key="VALIDKEY123",
+        client_id="VALIDCLIENT",
+        mpin="1234",
+        totp_secret="JBSWY3DPEHPK3PXP",
+    )
+    valid_status = valid_adapter.get_configuration_status()
+    assert valid_status["is_configured"] is True
+    assert len(valid_status["missing_fields"]) == 0
+    assert valid_status["has_api_key"] is True
+    assert valid_status["has_client_id"] is True
+    assert valid_status["has_mpin"] is True
+    assert valid_status["has_totp_secret"] is True
+
+
+def test_angel_adapter_format_date_handling():
+    """Verify _format_date cleanly handles ISO strings, datetime strings, and dates without time."""
+    adapter = AngelOneMarketAdapter()
+    assert adapter._format_date("2026-10-29", "09:15") == "2026-10-29 09:15"
+    assert adapter._format_date("2026-10-29 15:30", "09:15") == "2026-10-29 15:30"
+    assert adapter._format_date("2026-10-29T15:30:00+05:30", "09:15") == "2026-10-29 15:30"
+    assert adapter._format_date("2026-10-29T09:15:00", "09:15") == "2026-10-29 09:15"
+
+
+def test_angel_adapter_historical_candles_token_recovery():
+    """Verify get_historical_candles automatically regenerates session upon token expiry."""
+    adapter = AngelOneMarketAdapter(
+        api_key="mock_key",
+        client_id="mock_client",
+        mpin="1234",
+        totp_secret="JBSWY3DPEHPK3PXP",
+    )
+    adapter.jwt_token = "expired_jwt_token"
+
+    mock_sc = MagicMock()
+    # First call returns 401 Invalid Token; second call after re-auth returns valid candles
+    mock_sc.getCandleData.side_effect = [
+        {"status": False, "message": "Invalid Token", "errorcode": "AG8001"},
+        {
+            "status": True,
+            "data": [
+                ["2026-10-29T09:15:00+05:30", 2500.0, 2520.0, 2490.0, 2515.0, 10500],
+            ],
+        },
+    ]
+    mock_sc.generateSession.return_value = {
+        "status": True,
+        "data": {"jwtToken": "new_refreshed_jwt", "refreshToken": "new_refresh"},
+    }
+    mock_sc.getfeedToken.return_value = "new_feed_token"
+    adapter.smart_api = mock_sc
+
+    candles = adapter.get_historical_candles("RELIANCE", "1D", "2026-10-29 09:15", "2026-10-29 15:30")
+    assert len(candles) == 1
+    assert candles[0]["open"] == 2500.0
+    assert mock_sc.generateSession.called
+    assert adapter.jwt_token == "new_refreshed_jwt"
+
+
+def test_angel_adapter_daily_candle_date_timezone_preservation():
+    """Verify daily candle parsing preserves the local session date (no midnight UTC day shift)."""
+    adapter = AngelOneMarketAdapter(
+        api_key="mock_key",
+        client_id="mock_client",
+        mpin="1234",
+        totp_secret="JBSWY3DPEHPK3PXP",
+    )
+    adapter.jwt_token = "valid_token"
+
+    mock_sc = MagicMock()
+    # Midnight IST timestamp in ISO format
+    mock_sc.getCandleData.return_value = {
+        "status": True,
+        "data": [
+            ["2026-10-29T00:00:00+05:30", 1159.0, 1182.1, 1155.6, 1167.4, 20939623],
+        ],
+    }
+    adapter.smart_api = mock_sc
+
+    candles = adapter.get_historical_candles("RELIANCE", "1D", "2026-10-29 09:15", "2026-10-29 15:30")
+    assert len(candles) == 1
+    assert candles[0]["date"] == "2026-10-29"
+
+
+def test_index_registry_alias_resolution():
+    """Verify common index shorthand aliases resolve to canonical registry indices."""
+    from backend.app.domain.index_registry import get_index_by_symbol
+
+    nifty = get_index_by_symbol("NIFTY")
+    assert nifty is not None
+    assert nifty["symbol"] == "NIFTY 50"
+
+    nifty50 = get_index_by_symbol("NIFTY50")
+    assert nifty50 is not None
+    assert nifty50["symbol"] == "NIFTY 50"
+
+    banknifty = get_index_by_symbol("BANKNIFTY")
+    assert banknifty is not None
+    assert banknifty["symbol"] == "NIFTY BANK"
+
+    nse_ticker = get_index_by_symbol("^NSEI")
+    assert nse_ticker is not None
+    assert nse_ticker["symbol"] == "NIFTY 50"
+
+
+def test_market_history_envelope_provenance_and_status(client):
+    """Verify /api/v1/market/history/{symbol} returns observed_at, market_open, and honest freshness."""
+    res = client.get("/api/v1/market/history/RELIANCE?interval=1D&days=5")
+    assert res.status_code == 200
+    data = res.json()["data"]
+    assert "observed_at" in data
+    assert "market_open" in data
+    assert "freshness" in data
+    assert data["freshness"] in ("LIVE", "CLOSED", "END_OF_DAY")
+    assert isinstance(data["market_open"], bool)

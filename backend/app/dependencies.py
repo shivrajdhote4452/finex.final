@@ -16,6 +16,12 @@ def get_angel_adapter() -> AngelOneMarketAdapter:
     return _angel_adapter_instance
 
 
+def set_angel_adapter(adapter: AngelOneMarketAdapter) -> None:
+    """Set global AngelOneMarketAdapter singleton."""
+    global _angel_adapter_instance
+    _angel_adapter_instance = adapter
+
+
 def get_market_data_provider() -> AbstractMarketDataProvider:
     """FastAPI Dependency for active AbstractMarketDataProvider based on MARKET_DATA_MODE."""
     settings = get_settings()
@@ -32,6 +38,7 @@ __all__ = [
     "get_db",
     "get_market_hub",
     "get_angel_adapter",
+    "set_angel_adapter",
     "get_market_data_provider",
     "MarketHub",
     "AngelOneMarketAdapter",

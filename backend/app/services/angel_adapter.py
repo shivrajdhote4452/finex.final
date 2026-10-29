@@ -12,6 +12,7 @@ Implements AbstractMarketDataProvider:
 import asyncio
 import hashlib
 import logging
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -114,16 +115,31 @@ TOKEN_TO_SYMBOL: Dict[str, str] = {v: k for k, v in FINEX_INSTRUMENTS.items()}
 
 # SmartAPI Candle Interval Map
 INTERVAL_MAP = {
+    "1M": "ONE_MINUTE",
     "1m": "ONE_MINUTE",
     "ONE_MINUTE": "ONE_MINUTE",
+    "3M": "THREE_MINUTE",
     "3m": "THREE_MINUTE",
+    "THREE_MINUTE": "THREE_MINUTE",
+    "5M": "FIVE_MINUTE",
     "5m": "FIVE_MINUTE",
+    "FIVE_MINUTE": "FIVE_MINUTE",
+    "10M": "TEN_MINUTE",
     "10m": "TEN_MINUTE",
+    "TEN_MINUTE": "TEN_MINUTE",
+    "15M": "FIFTEEN_MINUTE",
     "15m": "FIFTEEN_MINUTE",
+    "FIFTEEN_MINUTE": "FIFTEEN_MINUTE",
+    "30M": "THIRTY_MINUTE",
     "30m": "THIRTY_MINUTE",
+    "THIRTY_MINUTE": "THIRTY_MINUTE",
+    "1H": "ONE_HOUR",
     "1h": "ONE_HOUR",
+    "60M": "ONE_HOUR",
+    "60m": "ONE_HOUR",
     "ONE_HOUR": "ONE_HOUR",
     "1D": "ONE_DAY",
+    "1d": "ONE_DAY",
     "ONE_DAY": "ONE_DAY",
 }
 
@@ -158,6 +174,7 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
         self._breaker_open_until: float = 0.0
         self.failure_threshold: int = 5
         self.recovery_timeout: float = 60.0
+        self._auth_lock = threading.Lock()
 
     @property
     def is_circuit_open(self) -> bool:
@@ -181,6 +198,30 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
         self._consecutive_failures = 0
         self._breaker_open_until = 0.0
 
+    def get_configuration_status(self) -> Dict[str, Any]:
+        """Return diagnostic status of Angel One configuration without revealing secret values."""
+        missing = []
+        if not self.api_key or "your_" in self.api_key.lower() or "placeholder" in self.api_key.lower():
+            missing.append("ANGEL_API_KEY")
+        if not self.client_id or "your_" in self.client_id.lower() or "placeholder" in self.client_id.lower():
+            missing.append("ANGEL_CLIENT_ID")
+        if not self.mpin or "your_" in self.mpin.lower() or "placeholder" in self.mpin.lower():
+            missing.append("ANGEL_MPIN")
+        if not self.totp_secret or "your_" in self.totp_secret.lower() or "placeholder" in self.totp_secret.lower():
+            missing.append("ANGEL_TOTP_SECRET")
+
+        return {
+            "is_configured": len(missing) == 0 and len(self.api_key) >= 5 and len(self.totp_secret) >= 8,
+            "missing_fields": missing,
+            "has_api_key": bool(self.api_key and len(self.api_key) >= 5),
+            "has_client_id": bool(self.client_id),
+            "has_mpin": bool(self.mpin),
+            "has_totp_secret": bool(self.totp_secret and len(self.totp_secret) >= 8),
+            "smartapi_library_available": SmartConnect is not None,
+            "is_circuit_open": self.is_circuit_open,
+            "has_active_session": bool(self.jwt_token),
+        }
+
     def is_configured(self) -> bool:
         """Verify if Angel One credentials are valid and ready."""
         required = [self.api_key, self.client_id, self.mpin, self.totp_secret]
@@ -189,38 +230,59 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
                 return False
         return len(self.api_key) >= 5 and len(self.totp_secret) >= 8
 
-    def authenticate(self) -> bool:
-        """Perform headless 2FA TOTP authentication to generate JWT session."""
+    def authenticate(self, force: bool = False) -> bool:
+        """Perform headless 2FA TOTP authentication or token renewal to generate JWT session."""
         if not self.is_configured():
-            logger.info("Angel One credentials not configured. Live Angel API authentication skipped.")
+            diag = self.get_configuration_status()
+            logger.info(f"Angel One credentials incomplete. Missing/placeholder: {diag['missing_fields']}. Live Angel API skipped.")
             return False
 
-        if not self.smart_api:
-            if SmartConnect is None:
-                logger.error(
-                    "SmartConnect library is not available. Please ensure smartapi-python, logzero, and websocket-client are installed."
-                )
-                return False
-            self.smart_api = SmartConnect(api_key=self.api_key)
+        with self._auth_lock:
+            if not force and self.jwt_token:
+                return True
 
-        try:
-            totp_code = pyotp.TOTP(self.totp_secret).now()
-            session = self.smart_api.generateSession(self.client_id, self.mpin, totp_code)
+            if not self.smart_api:
+                if SmartConnect is None:
+                    logger.error(
+                        "SmartConnect library is not available. Please ensure smartapi-python, logzero, and websocket-client are installed."
+                    )
+                    return False
+                self.smart_api = SmartConnect(api_key=self.api_key)
 
-            if not session or not session.get("status"):
-                err_msg = session.get("message") if session else "Unknown error"
-                logger.error(f"Angel One login failed: {err_msg}")
-                raise RuntimeError(f"Angel One login failed: {err_msg}")
+            # Attempt token renewal via refreshToken if available and not forced
+            if not force and self.smart_api and self.refresh_token:
+                try:
+                    self.smart_api.access_token = self.jwt_token
+                    self.smart_api.refresh_token = self.refresh_token
+                    self.smart_api.userId = self.client_id
+                    refresh_res = self.smart_api.renewAccessToken()
+                    if refresh_res and refresh_res.get("jwtToken"):
+                        self.jwt_token = refresh_res["jwtToken"]
+                        if refresh_res.get("refreshToken"):
+                            self.refresh_token = refresh_res["refreshToken"]
+                        logger.info("Angel One session token successfully renewed via refreshToken.")
+                        return True
+                except Exception as ref_err:
+                    logger.debug(f"Angel One token renewal attempt failed ({ref_err}), proceeding with TOTP login.")
 
-            data = session.get("data", {})
-            self.jwt_token = data.get("jwtToken")
-            self.refresh_token = data.get("refreshToken")
-            self.feed_token = self.smart_api.getfeedToken()
-            logger.info(f"Angel One SmartAPI authenticated successfully for client {self.client_id}")
-            return True
-        except Exception as e:
-            logger.error(f"Angel One authentication error: {e}")
-            raise
+            try:
+                totp_code = pyotp.TOTP(self.totp_secret).now()
+                session = self.smart_api.generateSession(self.client_id, self.mpin, totp_code)
+
+                if not session or not session.get("status"):
+                    err_msg = session.get("message") if session else "Unknown error"
+                    logger.error(f"Angel One login failed: {err_msg}")
+                    raise RuntimeError(f"Angel One login failed: {err_msg}")
+
+                data = session.get("data", {})
+                self.jwt_token = data.get("jwtToken")
+                self.refresh_token = data.get("refreshToken")
+                self.feed_token = self.smart_api.getfeedToken()
+                logger.info(f"Angel One SmartAPI authenticated successfully for client {self.client_id}")
+                return True
+            except Exception as e:
+                logger.error(f"Angel One authentication error: {e}")
+                raise
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=0.5, min=0.5, max=2.0), reraise=True)
     def _fetch_ltp_with_retry(self, exchange: str, tradingsymbol: str, symboltoken: str) -> Dict[str, Any]:
@@ -230,7 +292,7 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
             res.get("errorcode") in ("AG8001", "AG8002", "401") or "Invalid Token" in str(res.get("message", ""))
         ):
             logger.info("Angel One token expired or invalid (401). Regenerating session...")
-            self.authenticate()
+            self.authenticate(force=True)
             res = self.smart_api.ltpData(exchange, tradingsymbol, symboltoken)
         return res
 
@@ -248,7 +310,7 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
             res.get("errorcode") in ("AG8001", "AG8002", "401") or "Invalid Token" in str(res.get("message", ""))
         ):
             logger.info("Angel One token expired or invalid (401). Regenerating session...")
-            self.authenticate()
+            self.authenticate(force=True)
             res = self.smart_api.optionGreek({"name": name, "expirydate": expirydate})
         return res
 
@@ -362,11 +424,15 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
         return quote
 
     def _format_date(self, d_str: str, default_time: str) -> str:
-        """Ensure date has HH:MM time component required by Angel One API."""
-        d = d_str.strip()
-        if " " not in d:
-            return f"{d} {default_time}"
-        return d
+        """Ensure date has YYYY-MM-DD HH:MM format required by Angel One API."""
+        d = d_str.strip().replace("T", " ")
+        parts = d.split(" ")
+        date_part = parts[0]
+        if len(parts) > 1 and parts[1]:
+            time_part = parts[1][:5]
+        else:
+            time_part = default_time
+        return f"{date_part} {time_part}"
 
     def get_historical_candles(
         self,
@@ -393,7 +459,7 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
         if not self.smart_api:
             raise RuntimeError("SmartAPI client not initialized.")
 
-        smart_interval = INTERVAL_MAP.get(interval, "ONE_DAY")
+        smart_interval = INTERVAL_MAP.get(interval, INTERVAL_MAP.get(interval.upper(), "ONE_DAY"))
 
         params = {
             "exchange": exchange,
@@ -405,20 +471,32 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
 
         res = self.smart_api.getCandleData(params)
 
+        # 401 / Invalid Token recovery for candle data
+        if isinstance(res, dict) and (
+            res.get("errorcode") in ("AG8001", "AG8002", "401") or "Invalid Token" in str(res.get("message", ""))
+        ):
+            logger.info(f"Angel One token expired while fetching candles for {clean_symbol}. Regenerating session...")
+            self.authenticate(force=True)
+            res = self.smart_api.getCandleData(params)
+
         if not res or not res.get("status") or not res.get("data"):
             err_msg = res.get("message") if res else "Empty response"
             raise ValueError(f"Unable to fetch candles for {clean_symbol} from Angel One: {err_msg}")
+
+        # Reset circuit breaker on verified successful candle fetch
+        self._record_success()
 
         candles = []
         for row in res["data"]:
             try:
                 # row format: [timestamp_str, open, high, low, close, volume]
                 iso_str = row[0]
-                unix_ts = int(datetime.fromisoformat(iso_str).timestamp())
+                dt = datetime.fromisoformat(iso_str)
+                unix_ts = int(dt.timestamp())
                 candles.append(
                     {
                         "time": unix_ts,
-                        "date": datetime.fromtimestamp(unix_ts, tz=timezone.utc).strftime("%Y-%m-%d"),
+                        "date": dt.strftime("%Y-%m-%d"),
                         "open": float(row[1]),
                         "high": float(row[2]),
                         "low": float(row[3]),

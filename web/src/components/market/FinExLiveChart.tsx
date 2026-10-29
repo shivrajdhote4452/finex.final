@@ -282,7 +282,11 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
           '5Y': 1825,
           'ALL': 3650,
         };
-        const fetchDays = RANGE_DAYS[rangePreset] ?? 365;
+        const isIntraday = ['1m', '5m', '15m', '30m', '1h', '60m', 'ONE_MINUTE', 'THREE_MINUTE', 'FIVE_MINUTE', 'FIFTEEN_MINUTE', 'THIRTY_MINUTE', 'ONE_HOUR'].includes(interval);
+        let fetchDays = RANGE_DAYS[rangePreset] ?? 365;
+        if (isIntraday && fetchDays > 30) {
+          fetchDays = 5;
+        }
         let res: any;
         const isIndex = cleanSymbol.startsWith('NIFTY') || cleanSymbol === 'SENSEX' || cleanSymbol.includes('INDEX');
         if (isIndex) {
@@ -333,7 +337,16 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
               lastBarRef.current = { ...last };
             }
 
-            const observedAtStr = payload.observed_at || new Date().toLocaleString('en-IN');
+            const rawObs = payload.observed_at;
+            let displayTime = '--';
+            if (rawObs) {
+              const d = new Date(rawObs);
+              displayTime = !isNaN(d.getTime()) ? d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : rawObs;
+            } else if (last) {
+              displayTime = new Date(last.time * 1000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            }
+
+            const observedAtStr = rawObs || (last ? new Date(last.time * 1000).toLocaleString('en-IN') : new Date().toLocaleString('en-IN'));
             setCachedCandles(cleanSymbol, {
               candles: formatted,
               observedAt: observedAtStr,
@@ -346,7 +359,7 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
             setFreshness({
               status: payload.freshness || 'LIVE',
               source: payload.source || 'ANGEL_ONE_SMARTAPI',
-              asOf: payload.observed_at || new Date().toLocaleTimeString(),
+              asOf: displayTime,
               lastPrice: last ? last.close : null,
             });
 
@@ -622,6 +635,26 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
         </div>
       )}
 
+      {/* Honest Market Closed Informational Notice */}
+      {!isSimulated && !cachedLabel && (freshness.status === 'CLOSED' || freshness.status === 'MARKET_CLOSED') && (
+        <div
+          data-testid="market-closed-banner"
+          style={{
+            width: '100%',
+            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+            borderBottom: '1px solid rgba(245, 158, 11, 0.25)',
+            color: '#FBBF24',
+            padding: '4px 12px',
+            fontSize: 11,
+            fontWeight: 600,
+            textAlign: 'center',
+            flexShrink: 0,
+          }}
+        >
+          🏛️ NSE Market Closed (Trading Hours 09:15 - 15:30 IST) — displaying verified genuine session data ({freshness.asOf})
+        </div>
+      )}
+
       {/* Top Ticker Status Bar */}
       <div
         style={{
@@ -656,6 +689,8 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
               fontWeight: 600,
               backgroundColor: freshness.status === 'STREAMING' || freshness.status === 'LIVE'
                 ? 'rgba(16, 185, 129, 0.15)'
+                : freshness.status === 'CLOSED' || freshness.status === 'MARKET_CLOSED' || freshness.status === 'END_OF_DAY'
+                ? 'rgba(245, 158, 11, 0.15)'
                 : freshness.status === 'FALLBACK_CACHED'
                 ? 'rgba(56, 189, 248, 0.15)'
                 : freshness.status.includes('REPLAY') || freshness.status.includes('SIMULATED')
@@ -663,6 +698,8 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
                 : 'rgba(239, 68, 68, 0.15)',
               color: freshness.status === 'STREAMING' || freshness.status === 'LIVE'
                 ? '#34D399'
+                : freshness.status === 'CLOSED' || freshness.status === 'MARKET_CLOSED' || freshness.status === 'END_OF_DAY'
+                ? '#FBBF24'
                 : freshness.status === 'FALLBACK_CACHED'
                 ? '#38BDF8'
                 : freshness.status.includes('REPLAY') || freshness.status.includes('SIMULATED')
@@ -677,6 +714,8 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
                 borderRadius: '50%',
                 backgroundColor: freshness.status === 'STREAMING' || freshness.status === 'LIVE'
                   ? '#10B981'
+                  : freshness.status === 'CLOSED' || freshness.status === 'MARKET_CLOSED' || freshness.status === 'END_OF_DAY'
+                  ? '#F59E0B'
                   : freshness.status === 'FALLBACK_CACHED'
                   ? '#38BDF8'
                   : freshness.status.includes('REPLAY') || freshness.status.includes('SIMULATED')

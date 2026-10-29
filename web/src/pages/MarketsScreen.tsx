@@ -1237,7 +1237,7 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate, initia
               </div>
 
               <div style={{ width: '100%', height: '380px' }}>
-                <FinExLiveChart symbol={idxItem.symbol} height={380} />
+                <FinExLiveChart symbol={idxItem.symbol} interval="1D" rangePreset="1Y" height={380} />
               </div>
             </div>
 

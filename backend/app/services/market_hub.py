@@ -39,21 +39,30 @@ class MarketHub:
             if enable_demo_simulation is not None
             else getattr(settings, "ENABLE_DEMO_SIMULATION", False)
         )
-        if provider:
-            self.provider = provider
-        elif getattr(settings, "MARKET_DATA_MODE", "") == "INDIAN_LIVE_DATA":
-            from backend.app.services.angel_adapter import AngelOneMarketAdapter
-
-            angel = AngelOneMarketAdapter()
-            if angel.is_configured():
-                self.provider = angel
-            else:
-                self.provider = RealMarketDataProvider(force_cache=False, allow_fixture_fallback=self.allow_fixtures)
-        else:
-            self.provider = RealMarketDataProvider(force_cache=False, allow_fixture_fallback=self.allow_fixtures)
+        self._provider = provider
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._simulation_task: Optional[asyncio.Task] = None
         self._is_running = False
+
+    @property
+    def provider(self):
+        if self._provider is None:
+            from backend.app.config import get_settings
+            settings = get_settings()
+            if getattr(settings, "MARKET_DATA_MODE", "") == "INDIAN_LIVE_DATA":
+                from backend.app.dependencies import get_angel_adapter
+                angel = get_angel_adapter()
+                if angel.is_configured():
+                    self._provider = angel
+                else:
+                    self._provider = RealMarketDataProvider(force_cache=False, allow_fixture_fallback=self.allow_fixtures)
+            else:
+                self._provider = RealMarketDataProvider(force_cache=False, allow_fixture_fallback=self.allow_fixtures)
+        return self._provider
+
+    @provider.setter
+    def provider(self, val):
+        self._provider = val
 
     @property
     def allow_fixtures(self) -> bool:
@@ -169,6 +178,7 @@ class MarketHub:
         high_price = float(q.high_price) if q.high_price else price
         low_price = float(q.low_price) if q.low_price else price
         close_price = float(getattr(q, "close_price", None) or price)
+        from backend.app.services.angel_adapter import is_nse_market_open
         obs_dt = q.observed_at.replace(tzinfo=timezone.utc) if q.observed_at.tzinfo is None else q.observed_at
 
         tick = {
@@ -180,7 +190,7 @@ class MarketHub:
             "close": round(close_price, 2),
             "volume": getattr(q, "volume", 0) or 0,
             "source": q.source,
-            "freshness": getattr(q, "freshness_status", "END_OF_DAY"),
+            "freshness": "LIVE" if (getattr(q, "data_status", "fresh") == "fresh" and is_nse_market_open()) else ("CLOSED" if not is_nse_market_open() else "END_OF_DAY"),
             "CurrentBarUnixTime": int(obs_dt.timestamp()),
             "observed_at": obs_dt.isoformat(),
             "fetch_timestamp": now_utc.isoformat(),

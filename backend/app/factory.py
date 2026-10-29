@@ -75,13 +75,15 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
             startup_logger = logging.getLogger("startup")
             try:
-                from backend.app.services.angel_adapter import AngelOneMarketAdapter
+                from backend.app.dependencies import get_angel_adapter
                 from backend.app.services.market_hub import get_market_hub
 
-                angel = AngelOneMarketAdapter()
-                if not angel.is_configured():
+                angel = get_angel_adapter()
+                status = angel.get_configuration_status()
+                if not status["is_configured"]:
                     startup_logger.warning(
-                        "INDIAN_LIVE_DATA mode active but Angel One credentials incomplete. Fallback provider active."
+                        f"INDIAN_LIVE_DATA mode active but Angel One credentials incomplete. "
+                        f"Missing: {status['missing_fields']}. Fallback provider active."
                     )
                 else:
                     auth_ok = angel.authenticate()

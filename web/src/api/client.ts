@@ -11,6 +11,17 @@ const getApiBaseUrl = (): string => {
     (import.meta as any).env?.VITE_API_URL ||
     ''
   ).trim().replace(/\/+$/, '');
+
+  // When running locally in browser (localhost / 127.0.0.1), use Vite proxy /api/v1
+  // unless VITE_API_BASE_URL explicitly points to localhost. This prevents remote cloud
+  // deployment URLs (e.g. Render) in web/.env from bypassing local backend Angel One feeds.
+  if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+    if (envUrl && (envUrl.includes('localhost') || envUrl.includes('127.0.0.1'))) {
+      return envUrl.endsWith('/api/v1') ? envUrl : `${envUrl}/api/v1`;
+    }
+    return '/api/v1';
+  }
+
   if (!envUrl) return '/api/v1';
   if (envUrl.endsWith('/api/v1')) return envUrl;
   return `${envUrl}/api/v1`;
@@ -179,7 +190,7 @@ class ApiClient {
 
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit & { timeoutMs?: number } = {}
   ): Promise<T> {
     const url = `${API_BASE_URL}${endpoint}`;
     const headers: Record<string, string> = {
@@ -194,7 +205,8 @@ class ApiClient {
     }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    const timeoutMs = options.timeoutMs ?? (endpoint.includes('/market/') || endpoint.includes('/ai/') ? 15000 : 8000);
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     let response: Response;
     try {
       response = await fetch(url, {

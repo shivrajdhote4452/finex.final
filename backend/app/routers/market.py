@@ -10,6 +10,7 @@ Exposes:
 - /market/mode: Active market mode status, SEBI 30-day educational lag, and clock
 """
 
+import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
@@ -37,7 +38,7 @@ from backend.app.domain.technical_indicators import (
     calculate_vwap,
 )
 from backend.app.ports.market_data import AbstractMarketDataProvider, HistoricalBar
-from backend.app.services.angel_adapter import FINEX_INSTRUMENTS, AngelOneMarketAdapter
+from backend.app.services.angel_adapter import FINEX_INSTRUMENTS, AngelOneMarketAdapter, is_nse_market_open
 from backend.app.services.market_hub import MarketHub
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -121,7 +122,10 @@ async def get_instrument_quote(
     data = quote.model_dump(mode="json")
     data["clean_symbol"] = clean_sym
     data["ltp"] = float(quote.price)
-    data["freshness"] = "LIVE" if quote.data_status == "LIVE" else "END_OF_DAY"
+    market_is_open = is_nse_market_open()
+    freshness_val = "LIVE" if (getattr(quote, "data_status", "fresh") == "fresh" and market_is_open and not quote.served_from_cache) else ("CLOSED" if not market_is_open else "END_OF_DAY")
+    data["freshness"] = freshness_val
+    data["market_open"] = market_is_open
     data["served_from_cache"] = quote.served_from_cache
 
     return create_response_envelope(data=data, correlation_id=cid)
@@ -171,7 +175,8 @@ async def get_instrument_history(
 
     if angel_adapter and angel_adapter.is_configured():
         try:
-            candles = angel_adapter.get_historical_candles(
+            candles = await asyncio.to_thread(
+                angel_adapter.get_historical_candles,
                 symbol=clean_sym,
                 interval=interval,
                 from_date=f"{s_date} 09:15",
@@ -181,11 +186,21 @@ async def get_instrument_history(
                 if as_of_dt:
                     as_of_ts = int(as_of_dt.timestamp())
                     candles = [c for c in candles if c.get("time", 0) <= as_of_ts]
+
+                market_is_open = is_nse_market_open(as_of_dt)
+                freshness_status = "LIVE" if market_is_open else "CLOSED"
+                latest_obs_dt = (
+                    datetime.fromtimestamp(candles[-1]["time"], tz=timezone.utc).isoformat()
+                    if candles and "time" in candles[-1]
+                    else None
+                )
+
                 return create_response_envelope(
                     data={
                         "symbol": clean_sym,
                         "source": source,
-                        "freshness": "LIVE",
+                        "freshness": freshness_status,
+                        "market_open": market_is_open,
                         "served_from_cache": False,
                         "candles": candles,
                         "bars": candles,
@@ -194,6 +209,7 @@ async def get_instrument_history(
                         "start_date": s_date,
                         "end_date": e_date,
                         "as_of": as_of_dt.isoformat() if as_of_dt else None,
+                        "observed_at": latest_obs_dt,
                     },
                     correlation_id=cid,
                 )
@@ -234,7 +250,7 @@ async def get_instrument_history(
         candles.append(
             {
                 "time": unix_ts,
-                "date": b.date if hasattr(b, "date") else b.observed_at.isoformat(),
+                "date": b.date if hasattr(b, "date") else b.observed_at.strftime("%Y-%m-%d"),
                 "open": float(b.open),
                 "high": float(b.high),
                 "low": float(b.low),
@@ -243,11 +259,15 @@ async def get_instrument_history(
             }
         )
 
+    fallback_obs_dt = bars[-1].observed_at.isoformat() if bars else None
+    market_is_open = is_nse_market_open(as_of_dt)
+
     return create_response_envelope(
         data={
             "symbol": clean_sym,
             "source": getattr(bars[0], "source", source) if bars else source,
-            "freshness": "END_OF_DAY" if served_from_cache else "LIVE",
+            "freshness": "END_OF_DAY" if served_from_cache else ("LIVE" if market_is_open else "CLOSED"),
+            "market_open": market_is_open,
             "served_from_cache": served_from_cache,
             "candles": candles,
             "bars": [b.model_dump(mode="json") for b in bars],
@@ -257,6 +277,7 @@ async def get_instrument_history(
             "start_date": s_date,
             "end_date": e_date,
             "as_of": as_of_dt.isoformat() if as_of_dt else None,
+            "observed_at": fallback_obs_dt,
         },
         correlation_id=cid,
     )
@@ -488,18 +509,23 @@ async def get_index_history(
     # 1. Try Angel One if configured
     if angel_adapter and angel_adapter.is_configured():
         try:
-            candles = angel_adapter.get_historical_candles(
+            candles = await asyncio.to_thread(
+                angel_adapter.get_historical_candles,
                 symbol=idx_info["symbol"],
                 interval=interval,
                 from_date=f"{s_date} 09:15",
                 to_date=f"{e_date} 15:30",
             )
+            if candles:
+                source = "ANGEL_ONE_SMARTAPI"
+                served_from_cache = False
         except Exception as e:
             logger.info(f"Angel One candle fetch bypassed for index {idx_info['symbol']}: {e}")
 
     # 2. Fallback to public provider (Yahoo Finance)
     if not candles:
         source = "YAHOO_FINANCE_VERIFIED"
+        served_from_cache = True
         try:
             bars = await provider.get_historical_bars(
                 symbol=idx_info["symbol"],
@@ -510,8 +536,8 @@ async def get_index_history(
             )
             candles = [
                 {
-                    "time": int(b.timestamp.timestamp()),
-                    "date": b.timestamp.strftime("%Y-%m-%d"),
+                    "time": int(b.timestamp.timestamp()) if hasattr(b, "timestamp") else (b.time or int(b.observed_at.timestamp())),
+                    "date": b.date if hasattr(b, "date") else b.observed_at.strftime("%Y-%m-%d"),
                     "open": float(b.open),
                     "high": float(b.high),
                     "low": float(b.low),
@@ -523,6 +549,14 @@ async def get_index_history(
         except Exception as e:
             logger.warning(f"Public provider historical candle error for index {idx_info['symbol']}: {e}")
 
+    market_is_open = is_nse_market_open(as_of_dt if "as_of_dt" in locals() and as_of_dt else None)
+    latest_obs_dt = (
+        datetime.fromtimestamp(candles[-1]["time"], tz=timezone.utc).isoformat()
+        if candles and "time" in candles[-1]
+        else None
+    )
+    freshness_status = "LIVE" if (not served_from_cache and market_is_open) else ("CLOSED" if not served_from_cache else "END_OF_DAY")
+
     return create_response_envelope(
         data={
             "symbol": idx_info["symbol"],
@@ -531,7 +565,8 @@ async def get_index_history(
             "category": idx_info["category"],
             "tier": idx_info["tier"],
             "source": source,
-            "freshness": "END_OF_DAY",
+            "freshness": freshness_status,
+            "market_open": market_is_open,
             "served_from_cache": served_from_cache,
             "candles": candles,
             "bars": candles,
@@ -539,6 +574,7 @@ async def get_index_history(
             "interval": interval,
             "start_date": s_date,
             "end_date": e_date,
+            "observed_at": latest_obs_dt,
         },
         correlation_id=cid,
     )

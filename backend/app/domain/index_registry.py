@@ -307,6 +307,22 @@ INDEX_REGISTRY: List[Dict[str, str]] = [
     },
 ]
 
+INDEX_ALIASES: Dict[str, str] = {
+    "NIFTY": "NIFTY 50",
+    "NIFTY50": "NIFTY 50",
+    "^NSEI": "NIFTY 50",
+    "BANKNIFTY": "NIFTY BANK",
+    "NIFTYBANK": "NIFTY BANK",
+    "^NSEBANK": "NIFTY BANK",
+    "SENSEX": "SENSEX",
+    "^BSESN": "SENSEX",
+    "FINNIFTY": "NIFTY FINANCIAL SERVICES",
+    "MIDCPNIFTY": "NIFTY MIDCAP 50",
+    "NIFTYMID50": "NIFTY MIDCAP 50",
+    "NIFTYNXT50": "NIFTY NEXT 50",
+    "NIFTYSML100": "NIFTY SMALLCAP 100",
+}
+
 # Quick lookup indexes
 INDEX_BY_SYMBOL: Dict[str, Dict[str, str]] = {idx["symbol"].upper(): idx for idx in INDEX_REGISTRY}
 INDEX_BY_CANONICAL: Dict[str, Dict[str, str]] = {idx["canonical_id"].upper(): idx for idx in INDEX_REGISTRY}
@@ -320,8 +336,14 @@ def get_index_by_symbol(symbol: str) -> Optional[Dict[str, str]]:
     if clean in INDEX_BY_CANONICAL:
         return INDEX_BY_CANONICAL[clean]
 
-    # Partial / normalized match (e.g. NIFTY50 -> NIFTY 50, SENSEX -> SENSEX, BANKNIFTY -> NIFTY BANK)
+    # Alias and shorthand resolution
     normalized = clean.replace(" ", "").replace("_", "").replace("-", "")
+    if normalized in INDEX_ALIASES and INDEX_ALIASES[normalized] in INDEX_BY_SYMBOL:
+        return INDEX_BY_SYMBOL[INDEX_ALIASES[normalized]]
+    if clean in INDEX_ALIASES and INDEX_ALIASES[clean] in INDEX_BY_SYMBOL:
+        return INDEX_BY_SYMBOL[INDEX_ALIASES[clean]]
+
+    # Partial / normalized match
     for idx in INDEX_REGISTRY:
         reg_norm = idx["symbol"].replace(" ", "").replace("_", "").replace("-", "")
         if reg_norm == normalized:
