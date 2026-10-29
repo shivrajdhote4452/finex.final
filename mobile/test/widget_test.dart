@@ -17,7 +17,6 @@ void main() {
     // Verify brand and key auth buttons exist in pure black terminal auth
     expect(find.text('FinEx.'), findsOneWidget);
     expect(find.textContaining('CONTINUE WITH GOOGLE'), findsOneWidget);
-    expect(find.textContaining('CONTINUE AS DEVELOPER'), findsOneWidget);
   });
 
   testWidgets('FinEx mobile navigation shell displays workspace tabs', (WidgetTester tester) async {

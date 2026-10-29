@@ -87,6 +87,16 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
   Map<String, dynamic>? _modeInfo;
   Timer? _liveRefreshTimer;
 
+  // Real Market Metadata & Freshness State
+  String _freshnessStatus = 'CONNECTING';
+  String _dataSource = 'Angel One SmartAPI';
+  bool _marketOpen = false;
+  String? _observedAt;
+  String? _cachedNotice;
+
+  // In-memory cache for honest fallback when offline/off-market
+  static final Map<String, Map<String, dynamic>> _candleCache = {};
+
   // Order Ticket state
   String _orderSide = 'BUY';
   double _orderQty = 5;
@@ -156,10 +166,32 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
         double? p;
         if (_isIndex) {
           final q = await apiClient.getIndexQuote(_symbol);
-          if (mounted) _indexQuote = q;
+          if (mounted && q != null) {
+            _indexQuote = q;
+            if (q['freshness'] != null) {
+              _freshnessStatus = q['freshness'].toString().toUpperCase();
+            }
+            if (q['market_open'] != null) {
+              _marketOpen = q['market_open'] == true;
+            }
+            if (q['observed_at'] != null) {
+              _observedAt = q['observed_at'].toString();
+            }
+          }
           p = ((q?['price'] ?? q?['last_price']) as num?)?.toDouble();
         } else {
           final q = await apiClient.getQuote(_symbol);
+          if (mounted && q != null) {
+            if (q['freshness'] != null) {
+              _freshnessStatus = q['freshness'].toString().toUpperCase();
+            }
+            if (q['market_open'] != null) {
+              _marketOpen = q['market_open'] == true;
+            }
+            if (q['observed_at'] != null) {
+              _observedAt = q['observed_at'].toString();
+            }
+          }
           p = (q?['price'] as num?)?.toDouble();
         }
         if (p != null && p > 0 && mounted && _bars.isNotEmpty) {
@@ -177,6 +209,18 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
     });
   }
 
+  String _formatObservedAt(String? raw) {
+    if (raw == null || raw.isEmpty) return '--';
+    try {
+      final dt = DateTime.tryParse(raw);
+      if (dt != null) {
+        final local = dt.toLocal();
+        return DateFormat('dd MMM, HH:mm:ss').format(local);
+      }
+    } catch (_) {}
+    return raw;
+  }
+
   Future<void> _fetchChartData() async {
     setState(() {
       _loading = true;
@@ -191,6 +235,7 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
     try {
       final modeRes = await apiClient.getMarketMode();
       List<Map<String, dynamic>> rawBars = [];
+      Map<String, dynamic> historyPayload = {};
 
       if (_isIndex) {
         try {
@@ -203,6 +248,7 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
           interval: _timeframe,
           range: _range,
         );
+        historyPayload = historyRes;
         final list = (historyRes['candles'] ?? historyRes['bars'] ?? []) as List;
         rawBars = List<Map<String, dynamic>>.from(list);
       } else {
@@ -211,55 +257,90 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
           interval: _timeframe,
           range: _range,
         );
+        historyPayload = historyRes;
         rawBars = List<Map<String, dynamic>>.from(historyRes['bars'] ?? []);
       }
 
-      rawBars.sort((a, b) => (a['date'] ?? '').compareTo(b['date'] ?? ''));
+      final cacheKey = '${_symbol}_${_timeframe}_$_range';
 
+      if (rawBars.isNotEmpty) {
+        rawBars.sort((a, b) => (a['date'] ?? a['time'] ?? '').toString().compareTo((b['date'] ?? b['time'] ?? '').toString()));
+
+        final obsAt = historyPayload['observed_at']?.toString() ??
+            rawBars.last['date']?.toString() ??
+            DateTime.now().toIso8601String();
+        final freshness = (historyPayload['freshness']?.toString() ?? 'LIVE').toUpperCase();
+        final source = historyPayload['source']?.toString() ?? 'Angel One SmartAPI';
+        final isMarketOpen = historyPayload['market_open'] == true;
+
+        // Cache genuine candles for honest fallback
+        _candleCache[cacheKey] = {
+          'bars': rawBars,
+          'observed_at': obsAt,
+          'freshness': freshness,
+          'source': source,
+          'market_open': isMarketOpen,
+        };
+
+        setState(() {
+          _modeInfo = modeRes;
+          _bars = rawBars;
+          _freshnessStatus = freshness;
+          _dataSource = source;
+          _marketOpen = isMarketOpen;
+          _observedAt = obsAt;
+          _cachedNotice = null;
+          _loading = false;
+        });
+        return;
+      }
+
+      // If backend returned empty bars, check if we have cached real data
+      if (_candleCache.containsKey(cacheKey)) {
+        final cached = _candleCache[cacheKey]!;
+        setState(() {
+          _modeInfo = modeRes;
+          _bars = List<Map<String, dynamic>>.from(cached['bars'] ?? []);
+          _freshnessStatus = 'FALLBACK_CACHED';
+          _dataSource = '${cached['source']} (Cached)';
+          _marketOpen = cached['market_open'] == true;
+          _observedAt = cached['observed_at']?.toString();
+          _cachedNotice = 'Market data unavailable, showing last cached session';
+          _loading = false;
+        });
+        return;
+      }
+
+      // Honest empty state: No data returned & no cache
       setState(() {
         _modeInfo = modeRes;
-        _bars = rawBars;
+        _bars = [];
+        _freshnessStatus = 'DISCONNECTED';
+        _cachedNotice = null;
         _loading = false;
       });
     } catch (e) {
-      if (_isIndex && _bars.isEmpty) {
-        final fallback = _generateFallbackIndexCandles(_symbol);
+      final cacheKey = '${_symbol}_${_timeframe}_$_range';
+      if (_candleCache.containsKey(cacheKey)) {
+        final cached = _candleCache[cacheKey]!;
         setState(() {
-          _bars = fallback;
+          _bars = List<Map<String, dynamic>>.from(cached['bars'] ?? []);
+          _freshnessStatus = 'FALLBACK_CACHED';
+          _dataSource = '${cached['source']} (Cached)';
+          _marketOpen = cached['market_open'] == true;
+          _observedAt = cached['observed_at']?.toString();
+          _cachedNotice = 'Market connection offline, showing last cached session';
           _loading = false;
         });
       } else {
         setState(() {
-          _error = e.toString();
+          _error = e.toString().replaceFirst('Exception: ', '');
+          _freshnessStatus = 'DISCONNECTED';
+          _bars = [];
           _loading = false;
         });
       }
     }
-  }
-
-  List<Map<String, dynamic>> _generateFallbackIndexCandles(String symbol) {
-    double base = 24180.0;
-    if (symbol.contains('SENSEX')) base = 79400.0;
-    if (symbol.contains('BANK')) base = 51200.0;
-    if (symbol.contains('IT')) base = 37800.0;
-    final now = DateTime.now();
-    final List<Map<String, dynamic>> bars = [];
-    for (int i = 30; i >= 0; i--) {
-      final dt = now.subtract(Duration(days: i));
-      final open = base + math.sin(i * 0.5) * (base * 0.008);
-      final close = open + (math.cos(i * 0.8) * (base * 0.006));
-      final high = math.max(open, close) + (base * 0.003);
-      final low = math.min(open, close) - (base * 0.003);
-      bars.add({
-        'date': DateFormat('yyyy-MM-dd').format(dt),
-        'open': open,
-        'high': high,
-        'low': low,
-        'close': close,
-        'volume': 15000000,
-      });
-    }
-    return bars;
   }
 
   void _zoomIn() {
@@ -526,9 +607,9 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
   }
 
   void _openIndexBenchmarkInfoModal() {
-    final isLive = _indexQuote?['served_from_cache'] == false;
-    final observedAt = _indexQuote?['observed_at'] ?? 'Real-time Observation';
-    final source = _indexQuote?['source'] ?? 'NSE';
+    final isLive = _freshnessStatus == 'LIVE' || _freshnessStatus == 'STREAMING';
+    final observedAt = _formatObservedAt(_observedAt);
+    final source = _dataSource;
 
     showModalBottomSheet(
       context: context,
@@ -916,6 +997,122 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
     );
   }
 
+  Widget _buildFreshnessBadge() {
+    final status = _freshnessStatus.toUpperCase();
+    final timeStr = _formatObservedAt(_observedAt);
+    Color bg;
+    Color border;
+    Color text;
+    String label;
+    Color? dotColor;
+
+    if (status == 'LIVE' || status == 'STREAMING') {
+      bg = TerminalColors.positiveBg;
+      border = TerminalColors.positive;
+      text = TerminalColors.positive;
+      label = 'LIVE · $_dataSource';
+      dotColor = TerminalColors.positive;
+    } else if (status == 'CLOSED' || status == 'MARKET_CLOSED' || !_marketOpen) {
+      bg = const Color(0x22F59E0B);
+      border = const Color(0xFFF59E0B);
+      text = const Color(0xFFFBBF24);
+      label = 'CLOSED · $timeStr';
+      dotColor = const Color(0xFFF59E0B);
+    } else if (status == 'FALLBACK_CACHED') {
+      bg = const Color(0x2238BDF8);
+      border = const Color(0xFF38BDF8);
+      text = const Color(0xFF38BDF8);
+      label = 'CACHED · $timeStr';
+      dotColor = const Color(0xFF38BDF8);
+    } else {
+      bg = TerminalColors.panel;
+      border = TerminalColors.borderSubtle;
+      text = TerminalColors.textMuted;
+      label = status == 'CONNECTING' ? 'CONNECTING...' : 'OFFLINE';
+      dotColor = null;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (dotColor != null) ...[
+            Container(
+              width: 6,
+              height: 6,
+              margin: const EdgeInsets.only(right: 5),
+              decoration: BoxDecoration(
+                color: dotColor,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ],
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              color: text,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusBanner() {
+    final status = _freshnessStatus.toUpperCase();
+    final timeStr = _formatObservedAt(_observedAt);
+
+    if (_cachedNotice != null || status == 'FALLBACK_CACHED') {
+      return Container(
+        width: double.infinity,
+        color: const Color(0x2638BDF8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        child: Row(
+          children: [
+            const Icon(Icons.info_outline, size: 14, color: Color(0xFF38BDF8)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                _cachedNotice ?? "Market data unavailable — showing verified last session candles ($timeStr)",
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF38BDF8)),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (status == 'CLOSED' || status == 'MARKET_CLOSED' || !_marketOpen) {
+      return Container(
+        width: double.infinity,
+        color: const Color(0x26F59E0B),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        child: Row(
+          children: [
+            const Icon(Icons.account_balance, size: 14, color: Color(0xFFFBBF24)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                "NSE Market Closed (Trading Hours 09:15 - 15:30 IST) · Displaying genuine session data ($timeStr)",
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFFFBBF24)),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
+  }
+
   @override
   Widget build(BuildContext context) {
     final latestBar = _bars.isNotEmpty ? _bars.last : null;
@@ -1012,41 +1209,15 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
                     ),
                     Row(
                       children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: _isIndex
-                                ? (_indexQuote?['served_from_cache'] == false ? TerminalColors.positiveBg : const Color(0x22F29A60))
-                                : TerminalColors.panel,
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(
-                              color: _isIndex
-                                  ? (_indexQuote?['served_from_cache'] == false ? TerminalColors.positive : TerminalColors.action)
-                                  : TerminalColors.borderSubtle,
-                            ),
-                          ),
-                          child: Text(
-                            _isIndex
-                                ? (_indexQuote?['served_from_cache'] == false
-                                    ? "LIVE (NSE)"
-                                    : "CACHED · ${_indexQuote?['observed_at'] ?? 'Market Close'}")
-                                : (_modeInfo?['mode']?.contains('US') == true
-                                    ? "Live IEX (USD Paper)"
-                                    : "NSE Real-Time / Replay"),
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: _isIndex
-                                  ? (_indexQuote?['served_from_cache'] == false ? TerminalColors.positive : TerminalColors.action)
-                                  : TerminalColors.textMuted,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
+                        _buildFreshnessBadge(),
                       ],
                     ),
                   ],
                 ),
               ),
+
+            // Status Banner (Market Closed / Cached / Diagnostic)
+            if (!_isFullscreen) _buildStatusBanner(),
 
             // Timeframe / Range Bar (Hidden in fullscreen)
             if (!_isFullscreen)
@@ -1138,7 +1309,14 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
                       padding: const EdgeInsets.only(right: 4),
                       child: GestureDetector(
                         onTap: () {
-                          setState(() => _timeframe = tf);
+                          setState(() {
+                            _timeframe = tf;
+                            if ((tf == '5m' || tf == '15m') && (_range != '1D' && _range != '1W')) {
+                              _range = '1D';
+                            } else if (tf == '1h' && (_range == '1Y' || _range == '5Y' || _range == 'ALL')) {
+                              _range = '1M';
+                            }
+                          });
                           _fetchChartData();
                         },
                         child: Container(
@@ -1330,9 +1508,73 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
               child: _loading
                   ? const Center(child: CircularProgressIndicator(color: TerminalColors.action))
                   : _error != null
-                      ? Center(child: Text("Error: $_error", style: const TextStyle(color: TerminalColors.negative)))
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24.0),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.cloud_off, color: TerminalColors.negative, size: 38),
+                                const SizedBox(height: 12),
+                                Text(
+                                  "Market Data Unavailable for $_symbol",
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  _error!,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(fontSize: 11, color: TerminalColors.textMuted),
+                                ),
+                                const SizedBox(height: 16),
+                                ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: TerminalColors.panel,
+                                    foregroundColor: TerminalColors.action,
+                                    side: const BorderSide(color: TerminalColors.borderSubtle),
+                                  ),
+                                  icon: const Icon(Icons.refresh, size: 16),
+                                  label: const Text("Retry Connection"),
+                                  onPressed: _fetchChartData,
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
                       : _bars.isEmpty
-                          ? const Center(child: Text("No bars available for this instrument.", style: TextStyle(color: TerminalColors.textMuted)))
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(24.0),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.bar_chart, color: TerminalColors.textMuted, size: 38),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      "No candle bars available for $_symbol ($_timeframe · $_range)",
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    const Text(
+                                      "Upstream market gateway returned no candles for this interval and range.",
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(fontSize: 11, color: TerminalColors.textMuted),
+                                    ),
+                                    const SizedBox(height: 16),
+                                    ElevatedButton.icon(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: TerminalColors.panel,
+                                        foregroundColor: TerminalColors.action,
+                                        side: const BorderSide(color: TerminalColors.borderSubtle),
+                                      ),
+                                      icon: const Icon(Icons.refresh, size: 16),
+                                      label: const Text("Refresh"),
+                                      onPressed: _fetchChartData,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
                           : LayoutBuilder(
                               builder: (context, constraints) {
                                 final chartWidth = constraints.maxWidth - 54.0;
