@@ -18,6 +18,25 @@ FinEx is an educational financial intelligence platform engineered with strict d
 
 ---
 
+## 📱 Mobile App Downloads (Android APK)
+
+The FinEx mobile app is built with Flutter and natively connected to the live Render backend (`https://finex-final.onrender.com/api/v1`) with live Angel One SmartAPI quotes and Google OAuth.
+
+Download the latest verified release builds directly to your Android device:
+
+| Architecture | APK File | Size | Recommended For | Direct Download Link |
+| :--- | :--- | :--- | :--- | :--- |
+| **ARM 64-bit (Recommended)** | `app-arm64-v8a-release.apk` | **18.3 MB** | **All Modern Android Phones** (Samsung, OnePlus, Xiaomi, Realme, Vivo, Pixel, etc.) | 📲 [**Download arm64 (18.3 MB)**](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/app-arm64-v8a-release.apk) |
+| **ARM 32-bit** | `app-armeabi-v7a-release.apk` | **15.9 MB** | Older 32-bit Android phones | 📲 [**Download armeabi (15.9 MB)**](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/app-armeabi-v7a-release.apk) |
+| **x86_64** | `app-x86_64-release.apk` | **19.7 MB** | PC Android Emulators & Chromebooks | 📲 [**Download x86_64 (19.7 MB)**](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/app-x86_64-release.apk) |
+| **Universal (All-in-One)** | `app-release.apk` | **52.2 MB** | Universal multi-architecture installer | 📲 [**Download Universal (52.2 MB)**](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/app-release.apk) |
+
+👉 **[View Full Release Details on GitHub](https://github.com/shivrajdhote4452/finex.final/releases/tag/v1.0.0-android)**
+
+> **Installation Tip:** For almost all modern Android phones, download the **ARM 64-bit (`18.3 MB`)** version. Tap the downloaded APK to install (enable "Install from unknown sources" if prompted) and sign in with your verified Google account.
+
+---
+
 ## 2. Quickstart & Local Setup
 
 ### Prerequisites
