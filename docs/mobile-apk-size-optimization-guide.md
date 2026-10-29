@@ -150,3 +150,4 @@ The optimized binaries have been generated, validated, and published to GitHub R
 1. **For Direct Testing / Sideloading:** Always distribute the **`arm64-v8a` (18.3 MB)** APK. It is significantly faster to transfer, uses less user bandwidth, and installs instantly on all current Android hardware.
 2. **For Production App Store Release:** Compile as an **Android App Bundle (`.aab`)**, allowing Google Play to automatically serve tailored ~14 MB slices to end users.
 3. **Code Safety:** No compromises were made to application features, UI fidelity, or backend parity to achieve this optimization.
+
