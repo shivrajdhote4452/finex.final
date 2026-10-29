@@ -25,6 +25,9 @@ class _MobileOverviewScreenState extends State<MobileOverviewScreen> {
   List<Map<String, dynamic>> _positions = [];
   bool _isLoading = false;
   String _chartView = 'area'; // 'area' | 'candles'
+  bool _quotesLoaded = false;
+  bool _isMarketOpen = false;
+  String _quotesFreshness = 'CONNECTING';
 
   // Top watched market instruments with default fallback quotes
   final List<Map<String, dynamic>> _quickWatchlist = [
@@ -75,6 +78,8 @@ class _MobileOverviewScreenState extends State<MobileOverviewScreen> {
         if (q != null && mounted) {
           final ltp = (q['last_price'] ?? q['price'] as num?)?.toDouble();
           final chgPct = (q['change_percent'] ?? q['change_pct'] as num?)?.toDouble();
+          final isMktOpen = q['market_open'] == true;
+          final freshness = (q['freshness'] ?? (isMktOpen ? 'LIVE' : 'CLOSED')).toString().toUpperCase();
           if (ltp != null) {
             setState(() {
               _quickWatchlist[i]['price'] = ltp;
@@ -82,6 +87,9 @@ class _MobileOverviewScreenState extends State<MobileOverviewScreen> {
                 _quickWatchlist[i]['change'] = chgPct;
                 _quickWatchlist[i]['isPos'] = chgPct >= 0;
               }
+              _quotesLoaded = true;
+              _isMarketOpen = isMktOpen;
+              _quotesFreshness = freshness;
             });
           }
         }
@@ -432,19 +440,48 @@ class _MobileOverviewScreenState extends State<MobileOverviewScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Row(
+              Row(
                 children: [
-                  Icon(Icons.flash_on, size: 14, color: TerminalColors.action),
-                  SizedBox(width: 4),
-                  Text(
-                    "LIVE NSE QUOTES & 1-CLICK TRADE",
+                  Icon(
+                    _isMarketOpen ? Icons.flash_on : Icons.access_time,
+                    size: 14,
+                    color: _isMarketOpen ? TerminalColors.action : const Color(0xFFFBBF24),
+                  ),
+                  const SizedBox(width: 4),
+                  const Text(
+                    "NSE WATCHLIST & 1-CLICK TRADE",
                     style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: TerminalColors.textMuted),
                   ),
                 ],
               ),
-              Text(
-                "NSE Real-Time",
-                style: TextStyle(fontSize: 10, fontFamily: 'monospace', color: TerminalColors.positive.withValues(alpha: 0.8)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: _isMarketOpen
+                      ? TerminalColors.positiveBg
+                      : (_quotesFreshness == 'CLOSED' ? const Color(0x22F59E0B) : TerminalColors.panel),
+                  borderRadius: BorderRadius.circular(3),
+                  border: Border.all(
+                    color: _isMarketOpen
+                        ? TerminalColors.positive
+                        : (_quotesFreshness == 'CLOSED' ? const Color(0xFFF59E0B) : TerminalColors.borderSubtle),
+                  ),
+                ),
+                child: Text(
+                  _isMarketOpen
+                      ? "NSE LIVE"
+                      : (_quotesFreshness == 'CLOSED'
+                          ? "SESSION CLOSE"
+                          : (_quotesLoaded ? "CACHED" : "CONNECTING...")),
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontFamily: 'monospace',
+                    fontWeight: FontWeight.w700,
+                    color: _isMarketOpen
+                        ? TerminalColors.positive
+                        : (_quotesFreshness == 'CLOSED' ? const Color(0xFFFBBF24) : TerminalColors.textMuted),
+                  ),
+                ),
               ),
             ],
           ),

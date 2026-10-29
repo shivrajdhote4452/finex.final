@@ -31,6 +31,10 @@ class ApiClient {
   static String get _defaultUrl {
     const fromEnv = String.fromEnvironment('API_BASE_URL');
     if (fromEnv.isNotEmpty) return fromEnv;
+    // Release builds on real physical devices target the deployed Render backend
+    if (kReleaseMode) {
+      return 'https://finex-final.onrender.com/api/v1';
+    }
     if (kIsWeb ||
         defaultTargetPlatform == TargetPlatform.windows ||
         defaultTargetPlatform == TargetPlatform.macOS ||

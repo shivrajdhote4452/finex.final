@@ -1,0 +1,15 @@
+# Release Signing Keystore Configuration Template
+# -------------------------------------------------------------
+# Instructions to generate your production release keystore:
+# Run this command in terminal (replace finex-release with your chosen name):
+#
+# keytool -genkey -v -keystore app-release.keystore -alias finex -keyalg RSA -keysize 2048 -validity 10000
+#
+# Move app-release.keystore to: mobile/android/app/app-release.keystore
+# Copy this file to: mobile/android/key.properties
+# Fill in the values below (DO NOT commit key.properties or .keystore to git):
+
+storePassword=YOUR_KEYSTORE_PASSWORD
+keyPassword=YOUR_KEY_PASSWORD
+keyAlias=finex
+storeFile=app-release.keystore

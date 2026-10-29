@@ -76,3 +76,10 @@ scratch/
 .DS_Store
 Thumbs.db
 logs/
+
+# Android Keystore & Release Signing Secrets
+*.keystore
+*.jks
+key.properties
+mobile/android/key.properties
+**/android/key.properties
