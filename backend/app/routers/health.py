@@ -18,21 +18,30 @@ def set_database_health_checker(checker: Optional[Callable[[], Any]]):
 async def check_db_ready() -> Dict[str, Any]:
     """Execute registered database health check or report status."""
     global _database_health_checker
-    if _database_health_checker is None:
-        return {"status": "ok", "message": "Database connector initialized"}
+    if _database_health_checker is not None:
+        try:
+            res = _database_health_checker()
+            if hasattr(res, "__await__"):
+                res = await res
+            return {"status": "ok", "details": res}
+        except Exception as e:
+            return {"status": "down", "error": str(e)}
+
     try:
-        res = _database_health_checker()
-        if hasattr(res, "__await__"):
-            res = await res
-        return {"status": "ok", "details": res}
-    except Exception:
-        return {"status": "down", "error": "Database check failed"}
+        from backend.app.database import engine
+        from sqlalchemy import text
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        return {"status": "ok", "message": "Database ping succeeded"}
+    except Exception as e:
+        return {"status": "down", "error": f"{type(e).__name__}: {str(e)}"}
 
 
 class LivenessData(BaseModel):
     status: str = Field("ok", description="Process liveness indicator")
     app: str = Field(..., description="Application name")
     environment: str = Field(..., description="Active environment name")
+    version: str = Field("v1.2.1-live-resilience", description="Deployed build signature")
 
 
 class ReadinessData(BaseModel):
@@ -56,6 +65,7 @@ async def get_liveness(request: Request):
         status="ok",
         app=settings.APP_NAME,
         environment=settings.ENVIRONMENT.value,
+        version="v1.2.1-live-resilience",
     )
     return create_response_envelope(data.model_dump(), correlation_id=cid)
 

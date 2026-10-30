@@ -81,10 +81,19 @@ class _QuickTradeModalState extends State<QuickTradeModal> {
 
     try {
       final quote = await apiClient.getQuote(_symbol);
-      if (mounted && quote != null && quote['price'] != null) {
-        setState(() {
-          _currentPrice = (quote['price'] as num).toDouble();
-        });
+      if (mounted && quote != null) {
+        final p = quote['price'] ?? quote['ltp'] ?? quote['regular_market_price'];
+        double? parsedPrice;
+        if (p is num) {
+          parsedPrice = p.toDouble();
+        } else if (p is String) {
+          parsedPrice = double.tryParse(p);
+        }
+        if (parsedPrice != null && parsedPrice > 0) {
+          setState(() {
+            _currentPrice = parsedPrice!;
+          });
+        }
       }
     } catch (_) {}
   }

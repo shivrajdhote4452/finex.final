@@ -2,10 +2,11 @@ import logging
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import Request, status
+from fastapi import HTTPException as FastAPIHTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 logger = logging.getLogger("finex.errors")
 
@@ -186,6 +187,17 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     correlation_id = getattr(request.state, "correlation_id", "unknown-correlation-id")
+    if isinstance(exc, (FastAPIHTTPException, StarletteHTTPException)):
+        logger.warning(
+            f"HTTPException [{exc.status_code}] on {request.method} {request.url.path}: {exc.detail} (cid: {correlation_id})"
+        )
+        return build_error_response(
+            status_code=exc.status_code,
+            code="HTTP_EXCEPTION",
+            message=str(exc.detail),
+            correlation_id=correlation_id,
+        )
+
     logger.error(
         f"Unhandled server error on {request.method} {request.url.path}: {str(exc)} (cid: {correlation_id})",
         exc_info=True,
@@ -193,6 +205,6 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     return build_error_response(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         code="INTERNAL_SERVER_ERROR",
-        message="An unexpected error occurred. The incident has been recorded for review.",
+        message=f"{type(exc).__name__}: {str(exc)}",
         correlation_id=correlation_id,
     )

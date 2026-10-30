@@ -10,8 +10,11 @@ Exposes:
 - POST /paper-trading/reset: Reset virtual cash with audit entry
 """
 
+import logging
 from decimal import Decimal
 from typing import Optional
+
+logger = logging.getLogger("finex.paper_trading")
 
 from backend.app.core.envelope import create_response_envelope
 from backend.app.database import get_db
@@ -52,8 +55,14 @@ async def get_paper_account(
     cid = getattr(request.state, "correlation_id", None)
     user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
 
-    summary = await engine.get_portfolio_summary_db(user_id, db=db)
-    return create_response_envelope(data=summary, correlation_id=cid)
+    try:
+        summary = await engine.get_portfolio_summary_db(user_id, db=db)
+        return create_response_envelope(data=summary, correlation_id=cid)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"get_paper_account error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Account summary error: {type(e).__name__}: {str(e)}")
 
 
 @router.post("/orders")
@@ -76,8 +85,14 @@ async def submit_paper_order(
         )
     payload.idempotency_key = key
 
-    result = await engine.execute_order_db(user_id, payload, db=db)
-    return create_response_envelope(data=result.model_dump(mode="json"), correlation_id=cid)
+    try:
+        result = await engine.execute_order_db(user_id, payload, db=db)
+        return create_response_envelope(data=result.model_dump(mode="json"), correlation_id=cid)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"submit_paper_order error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Order error: {type(e).__name__}: {str(e)}")
 
 
 @router.get("/orders")
