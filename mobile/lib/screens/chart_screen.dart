@@ -47,7 +47,6 @@ class MobileChartScreen extends StatefulWidget {
 class _MobileChartScreenState extends State<MobileChartScreen> {
   late String _symbol;
   late bool _isIndex;
-  Map<String, dynamic>? _indexQuote;
   String _timeframe = '1D';
   String _range = '1Y';
   bool _showCandlesticks = true;
@@ -167,7 +166,6 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
         if (_isIndex) {
           final q = await apiClient.getIndexQuote(_symbol);
           if (mounted && q != null) {
-            _indexQuote = q;
             if (q['freshness'] != null) {
               _freshnessStatus = q['freshness'].toString().toUpperCase();
             }
@@ -239,8 +237,7 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
 
       if (_isIndex) {
         try {
-          final quoteRes = await apiClient.getIndexQuote(_symbol);
-          _indexQuote = quoteRes;
+          await apiClient.getIndexQuote(_symbol);
         } catch (_) {}
 
         final historyRes = await apiClient.getIndexHistory(

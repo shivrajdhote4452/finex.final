@@ -6,17 +6,20 @@ import 'app_toast.dart';
 
 class QuickTradeModal extends StatefulWidget {
   final String? initialSymbol;
+  final double? initialPrice;
   final VoidCallback? onTradeExecuted;
 
   const QuickTradeModal({
     super.key,
     this.initialSymbol,
+    this.initialPrice,
     this.onTradeExecuted,
   });
 
   static Future<void> show(
     BuildContext context, {
     String? initialSymbol,
+    double? initialPrice,
     VoidCallback? onTradeExecuted,
     VoidCallback? onOrderPlaced,
   }) {
@@ -26,6 +29,7 @@ class QuickTradeModal extends StatefulWidget {
       backgroundColor: Colors.transparent,
       builder: (ctx) => QuickTradeModal(
         initialSymbol: initialSymbol,
+        initialPrice: initialPrice,
         onTradeExecuted: onTradeExecuted ?? onOrderPlaced,
       ),
     );
@@ -62,21 +66,24 @@ class _QuickTradeModalState extends State<QuickTradeModal> {
   void initState() {
     super.initState();
     _symbol = widget.initialSymbol ?? 'RELIANCE';
-    _currentPrice = _symbolPrices[_symbol] ?? 2500.0;
+    _currentPrice = widget.initialPrice ?? _symbolPrices[_symbol] ?? 2500.0;
     _fetchAccountAndQuote();
   }
 
   Future<void> _fetchAccountAndQuote() async {
     try {
       final acct = await apiClient.getAccount();
-      final cash = (acct['cash_balance'] ?? acct['current_cash'] as num?)?.toDouble() ?? 100000.0;
+      final cash = (acct['cash_balance'] ?? acct['current_cash'] as num?)?.toDouble();
+      if (cash != null && mounted) {
+        setState(() => _availableCash = cash);
+      }
+    } catch (_) {}
+
+    try {
       final quote = await apiClient.getQuote(_symbol);
-      if (mounted) {
+      if (mounted && quote != null && quote['price'] != null) {
         setState(() {
-          _availableCash = cash;
-          if (quote != null && quote['price'] != null) {
-            _currentPrice = (quote['price'] as num).toDouble();
-          }
+          _currentPrice = (quote['price'] as num).toDouble();
         });
       }
     } catch (_) {}

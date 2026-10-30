@@ -98,9 +98,15 @@ class _MobileOverviewScreenState extends State<MobileOverviewScreen> {
   }
 
   void _openInstantTrade([String symbol = 'RELIANCE']) {
+    final item = _quickWatchlist.firstWhere(
+      (w) => w['symbol'] == symbol,
+      orElse: () => <String, dynamic>{'price': 2500.0},
+    );
+    final cardPrice = (item['price'] as num?)?.toDouble();
     QuickTradeModal.show(
       context,
       initialSymbol: symbol,
+      initialPrice: cardPrice,
       onOrderPlaced: _loadAccountSummary,
     );
   }

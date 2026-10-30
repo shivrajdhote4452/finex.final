@@ -19,7 +19,7 @@ import logging
 import uuid
 from datetime import datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from backend.app.adapters.market_data_provider import VERIFIED_OBSERVATIONS, RealMarketDataProvider
 from backend.app.database import AsyncSessionLocal
@@ -189,16 +189,21 @@ class PaperTradingEngine:
         self._market_provider = market_provider
 
     @property
-    def market_provider(self) -> RealMarketDataProvider:
+    def market_provider(self) -> Any:
         if self._market_provider is not None:
             return self._market_provider
         from backend.app.config import Environment, get_settings
 
         settings = get_settings()
-        allow_fixtures = settings.ENVIRONMENT == Environment.TESTING or getattr(
-            settings, "MARKET_ALLOW_FIXTURES", False
-        )
-        return RealMarketDataProvider(force_cache=True, allow_fixture_fallback=allow_fixtures)
+        if settings.ENVIRONMENT == Environment.TESTING or getattr(settings, "MARKET_ALLOW_FIXTURES", False):
+            return RealMarketDataProvider(force_cache=True, allow_fixture_fallback=True)
+
+        try:
+            from backend.app.dependencies import get_market_data_provider
+
+            return get_market_data_provider()
+        except Exception:
+            return RealMarketDataProvider(force_cache=False, allow_fixture_fallback=False)
 
     @market_provider.setter
     def market_provider(self, value: Optional[RealMarketDataProvider]):

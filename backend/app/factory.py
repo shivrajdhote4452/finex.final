@@ -47,8 +47,21 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        # Startup phase: Ensure seed identities exist in PostgreSQL
         app.state.settings = app_settings
+
+        # Startup phase 0: Ensure all database tables exist in PostgreSQL
+        try:
+            import backend.app.models  # Register all entity tables in Base.metadata
+            from backend.app.database import engine as db_engine
+            from backend.app.models.core import Base
+
+            async with db_engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+        except Exception as e:
+            import logging
+            logging.getLogger("startup").warning(f"Database schema auto-creation skipped or failed: {e}")
+
+        # Startup phase: Ensure seed identities exist in PostgreSQL
         try:
             from backend.app.domain.user_store import user_store
 
