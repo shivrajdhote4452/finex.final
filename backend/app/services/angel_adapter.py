@@ -176,6 +176,18 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
         self.recovery_timeout: float = 60.0
         self._auth_lock = threading.Lock()
 
+    def _normalize_symbol(self, symbol: str) -> str:
+        s = symbol.upper().strip()
+        return s.replace(".NS", "").replace("NSE:", "").replace("BSE:", "").strip()
+
+    def _evaluate_freshness(self, observed_at: datetime) -> Tuple[bool, bool, str]:
+        now = datetime.now(timezone.utc)
+        age = max(0.0, (now - observed_at).total_seconds())
+        is_stale = age > 86400
+        is_delayed = age > 900
+        status = "stale" if is_stale else ("delayed" if is_delayed else "fresh")
+        return is_delayed, is_stale, status
+
     @property
     def is_circuit_open(self) -> bool:
         """Returns True if the circuit breaker is currently tripped."""

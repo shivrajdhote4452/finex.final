@@ -245,10 +245,18 @@ class PaperTradingEngine:
 
     def get_market_quote_sync(self, symbol: str) -> Optional[Quote]:
         """Fetch quote synchronously checking cache or verified observation fixtures ONLY when explicitly permitted."""
-        norm = self.market_provider._normalize_symbol(symbol)
-        if norm in self.market_provider._cache:
-            cached = self.market_provider._cache[norm]
-            is_delayed, is_stale, status = self.market_provider._evaluate_freshness(cached.observed_at)
+        provider = self.market_provider
+        if hasattr(provider, "_normalize_symbol"):
+            norm = provider._normalize_symbol(symbol)
+        else:
+            norm = symbol.upper().replace(".NS", "").replace("NSE:", "").replace("BSE:", "").strip()
+
+        if hasattr(provider, "_cache") and norm in provider._cache:
+            cached = provider._cache[norm]
+            if hasattr(provider, "_evaluate_freshness"):
+                is_delayed, is_stale, status = provider._evaluate_freshness(cached.observed_at)
+            else:
+                is_delayed, is_stale, status = False, False, "fresh"
             return cached.model_copy(
                 update={
                     "served_from_cache": True,
