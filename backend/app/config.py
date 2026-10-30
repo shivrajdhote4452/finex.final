@@ -1,3 +1,38 @@
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+
+
+def sanitize_asyncpg_url(url_str: str) -> str:
+    url_str = url_str.strip()
+    if url_str.startswith("postgres://"):
+        url_str = url_str.replace("postgres://", "postgresql+asyncpg://", 1)
+    elif url_str.startswith("postgresql://") and not url_str.startswith("postgresql+"):
+        url_str = url_str.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+    if "sqlite" in url_str:
+        return url_str
+
+    try:
+        parsed = urlparse(url_str)
+        allowed_params = {
+            "ssl",
+            "timeout",
+            "command_timeout",
+            "statement_cache_size",
+            "prepared_statement_cache_size",
+        }
+        query_params = parse_qs(parsed.query)
+        if "sslmode" in query_params and "ssl" not in query_params:
+            query_params["ssl"] = query_params.pop("sslmode")
+        sanitized_params = {
+            k: v[0] if isinstance(v, list) else v
+            for k, v in query_params.items()
+            if k in allowed_params
+        }
+        sanitized_query = urlencode(sanitized_params)
+        return urlunparse(parsed._replace(query=sanitized_query))
+    except Exception:
+        return url_str
+
 from enum import Enum
 from functools import lru_cache
 from typing import List, Optional
@@ -109,13 +144,7 @@ class Settings(BaseSettings):
     def validate_database_url(cls, v: str, info) -> str:
         if not v or not v.strip():
             raise ValueError("DATABASE_URL is required and cannot be empty.")
-        v = v.strip()
-        # Auto-normalize standard Postgres URLs to asyncpg dialect
-        if v.startswith("postgres://"):
-            v = v.replace("postgres://", "postgresql+asyncpg://", 1)
-        elif v.startswith("postgresql://") and not v.startswith("postgresql+"):
-            v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
-        return v
+        return sanitize_asyncpg_url(v)
 
     @field_validator("ALLOWED_ORIGINS", mode="before")
     @classmethod
