@@ -21,7 +21,7 @@ class Settings(BaseSettings):
 
     # Database Settings
     DATABASE_URL: str = Field(
-        default="postgresql+asyncpg://postgres:postgres@localhost:5432/finex_db",
+        default="postgresql+asyncpg://neondb_owner:npg_werMu9iFyo2P@ep-gentle-frog-b4qvoy1o-pooler.c-6.us-east-2.aws.neon.tech/neondb?ssl=require",
         description="Async database connection URL",
     )
     DATABASE_POOL_SIZE: int = 10

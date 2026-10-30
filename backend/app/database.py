@@ -36,7 +36,10 @@ else:
     engine_kwargs["max_overflow"] = settings.DATABASE_MAX_OVERFLOW
     engine_kwargs["pool_pre_ping"] = True
 
-if "-pooler" in db_url or "pgbouncer" in db_url:
+if "sslmode=" in db_url:
+    db_url = db_url.replace("sslmode=", "ssl=")
+
+if "-pooler" in db_url or "pgbouncer" in db_url or "neon.tech" in db_url:
     connect_args = engine_kwargs.get("connect_args", {})
     connect_args["statement_cache_size"] = 0
     connect_args["prepared_statement_cache_size"] = 0

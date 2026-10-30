@@ -393,7 +393,11 @@ class ApiClient {
       recentOrdersNotifier.value = [newEntry, ...recentOrdersNotifier.value];
       return orderRes;
     }
-    throw Exception(data['error']?['message'] ?? 'Order submission failed');
+    final errMsg = data['error']?['message'] ??
+        (data['detail'] is String ? data['detail'] : null) ??
+        data['message'] ??
+        'Order submission failed (Status: ${response.statusCode})';
+    throw Exception(errMsg);
   }
 
   Future<List<Map<String, dynamic>>> getOrders([int limit = 50]) async {

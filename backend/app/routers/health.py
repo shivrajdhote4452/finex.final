@@ -87,10 +87,12 @@ async def get_readiness(request: Request, response: Response):
     if not is_ready:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
 
+    deps = {"database": db_status.get("status")}
+    if db_status.get("error"):
+        deps["database_error"] = str(db_status.get("error"))
+
     data = ReadinessData(
         status="ok" if is_ready else "degraded",
-        dependencies={
-            "database": db_status.get("status"),
-        },
+        dependencies=deps,
     )
     return create_response_envelope(data.model_dump(), correlation_id=cid)
