@@ -26,10 +26,11 @@ Download the latest verified release builds directly to your Android device:
 
 | Architecture | APK File | Size | Recommended For | Direct Download Link |
 | :--- | :--- | :--- | :--- | :--- |
-| **ARM 64-bit (Recommended)** | `app-arm64-v8a-release.apk` | **18.3 MB** | **All Modern Android Phones** (Samsung, OnePlus, Xiaomi, Realme, Vivo, Pixel, etc.) | 📲 [**Download arm64 (18.3 MB)**](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/app-arm64-v8a-release.apk) |
-| **ARM 32-bit** | `app-armeabi-v7a-release.apk` | **15.9 MB** | Older 32-bit Android phones | 📲 [**Download armeabi (15.9 MB)**](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/app-armeabi-v7a-release.apk) |
-| **x86_64** | `app-x86_64-release.apk` | **19.7 MB** | PC Android Emulators & Chromebooks | 📲 [**Download x86_64 (19.7 MB)**](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/app-x86_64-release.apk) |
-| **Universal (All-in-One)** | `app-release.apk` | **52.2 MB** | Universal multi-architecture installer | 📲 [**Download Universal (52.2 MB)**](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/app-release.apk) |
+| **Universal Compressed (⭐ Recommended)** | `finex-universal-compressed-release.apk` | **23.6 MB** | **All Android Devices** (arm64, armeabi-v7a, x86_64 bundled with compressed native libraries) | 📲 [**Download Universal Compressed (23.6 MB)**](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/finex-universal-compressed-release.apk) |
+| **ARM 64-bit (Single ABI)** | `app-arm64-v8a-release.apk` | **18.3 MB** | **Modern Android Phones** (Samsung, OnePlus, Xiaomi, Realme, Pixel, etc.) | 📲 [**Download arm64 (18.3 MB)**](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/app-arm64-v8a-release.apk) |
+| **ARM 32-bit (Single ABI)** | `app-armeabi-v7a-release.apk` | **15.9 MB** | Older 32-bit Android phones | 📲 [**Download armeabi (15.9 MB)**](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/app-armeabi-v7a-release.apk) |
+| **x86_64 (Single ABI)** | `app-x86_64-release.apk` | **19.7 MB** | PC Android Emulators & Chromebooks | 📲 [**Download x86_64 (19.7 MB)**](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/app-x86_64-release.apk) |
+| **Universal Uncompressed (Original)** | `app-release.apk` | **52.2 MB** | Legacy uncompressed multi-architecture installer | 📲 [**Download Universal Original (52.2 MB)**](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/app-release.apk) |
 
 👉 **[View Full Release Details on GitHub](https://github.com/shivrajdhote4452/finex.final/releases/tag/v1.0.0-android)**
 
