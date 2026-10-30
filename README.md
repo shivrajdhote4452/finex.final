@@ -31,6 +31,7 @@ Download the latest verified release builds directly to your Android device:
 | **ARM 32-bit (Single ABI)** | `app-armeabi-v7a-release.apk` | **15.9 MB** | Older 32-bit Android phones | 📲 [**Download armeabi (15.9 MB)**](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/app-armeabi-v7a-release.apk) |
 | **x86_64 (Single ABI)** | `app-x86_64-release.apk` | **19.7 MB** | PC Android Emulators & Chromebooks | 📲 [**Download x86_64 (19.7 MB)**](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/app-x86_64-release.apk) |
 | **Universal Uncompressed (Original)** | `app-release.apk` | **52.2 MB** | Legacy uncompressed multi-architecture installer | 📲 [**Download Universal Original (52.2 MB)**](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/app-release.apk) |
+| **Google Play App Bundle (`.aab`)** | `finex-release.aab` | **50.9 MB** | Official Google Play Store Publishing Bundle (generates per-device ~12–15 MB slices) | 📦 [**Download AAB (50.9 MB)**](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/finex-release.aab) |
 
 👉 **[View Full Release Details on GitHub](https://github.com/shivrajdhote4452/finex.final/releases/tag/v1.0.0-android)**
 

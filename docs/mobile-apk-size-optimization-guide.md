@@ -25,7 +25,7 @@ Achieve significant binary size reduction **without altering any application beh
 | **Optimized: 32-bit ARM (Single ABI)** | `app-armeabi-v7a-release.apk` | **15.9 MB** | **-69.5%** | Older / Budget 32-bit Android phones |
 | **Optimized: x86_64 (Single ABI)** | `app-x86_64-release.apk` | **19.7 MB** | **-62.3%** | PC Android Emulators & Chromebooks |
 | **Baseline (Uncompressed Fat Universal APK)** | `app-release.apk` | **52.2 MB** | Baseline (0.0%) | Legacy uncompressed multi-architecture build |
-| **Android App Bundle (`.aab`)** | `app-release.aab` | **~12–15 MB** | **~75.0%** | Google Play Store Dynamic Delivery (per-device download) |
+| **Android App Bundle (`.aab`)** | `finex-release.aab` | **50.9 MB (Build) / ~12–15 MB (Install)** | **Google Play Dynamic Delivery** | Google Play Store Publishing Bundle (dynamically generates ~12–15 MB sliced downloads per phone) |
 
 ---
 
@@ -179,6 +179,7 @@ All optimized binaries are validated and published on GitHub Releases.
 | **ARM 32-bit (Single ABI)** | [Download `app-armeabi-v7a-release.apk`](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/app-armeabi-v7a-release.apk) | **15.9 MB** | Single ABI sliced build for older 32-bit phones |
 | **x86_64 (Single ABI)** | [Download `app-x86_64-release.apk`](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/app-x86_64-release.apk) | **19.7 MB** | Single ABI sliced build for PC emulators |
 | **Universal Uncompressed (Baseline)** | [Download `app-release.apk`](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/app-release.apk) | **52.2 MB** | Legacy uncompressed multi-architecture installer |
+| **Android App Bundle (`.aab`)** | [Download `finex-release.aab`](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/finex-release.aab) | **50.9 MB** | Google Play Store publication bundle with stripped symbols |
 
 ### Release Verification Metadata
 - **Backend Gateway:** `https://finex-final.onrender.com/api/v1` (Healthy & Verified)
