@@ -87,7 +87,14 @@ async def submit_paper_order(
 
     try:
         result = await engine.execute_order_db(user_id, payload, db=db)
-        return create_response_envelope(data=result.model_dump(mode="json"), correlation_id=cid)
+        data = result.model_dump(mode="json")
+        for num_field in ["fill_price", "price", "quantity", "gross_value", "fee", "net_value", "cash_balance_after", "realized_pnl"]:
+            if num_field in data and data[num_field] is not None:
+                try:
+                    data[num_field] = float(data[num_field])
+                except (ValueError, TypeError):
+                    pass
+        return create_response_envelope(data=data, correlation_id=cid)
     except HTTPException:
         raise
     except Exception as e:

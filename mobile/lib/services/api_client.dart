@@ -372,8 +372,14 @@ class ApiClient {
     final data = jsonDecode(response.body);
     if (response.statusCode == 200 && data['data'] != null) {
       final orderRes = Map<String, dynamic>.from(data['data']);
-      final execPrice = (orderRes['fill_price'] as num?)?.toDouble() ??
-          (orderRes['price'] as num?)?.toDouble() ??
+      double? toNum(dynamic v) {
+        if (v == null) return null;
+        if (v is num) return v.toDouble();
+        if (v is String) return double.tryParse(v);
+        return null;
+      }
+      final execPrice = toNum(orderRes['fill_price']) ??
+          toNum(orderRes['price']) ??
           limitPrice ??
           0.0;
       final newEntry = <String, dynamic>{
@@ -386,7 +392,7 @@ class ApiClient {
         'price': execPrice,
         'fill_price': execPrice,
         'status': orderRes['status'] ?? 'FILLED',
-        'realized_pnl': (orderRes['realized_pnl'] as num?)?.toDouble(),
+        'realized_pnl': toNum(orderRes['realized_pnl']),
         'created_at': DateTime.now().toIso8601String(),
         'is_replay': orderRes['is_replay'] == true,
       };

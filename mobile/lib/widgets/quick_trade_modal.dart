@@ -123,7 +123,13 @@ class _QuickTradeModalState extends State<QuickTradeModal> {
       if (mounted) {
         Navigator.pop(context);
         final verb = _side.toUpperCase() == 'BUY' ? 'Bought' : 'Sold';
-        final fillPrice = (res['fill_price'] as num?)?.toDouble() ?? _currentPrice;
+        double? toNum(dynamic v) {
+          if (v == null) return null;
+          if (v is num) return v.toDouble();
+          if (v is String) return double.tryParse(v);
+          return null;
+        }
+        final fillPrice = toNum(res['fill_price']) ?? _currentPrice;
         final priceFmt = NumberFormat.currency(symbol: '₹', locale: 'en_IN', decimalDigits: 2).format(fillPrice);
         AppToast.success(
           context,
