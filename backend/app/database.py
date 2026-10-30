@@ -22,12 +22,10 @@ engine_kwargs: Dict[str, Any] = {
     "future": True,
 }
 
-# Normalize DATABASE_URL to asyncpg dialect defensively
-db_url = settings.DATABASE_URL.strip()
-if db_url.startswith("postgres://"):
-    db_url = db_url.replace("postgres://", "postgresql+asyncpg://", 1)
-elif db_url.startswith("postgresql://") and not db_url.startswith("postgresql+"):
-    db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+from backend.app.config import sanitize_asyncpg_url
+
+# Normalize and sanitize DATABASE_URL to asyncpg dialect defensively
+db_url = sanitize_asyncpg_url(settings.DATABASE_URL)
 
 if "sqlite" in db_url or settings.ENVIRONMENT == Environment.TESTING or "pytest" in sys.modules:
     engine_kwargs["poolclass"] = NullPool

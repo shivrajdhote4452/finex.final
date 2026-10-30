@@ -41,7 +41,7 @@ class LivenessData(BaseModel):
     status: str = Field("ok", description="Process liveness indicator")
     app: str = Field(..., description="Application name")
     environment: str = Field(..., description="Active environment name")
-    version: str = Field("v1.2.1-live-resilience", description="Deployed build signature")
+    version: str = Field("v1.2.2-database-online", description="Deployed build signature")
 
 
 class ReadinessData(BaseModel):
@@ -65,7 +65,7 @@ async def get_liveness(request: Request):
         status="ok",
         app=settings.APP_NAME,
         environment=settings.ENVIRONMENT.value,
-        version="v1.2.1-live-resilience",
+        version="v1.2.2-database-online",
     )
     return create_response_envelope(data.model_dump(), correlation_id=cid)
 
