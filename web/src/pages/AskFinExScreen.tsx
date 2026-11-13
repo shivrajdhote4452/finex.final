@@ -828,31 +828,40 @@ export const AskFinExScreen: React.FC = () => {
                   {/* Citations Badges */}
                   {m.citations && m.citations.length > 0 && (
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px' }}>
-                      {m.citations.map((c, cIdx) => (
-                        <button
-                          key={c.chunk_id || cIdx}
-                          type="button"
-                          onClick={() => {
-                            setSelectedCitation(c);
-                            setShowSourcesPanel(true);
-                          }}
-                          style={{
-                            fontSize: '11px',
-                            color: '#F29A60',
-                            backgroundColor: 'rgba(242, 154, 96, 0.1)',
-                            border: '1px solid rgba(242, 154, 96, 0.3)',
-                            padding: '4px 10px',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                          }}
-                        >
-                          <span>[{cIdx + 1}]</span>
-                          <span>{c.publisher}: {c.title.slice(0, 28)}...</span>
-                        </button>
-                      ))}
+                      {m.citations.map((c, cIdx) => {
+                        const pub = c.publisher || 'FinEx Educational Summary';
+                        const rawTitle = c.title || '';
+                        const cleanTitle = rawTitle.replace(/^FinEx Educational Summary(?::|\s*-)?\s*/i, '');
+                        const displayLabel = !cleanTitle || pub.toLowerCase().includes(cleanTitle.toLowerCase())
+                          ? pub
+                          : `${pub}: ${cleanTitle}`;
+                        const truncated = displayLabel.length > 60 ? `${displayLabel.slice(0, 57)}...` : displayLabel;
+                        return (
+                          <button
+                            key={c.chunk_id || cIdx}
+                            type="button"
+                            onClick={() => {
+                              setSelectedCitation(c);
+                              setShowSourcesPanel(true);
+                            }}
+                            style={{
+                              fontSize: '11px',
+                              color: '#F29A60',
+                              backgroundColor: 'rgba(242, 154, 96, 0.1)',
+                              border: '1px solid rgba(242, 154, 96, 0.3)',
+                              padding: '4px 10px',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                            }}
+                          >
+                            <span>[{cIdx + 1}]</span>
+                            <span>{truncated}</span>
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
 

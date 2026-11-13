@@ -12,6 +12,7 @@ Coordinates:
 5. Correlation ID tracing and latency tracking across retrieval and synthesis.
 """
 
+import re
 import time
 import uuid
 from enum import Enum
@@ -20,6 +21,30 @@ from typing import List, Optional
 from ai.rag.retriever import RegulatoryDocumentRetriever
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
+
+
+def clean_orchestrated_response_text(text: str) -> str:
+    """Clean up trailing incomplete list items, stray reference numbering, or duplicate citation labels."""
+    if not text:
+        return text
+
+    # Remove duplicate "FinEx Educational Summary: FinEx Educational Summary"
+    cleaned = re.sub(
+        r'FinEx Educational Summary(?:\s+based on official SEBI sources)?:\s*FinEx Educational Summary[:\s]*',
+        'FinEx Educational Summary based on official SEBI sources: ',
+        text,
+        flags=re.IGNORECASE,
+    )
+    # Remove any trailing stray list items e.g. "\n2." or "\n  2.  "
+    cleaned = re.sub(r'(?m)^\s*\d+\.\s*$', '', cleaned).strip()
+
+    # Remove trailing empty References / Sources section headers (with or without markdown headers and colons)
+    cleaned = re.sub(r'(?i)(?:#{1,6}\s*)?(?:References|Sources):?\s*\Z', '', cleaned).strip()
+
+    # Re-check trailing stray item or dangling list marker at the very end
+    cleaned = re.sub(r'\n+\s*\d+\.\s*$', '', cleaned).strip()
+
+    return cleaned
 
 
 class AIIntent(str, Enum):
@@ -348,10 +373,16 @@ class AIOrchestrator:
                     "     * Exceptions: Index Funds and ETFs passively replicating benchmark indices are exempt under portfolio concentration norms (subject to index-level capping rules); sectoral/thematic funds invest according to their designated mandates; debt instruments follow credit-rated single-issuer frameworks.\n"
                     "   - Make it clear that the relevant official circular is linked, directly citing the official circular: SEBI Master Circular for Mutual Funds dated March 20, 2026 (Circular No. HO/24/13/11(1)2026-IMD-POD-1/I/7602/2026, https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf).\n"
                     "3. Accurate Labeling of Team-Written Summaries & Citation Mapping:\n"
-                    "   - Clearly label team-written explanations based on official SEBI sources as 'FinEx Educational Summary based on official SEBI sources' (e.g. [1]), and retain the relevant official SEBI links (https://investor.sebi.gov.in/investment_risk_managment.html and https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf).\n"
+                    "   - Ensure each claim is cited ONLY to a source that directly supports it:\n"
+                    "     * If explaining the mutual fund statutory 10% NAV limit, cite ONLY the SEBI Master Circular source (e.g. [2]). Do NOT cite personal heuristics summaries (such as [1]) for the mutual-fund rule.\n"
+                    "     * If explaining illustrative retail portfolio heuristics (e.g. 10–15% single-stock, 25–30% single-sector), cite ONLY the FinEx heuristics summary (e.g. [1]), and state they are illustrative rules of thumb, not statutory SEBI regulations.\n"
+                    "     * If the relevant official circular is not among the retrieved sources, do NOT present a specific regulatory rule as verified.\n"
+                    "   - Preserve the distinction between a FinEx-written summary and the official source it is based on: label team-written summaries based on official SEBI sources as 'FinEx Educational Summary based on official SEBI sources' with their official links (https://investor.sebi.gov.in/investment_risk_managment.html and https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf).\n"
                     "   - Only label content as an original SEBI publication when citing authentic, verified extracts directly from that publication. Do not attribute team-written formulations or summaries to SEBI as author/publisher.\n"
                     "   - Clearly cite the official SEBI publication on risk management (https://investor.sebi.gov.in/investment_risk_managment.html) when discussing general asset allocation and unsystematic risk reduction.\n"
                     "   - Make sure citation numbers, labels, and links correspond strictly to the specific claims they support.\n"
+                    "   - Do NOT duplicate citation labels (e.g. do not write 'FinEx Educational Summary: FinEx Educational Summary').\n"
+                    "   - If including a reference list, ensure all entries are fully completed with accurate numbering; NEVER leave a stray, empty, or incomplete reference number (e.g. '2.').\n"
                     "4. Prudent Risk Characterization & No Guaranteed Offset:\n"
                     "   - State that diversification can reduce some risks (specifically unsystematic or company/sector-specific risk), but does NOT eliminate market (systematic) risk and does NOT guarantee protection against investment losses.\n"
                     "   - Correct and avoid any example or claim implying that other investments will always remain unaffected or will automatically offset losses during market declines, because broader economic or market downturns can cause multiple holdings or sectors to decline simultaneously.\n"
@@ -361,9 +392,11 @@ class AIOrchestrator:
                 )
                 ai_text = await gemini_assistant.call_llm_api(query, sys_instruct)
                 if ai_text:
-                    content_body = ai_text
+                    content_body = clean_orchestrated_response_text(ai_text)
         except Exception:
             pass
+
+        content_body = clean_orchestrated_response_text(content_body)
 
         latency = (time.perf_counter() - t0) * 1000.0
 

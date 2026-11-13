@@ -229,7 +229,8 @@ async def test_returned_citation_publisher_source_link_and_attribution():
     mf_cit = [c for c in resp_mf.citations if c.document_id == "SEBI-CIRC-MF-2026"][0]
     assert mf_cit.publisher == "FinEx Educational Summary based on official SEBI sources"
     assert mf_cit.publisher != "Securities and Exchange Board of India (SEBI)"
-    assert "Mutual Fund Concentration Norms" in mf_cit.title
+    assert "SEBI Master Circular for Mutual Funds" in mf_cit.title
+    assert "Portfolio Concentration Norms" in mf_cit.title
     assert mf_cit.source_url == "https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf"
     assert mf_cit.page_number is None  # Unverified page number removed
 
@@ -355,7 +356,8 @@ async def test_sebi_explanation_source_labels_and_page_reference_removal():
     mf_meta = doc_map["SEBI-CIRC-MF-2026"]
     assert mf_meta["publisher"] == "FinEx Educational Summary based on official SEBI sources"
     assert mf_meta["publisher"] != "Securities and Exchange Board of India (SEBI)"
-    assert "Mutual Fund Concentration Norms" in mf_meta["title"]
+    assert "SEBI Master Circular for Mutual Funds" in mf_meta["title"]
+    assert "Portfolio Concentration Norms" in mf_meta["title"]
     assert mf_meta["source_url"] == "https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf"
 
     # Team-written educational guides are labeled FinEx Educational Summary
@@ -365,7 +367,7 @@ async def test_sebi_explanation_source_labels_and_page_reference_removal():
 
     heur_meta = doc_map["FINEX-ED-DIVERSIFICATION-2026"]
     assert heur_meta["publisher"] == "FinEx Educational Summary"
-    assert "FinEx Educational Summary" in heur_meta["title"]
+    assert "Portfolio Diversification" in heur_meta["title"]
 
     # 2. Check extracted document files (verifying Page: 1 was removed and parsed as None)
     _, risk_sections = extract_document_from_file(risk_meta["local_file"])
@@ -398,7 +400,7 @@ async def test_sebi_explanation_source_labels_and_page_reference_removal():
     chunk_unpaged = DocumentChunk(
         chunk_id="chk_test_01",
         document_id="SEBI-CIRC-MF-2026",
-        title="FinEx Educational Summary: Mutual Fund Concentration Norms (Based on SEBI Master Circular)",
+        title="SEBI Master Circular for Mutual Funds: Portfolio Concentration Norms",
         publisher="FinEx Educational Summary based on official SEBI sources",
         source_url="https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf",
         section="Section 1: Portfolio Concentration Limits for Mutual Fund Schemes",
@@ -409,7 +411,7 @@ async def test_sebi_explanation_source_labels_and_page_reference_removal():
     formatted = format_citation(chunk_unpaged)
     assert "p." not in formatted
     assert "None" not in formatted
-    assert formatted == "[FinEx Educational Summary: Mutual Fund Concentration Norms (Based on SEBI Master Circular), Section 1: Portfolio Concentration Limits for Mutual Fund Schemes]"
+    assert formatted == "[SEBI Master Circular for Mutual Funds: Portfolio Concentration Norms, Section 1: Portfolio Concentration Limits for Mutual Fund Schemes]"
 
 
 @pytest.mark.asyncio
@@ -452,6 +454,97 @@ async def test_regulatory_wording_no_broad_claims_and_accurate_circular_links():
     # 3. Prudent risk characterization
     assert "does not guarantee" in content_lower or "not eliminate market risk" in content_lower
     assert "unaffected or will offset losses" not in content_lower or "does not guarantee that other investments will be unaffected" in content_lower
+
+
+@pytest.mark.asyncio
+async def test_source_to_claim_mapping_and_stray_reference_cleanup():
+    """Focused test for:
+    1. Source-to-claim mapping:
+       - Mutual-fund concentration claims link directly and strictly to SEBI Master Circular.
+       - Personal direct-equity heuristics link strictly to FinEx heuristics.
+       - If the relevant circular is not retrieved, a statutory rule is not presented as verified.
+    2. Reference list integrity:
+       - Stray numbering (e.g. trailing '2.') is eliminated.
+       - Incomplete trailing references headers are removed.
+       - Duplicate citation labels ('FinEx Educational Summary: FinEx Educational Summary') are cleaned.
+    """
+    from backend.app.domain.ai_orchestration import clean_orchestrated_response_text
+    from backend.app.domain.gemini_assistant import gemini_assistant
+    from unittest.mock import patch
+
+    # 1. Test clean_orchestrated_response_text on stray numbering and duplicate labels
+    dirty_text_1 = (
+        "Under the SEBI Master Circular for Mutual Funds, a mutual fund scheme shall not invest more than 10% of NAV in a single company.\n\n"
+        "### References\n"
+        "1. [SEBI Master Circular for Mutual Funds: Portfolio Concentration Norms]\n"
+        "2."
+    )
+    cleaned_1 = clean_orchestrated_response_text(dirty_text_1)
+    assert not cleaned_1.endswith("2.")
+    assert "2." not in cleaned_1
+    assert "1. [SEBI Master Circular for Mutual Funds: Portfolio Concentration Norms]" in cleaned_1
+
+    dirty_text_2 = (
+        "Educational overview of asset allocation.\n\n"
+        "References:\n"
+        "2.  "
+    )
+    cleaned_2 = clean_orchestrated_response_text(dirty_text_2)
+    assert "2." not in cleaned_2
+    assert "References:" not in cleaned_2
+    assert cleaned_2 == "Educational overview of asset allocation."
+
+    dirty_text_3 = (
+        "Source: FinEx Educational Summary based on official SEBI sources: FinEx Educational Summary: Mutual Fund Concentration Norms"
+    )
+    cleaned_3 = clean_orchestrated_response_text(dirty_text_3)
+    assert "FinEx Educational Summary: FinEx Educational Summary" not in cleaned_3
+    assert "FinEx Educational Summary based on official SEBI sources: Mutual Fund Concentration Norms" in cleaned_3
+
+    # 2. Test source-to-claim mapping in AI Orchestrator
+    retriever = RegulatoryDocumentRetriever(chunks=ingest_corpus_documents(include_educational_summaries=True))
+    orchestrator = AIOrchestrator(retriever=retriever)
+
+    resp = await orchestrator.answer_query("What are the diversification rules and single-stock exposure limits under SEBI regulations?")
+    assert resp.intent == AIIntent.FINANCIAL_EDUCATION
+    # Check that response text has no stray trailing '2.'
+    assert not resp.content.strip().endswith("2.")
+    assert "\n2.\n" not in resp.content and "\n2.\r\n" not in resp.content
+    assert "FinEx Educational Summary: FinEx Educational Summary" not in resp.content
+
+    # Check citation mapping:
+    cits_by_id = {c.document_id: c for c in resp.citations}
+    assert "SEBI-CIRC-MF-2026" in cits_by_id
+    mf_cit = cits_by_id["SEBI-CIRC-MF-2026"]
+    # Document title establishes it is the SEBI Master Circular
+    assert "SEBI Master Circular for Mutual Funds" in mf_cit.title
+    assert "Portfolio Concentration Norms" in mf_cit.title
+    # Publisher preserves distinction: FinEx Educational Summary based on official SEBI sources
+    assert mf_cit.publisher == "FinEx Educational Summary based on official SEBI sources"
+    assert mf_cit.source_url == "https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf"
+
+    # 3. Test behavior when official circular is NOT among retrieved sources
+    # Supply chunks lacking the SEBI circular
+    heuristics_only_chunks = [
+        c for c in ingest_corpus_documents(include_educational_summaries=True)
+        if c.document_id != "SEBI-CIRC-MF-2026"
+    ]
+    retriever_no_mf = RegulatoryDocumentRetriever(chunks=heuristics_only_chunks)
+    orchestrator_no_mf = AIOrchestrator(retriever=retriever_no_mf)
+
+    captured_prompt = None
+    async def mock_call(prompt, sys_instruct):
+        nonlocal captured_prompt
+        captured_prompt = sys_instruct
+        return "Heuristics suggest 10-15% single-stock exposure. No official SEBI circular was retrieved to verify statutory limits."
+
+    with patch.object(gemini_assistant, "is_llm_ready", return_value=True), \
+         patch.object(gemini_assistant, "call_llm_api", side_effect=mock_call):
+        resp_no_mf = await orchestrator_no_mf.answer_query("What are the mutual fund single-stock concentration rules?")
+        assert captured_prompt is not None
+        assert "If the relevant official circular is not among the retrieved sources" in captured_prompt
+        assert not resp_no_mf.content.strip().endswith("2.")
+
 
 
 

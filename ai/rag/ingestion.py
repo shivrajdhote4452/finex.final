@@ -34,7 +34,7 @@ APPROVED_LOCAL_DOCUMENTS = [
     },
     {
         "document_id": "SEBI-INVESTOR-ED-RISK",
-        "title": "FinEx Educational Summary: How to Manage Investment Risks (Based on SEBI Investor Education)",
+        "title": "SEBI Investor Education: How to Manage Investment Risks",
         "doc_type": "EDUCATIONAL_SUMMARY",
         "publisher": "FinEx Educational Summary based on official SEBI sources",
         "publishing_date": date(2024, 1, 15),
@@ -43,7 +43,7 @@ APPROVED_LOCAL_DOCUMENTS = [
     },
     {
         "document_id": "SEBI-CIRC-MF-2026",
-        "title": "FinEx Educational Summary: Mutual Fund Concentration Norms (Based on SEBI Master Circular)",
+        "title": "SEBI Master Circular for Mutual Funds: Portfolio Concentration Norms",
         "doc_type": "EDUCATIONAL_SUMMARY",
         "publisher": "FinEx Educational Summary based on official SEBI sources",
         "publishing_date": date(2026, 3, 20),
@@ -70,7 +70,7 @@ APPROVED_LOCAL_DOCUMENTS = [
     },
     {
         "document_id": "FINEX-ED-DIVERSIFICATION-2026",
-        "title": "FinEx Educational Summary: Portfolio Diversification & Risk Allocation Heuristics",
+        "title": "Portfolio Diversification & Risk Allocation Heuristics",
         "doc_type": "EDUCATIONAL_SUMMARY",
         "publisher": "FinEx Educational Summary",
         "publishing_date": date(2026, 10, 16),

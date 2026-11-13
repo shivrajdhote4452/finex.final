@@ -348,7 +348,7 @@ class GeminiInvestmentAssistant:
                     {"role": "user", "content": prompt},
                 ],
                 "temperature": 0.2,
-                "max_tokens": 1000,
+                "max_tokens": 2048,
             }
 
             try:

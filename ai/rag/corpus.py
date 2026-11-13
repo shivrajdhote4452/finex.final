@@ -79,7 +79,7 @@ REGULATORY_DOCUMENTS: List[Dict[str, Any]] = [
     },
     {
         "document_id": "SEBI-INVESTOR-ED-RISK",
-        "title": "FinEx Educational Summary: How to Manage Investment Risks (Based on SEBI Investor Education)",
+        "title": "SEBI Investor Education: How to Manage Investment Risks",
         "publisher": "FinEx Educational Summary based on official SEBI sources",
         "source_url": "https://investor.sebi.gov.in/investment_risk_managment.html",
         "document_date": "2024-01-15",
@@ -104,7 +104,7 @@ REGULATORY_DOCUMENTS: List[Dict[str, Any]] = [
     },
     {
         "document_id": "SEBI-CIRC-MF-2026",
-        "title": "FinEx Educational Summary: Mutual Fund Concentration Norms (Based on SEBI Master Circular)",
+        "title": "SEBI Master Circular for Mutual Funds: Portfolio Concentration Norms",
         "publisher": "FinEx Educational Summary based on official SEBI sources",
         "source_url": "https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf",
         "document_date": "2026-03-20",
@@ -299,7 +299,7 @@ REGULATORY_DOCUMENTS: List[Dict[str, Any]] = [
 FINEX_EDUCATIONAL_DOCUMENTS: List[Dict[str, Any]] = [
     {
         "document_id": "FINEX-ED-DIVERSIFICATION-2026",
-        "title": "FinEx Educational Summary: Portfolio Diversification & Risk Allocation Heuristics",
+        "title": "Portfolio Diversification & Risk Allocation Heuristics",
         "doc_type": "EDUCATIONAL_SUMMARY",
         "publisher": "FinEx Educational Summary",
         "source_url": "local://finex/educational-summary/diversification",
@@ -309,14 +309,14 @@ FINEX_EDUCATIONAL_DOCUMENTS: List[Dict[str, Any]] = [
                 "section": "Section 1: Portfolio Diversification Heuristics for Retail Investors",
                 "page_number": 1,
                 "content": (
-                    "FinEx Educational Summary: Practical Portfolio Diversification Heuristics. "
-                    "While the mutual fund 10% single-company concentration limit under the SEBI Master Circular for Mutual Funds is a scheme-level restriction and does not govern individual personal direct equity portfolios, "
-                    "financial planning practitioners and FinEx educational research commonly suggest the following illustrative heuristics to help manage unsystematic risk: "
+                    "FinEx Educational Summary: Practical Portfolio Diversification Heuristics for Retail Investors. "
+                    "Financial planning practitioners and FinEx educational research commonly suggest the following illustrative heuristics to help individual retail investors manage unsystematic (company-specific and sector-specific) risk in personal direct equity portfolios: "
                     "1. Single-Stock Heuristic: Consider capping individual equity holdings under 10% to 15% of total portfolio equity to mitigate disproportionate firm-specific downside. "
                     "2. Single-Sector Heuristic: Consider capping total exposure to a single industry under 25% to 30% of total portfolio equity to manage sector-specific downturns. "
-                    "Regulatory & Risk Disclosures: These percentage guidelines are illustrative FinEx educational summaries and financial planning heuristics; they are NOT statutory SEBI regulations for individual retail investors. "
-                    "Statutory 10% single-company concentration limits apply to mutual fund schemes under the SEBI Master Circular for Mutual Funds dated March 20, 2026 (Circular No. HO/24/13/11(1)2026-IMD-POD-1/I/7602/2026, https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf) and Clause 1 of the Seventh Schedule of SEBI (Mutual Funds) Regulations, 1996 (with exceptions for Index Funds and ETFs tracking benchmark indices). "
-                    "Diversification can reduce unsystematic (company-specific and sector-specific) risk, but it does not eliminate market risk (systematic risk). It does NOT guarantee that other holdings will remain unaffected or offset losses, and it does not guarantee protection against investment losses."
+                    "Regulatory Status & Risk Disclosures: "
+                    "- Clear Attribution: These percentage guidelines are illustrative FinEx educational summaries and financial planning heuristics; they are NOT statutory SEBI regulations for individual retail investors. "
+                    "- Independent Scope: Statutory concentration caps established under official SEBI regulations govern mutual fund schemes, rather than personal retail portfolios; retail investors determine their own portfolio allocation based on individual goals and risk tolerance. "
+                    "- Risk Limitation: Diversification can reduce unsystematic (company-specific and sector-specific) risk, but it does not eliminate market risk (systematic risk). It does NOT guarantee that other holdings will remain unaffected or offset losses, and it does not guarantee protection against investment losses."
                 ),
             }
         ],
