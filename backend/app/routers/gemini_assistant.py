@@ -1,4 +1,4 @@
-"""Gemini Investment Assistant API Router.
+"""AskFinEx Paper Investment Assistant API Router.
 
 Exposes:
 - POST /ai/assistant/chat: Send user query in English/Hindi/Hinglish with chart context
@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-router = APIRouter(prefix="/ai/assistant", tags=["Gemini Paper Investment Assistant"])
+router = APIRouter(prefix="/ai/assistant", tags=["AskFinEx Paper Investment Assistant"])
 
 
 class AssistantChatRequest(BaseModel):
@@ -48,13 +48,14 @@ async def get_assistant_status(request: Request):
     return create_response_envelope(
         data={
             "is_configured": is_cfg,
-            "has_live_gemini": is_verified,
+            "has_live_gemini": False,
+            "has_live_groq": is_verified,
             "has_live_llm": is_verified,
             "is_verified_working": is_verified,
             "model": info["model"],
             "provider": info["provider"],
             "status_message": (
-                f"FinEx AI Assistant is verified working live with {info['model']}."
+                f"FinEx AI Assistant is verified working live with {info['model']} on Groq."
                 if is_verified
                 else (
                     f"AI provider ({info['provider']}) is configured. Ready to process queries."
@@ -75,7 +76,7 @@ async def chat_with_assistant(
     current_user: dict = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """Chat with Gemini investment assistant with grounded tool execution."""
+    """Chat with FinEx AI investment assistant with grounded tool execution."""
     cid = getattr(request.state, "correlation_id", None)
     user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
 

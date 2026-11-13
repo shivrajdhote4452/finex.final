@@ -18,7 +18,7 @@ Validates:
 15. Missing market prices do not become fabricated executable quotes (no 2500.0 fallback).
 16. Cache refresh preserves the original observation timestamp.
 17. Historical operations exclude future observations when as_of is specified.
-18. Gemini API call passes credentials via headers only (no ?key= in URLs).
+18. Groq API call passes credentials via headers only (no key in URLs).
 """
 
 import inspect
@@ -674,9 +674,9 @@ async def test_historical_operations_exclude_future_observations():
 
 
 @pytest.mark.asyncio
-async def test_gemini_api_call_has_no_key_in_url():
-    """Verify call_gemini_api never appends ?key= in request URLs."""
+async def test_groq_api_call_has_no_key_in_url():
+    """Verify call_groq_api never appends API key in request URLs (uses Bearer headers)."""
     assistant = GeminiInvestmentAssistant()
-    source = inspect.getsource(assistant.call_gemini_api)
-    assert "?key=" not in source, "Found ?key= query param in call_gemini_api URL!"
-    assert '"x-goog-api-key": key' in source or "'x-goog-api-key': key" in source
+    source = inspect.getsource(assistant.call_groq_api)
+    assert "?key=" not in source, "Found ?key= query param in call_groq_api URL!"
+    assert "Authorization" in source and "Bearer" in source

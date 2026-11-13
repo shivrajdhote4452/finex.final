@@ -1,10 +1,10 @@
-"""Gemini AI Paper Investment Assistant with Grounded Function Calling.
+"""FinEx AI Paper Investment Assistant with Groq LPU Integration.
 
 Tasks:
 - Section 2: Conversational AI in English, Hindi, and Hinglish.
 - Section 5: Typed tool schemas, server-owned user context, separate proposal & execution flows.
 - Section 8I: get_chart_context tool for active chart understanding.
-- Section 9: Server-side GEMINI_API_KEY setup with graceful unconfigured degradation.
+- Section 9: Server-side GROQ_API_KEY setup with graceful unconfigured degradation.
 
 Strict Invariants:
 1. Paper Trading Only: All trades, proposals, and balances are 100% virtual.
@@ -203,14 +203,26 @@ class AssistantMessageResponse(BaseModel):
 
 
 class GeminiInvestmentAssistant:
-    def __init__(self, engine: Optional[PaperTradingEngine] = None, provider: Optional[RealMarketDataProvider] = None):
+    def __init__(
+        self,
+        engine: Optional[PaperTradingEngine] = None,
+        provider: Optional[RealMarketDataProvider] = None,
+        settings: Optional[Any] = None,
+    ):
         self._provider = provider
         self._engine = engine
+        self._settings = settings
         self._verified_working = False
 
     @property
     def settings(self):
+        if self._settings is not None:
+            return self._settings
         return get_settings()
+
+    @settings.setter
+    def settings(self, val):
+        self._settings = val
 
     @property
     def provider(self) -> RealMarketDataProvider:
@@ -234,17 +246,14 @@ class GeminiInvestmentAssistant:
         return len(key.strip()) >= 10
 
     def is_gemini_api_ready(self) -> bool:
-        """Verify if a valid, non-placeholder GEMINI_API_KEY is configured for external API calls."""
-        key = getattr(self.settings, "GEMINI_API_KEY", None)
-        if not key or "YOUR_NEW_GEMINI_API_KEY" in key or "placeholder" in key.lower():
-            return False
-        return len(key.strip()) >= 10
+        """Deprecated: Gemini provider removed. Returns False."""
+        return False
 
     def is_llm_ready(self) -> bool:
-        """Verify if any supported LLM provider (Groq or Gemini) is ready."""
+        """Verify if the supported LLM provider (Groq) is ready."""
         if getattr(self.settings, "LLM_PROVIDER", "").lower() in ("mock", "offline", "simulated", "local"):
             return False
-        return self.is_groq_api_ready() or self.is_gemini_api_ready()
+        return self.is_groq_api_ready()
 
     def is_configured(self) -> bool:
         """Verify if assistant is configured with a valid API key format."""
@@ -256,16 +265,10 @@ class GeminiInvestmentAssistant:
 
     def get_provider_info(self) -> Dict[str, str]:
         """Return active provider identification and model for status reporting."""
-        pref = getattr(self.settings, "LLM_PROVIDER", "groq").lower()
-        if pref == "groq" and self.is_groq_api_ready():
+        if self.is_groq_api_ready():
             return {
                 "provider": "groq-live" if self._verified_working else "groq-configured",
                 "model": getattr(self.settings, "GROQ_MODEL", "openai/gpt-oss-120b"),
-            }
-        if self.is_gemini_api_ready():
-            return {
-                "provider": "gemini-live" if self._verified_working else "gemini-configured",
-                "model": getattr(self.settings, "GEMINI_MODEL", "gemini-1.5-flash"),
             }
         return {
             "provider": "mock-offline",
@@ -326,260 +329,8 @@ class GeminiInvestmentAssistant:
         return None
 
     async def call_llm_api(self, prompt: str, system_instruction: str) -> Optional[str]:
-        """Unified LLM router supporting Groq and Gemini with bi-directional fallback."""
-        pref = getattr(self.settings, "LLM_PROVIDER", "groq").lower()
-        if pref == "groq":
-            res = await self.call_groq_api(prompt, system_instruction)
-            if res:
-                return res
-            return await self.call_gemini_api(prompt, system_instruction)
-        else:
-            res = await self.call_gemini_api(prompt, system_instruction)
-            if res:
-                return res
-            return await self.call_groq_api(prompt, system_instruction)
-
-    async def call_gemini_api(self, prompt: str, system_instruction: str) -> Optional[str]:
-        """Invoke Google Gemini API using httpx with headers only (never key in URL) and graceful fallback."""
-        if not self.is_gemini_api_ready():
-            return None
-        key = self.settings.GEMINI_API_KEY
-        model = getattr(self.settings, "GEMINI_MODEL", "gemini-1.5-flash") or "gemini-1.5-flash"
-        headers = {
-            "x-goog-api-key": key,
-            "Content-Type": "application/json",
-        }
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-        payload = {
-            "system_instruction": {"parts": [{"text": system_instruction}]},
-            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "temperature": 0.3,
-                "maxOutputTokens": 800,
-            },
-        }
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                res = await client.post(url, json=payload, headers=headers, params={"key": key})
-                if res.status_code == 200:
-                    self._verified_working = True
-                    data = res.json()
-                    candidates = data.get("candidates", [])
-                    if candidates:
-                        parts = candidates[0].get("content", {}).get("parts", [])
-                        if parts:
-                            return parts[0].get("text", "").strip()
-                elif res.status_code in (404, 503):
-                    # Model ID fallback if model has variant naming or temporary high demand
-                    for alt_model in ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-2.5-pro"]:
-                        alt_url = f"https://generativelanguage.googleapis.com/v1beta/models/{alt_model}:generateContent"
-                        res_alt = await client.post(alt_url, json=payload, headers=headers, params={"key": key})
-                        if res_alt.status_code == 200:
-                            self._verified_working = True
-                            data = res_alt.json()
-                            candidates = data.get("candidates", [])
-                            if candidates:
-                                parts = candidates[0].get("content", {}).get("parts", [])
-                                if parts:
-                                    return parts[0].get("text", "").strip()
-                elif res.status_code in (400, 401, 403):
-                    self._verified_working = False
-                    print(f"[GeminiAssistant] API authentication error ({res.status_code}): {res.text[:150]}.")
-                elif res.status_code == 429:
-                    print("[GeminiAssistant] Rate limit reached (HTTP 429). Falling back to verified local data.")
-        except httpx.TimeoutException:
-            print("[GeminiAssistant] Request timed out. Falling back to verified local data.")
-        except Exception as e:
-            print(f"[GeminiAssistant] API error: {type(e).__name__}. Falling back to verified local data.")
-        return None
-
-    async def call_gemini_grounded(
-        self,
-        prompt: str,
-        system_instruction: str,
-        user_id: str,
-        active_sym: str = "RELIANCE",
-        db: Optional[AsyncSession] = None,
-    ) -> Tuple[Optional[str], List[Dict[str, Any]], List[Dict[str, Any]]]:
-        """Invoke Gemini API with connected tool definitions and server-validated function calling."""
-        if not self.is_gemini_api_ready():
-            return None, [], []
-
-        key = self.settings.GEMINI_API_KEY
-        model = getattr(self.settings, "GEMINI_MODEL", "gemini-1.5-flash") or "gemini-1.5-flash"
-        headers = {
-            "x-goog-api-key": key,
-            "Content-Type": "application/json",
-        }
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-
-        # Supported research & inquiry tool declarations (execution tool requires explicit confirmation)
-        allowed_tools = [
-            {
-                "name": t["name"],
-                "description": t["description"],
-                "parameters": t["parameters"],
-            }
-            for t in TOOL_DEFINITIONS
-            if t["name"] not in ("execute_paper_proposal",)
-        ]
-
-        payload = {
-            "system_instruction": {"parts": [{"text": system_instruction}]},
-            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-            "tools": [{"function_declarations": allowed_tools}],
-            "generationConfig": {
-                "temperature": 0.2,
-                "maxOutputTokens": 1000,
-            },
-        }
-
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                res = await client.post(url, json=payload, headers=headers, params={"key": key})
-                if res.status_code in (404, 503):
-                    for alt_model in ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-2.5-pro"]:
-                        alt_url = f"https://generativelanguage.googleapis.com/v1beta/models/{alt_model}:generateContent"
-                        res = await client.post(alt_url, json=payload, headers=headers, params={"key": key})
-                        if res.status_code == 200:
-                            url = alt_url
-                            break
-
-                if res.status_code != 200:
-                    if res.status_code in (400, 401, 403):
-                        self._verified_working = False
-                        print(
-                            f"[GeminiAssistant] Grounded API authentication error ({res.status_code}): {res.text[:150]}."
-                        )
-                    return None, [], []
-
-                self._verified_working = True
-                data = res.json()
-                candidates = data.get("candidates", [])
-                if not candidates:
-                    return None, [], []
-
-                parts = candidates[0].get("content", {}).get("parts", [])
-                if not parts:
-                    return None, [], []
-
-                fn_call = parts[0].get("functionCall")
-                if not fn_call:
-                    # Model answered with text directly
-                    return parts[0].get("text", "").strip(), [], []
-
-                # Function Call detected - execute through verified backend handlers
-                fn_name = fn_call.get("name")
-                raw_args = fn_call.get("args") or {}
-
-                tool_result: Any = None
-                evidence: Any = None
-
-                if fn_name == "get_market_snapshot":
-                    symbols = raw_args.get("symbols", [active_sym])
-                    if not isinstance(symbols, list):
-                        symbols = [str(symbols)]
-                    tool_result = await self.tool_get_market_snapshot(symbols)
-                    evidence = tool_result
-                elif fn_name == "search_instruments":
-                    query = str(raw_args.get("query", ""))
-                    market = str(raw_args.get("market", "NSE"))
-                    tool_result = await self.tool_search_instruments(query, market=market)
-                    evidence = tool_result
-                elif fn_name == "get_price_history":
-                    symbol = str(raw_args.get("symbol", active_sym))
-                    interval = str(raw_args.get("interval", "1D"))
-                    tool_result = await self.tool_get_price_history(symbol, interval=interval)
-                    evidence = tool_result
-                elif fn_name == "get_stock_facts":
-                    symbols = raw_args.get("symbols", [active_sym])
-                    if not isinstance(symbols, list):
-                        symbols = [str(symbols)]
-                    tool_result = await self.tool_get_stock_facts(symbols)
-                    evidence = tool_result
-                elif fn_name == "get_my_paper_portfolio":
-                    currency = str(raw_args.get("currency", "INR"))
-                    # Enforce authenticated user_id strictly
-                    tool_result = await self.tool_get_my_paper_portfolio(user_id, currency=currency, db=db)
-                    evidence = tool_result
-                elif fn_name == "get_my_risk_constraints":
-                    tool_result = await self.tool_get_my_risk_constraints(user_id, db=db)
-                    evidence = tool_result
-                elif fn_name == "compare_candidates":
-                    symbols = raw_args.get("symbols", [active_sym])
-                    if not isinstance(symbols, list):
-                        symbols = [str(symbols)]
-                    criteria = raw_args.get("criteria")
-                    tool_result = await self.tool_compare_candidates(symbols, criteria=criteria)
-                    evidence = tool_result
-                elif fn_name == "get_chart_context":
-                    symbol = str(raw_args.get("symbol", active_sym))
-                    timeframe = str(raw_args.get("timeframe", "1D"))
-                    tool_result = await self.tool_get_chart_context(symbol, timeframe=timeframe, db=db)
-                    evidence = tool_result
-                elif fn_name == "get_my_paper_order_status":
-                    order_id = str(raw_args.get("order_id", ""))
-                    tool_result = await self.tool_get_my_paper_order_status(user_id, order_id=order_id, db=db)
-                    evidence = tool_result
-                elif fn_name == "create_paper_proposal":
-                    symbols = raw_args.get("symbols", [active_sym])
-                    if not isinstance(symbols, list):
-                        symbols = [str(symbols)]
-                    budget = float(raw_args.get("budget", 10000.0))
-                    currency = str(raw_args.get("currency", "INR"))
-                    tool_result = await self.tool_create_paper_proposal(
-                        user_id=user_id,
-                        symbols=symbols,
-                        budget=budget,
-                        currency=currency,
-                        db=db,
-                    )
-                    evidence = tool_result
-                else:
-                    tool_result = {"status": "UNSUPPORTED_TOOL", "message": f"Tool '{fn_name}' is not supported."}
-
-                # Second turn: Send verified backend result back to Gemini for grounded interpretation
-                followup_payload = {
-                    "system_instruction": {"parts": [{"text": system_instruction}]},
-                    "contents": [
-                        {"role": "user", "parts": [{"text": prompt}]},
-                        {"role": "model", "parts": [{"functionCall": fn_call}]},
-                        {
-                            "role": "function",
-                            "parts": [
-                                {
-                                    "functionResponse": {
-                                        "name": fn_name,
-                                        "response": {"output": tool_result},
-                                    }
-                                }
-                            ],
-                        },
-                    ],
-                    "generationConfig": {
-                        "temperature": 0.2,
-                        "maxOutputTokens": 1000,
-                    },
-                }
-
-                res_followup = await client.post(url, json=followup_payload, headers=headers, params={"key": key})
-                if res_followup.status_code == 200:
-                    f_data = res_followup.json()
-                    f_cands = f_data.get("candidates", [])
-                    if f_cands:
-                        f_parts = f_cands[0].get("content", {}).get("parts", [])
-                        if f_parts:
-                            final_text = f_parts[0].get("text", "").strip()
-                            ev_list = (
-                                [evidence]
-                                if isinstance(evidence, dict)
-                                else (evidence if isinstance(evidence, list) else [])
-                            )
-                            return final_text, [{"name": fn_name, "args": raw_args}], ev_list
-        except Exception as e:
-            print(f"[GeminiAssistant] Grounded API error: {type(e).__name__}. Falling back to verified local data.")
-
-        return None, [], []
+        """Direct call to active Groq LLM API with graceful degradation to None."""
+        return await self.call_groq_api(prompt, system_instruction)
 
     def detect_language(self, prompt: str) -> str:
         """Detect language: English ('en'), Hindi ('hi'), or Hinglish ('hi-Latn')."""
@@ -1083,7 +834,7 @@ class GeminiInvestmentAssistant:
         visible_bars: int = 50,
         db: Optional[AsyncSession] = None,
     ) -> Dict[str, Any]:
-        """Provide detailed chart context for Gemini active chart understanding."""
+        """Provide detailed chart context for active chart understanding."""
         clean_sym = symbol.upper()
         q = await self.provider.get_latest_quote(clean_sym)
         bars = await self.provider.get_historical_bars(clean_sym, "2026-08-01", "2026-10-16", interval=timeframe)
@@ -1127,7 +878,7 @@ class GeminiInvestmentAssistant:
         db: Optional[AsyncSession] = None,
         active_chart_context: Optional[Dict[str, Any]] = None,
     ) -> AssistantMessageResponse:
-        """Process user message using Google Gemini with function calling and server-verified execution."""
+        """Process user message using Groq LPU with function calling and server-verified execution."""
         msg_id = f"msg-{uuid.uuid4().hex[:12]}"
         conv_id = conversation_id or f"conv-{uuid.uuid4().hex[:12]}"
         lang = self.detect_language(user_message)
@@ -1809,7 +1560,7 @@ class GeminiInvestmentAssistant:
                 is_setup_incomplete=False,
             )
 
-        # 6. Try Live LLM (Groq or Gemini) if configured
+        # 6. Try Live LLM (Groq) if configured
         if self.is_llm_ready():
             sys_instruct = (
                 "You are FinEx AI Paper Investment Assistant for Indian Equities (NSE). "
@@ -1818,12 +1569,11 @@ class GeminiInvestmentAssistant:
                 "Maintain strict SEBI educational compliance: all trades and balances are 100% virtual paper trading. "
                 "Ground all market prices and facts strictly using verified facts. Never invent quotes."
             )
-            pref = getattr(self.settings, "LLM_PROVIDER", "groq").lower()
             llm_reply = None
             tool_calls = []
             evidence = []
 
-            if pref == "groq" and self.is_groq_api_ready():
+            if self.is_groq_api_ready():
                 snapshots = await self.tool_get_market_snapshot([active_sym, "RELIANCE", "TCS", "HDFCBANK", "INFY"])
                 context_notes = "\n".join([f"- {s['symbol']}: ₹{s['price']:,.2f} ({s['source']})" for s in snapshots])
                 enhanced_sys = (
@@ -1837,10 +1587,6 @@ class GeminiInvestmentAssistant:
                 )
                 llm_reply = await self.call_groq_api(user_message, enhanced_sys)
                 evidence = snapshots
-            elif self.is_gemini_api_ready():
-                llm_reply, tool_calls, evidence = await self.call_gemini_grounded(
-                    user_message, sys_instruct, user_id=user_id, active_sym=active_sym, db=db
-                )
 
             if not llm_reply and self.is_llm_ready():
                 llm_reply = await self.call_llm_api(user_message, sys_instruct)
@@ -1899,3 +1645,5 @@ class GeminiInvestmentAssistant:
 
 
 gemini_assistant = GeminiInvestmentAssistant()
+ai_assistant = gemini_assistant
+AiInvestmentAssistant = GeminiInvestmentAssistant

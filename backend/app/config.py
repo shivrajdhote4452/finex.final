@@ -104,10 +104,8 @@ class Settings(BaseSettings):
     )
     SEBI_EDUCATIONAL_LAG_DAYS: int = 30
 
-    # AI Assistant Configuration (Gemini & Groq)
+    # AI Assistant Configuration (Groq only)
     LLM_PROVIDER: str = "groq"
-    GEMINI_API_KEY: Optional[str] = Field(default=None, description="Google Gemini API Key")
-    GEMINI_MODEL: str = Field(default="gemini-1.5-flash", description="Configured Gemini model ID")
     GROQ_API_KEY: Optional[str] = Field(default=None, description="Groq API Key")
     GROQ_MODEL: str = Field(default="openai/gpt-oss-120b", description="Configured Groq model ID")
     OPENAI_API_KEY: Optional[str] = None

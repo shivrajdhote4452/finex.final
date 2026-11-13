@@ -613,8 +613,8 @@ class ApiClient {
     return {'mode': 'INDIA_HISTORICAL_REPLAY', 'currency': 'INR'};
   }
 
-  // --- Gemini Paper Investment Assistant ---
-  Future<Map<String, dynamic>> sendGeminiAssistantMessage(
+  // --- AskFinEx AI Paper Investment Assistant ---
+  Future<Map<String, dynamic>> sendAiAssistantMessage(
     String message, {
     Map<String, dynamic>? chartContext,
   }) async {
@@ -633,6 +633,12 @@ class ApiClient {
     }
     throw Exception(data['error']?['message'] ?? 'Assistant communication failed');
   }
+
+  // Backward-compatible alias
+  Future<Map<String, dynamic>> sendGeminiAssistantMessage(
+    String message, {
+    Map<String, dynamic>? chartContext,
+  }) => sendAiAssistantMessage(message, chartContext: chartContext);
 
   Future<Map<String, dynamic>> executeProposal(String proposalId) async {
     final url = Uri.parse('$baseUrl/ai/assistant/proposals/$proposalId/execute');

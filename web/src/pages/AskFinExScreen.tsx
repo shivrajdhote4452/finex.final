@@ -82,7 +82,7 @@ export const AskFinExScreen: React.FC = () => {
   }, []);
 
   // 2. Load Previous Chat History on mount
-  // Gemini Behavior: Always start in a fresh NEW CHAT state on open!
+  // Modern AI Chat UX: Always start in a fresh NEW CHAT state on open!
   useEffect(() => {
     const loadChatHistory = async () => {
       setLoadingHistory(true);
@@ -97,7 +97,7 @@ export const AskFinExScreen: React.FC = () => {
         setLoadingHistory(false);
       }
 
-      // Explicit Gemini Behavior: Show new chat when website/app opens
+      // Clean start: Show new chat when website/app opens
       setActiveConversationId(null);
       setMessages([]);
     };
@@ -148,7 +148,7 @@ export const AskFinExScreen: React.FC = () => {
     }
   };
 
-  // Start a fresh New Chat (Gemini behavior)
+  // Start a fresh New Chat
   const handleStartNewChat = () => {
     setActiveConversationId(null);
     setMessages([]);
@@ -212,7 +212,7 @@ export const AskFinExScreen: React.FC = () => {
         }
       }
 
-      // Send to backend orchestrator (connected to Groq 120B / Gemini)
+      // Send to backend orchestrator (connected to Groq 120B)
       const res = await apiClient.ai.sendMessage(targetConvId || 'conv-default', textToSend.trim());
       if (res && res.assistant_message) {
         const asst = res.assistant_message;
@@ -331,7 +331,7 @@ export const AskFinExScreen: React.FC = () => {
             </div>
           </div>
 
-          {/* + New Chat Button (Prominent, Gemini/ChatGPT Style) */}
+          {/* + New Chat Button */}
           <button
             type="button"
             onClick={handleStartNewChat}
@@ -696,7 +696,7 @@ export const AskFinExScreen: React.FC = () => {
               justifyContent: messages.length === 0 ? 'center' : undefined,
             }}
           >
-          {/* Welcome Screen / Gemini-Style Starter Grid if Messages is Empty */}
+          {/* Welcome Screen / Starter Grid if Messages is Empty */}
           {messages.length === 0 ? (
             <div
               style={{

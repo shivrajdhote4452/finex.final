@@ -992,7 +992,8 @@ class ApiClient {
     getAssistantStatus: async () => {
       return this.request<{
         is_configured: boolean;
-        has_live_gemini: boolean;
+        has_live_gemini?: boolean;
+        has_live_groq?: boolean;
         has_live_llm: boolean;
         is_verified_working: boolean;
         model: string;
@@ -1187,8 +1188,8 @@ class ApiClient {
     },
   };
 
-  // --- Gemini AI Paper Investment Assistant ---
-  public geminiAssistant = {
+  // --- AskFinEx AI Paper Investment Assistant ---
+  public aiAssistant = {
     chat: async (message: string, chartContext?: any) => {
       return this.request<{
         reply: string;
@@ -1268,14 +1269,21 @@ class ApiClient {
 
     getStatus: async () => {
       return this.request<{
-        gemini_configured: boolean;
+        ai_configured?: boolean;
+        groq_configured?: boolean;
+        gemini_configured?: boolean;
         model: string;
         market_mode: string;
         disclaimer: string;
         status_message: string;
+        has_live_groq?: boolean;
+        has_live_llm?: boolean;
       }>('/ai/assistant/status');
     },
   };
+
+  // Backward-compatible alias
+  public geminiAssistant = this.aiAssistant;
 }
 
 export const apiClient = new ApiClient();

@@ -227,14 +227,12 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
       }
 
       try {
-        const aiStatus = await apiClient.geminiAssistant.getStatus();
+        const aiStatus = await apiClient.aiAssistant.getStatus();
         if (isMounted && aiStatus) {
           const provider = ((aiStatus as any)?.provider || '').toLowerCase();
           const model = ((aiStatus as any)?.model || '').toLowerCase();
           if (provider.includes('groq') || model.includes('oss') || model.includes('llama') || model.includes('qwen')) {
             setAiProviderBadge('Groq');
-          } else if (provider.includes('gemini')) {
-            setAiProviderBadge('Gemini');
           } else {
             setAiProviderBadge('FinEx AI');
           }
@@ -701,7 +699,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
     setAiMessages((prev) => [...prev, tempUser]);
 
     try {
-      // Gather active chart context to supply to Gemini assistant
+      // Gather active chart context to supply to AskFinEx AI assistant
       const chartContext = {
         symbol: selectedSymbol,
         timeframe: timeframe,
@@ -711,7 +709,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
         active_indicators: Object.keys(activeIndicators).filter((k) => (activeIndicators as any)[k]),
       };
 
-      const res = await apiClient.geminiAssistant.chat(userText, chartContext);
+      const res = await apiClient.aiAssistant.chat(userText, chartContext);
       const asstMsg = {
         id: `asst-${Date.now()}`,
         role: 'assistant' as const,
@@ -764,7 +762,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
   const handleExecuteAiProposal = async (proposalId: string) => {
     setAiExecutingProposal(proposalId);
     try {
-      const res = await apiClient.geminiAssistant.executeProposal(proposalId);
+      const res = await apiClient.aiAssistant.executeProposal(proposalId);
       const status = res?.status;
       let text = '';
       if (status === 'EXECUTED') {
@@ -2042,7 +2040,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                           )}
                         </div>
 
-                        {/* Proposal Card if Gemini created bounded proposal */}
+                        {/* Proposal Card if AI created bounded proposal */}
                         {m.proposal && (
                           <div
                             style={{

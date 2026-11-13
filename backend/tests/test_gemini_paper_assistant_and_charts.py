@@ -1,7 +1,7 @@
 """Comprehensive Acceptance Tests for Gemini AI Paper Assistant, Technical Indicators, and Charts.
 
 Covers:
-- Unconfigured Gemini API key graceful degradation
+- Unconfigured Groq AI key graceful degradation
 - Multilingual language detection (English, Hindi, Hinglish)
 - Research queries creating zero orders
 - Bounded paper proposal generation, expiry, and execution
@@ -49,13 +49,14 @@ def test_alpaca_paper_host_security_allowlist():
     assert not adapter.is_configured
 
 
-def test_gemini_assistant_unconfigured_status(client):
-    """Verify application reports AI setup is incomplete when key is missing or placeholder."""
+def test_ai_assistant_unconfigured_status(client):
+    """Verify application reports AI setup is incomplete or offline when key is missing or placeholder."""
     res = client.get("/api/v1/ai/assistant/status")
     assert res.status_code == 200
     data = res.json()["data"]
     assert "status_message" in data
     assert "disclaimer" in data
+    assert data["is_configured"] is False or data["provider"] in ("mock-offline", "groq-configured", "groq-live")
 
 
 def test_multilingual_language_detection():

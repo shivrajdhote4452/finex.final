@@ -171,7 +171,7 @@ class AIOrchestrator:
                 intent=AIIntent.FINANCIAL_EDUCATION,
                 headline="Welcome to Ask FinEx Financial Intelligence",
                 content=(
-                    "Namaste! I am your FinEx AI Financial Research Assistant, powered by Google Gemini and grounded in verified regulatory documentation.\n\n"
+                    "Namaste! I am your FinEx AI Financial Research Assistant, powered by Groq and grounded in verified regulatory documentation.\n\n"
                     "You can ask me questions regarding:\n"
                     "- 📜 **SEBI Investor Protection & Guidelines** (emergency funds, risk profiling)\n"
                     "- 💡 **Core Financial Principles** (SIP compounding, 50/30/20 rule, asset allocation)\n"
@@ -306,7 +306,7 @@ class AIOrchestrator:
             f"Holding diversified assets and reviewing regulatory disclosures provides structural resilience."
         )
 
-        # Enhance with live LLM synthesis (Groq or Gemini) when available
+        # Enhance with live LLM synthesis (Groq) when available
         try:
             from backend.app.domain.gemini_assistant import gemini_assistant
 

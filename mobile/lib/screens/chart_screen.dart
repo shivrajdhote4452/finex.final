@@ -898,7 +898,7 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
                             Icon(Icons.auto_awesome, color: TerminalColors.action, size: 18),
                             SizedBox(width: 8),
                             Text(
-                              "FinEx Gemini Assistant",
+                              "FinEx AI Assistant",
                               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: TerminalColors.textMain),
                             ),
                           ],
@@ -934,7 +934,7 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
                             controller: textController,
                             style: const TextStyle(fontSize: 13, color: Colors.white),
                             decoration: const InputDecoration(
-                              hintText: "Ask Gemini about technical indicators...",
+                              hintText: "Ask FinEx AI about technical indicators...",
                               hintStyle: TextStyle(fontSize: 12, color: TerminalColors.textMuted),
                               filled: true,
                               fillColor: TerminalColors.panel,
@@ -962,7 +962,7 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
                                   textController.clear();
                                   setSheetState(() => aiThinking = true);
                                   try {
-                                    final res = await apiClient.sendGeminiAssistantMessage(
+                                    final res = await apiClient.sendAiAssistantMessage(
                                       text,
                                       chartContext: {
                                         'symbol': _symbol,
@@ -1154,7 +1154,7 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
               actions: [
                 IconButton(
                   icon: const Icon(Icons.auto_awesome, color: TerminalColors.action),
-                  tooltip: "Ask Gemini Assistant",
+                  tooltip: "Ask FinEx AI Assistant",
                   onPressed: _openAiAssistantSheet,
                 ),
                 if (!_isIndex)
