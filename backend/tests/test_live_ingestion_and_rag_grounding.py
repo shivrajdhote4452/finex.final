@@ -542,8 +542,23 @@ async def test_source_to_claim_mapping_and_stray_reference_cleanup():
          patch.object(gemini_assistant, "call_llm_api", side_effect=mock_call):
         resp_no_mf = await orchestrator_no_mf.answer_query("What are the mutual fund single-stock concentration rules?")
         assert captured_prompt is not None
-        assert "If the relevant official circular is not among the retrieved sources" in captured_prompt
+        assert "If that specific circular source was NOT retrieved" in captured_prompt
+        assert "You MUST completely OMIT the specific mutual-fund concentration regulatory claim" in captured_prompt
         assert not resp_no_mf.content.strip().endswith("2.")
+
+    # 4. Test fallback mode when official circular is omitted vs present
+    with patch.object(gemini_assistant, "is_llm_ready", return_value=False):
+        # When circular is omitted: specific mutual-fund concentration claim must NOT be present
+        resp_fb_no_mf = await orchestrator_no_mf.answer_query("What are the diversification rules?")
+        assert "Statutory Mutual Fund Concentration Norms" not in resp_fb_no_mf.content
+        assert "1774024028162.pdf" not in resp_fb_no_mf.content
+
+        # When circular IS present: statutory mutual-fund claim links directly to circular PDF
+        resp_fb_mf = await orchestrator.answer_query(
+            "What are the mutual fund concentration limits and diversification rules under SEBI regulations?"
+        )
+        assert "Statutory Mutual Fund Concentration Norms" in resp_fb_mf.content
+        assert "https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf" in resp_fb_mf.content
 
 
 

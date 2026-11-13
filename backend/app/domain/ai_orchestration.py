@@ -255,7 +255,7 @@ class AIOrchestrator:
                 print(f"[AIOrchestrator] Screening error: {e}")
 
         # Retrieve relevant regulatory evidence
-        retrieved_chunks = await self.retriever.retrieve_relevant_chunks(query, top_k=3, db=db)
+        retrieved_chunks = await self.retriever.retrieve_relevant_chunks(query, top_k=4, db=db)
 
         if not retrieved_chunks:
             # If LLM is ready, provide educational insight on general financial queries
@@ -337,12 +337,22 @@ class AIOrchestrator:
             headline = f"Educational Summary: {primary.section or primary.title}"
             source_intro = f"Based on educational summary from {primary.publisher} ({primary.title}):\n\n"
 
-        content_body = (
-            f"{source_intro}"
-            f"{primary.content}\n\n"
-            f"Key Takeaway: Capital market participation requires balancing expected returns with prudent risk limits. "
-            f"Holding diversified assets across sectors can reduce some risks, but does not eliminate market risk. "
-            f"Diversification does not guarantee that other investments will be unaffected or will offset losses, and does not guarantee protection against declines."
+        # Check if SEBI-CIRC-MF-2026 is among retrieved chunks
+        mf_circular_chunk = next((c for c in retrieved_chunks if c.document_id == "SEBI-CIRC-MF-2026"), None)
+        mf_source_idx = (retrieved_chunks.index(mf_circular_chunk) + 1) if mf_circular_chunk else None
+
+        content_body = f"{source_intro}{primary.content}\n\n"
+        if mf_circular_chunk:
+            content_body += (
+                f"Statutory Mutual Fund Concentration Norms [{mf_source_idx}]: Under the SEBI Master Circular for Mutual Funds dated March 20, 2026 "
+                f"({mf_circular_chunk.source_url}), a mutual fund scheme shall not invest more than 10% of its Net Asset Value (NAV) in equity shares or "
+                f"equity-related instruments of any single company. This scheme-level limit applies to actively managed schemes (with exceptions for "
+                f"Index Funds, ETFs, and sectoral/thematic mandates), rather than governing personal direct equity portfolios.\n\n"
+            )
+        content_body += (
+            "Key Takeaway: Capital market participation requires balancing expected returns with prudent risk limits. "
+            "Holding diversified assets across sectors can reduce some risks, but does not eliminate market risk. "
+            "Diversification does not guarantee that other investments will be unaffected or will offset losses, and does not guarantee protection against declines."
         )
 
         # Enhance with live LLM synthesis (Groq) when available
@@ -352,7 +362,7 @@ class AIOrchestrator:
             if gemini_assistant.is_llm_ready():
                 evidence_text = "\n\n".join(
                     [
-                        f"Source [{i + 1}] ({c.publisher} - {c.title}):\nOfficial Link: {c.source_url or 'N/A'}\nContent:\n{c.content}"
+                        f"Source [{i + 1}] (Document ID: {c.document_id} | Publisher: {c.publisher} | Title: {c.title}):\nOfficial Link: {c.source_url or 'N/A'}\nContent:\n{c.content}"
                         for i, c in enumerate(retrieved_chunks)
                     ]
                 )
@@ -366,21 +376,23 @@ class AIOrchestrator:
                     "   - Do NOT state or imply that 'statutory caps apply only to mutual funds'.\n"
                     "   - Avoid asserting that 'no retail limits exist' or making sweeping claims about the absence of retail caps unless a specific reliable source explicitly establishes that exact claim and scope.\n"
                     "   - Accurately state the specific scope of the rule: under the SEBI mutual fund regulatory framework, the 10% NAV single-issuer concentration limit governs mutual fund schemes, rather than serving as an individual personal direct equity portfolio cap under that circular.\n"
-                    "2. Accurate Explanation & Official Link for Mutual Fund Concentration Norms:\n"
-                    "   - If explaining the mutual fund concentration rule, use the applicable rule, scope and exceptions from the official circular:\n"
-                    "     * Applicable Rule: A mutual fund scheme shall not invest more than 10% of its Net Asset Value (NAV) in equity shares or equity-related instruments of any single company (originating in Clause 1 of the Seventh Schedule of SEBI (Mutual Funds) Regulations, 1996).\n"
-                    "     * Scope: Applies at the scheme level to actively managed mutual fund schemes.\n"
-                    "     * Exceptions: Index Funds and ETFs passively replicating benchmark indices are exempt under portfolio concentration norms (subject to index-level capping rules); sectoral/thematic funds invest according to their designated mandates; debt instruments follow credit-rated single-issuer frameworks.\n"
-                    "   - Make it clear that the relevant official circular is linked, directly citing the official circular: SEBI Master Circular for Mutual Funds dated March 20, 2026 (Circular No. HO/24/13/11(1)2026-IMD-POD-1/I/7602/2026, https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf).\n"
+                    "2. Mutual Fund Concentration Norms & Source-to-Claim Verification:\n"
+                    "   - Check the retrieved sources list above for the SEBI Master Circular for Mutual Funds (Document ID: 'SEBI-CIRC-MF-2026', Title: 'SEBI Master Circular for Mutual Funds: Portfolio Concentration Norms', Official Link: https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf).\n"
+                    "   - If and ONLY if that specific circular source is present in the retrieved sources above:\n"
+                    "     * You may explain the statutory mutual-fund concentration rule:\n"
+                    "       - Applicable Rule: A mutual fund scheme shall not invest more than 10% of its Net Asset Value (NAV) in equity shares or equity-related instruments of any single company (originating in Clause 1 of the Seventh Schedule of SEBI (Mutual Funds) Regulations, 1996).\n"
+                    "       - Scope: Applies at the scheme level to actively managed mutual fund schemes (does not govern individual personal direct equity portfolios under this circular).\n"
+                    "       - Exceptions: Index Funds and ETFs that passively replicate benchmark indices are exempt (subject to index-level capping rules); sectoral/thematic funds invest according to their designated mandates; debt instruments follow credit-rated single-issuer frameworks.\n"
+                    "     * You MUST cite ONLY the exact source number corresponding to SEBI-CIRC-MF-2026 and provide its official circular link: https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf.\n"
+                    "   - If that specific circular source was NOT retrieved:\n"
+                    "     * You MUST completely OMIT the specific mutual-fund concentration regulatory claim. Do NOT cite an unrelated summary (such as general financial planning or personal heuristics) for a statutory mutual fund rule.\n"
                     "3. Accurate Labeling of Team-Written Summaries & Citation Mapping:\n"
                     "   - Ensure each claim is cited ONLY to a source that directly supports it:\n"
-                    "     * If explaining the mutual fund statutory 10% NAV limit, cite ONLY the SEBI Master Circular source (e.g. [2]). Do NOT cite personal heuristics summaries (such as [1]) for the mutual-fund rule.\n"
-                    "     * If explaining illustrative retail portfolio heuristics (e.g. 10–15% single-stock, 25–30% single-sector), cite ONLY the FinEx heuristics summary (e.g. [1]), and state they are illustrative rules of thumb, not statutory SEBI regulations.\n"
-                    "     * If the relevant official circular is not among the retrieved sources, do NOT present a specific regulatory rule as verified.\n"
-                    "   - Preserve the distinction between a FinEx-written summary and the official source it is based on: label team-written summaries based on official SEBI sources as 'FinEx Educational Summary based on official SEBI sources' with their official links (https://investor.sebi.gov.in/investment_risk_managment.html and https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf).\n"
+                    "     * General risk management, asset allocation, and unsystematic risk reduction: Cite ONLY the SEBI Investor Education risk-management source (SEBI-INVESTOR-ED-RISK, https://investor.sebi.gov.in/investment_risk_managment.html).\n"
+                    "     * Personal retail direct-equity heuristics (capping single stocks at 10–15% and single sector at 25–30%): Cite ONLY the FinEx heuristics summary (FINEX-ED-DIVERSIFICATION-2026), and state clearly that they are illustrative financial planning rules of thumb, NOT statutory SEBI regulations.\n"
+                    "     * Never cite personal heuristics or general financial planning guides as authority for statutory mutual-fund rules.\n"
+                    "   - Preserve the distinction between a FinEx-written summary and the official publication it is based on: label team-written summaries based on official SEBI sources as 'FinEx Educational Summary based on official SEBI sources' with their official links (https://investor.sebi.gov.in/investment_risk_managment.html and https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf).\n"
                     "   - Only label content as an original SEBI publication when citing authentic, verified extracts directly from that publication. Do not attribute team-written formulations or summaries to SEBI as author/publisher.\n"
-                    "   - Clearly cite the official SEBI publication on risk management (https://investor.sebi.gov.in/investment_risk_managment.html) when discussing general asset allocation and unsystematic risk reduction.\n"
-                    "   - Make sure citation numbers, labels, and links correspond strictly to the specific claims they support.\n"
                     "   - Do NOT duplicate citation labels (e.g. do not write 'FinEx Educational Summary: FinEx Educational Summary').\n"
                     "   - If including a reference list, ensure all entries are fully completed with accurate numbering; NEVER leave a stray, empty, or incomplete reference number (e.g. '2.').\n"
                     "4. Prudent Risk Characterization & No Guaranteed Offset:\n"

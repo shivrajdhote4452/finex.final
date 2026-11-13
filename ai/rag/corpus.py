@@ -46,13 +46,7 @@ REGULATORY_DOCUMENTS: List[Dict[str, Any]] = [
                     "Diversification can reduce some risks, but it does not eliminate market risk (systematic risk) and does not guarantee "
                     "protection against investment losses or guarantee positive returns during market downturns. It does not guarantee that other "
                     "investments will be unaffected or will offset losses, because broader market downturns can impact multiple assets simultaneously. "
-                    "In Indian securities regulations, the statutory 10% NAV concentration limit under the SEBI Master Circular for Mutual Funds "
-                    "(Circular No. HO/24/13/11(1)2026-IMD-POD-1/I/7602/2026, https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf) "
-                    "applies at the scheme portfolio level to actively managed mutual funds (with exceptions for Index Funds and ETFs tracking benchmark indices); "
-                    "under this circular, it does not serve as an individual personal portfolio cap for retail direct equities. Retail investors determine their "
-                    "own asset allocation based on their personal financial goals and risk profile. Financial planning practitioners commonly suggest illustrative "
-                    "heuristics (such as capping individual stock holdings below 10–15% or single-sector exposure below 25–30%) as practical rules of thumb "
-                    "to manage firm-specific downside, but these are illustrative heuristics, not statutory regulations."
+                    "Retail investors determine their own asset allocation based on their personal financial goals, investment horizon, and risk profile."
                 ),
             },
             {
