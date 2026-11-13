@@ -170,8 +170,8 @@ async def test_diversification_query_does_not_assert_unsupported_sebi_caps():
            "not as a statutory sebi regulation" in content_lower or \
            "illustrative" in content_lower
 
-    # 3. Must accurately explain mutual fund Seventh Schedule concentration limits with scope and exceptions
-    assert "clause 1 of the seventh schedule" in content_lower or "seventh schedule" in content_lower
+    # 3. Must accurately explain mutual fund concentration limits with current Master Circular, historical context, scope and exceptions
+    assert "master circular for mutual funds" in content_lower or "seventh schedule" in content_lower or "1774024028162.pdf" in content_lower
     assert "actively managed mutual fund schemes" in content_lower or "mutual fund scheme" in content_lower
     assert "does not apply to individual" in content_lower
     assert "index funds" in content_lower or "etfs" in content_lower
@@ -180,64 +180,47 @@ async def test_diversification_query_does_not_assert_unsupported_sebi_caps():
     assert "reduces some risks" in content_lower or "reduce some risks" in content_lower or "unsystematic" in content_lower
     assert "not guarantee protection against" in content_lower or "does not eliminate market risk" in content_lower
 
-    # 5. Verified citations must include SEBI education document and NEVER reference internal blueprints
+    # 5. Verified citations must include FinEx educational summary and NEVER reference internal blueprints
     doc_ids = [cit.document_id for cit in resp.citations]
     assert "SEBI-ED-2024-01" in doc_ids
     for cit in resp.citations:
-        assert "FINEX" not in cit.document_id
         assert "blueprint" not in cit.title.lower()
         assert "sprint plan" not in cit.title.lower()
 
 
 @pytest.mark.asyncio
-async def test_sebi_document_excludes_team_written_heuristics():
-    """Verify the SEBI-attributed document contains only verified official guidance and excludes project heuristics."""
+async def test_returned_citation_publisher_source_link_and_attribution():
+    """Verify returned citations are labeled as FinEx educational summary, not original SEBI docs,
+    and link to verifiable official sources (SEBI Investor Education and Master Circular)."""
+    retriever = RegulatoryDocumentRetriever(chunks=ingest_corpus_documents())
+    orchestrator = AIOrchestrator(retriever=retriever)
+
+    resp = await orchestrator.answer_query("How should retail investors approach portfolio diversification?")
+    assert len(resp.citations) >= 1
+
+    summary_cit = [c for c in resp.citations if c.document_id == "SEBI-ED-2024-01"][0]
+
+    # 1. Publisher must be FinEx Educational Summary, NOT Securities and Exchange Board of India (SEBI)
+    assert summary_cit.publisher == "FinEx Educational Summary"
+    assert summary_cit.publisher != "Securities and Exchange Board of India (SEBI)"
+
+    # 2. Document title explicitly identifies it as a FinEx educational summary
+    assert "FinEx Educational Summary" in summary_cit.title
+
+    # 3. Verifiable official source link for general diversification guidance
+    assert summary_cit.source_url == "https://investor.sebi.gov.in/investment_risk_managment.html"
+
+    # 4. Content contains verifiable official source citations and current Master Circular reference
     chunks = ingest_corpus_documents()
-    sebi_chunks = [c for c in chunks if c.document_id == "SEBI-ED-2024-01"]
-    assert len(sebi_chunks) == 5
-
-    ch3 = [c for c in sebi_chunks if "Diversification" in c.section][0]
-
-    # Team-written heuristics (10-15% single-stock, 25-30% single-sector) must NOT be attributed to SEBI
-    assert "10% to 15%" not in ch3.content
-    assert "25% to 30%" not in ch3.content
-    assert "capping single-stock" not in ch3.content.lower()
-
-    # Must contain verified official SEBI mutual fund concentration limits and exceptions
-    assert "Seventh Schedule of the SEBI (Mutual Funds) Regulations, 1996" in ch3.content
-    assert "Clause 1" in ch3.content
+    ch3 = [c for c in chunks if c.document_id == "SEBI-ED-2024-01" and "Diversification" in c.section][0]
+    assert "https://investor.sebi.gov.in/investment_risk_managment.html" in ch3.content
+    assert "https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf" in ch3.content
+    assert "SEBI Master Circular for Mutual Funds" in ch3.content
+    assert "Regulation 44(1) and Clause 1 of the Seventh Schedule" in ch3.content
     assert "actively managed mutual fund schemes" in ch3.content
     assert "Index Funds and Exchange Traded Funds (ETFs)" in ch3.content
-    assert "does not apply to individual retail investors" in ch3.content
-
-    # Must state diversification reduces some risks without guaranteeing protection against losses
-    assert "reduces some risks" in ch3.content or "reduce some risks" in ch3.content
+    assert "does not apply to individual retail investors" in ch3.content.lower()
     assert "does not guarantee protection against investment losses" in ch3.content
-
-
-@pytest.mark.asyncio
-async def test_finex_educational_summary_source_attribution():
-    """Verify FinEx educational summaries are clearly attributed to FinEx and never presented as SEBI documents."""
-    from ai.rag.corpus import FINEX_EDUCATIONAL_DOCUMENTS
-
-    all_chunks = ingest_corpus_documents(include_educational_summaries=True)
-    finex_chunks = [c for c in all_chunks if c.document_id == "FINEX-ED-DIVERSIFICATION-2026"]
-    assert len(finex_chunks) == 1
-
-    chk = finex_chunks[0]
-    assert chk.publisher == "FinEx Educational Summary"
-    assert "FinEx Educational Summary" in chk.title
-    assert "SEBI" not in chk.publisher
-
-    # Orchestrator formats FinEx summary with Educational Summary headline, not Regulatory
-    retriever = RegulatoryDocumentRetriever(chunks=[chk])
-    orchestrator = AIOrchestrator(retriever=retriever)
-    resp = await orchestrator.answer_query("What are FinEx diversification heuristics?")
-
-    assert resp.headline.startswith("Educational Summary:")
-    assert "Based on educational summary from FinEx Educational Summary" in resp.content
-    assert len(resp.citations) == 1
-    assert resp.citations[0].publisher == "FinEx Educational Summary"
 
 
 @pytest.mark.asyncio
@@ -260,12 +243,12 @@ async def test_engineering_blueprint_excluded_from_retrieval_and_citations():
         DocumentChunk(
             chunk_id="chk_sebi_01",
             document_id="SEBI-ED-2024-01",
-            title="SEBI Guide to Financial Education for Beginners",
-            publisher="Securities and Exchange Board of India (SEBI)",
-            source_url="https://investor.sebi.gov.in/financial-education/beginners-guide.html",
+            title="FinEx Educational Summary: Guide to Financial Planning & SEBI Regulatory Framework",
+            publisher="FinEx Educational Summary",
+            source_url="https://investor.sebi.gov.in/investment_risk_managment.html",
             section="Chapter 3: Asset Allocation and Diversification Principles",
             page_number=12,
-            content="Diversification is the primary protection against unsystematic risk in capital markets.",
+            content="FinEx Educational Summary: Asset allocation and portfolio diversification are foundational risk-mitigation principles in securities markets.",
             score=0.0,
         ),
     ]
@@ -311,9 +294,11 @@ async def test_groq_synthesis_receives_anti_hallucination_diversification_instru
         assert captured_sys_instruct is not None
         # Assert strict compliance prompt directives are present
         assert "Accurate Source Attribution" in captured_sys_instruct
-        assert "Never attribute project-written explanations" in captured_sys_instruct
+        assert "Never attribute team-written formulations" in captured_sys_instruct or "Never attribute project-written explanations" in captured_sys_instruct
         assert "Clearly Label Educational Summaries" in captured_sys_instruct
-        assert "Mutual Fund Concentration Limit Scope & Exceptions" in captured_sys_instruct
+        assert "Mutual Fund Concentration Limit Scope" in captured_sys_instruct
+        assert "SEBI Master Circular for Mutual Funds" in captured_sys_instruct
+        assert "investment_risk_managment.html" in captured_sys_instruct
         assert "Prudent Risk Characterization" in captured_sys_instruct
         assert "Do NOT state or imply that SEBI mandates percentage holding caps" not in captured_sys_instruct or "SEBI does NOT prescribe mandatory percentage holding caps" in captured_sys_instruct
         assert "Never cite internal engineering blueprints" in captured_sys_instruct

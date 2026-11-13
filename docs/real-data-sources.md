@@ -35,10 +35,13 @@
 ## 2. Regulatory & Educational Documents for RAG
 
 Approved real documents for Sprint 1 & Sprint 4 RAG ingestion:
-1. **SEBI Investor Education Material:**
-   - *Title:* SEBI Guide to Financial Education for Beginners
-   - *Publisher:* Securities and Exchange Board of India (SEBI)
-   - *Topic:* Equities, Mutual Funds, Risk Diversification
+1. **FinEx Educational Summary (Grounded in SEBI Investor Education & Regulations):**
+   - *Title:* FinEx Educational Summary: Guide to Financial Planning & SEBI Regulatory Framework
+   - *Publisher:* FinEx Educational Summary
+   - *Official Sources Cited:*
+     - SEBI Investor Education: "How to Manage Investment Risks" (`https://investor.sebi.gov.in/investment_risk_managment.html`)
+     - SEBI Master Circular for Mutual Funds (March 20, 2026, `https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf`)
+   - *Topic:* Equities, Mutual Funds, Risk Diversification, Emergency Funds
 2. **NSE Factsheet / Market Fundamentals:**
    - *Title:* NIFTY 50 Index Factsheet & Methodology
    - *Publisher:* NSE Indices Limited

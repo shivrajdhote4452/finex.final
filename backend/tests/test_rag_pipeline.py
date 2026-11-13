@@ -38,7 +38,7 @@ async def test_retriever_emergency_fund_query():
     assert top_result.document_id == "SEBI-ED-2024-01"
     assert "Foundations of Financial Planning" in top_result.section
     citation = format_citation(top_result)
-    assert "SEBI Guide to Financial Education for Beginners" in citation
+    assert "FinEx Educational Summary: Guide to Financial Planning & SEBI Regulatory Framework" in citation
     assert "p. 4" in citation
 
 
@@ -85,5 +85,5 @@ def test_format_citation():
     cit = format_citation(sebi_chunk)
     assert (
         cit
-        == "[SEBI Guide to Financial Education for Beginners, Chapter 1: The Foundations of Financial Planning, p. 4]"
+        == "[FinEx Educational Summary: Guide to Financial Planning & SEBI Regulatory Framework, Chapter 1: The Foundations of Financial Planning, p. 4]"
     )

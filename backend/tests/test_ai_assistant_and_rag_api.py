@@ -90,9 +90,10 @@ async def test_ai_rag_educational_question_with_citations(app, auth_headers):
         assert asst_msg["intent"] == "FINANCIAL_EDUCATION"
         assert len(asst_msg["citations"]) > 0
 
-        # Verify citation references authentic regulatory document
+        # Verify citation references authentic educational summary and official regulatory source
         citation = asst_msg["citations"][0]
-        assert "SEBI" in citation["publisher"] or "Securities and Exchange Board" in citation["publisher"]
+        assert "FinEx Educational Summary" in citation["publisher"] or "SEBI" in citation["publisher"]
+        assert "sebi.gov.in" in citation["source_url"]
         assert "EDUCATIONAL DISCLAIMER" in asst_msg["legal_disclaimer"]
         assert asst_msg["correlation_id"] is not None
 

@@ -198,7 +198,7 @@ def evaluate_risk_profile(submission: AssessmentSubmission) -> RiskAssessmentRes
         horizon_factor=horizon_factor,
         factors=factors,
         explanation=explanation,
-        citation="SEBI Guide to Financial Education for Beginners, Chapter 2 & Chapter 3 (Asset Allocation Principles)",
+        citation="FinEx Educational Summary: Guide to Financial Planning & SEBI Regulatory Framework, Chapter 2 & Chapter 3 (Asset Allocation Principles)",
         disclaimer=(
             "This risk assessment is derived by a deterministic scoring formula for educational and simulated trading purposes. "
             "It does not constitute registered financial advisory under SEBI (Investment Advisers) Regulations, 2013."

@@ -25,11 +25,11 @@ from backend.app.ports.retriever import DocumentChunk
 APPROVED_LOCAL_DOCUMENTS = [
     {
         "document_id": "SEBI-ED-2024-01",
-        "title": "SEBI Guide to Financial Education for Beginners",
-        "doc_type": "REGULATORY_GUIDE",
-        "publisher": "Securities and Exchange Board of India (SEBI)",
+        "title": "FinEx Educational Summary: Guide to Financial Planning & SEBI Regulatory Framework",
+        "doc_type": "EDUCATIONAL_SUMMARY",
+        "publisher": "FinEx Educational Summary",
         "publishing_date": date(2024, 1, 15),
-        "source_url": "https://investor.sebi.gov.in/financial-education/beginners-guide.html",
+        "source_url": "https://investor.sebi.gov.in/investment_risk_managment.html",
         "local_file": "data/documents/sebi_financial_education_guide.txt",
     },
     {
@@ -160,16 +160,23 @@ async def ingest_document_file_to_db(
     # 1. Check existing record
     existing = await db.get(DocumentRegistryModel, doc_id)
     if existing:
-        if existing.content_hash == content_hash:
-            # Document is already current and indexed
+        metadata_changed = (
+            existing.title != meta.get("title")
+            or existing.publisher != meta.get("publisher")
+            or existing.source_url != meta.get("source_url")
+            or existing.doc_type != meta.get("doc_type")
+        )
+        if existing.content_hash == content_hash and not metadata_changed:
+            # Document is already current and indexed with up-to-date metadata
             return existing
 
-        # Document updated: replace chunks
+        # Document content or metadata updated: replace chunks & refresh registry
         await db.execute(delete(DocumentChunkModel).where(DocumentChunkModel.document_id == doc_id))
         existing.content_hash = content_hash
         existing.title = meta.get("title", existing.title)
         existing.publisher = meta.get("publisher", existing.publisher)
         existing.source_url = meta.get("source_url", existing.source_url)
+        existing.doc_type = meta.get("doc_type", existing.doc_type)
         existing.created_at = now
         doc_reg = existing
     else:
