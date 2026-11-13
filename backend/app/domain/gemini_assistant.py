@@ -15,6 +15,7 @@ Strict Invariants:
 """
 
 import re
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
@@ -213,6 +214,8 @@ class GeminiInvestmentAssistant:
         self._engine = engine
         self._settings = settings
         self._verified_working = False
+        self._last_verified_at: Optional[float] = None
+        self._last_verification_attempt: Optional[float] = None
 
     @property
     def settings(self):
@@ -256,53 +259,88 @@ class GeminiInvestmentAssistant:
         return self.is_groq_api_ready()
 
     def is_configured(self) -> bool:
-        """Verify if assistant is configured with a valid API key format."""
+        """Verify if assistant is configured with a valid API key format and active provider."""
         return self.is_llm_ready()
 
     def is_verified_working(self) -> bool:
         """Verify if live LLM connection has been verified working."""
-        return self._verified_working and self.is_llm_ready()
+        return bool(self._verified_working and self.is_llm_ready())
 
     def get_provider_info(self) -> Dict[str, str]:
         """Return active provider identification and model for status reporting."""
-        if self.is_groq_api_ready():
+        if not self.is_llm_ready():
             return {
-                "provider": "groq-live" if self._verified_working else "groq-configured",
-                "model": getattr(self.settings, "GROQ_MODEL", "openai/gpt-oss-120b"),
+                "provider": "mock-offline",
+                "model": "deterministic-engine",
             }
         return {
-            "provider": "mock-offline",
-            "model": "deterministic-engine",
+            "provider": "groq-live" if self.is_verified_working() else "groq-configured",
+            "model": getattr(self.settings, "GROQ_MODEL", "openai/gpt-oss-120b"),
         }
 
-    async def verify_live_connection(self) -> bool:
+    async def verify_live_connection(self, force: bool = False) -> bool:
         """Test and verify connectivity by pinging active LLM API if not already verified."""
-        if self._verified_working:
-            return True
         if not self.is_llm_ready():
+            self._verified_working = False
             return False
+        if self._verified_working and not force:
+            return True
+
+        # Throttle repeated failed verification attempts to avoid blocking callers (cooldown: 30s)
+        now = time.monotonic()
+        if not force and self._last_verification_attempt is not None:
+            if (now - self._last_verification_attempt) < 30.0:
+                return self.is_verified_working()
+
+        self._last_verification_attempt = now
         res = await self.call_llm_api("ping", "Respond strictly with pong")
-        return bool(res)
+        if res and res.strip():
+            self._verified_working = True
+            self._last_verified_at = now
+            return True
+
+        self._verified_working = False
+        return False
 
     async def call_groq_api(self, prompt: str, system_instruction: str) -> Optional[str]:
-        """Invoke Groq Cloud API using OpenAI-compatible chat completions."""
-        if not self.is_groq_api_ready():
+        """Invoke Groq Cloud API using OpenAI-compatible chat completions with prompt fallback."""
+        if not self.is_llm_ready():
+            self._verified_working = False
             return None
-        groq_key = self.settings.GROQ_API_KEY
+
+        groq_key = getattr(self.settings, "GROQ_API_KEY", "") or ""
+        if not groq_key or len(groq_key.strip()) < 10:
+            self._verified_working = False
+            return None
+
         pref_model = getattr(self.settings, "GROQ_MODEL", "openai/gpt-oss-120b") or "openai/gpt-oss-120b"
-        models_to_try = [
+        total_timeout = float(getattr(self.settings, "GROQ_TIMEOUT", 8.0) or 8.0)
+        per_attempt_timeout = min(5.0, total_timeout)
+
+        # Primary configured model + fallback candidate for model-specific errors (404/400/429/503)
+        candidate_models = [
             pref_model,
+            "llama-3.3-70b-versatile",
             "openai/gpt-oss-120b",
             "qwen/qwen3.8-27b",
-            "openai/gpt-oss-20b",
         ]
+        models_to_try = list(dict.fromkeys(candidate_models))[:2]
+
         headers = {
             "Authorization": f"Bearer {groq_key.strip()}",
             "Content-Type": "application/json",
         }
         url = "https://api.groq.com/openai/v1/chat/completions"
+        start_time = time.monotonic()
 
-        for model in dict.fromkeys(models_to_try):
+        for idx, model in enumerate(models_to_try):
+            elapsed = time.monotonic() - start_time
+            remaining = total_timeout - elapsed
+            if remaining <= 1.0:
+                print(f"[GroqAssistant] Total timeout budget ({total_timeout}s) exhausted. Falling back to local engine.")
+                break
+
+            current_timeout = min(per_attempt_timeout, remaining)
             payload = {
                 "model": model,
                 "messages": [
@@ -312,20 +350,55 @@ class GeminiInvestmentAssistant:
                 "temperature": 0.2,
                 "max_tokens": 1000,
             }
+
             try:
-                async with httpx.AsyncClient(timeout=25.0) as client:
+                limits = httpx.Timeout(current_timeout, connect=min(2.5, current_timeout))
+                async with httpx.AsyncClient(timeout=limits) as client:
                     res = await client.post(url, json=payload, headers=headers)
+
                     if res.status_code == 200:
-                        self._verified_working = True
-                        data = res.json()
-                        choices = data.get("choices", [])
-                        if choices:
-                            return choices[0].get("message", {}).get("content", "").strip()
-                    elif res.status_code in (401, 403):
-                        print(f"[GroqAssistant] Auth error ({res.status_code}): {res.text[:150]}")
+                        try:
+                            data = res.json()
+                            choices = data.get("choices", [])
+                            if choices:
+                                content = choices[0].get("message", {}).get("content", "")
+                                if content and isinstance(content, str) and content.strip():
+                                    self._verified_working = True
+                                    return content.strip()
+                                print(f"[GroqAssistant] Model {model} returned HTTP 200 with empty content.")
+                            else:
+                                print(f"[GroqAssistant] Model {model} returned HTTP 200 with empty choices array.")
+                        except Exception as parse_err:
+                            print(f"[GroqAssistant] JSON parse error on HTTP 200 from {model}: {parse_err}")
+                        # HTTP 200 without usable content does not verify live connection and aborts
                         break
+
+                    elif res.status_code in (401, 403):
+                        print(f"[GroqAssistant] Auth error ({res.status_code}): Invalid or unauthorized credentials.")
+                        # Authentication error is fatal across all models
+                        break
+
+                    elif res.status_code in (400, 404, 422, 429, 503):
+                        # Model-specific or capacity issue; allow fallback to next candidate if time permits
+                        print(f"[GroqAssistant] Model {model} returned status {res.status_code}. Attempting fallback if available.")
+                        continue
+
+                    else:
+                        print(f"[GroqAssistant] Unexpected HTTP status {res.status_code} from {model}.")
+                        break
+
+            except (httpx.ConnectError, httpx.ConnectTimeout) as conn_err:
+                print(f"[GroqAssistant] Host connection failed ({type(conn_err).__name__}). Aborting further model attempts.")
+                break
+            except httpx.TimeoutException as to_err:
+                print(f"[GroqAssistant] Request timed out on model {model} ({type(to_err).__name__}). Aborting to preserve response latency.")
+                break
             except Exception as e:
-                print(f"[GroqAssistant] API error for model {model}: {type(e).__name__}")
+                print(f"[GroqAssistant] Unexpected error for model {model}: {type(e).__name__} - {e}")
+                break
+
+        # Succeeded call returns early; reaching here indicates API failed or timed out
+        self._verified_working = False
         return None
 
     async def call_llm_api(self, prompt: str, system_instruction: str) -> Optional[str]:
@@ -1569,27 +1642,18 @@ class GeminiInvestmentAssistant:
                 "Maintain strict SEBI educational compliance: all trades and balances are 100% virtual paper trading. "
                 "Ground all market prices and facts strictly using verified facts. Never invent quotes."
             )
-            llm_reply = None
-            tool_calls = []
-            evidence = []
-
-            if self.is_groq_api_ready():
-                snapshots = await self.tool_get_market_snapshot([active_sym, "RELIANCE", "TCS", "HDFCBANK", "INFY"])
-                context_notes = "\n".join([f"- {s['symbol']}: ₹{s['price']:,.2f} ({s['source']})" for s in snapshots])
-                enhanced_sys = (
-                    f"{sys_instruct}\n\n"
-                    f"Current verified NSE quotes:\n{context_notes}\n\n"
-                    "If the user asks for 'best stock for tomorrow' or trading ideas: "
-                    "Do NOT give a blunt refusal. Provide an educational technical momentum screening guide for tomorrow: "
-                    "1. Note SEBI paper trading education. "
-                    "2. Give a 3-point technical checklist (5-day & 20-day SMA trend, RSI crossing 50, volume confirmation). "
-                    "3. Highlight 2-3 of the candidate stocks above with key technical pivot levels to watch."
-                )
-                llm_reply = await self.call_groq_api(user_message, enhanced_sys)
-                evidence = snapshots
-
-            if not llm_reply and self.is_llm_ready():
-                llm_reply = await self.call_llm_api(user_message, sys_instruct)
+            snapshots = await self.tool_get_market_snapshot([active_sym, "RELIANCE", "TCS", "HDFCBANK", "INFY"])
+            context_notes = "\n".join([f"- {s['symbol']}: ₹{s['price']:,.2f} ({s['source']})" for s in snapshots])
+            enhanced_sys = (
+                f"{sys_instruct}\n\n"
+                f"Current verified NSE quotes:\n{context_notes}\n\n"
+                "If the user asks for 'best stock for tomorrow' or trading ideas: "
+                "Do NOT give a blunt refusal. Provide an educational technical momentum screening guide for tomorrow: "
+                "1. Note SEBI paper trading education. "
+                "2. Give a 3-point technical checklist (5-day & 20-day SMA trend, RSI crossing 50, volume confirmation). "
+                "3. Highlight 2-3 of the candidate stocks above with key technical pivot levels to watch."
+            )
+            llm_reply = await self.call_groq_api(user_message, enhanced_sys)
 
             if llm_reply:
                 return AssistantMessageResponse(
@@ -1597,8 +1661,8 @@ class GeminiInvestmentAssistant:
                     conversation_id=conv_id,
                     reply=llm_reply,
                     language_detected=lang,
-                    tool_calls=tool_calls,
-                    evidence_cards=evidence,
+                    tool_calls=[],
+                    evidence_cards=snapshots,
                     is_setup_incomplete=False,
                 )
 

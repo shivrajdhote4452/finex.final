@@ -108,6 +108,7 @@ class Settings(BaseSettings):
     LLM_PROVIDER: str = "groq"
     GROQ_API_KEY: Optional[str] = Field(default=None, description="Groq API Key")
     GROQ_MODEL: str = Field(default="openai/gpt-oss-120b", description="Configured Groq model ID")
+    GROQ_TIMEOUT: float = Field(default=8.0, description="Groq API timeout in seconds")
     OPENAI_API_KEY: Optional[str] = None
 
     # Angel One SmartAPI Configuration
