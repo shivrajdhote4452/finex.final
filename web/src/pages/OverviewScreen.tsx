@@ -426,7 +426,7 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ onNavigate }) =>
             High IT Concentration
           </h3>
           <p style={{ fontSize: '13px', lineHeight: 1.6, color: 'var(--text-muted)', marginBottom: '18px', wordBreak: 'break-word', whiteSpace: 'normal', overflowWrap: 'break-word' }}>
-            TCS and Infosys represent <strong>50.8%</strong> of your invested equity holdings. While both are market leaders, SEBI diversification guidelines recommend capping single-sector exposure under 30% to mitigate industry downturns.
+            TCS and Infosys represent <strong>50.8%</strong> of your invested equity holdings. While both are market leaders, prudent diversification principles suggest avoiding heavy sector concentration (e.g. keeping single-sector exposure under 25–30% as an illustrative guideline) to mitigate industry downturns.
           </p>
 
           <div
@@ -443,7 +443,7 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ onNavigate }) =>
               lineHeight: 1.45,
             }}
           >
-            Citation: SEBI Investor Education Guide (Chapter 3: Asset Allocation Principles).
+            Reference: SEBI Investor Education Guide (Chapter 3: Asset Allocation Principles). Note: Individual retail investors are not subject to statutory percentage holding caps.
           </div>
 
           <button onClick={() => onNavigate('ask-finex')} className="btn btn-secondary" style={{ width: '100%' }}>

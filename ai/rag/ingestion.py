@@ -50,15 +50,6 @@ APPROVED_LOCAL_DOCUMENTS = [
         "source_url": "https://rbi.org.in/financialeducation/literacy-guide.html",
         "local_file": "data/documents/rbi_financial_literacy_guide.txt",
     },
-    {
-        "document_id": "FINEX-SOLO-SPRINT-PLAN-2026",
-        "title": "FinEx Solo Project Blueprint and Real Data Sprint Plan",
-        "doc_type": "PLANNING_BLUEPRINT",
-        "publisher": "FinEx Engineering / Shivraj Dhote",
-        "publishing_date": date(2026, 10, 16),
-        "source_url": "file://FinEx_Shivraj_Solo_Real_Data_Sprint_Plan (1).pdf",
-        "local_file": "FinEx_Shivraj_Solo_Real_Data_Sprint_Plan (1).pdf",
-    },
 ]
 
 
@@ -215,22 +206,35 @@ async def ensure_documents_indexed_db(
     db: Optional[AsyncSession] = None,
     base_dir: Optional[Path] = None,
 ) -> List[DocumentRegistryModel]:
-    """Ensure all approved local documents are extracted and indexed in the PostgreSQL database."""
+    """Ensure all approved local regulatory documents are extracted and indexed in PostgreSQL."""
     from backend.app.database import AsyncSessionLocal
 
-    results = []
-    if db is not None:
+    async def _index_and_clean(session: AsyncSession) -> List[DocumentRegistryModel]:
+        # Purge legacy non-regulatory / planning blueprint documents from investor RAG tables
+        await session.execute(
+            delete(DocumentChunkModel).where(
+                DocumentChunkModel.document_id.in_(["FINEX-SOLO-SPRINT-PLAN-2026"])
+            )
+        )
+        await session.execute(
+            delete(DocumentRegistryModel).where(
+                DocumentRegistryModel.id.in_(["FINEX-SOLO-SPRINT-PLAN-2026"])
+            )
+        )
+        await session.commit()
+
+        results = []
         for doc_meta in APPROVED_LOCAL_DOCUMENTS:
-            doc = await ingest_document_file_to_db(doc_meta, db, base_dir)
+            doc = await ingest_document_file_to_db(doc_meta, session, base_dir)
             if doc:
                 results.append(doc)
+        return results
+
+    if db is not None:
+        return await _index_and_clean(db)
     else:
         async with AsyncSessionLocal() as session:
-            for doc_meta in APPROVED_LOCAL_DOCUMENTS:
-                doc = await ingest_document_file_to_db(doc_meta, session, base_dir)
-                if doc:
-                    results.append(doc)
-    return results
+            return await _index_and_clean(session)
 
 
 def ingest_corpus_documents() -> List[DocumentChunk]:

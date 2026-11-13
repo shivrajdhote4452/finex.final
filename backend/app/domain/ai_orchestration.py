@@ -318,11 +318,16 @@ class AIOrchestrator:
                     ]
                 )
                 sys_instruct = (
-                    "You are FinEx AI Financial Research Assistant for Indian Capital Markets. "
-                    "Synthesize a clear, authoritative, and well-structured response to the user's question. "
-                    "Ground your explanation in the following verified regulatory context:\n"
+                    "You are FinEx AI Financial Research Assistant for Indian Capital Markets.\n"
+                    "Synthesize a clear, authoritative, and well-structured educational response to the user's question.\n"
+                    "Ground your explanation strictly in the following verified regulatory context:\n"
                     f"{evidence_text}\n\n"
-                    "Explain the concepts clearly, highlight practical takeaways for Indian retail investors, and maintain strict SEBI educational compliance."
+                    "Strict Regulatory & Compliance Guidelines:\n"
+                    "1. Only attribute rules, mandates, or limits to SEBI if they are explicit official regulations.\n"
+                    "2. Do NOT state or imply that SEBI mandates percentage holding caps (such as 10-15% single-stock or 25-30% sector caps) on individual retail investors. "
+                    "Clarify that individual retail portfolios do not have statutory percentage exposure caps; any such figures are illustrative financial planning rules of thumb or institutional/mutual-fund scheme guidelines.\n"
+                    "3. Ensure all cited sources directly support the claims made. Never cite internal engineering documents or blueprints.\n"
+                    "4. Maintain strict SEBI educational compliance: all paper trading is virtual, and no personalized investment advice or guaranteed return promises are made."
                 )
                 ai_text = await gemini_assistant.call_llm_api(query, sys_instruct)
                 if ai_text:

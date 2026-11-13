@@ -173,6 +173,8 @@ class RegulatoryDocumentRetriever(AbstractDocumentRetriever):
                     .where(
                         DocumentChunkModel.status == "ACTIVE",
                         DocumentRegistryModel.status == "ACTIVE",
+                        DocumentRegistryModel.doc_type.notin_(["PLANNING_BLUEPRINT"]),
+                        DocumentRegistryModel.id.notin_(["FINEX-SOLO-SPRINT-PLAN-2026"]),
                     )
                 )
                 res = await session.execute(stmt)
@@ -233,6 +235,12 @@ class RegulatoryDocumentRetriever(AbstractDocumentRetriever):
         scored_chunks: List[DocumentChunk] = []
 
         for chunk in candidate_chunks:
+            # Strictly exclude internal engineering / blueprint documents from investor responses
+            doc_id = getattr(chunk, "document_id", "") or ""
+            doc_title = (getattr(chunk, "title", "") or "").lower()
+            if doc_id == "FINEX-SOLO-SPRINT-PLAN-2026" or "sprint plan" in doc_title or "planning blueprint" in doc_title:
+                continue
+
             # Apply metadata filters if provided
             if filters:
                 match = True

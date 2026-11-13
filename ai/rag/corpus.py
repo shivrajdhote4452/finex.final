@@ -39,9 +39,13 @@ REGULATORY_DOCUMENTS: List[Dict[str, Any]] = [
                 "section": "Chapter 3: Asset Allocation and Diversification Principles",
                 "page_number": 12,
                 "content": (
-                    "Diversification is the primary protection against unsystematic risk. Holding securities across unrelated economic sectors "
+                    "Diversification is the primary protection against unsystematic risk in capital markets. Holding securities across unrelated economic sectors "
                     "ensures that severe drawdowns in a single industry (such as Technology or Energy) do not impair total portfolio solvency. "
-                    "SEBI guidelines recommend capping single-stock exposure under 10% to 15% and single-sector exposure under 25% to 30% of total equity holdings."
+                    "SEBI regulations do not prescribe mandatory percentage exposure limits or portfolio caps for individual retail investors in their personal "
+                    "direct equity holdings. While statutory concentration restrictions (such as a 10% single-issuer NAV limit under the Seventh Schedule of "
+                    "SEBI Mutual Funds Regulations) apply to mutual fund schemes, individual retail investors manage their own asset allocation. "
+                    "As an illustrative financial planning rule of thumb, market practitioners often suggest capping single-stock exposure under 10% to 15% "
+                    "and single-sector exposure under 25% to 30% of total equity holdings as a prudent personal risk-management example, not as a statutory SEBI regulation."
                 ),
             },
             {

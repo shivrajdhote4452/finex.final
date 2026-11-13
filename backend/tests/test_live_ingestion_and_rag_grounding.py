@@ -145,3 +145,109 @@ async def test_insufficient_evidence_withholds_ungrounded_speculation():
     assert resp.is_fallback is True
     assert len(resp.citations) == 0
     assert "could not find sufficiently verified regulatory filings" in resp.content.lower()
+
+
+@pytest.mark.asyncio
+async def test_diversification_query_does_not_assert_unsupported_sebi_caps():
+    """Verify diversification answer does not claim SEBI mandates percentage caps for retail investors."""
+    retriever = RegulatoryDocumentRetriever(chunks=ingest_corpus_documents())
+    orchestrator = AIOrchestrator(retriever=retriever)
+
+    resp = await orchestrator.answer_query("What are the single stock and single sector limits under SEBI diversification rules?")
+    assert resp.intent == AIIntent.FINANCIAL_EDUCATION
+    assert resp.is_fallback is False
+    assert len(resp.citations) >= 1
+
+    content_lower = resp.content.lower()
+
+    # 1. Must NOT claim SEBI mandates/recommends these caps as a rule for retail investors
+    assert "sebi guidelines recommend capping single-stock" not in content_lower
+    assert "sebi rules mandate 10%" not in content_lower
+
+    # 2. Must explicitly clarify that SEBI does not prescribe mandatory caps for retail investors
+    assert "sebi regulations do not prescribe mandatory percentage" in content_lower or \
+           "not as a statutory sebi regulation" in content_lower or \
+           "illustrative" in content_lower
+
+    # 3. Verified citations must include SEBI education document and NEVER reference internal blueprints
+    doc_ids = [cit.document_id for cit in resp.citations]
+    assert "SEBI-ED-2024-01" in doc_ids
+    for cit in resp.citations:
+        assert "FINEX" not in cit.document_id
+        assert "blueprint" not in cit.title.lower()
+        assert "sprint plan" not in cit.title.lower()
+
+
+@pytest.mark.asyncio
+async def test_engineering_blueprint_excluded_from_retrieval_and_citations():
+    """Verify that internal planning blueprints are never returned or cited to investors."""
+    from backend.app.ports.retriever import DocumentChunk
+
+    mixed_chunks = [
+        DocumentChunk(
+            chunk_id="chk_blueprint_01",
+            document_id="FINEX-SOLO-SPRINT-PLAN-2026",
+            title="FinEx Solo Project Blueprint and Real Data Sprint Plan",
+            publisher="FinEx Engineering / Shivraj Dhote",
+            source_url="file://FinEx_Shivraj_Solo_Real_Data_Sprint_Plan (1).pdf",
+            section="Sprint 4: Portfolio Diversification Architecture",
+            page_number=1,
+            content="Architecture sprint plan for portfolio diversification and single-stock exposure calculation engine.",
+            score=0.0,
+        ),
+        DocumentChunk(
+            chunk_id="chk_sebi_01",
+            document_id="SEBI-ED-2024-01",
+            title="SEBI Guide to Financial Education for Beginners",
+            publisher="Securities and Exchange Board of India (SEBI)",
+            source_url="https://investor.sebi.gov.in/financial-education/beginners-guide.html",
+            section="Chapter 3: Asset Allocation and Diversification Principles",
+            page_number=12,
+            content="Diversification is the primary protection against unsystematic risk in capital markets.",
+            score=0.0,
+        ),
+    ]
+
+    retriever = RegulatoryDocumentRetriever(chunks=mixed_chunks)
+    results = await retriever.retrieve_relevant_chunks("portfolio diversification sprint plan architecture", top_k=5)
+
+    # Blueprint chunk must be completely filtered out
+    assert len(results) > 0
+    for r in results:
+        assert r.document_id != "FINEX-SOLO-SPRINT-PLAN-2026"
+        assert "blueprint" not in r.title.lower()
+        assert "sprint plan" not in r.title.lower()
+
+
+@pytest.mark.asyncio
+async def test_groq_synthesis_receives_anti_hallucination_diversification_instructions():
+    """Verify system prompt passed to Groq contains explicit directives against inventing SEBI retail caps."""
+    from unittest.mock import AsyncMock, patch
+    from backend.app.domain.gemini_assistant import gemini_assistant
+
+    retriever = RegulatoryDocumentRetriever(chunks=ingest_corpus_documents())
+    orchestrator = AIOrchestrator(retriever=retriever)
+
+    captured_sys_instruct = None
+
+    async def mock_call_llm(prompt, sys_instruct):
+        nonlocal captured_sys_instruct
+        captured_sys_instruct = sys_instruct
+        return (
+            "According to SEBI investor education, diversification protects against unsystematic risk. "
+            "SEBI does not prescribe mandatory percentage exposure limits for individual retail investors. "
+            "Holding no more than 10-15% in a single stock is an illustrative financial planning rule of thumb, "
+            "whereas statutory 10% caps apply to mutual fund schemes under SEBI regulations."
+        )
+
+    with patch.object(gemini_assistant, "is_llm_ready", return_value=True), \
+         patch.object(gemini_assistant, "call_llm_api", side_effect=mock_call_llm):
+        resp = await orchestrator.answer_query("Explain SEBI rules on 10% stock diversification")
+
+        assert resp.intent == AIIntent.FINANCIAL_EDUCATION
+        assert "does not prescribe mandatory percentage" in resp.content
+        assert captured_sys_instruct is not None
+        # Assert strict compliance prompt directives are present
+        assert "Do NOT state or imply that SEBI mandates percentage holding caps" in captured_sys_instruct
+        assert "Never cite internal engineering documents or blueprints" in captured_sys_instruct
+
