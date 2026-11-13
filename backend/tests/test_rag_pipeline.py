@@ -10,10 +10,11 @@ from ai.rag.retriever import RegulatoryDocumentRetriever
 
 def test_ingest_corpus_documents():
     chunks = ingest_corpus_documents()
-    assert len(chunks) == 18, f"Expected 18 sections across 6 documents, got {len(chunks)}"
+    assert len(chunks) == 19, f"Expected 19 sections across 7 documents, got {len(chunks)}"
 
     approved_doc_ids = [
         "SEBI-ED-2024-01",
+        "SEBI-CIRC-MF-2026",
         "NSE-FACT-NIFTY50-2026",
         "RBI-FLG-2024-02",
         "RBI-SGB-2024-FAQ",
@@ -38,7 +39,7 @@ async def test_retriever_emergency_fund_query():
     assert top_result.document_id == "SEBI-ED-2024-01"
     assert "Foundations of Financial Planning" in top_result.section
     citation = format_citation(top_result)
-    assert "FinEx Educational Summary: Guide to Financial Planning & SEBI Regulatory Framework" in citation
+    assert "SEBI Investor Education: Guide to Financial Planning & Risk Management" in citation
     assert "p. 4" in citation
 
 
@@ -85,5 +86,5 @@ def test_format_citation():
     cit = format_citation(sebi_chunk)
     assert (
         cit
-        == "[FinEx Educational Summary: Guide to Financial Planning & SEBI Regulatory Framework, Chapter 1: The Foundations of Financial Planning, p. 4]"
+        == "[SEBI Investor Education: Guide to Financial Planning & Risk Management, Chapter 1: The Foundations of Financial Planning, p. 4]"
     )

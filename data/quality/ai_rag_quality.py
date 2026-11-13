@@ -48,9 +48,12 @@ class AIRAGQualityChecker:
         self.allowed_publishers = allowed_publishers or {
             "SEBI",
             "Securities and Exchange Board of India (SEBI)",
+            "SEBI Investor Education",
             "RBI",
+            "Reserve Bank of India",
             "Reserve Bank of India (RBI)",
             "NSE",
+            "NSE Indices Limited",
             "National Stock Exchange (NSE)",
             "AMFI",
             "Association of Mutual Funds in India (AMFI)",

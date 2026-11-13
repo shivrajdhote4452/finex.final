@@ -25,12 +25,21 @@ from backend.app.ports.retriever import DocumentChunk
 APPROVED_LOCAL_DOCUMENTS = [
     {
         "document_id": "SEBI-ED-2024-01",
-        "title": "FinEx Educational Summary: Guide to Financial Planning & SEBI Regulatory Framework",
-        "doc_type": "EDUCATIONAL_SUMMARY",
-        "publisher": "FinEx Educational Summary",
+        "title": "SEBI Investor Education: Guide to Financial Planning & Risk Management",
+        "doc_type": "INVESTOR_EDUCATION",
+        "publisher": "SEBI Investor Education",
         "publishing_date": date(2024, 1, 15),
         "source_url": "https://investor.sebi.gov.in/investment_risk_managment.html",
         "local_file": "data/documents/sebi_financial_education_guide.txt",
+    },
+    {
+        "document_id": "SEBI-CIRC-MF-2026",
+        "title": "SEBI Master Circular for Mutual Funds: Portfolio Concentration Norms",
+        "doc_type": "REGULATORY_CIRCULAR",
+        "publisher": "Securities and Exchange Board of India (SEBI)",
+        "publishing_date": date(2026, 3, 20),
+        "source_url": "https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf",
+        "local_file": "data/documents/sebi_master_circular_mutual_funds.txt",
     },
     {
         "document_id": "NSE-FACT-NIFTY50-2026",
