@@ -164,17 +164,18 @@ async def test_diversification_query_does_not_assert_unsupported_sebi_caps():
     assert "sebi guidelines recommend capping single-stock" not in content_lower
     assert "sebi rules mandate 10%" not in content_lower
 
-    # 2. Must explicitly clarify that SEBI does not prescribe mandatory caps for retail investors
+    # 2. Must clarify that the circular rule does not govern individual personal direct equity portfolios
     assert "no statutory percentage holding limits" in content_lower or \
            "sebi regulations do not prescribe mandatory percentage" in content_lower or \
            "not as a statutory sebi regulation" in content_lower or \
-           "does not apply to individual retail investors" in content_lower or \
+           "does not apply to individual" in content_lower or \
+           "does not govern individual" in content_lower or \
            "illustrative" in content_lower
 
     # 3. Must accurately explain mutual fund concentration limits with current Master Circular, historical context, scope and exceptions
     assert "master circular for mutual funds" in content_lower or "seventh schedule" in content_lower or "1774024028162.pdf" in content_lower
     assert "actively managed mutual fund schemes" in content_lower or "mutual fund scheme" in content_lower
-    assert "does not apply to individual" in content_lower
+    assert "does not apply to individual" in content_lower or "does not govern individual" in content_lower
     assert "index funds" in content_lower or "etfs" in content_lower
 
     # 4. Must describe diversification as reducing some risks, not guaranteeing protection against losses
@@ -214,10 +215,8 @@ async def test_returned_citation_publisher_source_link_and_attribution():
     sebi_risk_cits = [c for c in resp_risk.citations if c.document_id == "SEBI-INVESTOR-ED-RISK"]
     assert len(sebi_risk_cits) > 0
     risk_cit = sebi_risk_cits[0]
-    assert risk_cit.publisher == "FinEx Educational Summary"
-    assert "FinEx Educational Summary" in risk_cit.title
+    assert risk_cit.publisher == "Securities and Exchange Board of India (SEBI)"
     assert "How to Manage Investment Risks" in risk_cit.title
-    assert "SEBI Investor Education" in risk_cit.title
     assert risk_cit.source_url == "https://investor.sebi.gov.in/investment_risk_managment.html"
     assert risk_cit.page_number is None  # Unpaged web source has no page number
     # Must NOT claim this page proves a broad absence of statutory retail limits
@@ -227,8 +226,7 @@ async def test_returned_citation_publisher_source_link_and_attribution():
     resp_mf = await orchestrator.answer_query("What are mutual fund concentration limits according to SEBI?")
     assert len(resp_mf.citations) >= 1
     mf_cit = [c for c in resp_mf.citations if c.document_id == "SEBI-CIRC-MF-2026"][0]
-    assert mf_cit.publisher == "FinEx Educational Summary"
-    assert "FinEx Educational Summary" in mf_cit.title
+    assert mf_cit.publisher == "Securities and Exchange Board of India (SEBI)"
     assert "SEBI Master Circular" in mf_cit.title
     assert mf_cit.source_url == "https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf"
     assert mf_cit.page_number is None  # Unverified page number removed
@@ -241,13 +239,15 @@ async def test_returned_citation_publisher_source_link_and_attribution():
     assert "https://investor.sebi.gov.in/investment_risk_managment.html" in sr_chk.content
     assert "does not eliminate market risk" in sr_chk.content.lower()
     assert "no statutory percentage holding limits" not in sr_chk.content.lower()
+    assert "statutory caps apply only to mutual funds" not in sr_chk.content.lower()
 
     mf_chunks = [c for c in chunks if c.document_id == "SEBI-CIRC-MF-2026"]
     assert len(mf_chunks) > 0
     mf_chk = mf_chunks[0]
     assert "https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf" in mf_chk.content
-    assert "SEBI Master Circular for Mutual Funds" in mf_chk.content
-    assert "Regulation 44(1) and Clause 1 of the Seventh Schedule" in mf_chk.content
+    assert "Master Circular for Mutual Funds" in mf_chk.content
+    assert "Clause 1 of the Seventh Schedule" in mf_chk.content
+    assert "statutory caps apply only to mutual funds" not in mf_chk.content.lower()
     assert "actively managed mutual fund schemes" in mf_chk.content
     assert "Index Funds and Exchange Traded Funds (ETFs)" in mf_chk.content
 
@@ -322,20 +322,21 @@ async def test_groq_synthesis_receives_anti_hallucination_diversification_instru
         assert "does not prescribe mandatory percentage" in resp.content
         assert captured_sys_instruct is not None
         # Assert strict compliance prompt directives are present
-        assert "Accurate Source Attribution" in captured_sys_instruct
-        assert "Never attribute team-written formulations" in captured_sys_instruct or "Never attribute project-written explanations" in captured_sys_instruct
-        assert "Clearly Label Educational Summaries" in captured_sys_instruct
-        assert "Mutual Fund Concentration Limit Scope" in captured_sys_instruct
+        assert "Avoid Overbroad Claims Regarding Retail Limits" in captured_sys_instruct
+        assert "statutory caps apply only to mutual funds" in captured_sys_instruct
+        assert "no retail limits exist" in captured_sys_instruct
         assert "SEBI Master Circular for Mutual Funds" in captured_sys_instruct
+        assert "1774024028162.pdf" in captured_sys_instruct
         assert "investment_risk_managment.html" in captured_sys_instruct
-        assert "Prudent Risk Characterization" in captured_sys_instruct
-        assert "Do NOT state or imply that SEBI mandates percentage holding caps" not in captured_sys_instruct or "SEBI does NOT prescribe mandatory percentage holding caps" in captured_sys_instruct
+        assert "Prudent Risk Characterization & No Guaranteed Offset" in captured_sys_instruct
+        assert "unaffected or will offset losses" in captured_sys_instruct
+        assert "FinEx Educational Summary" in captured_sys_instruct
         assert "Never cite internal engineering blueprints" in captured_sys_instruct
 
 
 @pytest.mark.asyncio
 async def test_sebi_explanation_source_labels_and_page_reference_removal():
-    """Verify that SEBI explanation files are labeled as FinEx educational summaries with correct links and no unverified page numbers."""
+    """Verify that SEBI regulatory records link to official sources, team explanations are labeled FinEx, and unverified page numbers are removed."""
     from ai.rag.corpus import REGULATORY_DOCUMENTS
     from ai.rag.ingestion import APPROVED_LOCAL_DOCUMENTS, extract_document_from_file, format_citation
     from backend.app.ports.retriever import DocumentChunk
@@ -344,37 +345,46 @@ async def test_sebi_explanation_source_labels_and_page_reference_removal():
     doc_map = {d["document_id"]: d for d in APPROVED_LOCAL_DOCUMENTS}
 
     risk_meta = doc_map["SEBI-INVESTOR-ED-RISK"]
-    assert risk_meta["publisher"] == "FinEx Educational Summary"
-    assert "FinEx Educational Summary" in risk_meta["title"]
+    assert risk_meta["publisher"] == "Securities and Exchange Board of India (SEBI)"
     assert "SEBI Investor Education" in risk_meta["title"]
     assert risk_meta["source_url"] == "https://investor.sebi.gov.in/investment_risk_managment.html"
 
     mf_meta = doc_map["SEBI-CIRC-MF-2026"]
-    assert mf_meta["publisher"] == "FinEx Educational Summary"
-    assert "FinEx Educational Summary" in mf_meta["title"]
+    assert mf_meta["publisher"] == "Securities and Exchange Board of India (SEBI)"
     assert "SEBI Master Circular" in mf_meta["title"]
     assert mf_meta["source_url"] == "https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf"
+
+    # Team-written educational guides are labeled FinEx Educational Summary
+    ed_meta = doc_map["SEBI-ED-2024-01"]
+    assert ed_meta["publisher"] == "FinEx Educational Summary"
+    assert "FinEx Educational Summary" in ed_meta["title"]
+
+    heur_meta = doc_map["FINEX-ED-DIVERSIFICATION-2026"]
+    assert heur_meta["publisher"] == "FinEx Educational Summary"
+    assert "FinEx Educational Summary" in heur_meta["title"]
 
     # 2. Check extracted document files (verifying Page: 1 was removed and parsed as None)
     _, risk_sections = extract_document_from_file(risk_meta["local_file"])
     assert len(risk_sections) == 1
     assert risk_sections[0]["page_number"] is None
-    assert "FinEx Educational Summary based on official SEBI Investor Education" in risk_sections[0]["content"]
+    assert "Official Publication: Securities and Exchange Board of India (SEBI) Investor Education" in risk_sections[0]["content"]
+    assert "unaffected or will offset losses" in risk_sections[0]["content"]
 
     _, mf_sections = extract_document_from_file(mf_meta["local_file"])
     assert len(mf_sections) == 1
     assert mf_sections[0]["page_number"] is None  # Page 1 removed because Master Circular is 748 pages
-    assert "FinEx Educational Summary based on official SEBI Master Circular" in mf_sections[0]["content"]
+    assert "Official Regulatory Publication: Securities and Exchange Board of India (SEBI) Master Circular" in mf_sections[0]["content"]
+    assert "statutory caps apply only to mutual funds" not in mf_sections[0]["content"].lower()
 
     # 3. Check fallback corpus
     corpus_map = {d["document_id"]: d for d in REGULATORY_DOCUMENTS}
     c_risk = corpus_map["SEBI-INVESTOR-ED-RISK"]
-    assert c_risk["publisher"] == "FinEx Educational Summary"
+    assert c_risk["publisher"] == "Securities and Exchange Board of India (SEBI)"
     assert c_risk["source_url"] == "https://investor.sebi.gov.in/investment_risk_managment.html"
     assert c_risk["sections"][0]["page_number"] is None
 
     c_mf = corpus_map["SEBI-CIRC-MF-2026"]
-    assert c_mf["publisher"] == "FinEx Educational Summary"
+    assert c_mf["publisher"] == "Securities and Exchange Board of India (SEBI)"
     assert c_mf["source_url"] == "https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf"
     assert c_mf["sections"][0]["page_number"] is None
 
@@ -382,8 +392,8 @@ async def test_sebi_explanation_source_labels_and_page_reference_removal():
     chunk_unpaged = DocumentChunk(
         chunk_id="chk_test_01",
         document_id="SEBI-CIRC-MF-2026",
-        title="FinEx Educational Summary: Mutual Fund Concentration Norms (Based on SEBI Master Circular)",
-        publisher="FinEx Educational Summary",
+        title="SEBI Master Circular for Mutual Funds: Portfolio Concentration Norms",
+        publisher="Securities and Exchange Board of India (SEBI)",
         source_url="https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf",
         section="Section 1: Portfolio Concentration Limits for Mutual Fund Schemes",
         page_number=None,
@@ -393,6 +403,47 @@ async def test_sebi_explanation_source_labels_and_page_reference_removal():
     formatted = format_citation(chunk_unpaged)
     assert "p." not in formatted
     assert "None" not in formatted
-    assert formatted == "[FinEx Educational Summary: Mutual Fund Concentration Norms (Based on SEBI Master Circular), Section 1: Portfolio Concentration Limits for Mutual Fund Schemes]"
+    assert formatted == "[SEBI Master Circular for Mutual Funds: Portfolio Concentration Norms, Section 1: Portfolio Concentration Limits for Mutual Fund Schemes]"
+
+
+@pytest.mark.asyncio
+async def test_regulatory_wording_no_broad_claims_and_accurate_circular_links():
+    """Verify that:
+    1. Broad claims ('statutory caps apply only to mutual funds', 'no retail limits exist') are eliminated.
+    2. Mutual fund concentration claims link directly to the official circular PDF.
+    3. Team explanations are labeled FinEx Educational Summary.
+    4. Risk wording explicitly rejects guaranteed offset and affirms market risk remains."""
+    retriever = RegulatoryDocumentRetriever(chunks=ingest_corpus_documents(include_educational_summaries=True))
+    orchestrator = AIOrchestrator(retriever=retriever)
+
+    resp = await orchestrator.answer_query("What are the diversification rules and single-stock exposure limits under SEBI regulations?")
+    assert resp.intent == AIIntent.FINANCIAL_EDUCATION
+    content_lower = resp.content.lower()
+
+    # 1. Broad claim elimination
+    assert "statutory caps apply only to mutual funds" not in content_lower
+    assert "no retail limits exist" not in content_lower
+
+    # 2. Citations verification
+    citations_by_doc = {c.document_id: c for c in resp.citations}
+
+    if "SEBI-CIRC-MF-2026" in citations_by_doc:
+        mf_cit = citations_by_doc["SEBI-CIRC-MF-2026"]
+        assert mf_cit.publisher == "Securities and Exchange Board of India (SEBI)"
+        assert mf_cit.source_url == "https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf"
+
+    if "SEBI-INVESTOR-ED-RISK" in citations_by_doc:
+        risk_cit = citations_by_doc["SEBI-INVESTOR-ED-RISK"]
+        assert risk_cit.publisher == "Securities and Exchange Board of India (SEBI)"
+        assert risk_cit.source_url == "https://investor.sebi.gov.in/investment_risk_managment.html"
+
+    if "FINEX-ED-DIVERSIFICATION-2026" in citations_by_doc:
+        finex_cit = citations_by_doc["FINEX-ED-DIVERSIFICATION-2026"]
+        assert finex_cit.publisher == "FinEx Educational Summary"
+
+    # 3. Prudent risk characterization
+    assert "does not guarantee" in content_lower or "not eliminate market risk" in content_lower
+    assert "unaffected or will offset losses" not in content_lower or "does not guarantee that other investments will be unaffected" in content_lower
+
 
 

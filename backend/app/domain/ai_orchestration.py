@@ -313,7 +313,8 @@ class AIOrchestrator:
             f"{source_intro}"
             f"{primary.content}\n\n"
             f"Key Takeaway: Capital market participation requires balancing expected returns with prudent risk limits. "
-            f"Holding diversified assets across sectors helps reduce unsystematic risk, but does not eliminate market risk or guarantee protection against losses."
+            f"Holding diversified assets across sectors can reduce some risks, but does not eliminate market risk. "
+            f"Diversification does not guarantee that other investments will be unaffected or will offset losses, and does not guarantee protection against declines."
         )
 
         # Enhance with live LLM synthesis (Groq) when available
@@ -323,7 +324,7 @@ class AIOrchestrator:
             if gemini_assistant.is_llm_ready():
                 evidence_text = "\n\n".join(
                     [
-                        f"Source [{i + 1}] ({c.publisher} - {c.title}):\n{c.content}"
+                        f"Source [{i + 1}] ({c.publisher} - {c.title}):\nOfficial Link: {c.source_url or 'N/A'}\nContent:\n{c.content}"
                         for i, c in enumerate(retrieved_chunks)
                     ]
                 )
@@ -333,14 +334,26 @@ class AIOrchestrator:
                     "Ground your explanation strictly in the following verified regulatory context:\n"
                     f"{evidence_text}\n\n"
                     "Strict Regulatory & Compliance Guidelines:\n"
-                    "1. Accurate Source Attribution & Citation Matching: Ensure citation labels and source names in your answer strictly match the retrieved Source [1], [2], etc. labels. Never attribute team-written formulations or exact project phrasing directly to SEBI without verification.\n"
-                    "   - Clearly Label Educational Summaries: Project-written guides and practical portfolio heuristics (such as capping single-stock exposure under 10–15% or single-sector exposure under 25–30%) must be cited and labeled as 'FinEx Educational Summary' (e.g. [1]), NEVER as statutory SEBI rules for retail investors. Clarify that SEBI does NOT prescribe mandatory percentage holding caps for individual retail investors in direct equities.\n"
-                    "   - Present FinEx Summaries Based on Official SEBI Sources: For risk management principles (asset allocation, unsystematic risk reduction) or mutual fund concentration norms (10% NAV cap for actively managed funds), present and cite them as FinEx Educational Summaries based on official SEBI sources, linking directly to the verified official publications (https://investor.sebi.gov.in/investment_risk_managment.html and https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf). Do NOT cite the SEBI risk-management page as proof of a broad absence of statutory retail-investor limits.\n"
-                    "   - Never mismatch citation numbers: ensure each claim refers to the specific citation number whose label and link directly support that claim.\n"
-                    "2. Mutual Fund Concentration Limit Scope, Current Regulations & Historical Context: Accurately state that statutory 10% single-company concentration limits apply to actively managed mutual fund schemes under the SEBI Master Circular for Mutual Funds dated March 20, 2026 (Circular No. HO/24/13/11(1)2026-IMD-POD-1/I/7602/2026, effective April 1, 2026) and Clause 1 of the Seventh Schedule of SEBI (Mutual Funds) Regulations, 1996; they do NOT apply to individual retail investors in direct equities. Mention exceptions for Index Funds and ETFs tracking benchmark indices under portfolio concentration norms, sectoral/thematic funds, and credit-rated debt limits.\n"
-                    "3. Prudent Risk Characterization: Describe diversification as a risk-mitigation strategy that helps reduce some risks (specifically unsystematic or firm-specific risk); explicitly state that diversification does NOT eliminate market (systematic) risk and does NOT guarantee protection against losses or guarantee positive returns.\n"
-                    "4. Source Integrity: Ensure all cited sources directly support the claims made. Never cite internal engineering blueprints or unapproved documents.\n"
-                    "5. Maintain strict SEBI educational compliance: all paper trading is virtual, and no personalized investment advice or guaranteed return promises are made."
+                    "1. Avoid Overbroad Claims Regarding Retail Limits:\n"
+                    "   - Do NOT state or imply that 'statutory caps apply only to mutual funds'.\n"
+                    "   - Avoid asserting that 'no retail limits exist' or making sweeping claims about the absence of retail caps unless a specific reliable source explicitly establishes that exact claim and scope.\n"
+                    "   - Accurately state the specific scope of the rule: under the SEBI mutual fund regulatory framework, the 10% NAV single-issuer concentration limit governs mutual fund schemes, rather than serving as an individual personal direct equity portfolio cap under that circular.\n"
+                    "2. Accurate Explanation & Official Link for Mutual Fund Concentration Norms:\n"
+                    "   - If explaining the mutual fund concentration rule, use the applicable rule, scope and exceptions from the official circular:\n"
+                    "     * Applicable Rule: A mutual fund scheme shall not invest more than 10% of its Net Asset Value (NAV) in equity shares or equity-related instruments of any single company (originating in Clause 1 of the Seventh Schedule of SEBI (Mutual Funds) Regulations, 1996).\n"
+                    "     * Scope: Applies at the scheme level to actively managed mutual fund schemes.\n"
+                    "     * Exceptions: Index Funds and ETFs passively replicating benchmark indices are exempt under portfolio concentration norms (subject to index-level capping rules); sectoral/thematic funds invest according to their designated mandates; debt instruments follow credit-rated single-issuer frameworks.\n"
+                    "   - Make it clear that the relevant official circular is linked, directly citing the official circular: SEBI Master Circular for Mutual Funds dated March 20, 2026 (Circular No. HO/24/13/11(1)2026-IMD-POD-1/I/7602/2026, https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf).\n"
+                    "3. Accurate Labeling of Team-Written Summaries & Citation Mapping:\n"
+                    "   - Clearly label team-written explanations and practical heuristics (such as capping single-stock exposure under 10–15% or single-sector exposure under 25–30%) as 'FinEx Educational Summary' (e.g. [1]), NOT as statutory regulations.\n"
+                    "   - Clearly cite the official SEBI publication on risk management (https://investor.sebi.gov.in/investment_risk_managment.html) when discussing general asset allocation and unsystematic risk reduction.\n"
+                    "   - Make sure citation numbers, labels, and links correspond strictly to the specific claims they support. Do not attribute regulatory rules to FinEx summaries when citing official circular provisions, and do not attribute team-written formulations to SEBI.\n"
+                    "4. Prudent Risk Characterization & No Guaranteed Offset:\n"
+                    "   - State that diversification can reduce some risks (specifically unsystematic or company/sector-specific risk), but does NOT eliminate market (systematic) risk and does NOT guarantee protection against investment losses.\n"
+                    "   - Correct and avoid any example or claim implying that other investments will always remain unaffected or will automatically offset losses during market declines, because broader economic or market downturns can cause multiple holdings or sectors to decline simultaneously.\n"
+                    "5. Source Integrity & Compliance:\n"
+                    "   - Ensure all cited sources directly support the claims made. Never cite internal engineering blueprints or unapproved documents.\n"
+                    "   - Maintain strict SEBI educational compliance: all paper trading is virtual, and no personalized investment advice or guaranteed return promises are made."
                 )
                 ai_text = await gemini_assistant.call_llm_api(query, sys_instruct)
                 if ai_text:

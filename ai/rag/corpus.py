@@ -43,14 +43,16 @@ REGULATORY_DOCUMENTS: List[Dict[str, Any]] = [
                     "FinEx Educational Summary: Asset allocation and portfolio diversification are foundational risk-mitigation principles "
                     "in securities markets. Diversification involves spreading investments across different asset classes (equity, debt, "
                     "and cash equivalents), market sectors, and issuers to reduce unsystematic (company-specific and sector-specific) risk. "
-                    "Diversification helps reduce some risks, but it does not eliminate market risk (systematic risk) and does not guarantee "
-                    "protection against investment losses or guarantee positive returns during market downturns. In Indian securities regulations, "
-                    "statutory concentration boundaries (such as the 10% NAV cap under the SEBI Master Circular for Mutual Funds) apply specifically "
-                    "to actively managed mutual funds (with exceptions for Index Funds and ETFs tracking benchmark indices); this statutory "
-                    "restriction does not apply to individual retail investors. Retail investors determine their own asset allocation based on "
-                    "their personal financial goals and risk tolerance. Financial planning practitioners commonly suggest illustrative heuristics "
-                    "(such as capping individual stock holdings below 10–15% or single-sector exposure below 25–30%) as practical rules of thumb "
-                    "to avoid disproportionate firm-specific downside, but these are illustrative heuristics, not statutory regulations."
+                    "Diversification can reduce some risks, but it does not eliminate market risk (systematic risk) and does not guarantee "
+                    "protection against investment losses or guarantee positive returns during market downturns. It does not guarantee that other "
+                    "investments will be unaffected or will offset losses, because broader market downturns can impact multiple assets simultaneously. "
+                    "In Indian securities regulations, the statutory 10% NAV concentration limit under the SEBI Master Circular for Mutual Funds "
+                    "(Circular No. HO/24/13/11(1)2026-IMD-POD-1/I/7602/2026, https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf) "
+                    "applies at the scheme portfolio level to actively managed mutual funds (with exceptions for Index Funds and ETFs tracking benchmark indices); "
+                    "under this circular, it does not serve as an individual personal portfolio cap for retail direct equities. Retail investors determine their "
+                    "own asset allocation based on their personal financial goals and risk profile. Financial planning practitioners commonly suggest illustrative "
+                    "heuristics (such as capping individual stock holdings below 10–15% or single-sector exposure below 25–30%) as practical rules of thumb "
+                    "to manage firm-specific downside, but these are illustrative heuristics, not statutory regulations."
                 ),
             },
             {
@@ -77,8 +79,8 @@ REGULATORY_DOCUMENTS: List[Dict[str, Any]] = [
     },
     {
         "document_id": "SEBI-INVESTOR-ED-RISK",
-        "title": "FinEx Educational Summary: How to Manage Investment Risks (Based on SEBI Investor Education)",
-        "publisher": "FinEx Educational Summary",
+        "title": "SEBI Investor Education: How to Manage Investment Risks",
+        "publisher": "Securities and Exchange Board of India (SEBI)",
         "source_url": "https://investor.sebi.gov.in/investment_risk_managment.html",
         "document_date": "2024-01-15",
         "sections": [
@@ -86,23 +88,24 @@ REGULATORY_DOCUMENTS: List[Dict[str, Any]] = [
                 "section": "Section 1: How to Manage Investment Risks",
                 "page_number": None,
                 "content": (
-                    "FinEx Educational Summary based on official SEBI Investor Education publication ('How to Manage Investment Risks', "
-                    "https://investor.sebi.gov.in/investment_risk_managment.html). Asset allocation and portfolio diversification are foundational "
-                    "risk-mitigation principles in securities markets. Asset allocation involves distributing investments across "
-                    "distinct asset classes such as equity, debt, and cash equivalents based on individual investment horizon, financial goals, "
-                    "and risk profile. Portfolio diversification involves spreading capital across diverse securities, industries, sectors, and issuers "
-                    "to reduce unsystematic (company-specific and sector-specific) risk because adverse events impacting an individual company "
-                    "or sector do not affect the entire portfolio equally. Prudent Risk Limitation: While asset allocation and diversification help "
-                    "manage and mitigate specific risks, diversification does not eliminate market risk (systematic risk) and does not guarantee "
-                    "protection against investment losses or assure positive returns during broad market downturns."
+                    "Official Publication: Securities and Exchange Board of India (SEBI) Investor Education, 'How to Manage Investment Risks' "
+                    "(https://investor.sebi.gov.in/investment_risk_managment.html). Asset allocation and portfolio diversification are foundational "
+                    "risk-mitigation principles in securities markets. Key Principles: 1. Asset Allocation: Distributing investments across distinct "
+                    "asset classes such as equity, debt, and cash equivalents based on individual investment horizon, financial goals, and risk profile. "
+                    "2. Portfolio Diversification: Spreading capital across diverse securities, industries, sectors, and issuers to reduce unsystematic "
+                    "(company-specific and sector-specific) risk. Diversification can reduce some risks, but it does not guarantee that other investments "
+                    "will be unaffected or will offset losses, because broader market, economic, or industry downturns can cause multiple holdings or asset "
+                    "classes to decline simultaneously. 3. Prudent Risk Limitation: While asset allocation and diversification help manage and mitigate "
+                    "specific risks, diversification does not eliminate market risk (systematic risk) and does not guarantee protection against investment "
+                    "losses or assure positive returns during downturns."
                 ),
             },
         ],
     },
     {
         "document_id": "SEBI-CIRC-MF-2026",
-        "title": "FinEx Educational Summary: Mutual Fund Concentration Norms (Based on SEBI Master Circular)",
-        "publisher": "FinEx Educational Summary",
+        "title": "SEBI Master Circular for Mutual Funds: Portfolio Concentration Norms",
+        "publisher": "Securities and Exchange Board of India (SEBI)",
         "source_url": "https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf",
         "document_date": "2026-03-20",
         "sections": [
@@ -110,16 +113,17 @@ REGULATORY_DOCUMENTS: List[Dict[str, Any]] = [
                 "section": "Section 1: Portfolio Concentration Limits for Mutual Fund Schemes",
                 "page_number": None,
                 "content": (
-                    "FinEx Educational Summary based on official SEBI Master Circular for Mutual Funds dated March 20, 2026 "
+                    "Official Regulatory Publication: Securities and Exchange Board of India (SEBI) Master Circular for Mutual Funds dated March 20, 2026 "
                     "(Circular No. HO/24/13/11(1)2026-IMD-POD-1/I/7602/2026, effective April 1, 2026, https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf), "
-                    "historically originating in Regulation 44(1) and Clause 1 of the Seventh Schedule of the SEBI (Mutual Funds) Regulations, 1996. Mutual fund schemes are "
-                    "subject to single-issuer concentration boundaries: a mutual fund scheme shall not invest more than 10% of its Net Asset Value (NAV) in equity shares "
-                    "or equity-related instruments of any single company. Scope and Exceptions: This statutory 10% NAV restriction applies specifically to actively managed "
-                    "mutual fund schemes to avoid concentration of scheme NAV in a single corporate issuer; this statutory restriction does not apply to individual retail "
-                    "investors in their personal direct equity portfolios. Furthermore, Index Funds and Exchange Traded Funds (ETFs) that passively replicate benchmark indices "
-                    "are exempt from the 10% single-company limit to replicate index constituents under SEBI portfolio concentration norms (subject to index-level capping rules); "
-                    "sectoral and thematic funds invest according to their designated mandates where sector concentration exceeds broad diversified limits; and debt instruments are "
-                    "governed by distinct credit-rating-based single-issuer limits under the debt exposure framework."
+                    "originating in Clause 1 of the Seventh Schedule of the SEBI (Mutual Funds) Regulations, 1996. Applicable Regulatory Rule: Under the SEBI portfolio "
+                    "concentration framework for mutual funds, a mutual fund scheme shall not invest more than 10% of its Net Asset Value (NAV) in equity shares or "
+                    "equity-related instruments of any single company. Scope and Regulatory Exceptions: 1. Scheme-Level Application: This statutory 10% NAV single-issuer "
+                    "concentration limit applies at the mutual fund scheme level to actively managed mutual fund schemes to prevent concentration of unitholder capital in a single corporate "
+                    "issuer; under this circular, it does not govern individual personal direct equity portfolios. 2. Passive Index Funds and ETFs: Index Funds and Exchange "
+                    "Traded Funds (ETFs) that passively replicate benchmark indices are exempt from the 10% single-company limit to replicate index constituents under SEBI "
+                    "portfolio concentration norms (subject to index-level capping rules). 3. Sectoral and Thematic Funds: Sectoral and thematic mutual funds invest according "
+                    "to their designated investment mandates where sector concentration exceeds broad diversified limits. 4. Debt Instruments: Debt instruments are governed by "
+                    "distinct credit-rating-based single-issuer limits under the SEBI debt exposure framework."
                 ),
             },
         ],
@@ -306,13 +310,13 @@ FINEX_EDUCATIONAL_DOCUMENTS: List[Dict[str, Any]] = [
                 "page_number": 1,
                 "content": (
                     "FinEx Educational Summary: Practical Portfolio Diversification Heuristics. "
-                    "While SEBI regulations do not prescribe statutory portfolio caps or percentage limits for individual retail investors in their personal direct equity holdings, "
-                    "financial planning practitioners and FinEx educational research commonly recommend the following illustrative heuristics to help reduce unsystematic risk: "
-                    "1. Single-Stock Heuristic: Consider capping individual equity holdings under 10% to 15% of total equity to avoid disproportionate firm-specific downside. "
-                    "2. Single-Sector Heuristic: Consider capping total exposure to a single industry under 25% to 30% of total equity holdings to mitigate sectoral downturns. "
-                    "Regulatory & Risk Disclosures: These figures are illustrative FinEx educational summaries and financial planning heuristics; they are NOT statutory SEBI regulations for retail investors. "
-                    "Statutory 10% single-company concentration limits apply to actively managed mutual fund schemes under Clause 1 of the Seventh Schedule of SEBI (Mutual Funds) Regulations, 1996 (with exceptions for Index Funds and ETFs tracking benchmark indices), not to individual retail investors. "
-                    "Diversification helps reduce unsystematic (company-specific and sector-specific) risk, but does not eliminate systematic market risk and does not guarantee protection against investment losses."
+                    "While the mutual fund 10% single-company concentration limit under the SEBI Master Circular for Mutual Funds is a scheme-level restriction and does not govern individual personal direct equity portfolios, "
+                    "financial planning practitioners and FinEx educational research commonly suggest the following illustrative heuristics to help manage unsystematic risk: "
+                    "1. Single-Stock Heuristic: Consider capping individual equity holdings under 10% to 15% of total portfolio equity to mitigate disproportionate firm-specific downside. "
+                    "2. Single-Sector Heuristic: Consider capping total exposure to a single industry under 25% to 30% of total portfolio equity to manage sector-specific downturns. "
+                    "Regulatory & Risk Disclosures: These percentage guidelines are illustrative FinEx educational summaries and financial planning heuristics; they are NOT statutory SEBI regulations for individual retail investors. "
+                    "Statutory 10% single-company concentration limits apply to mutual fund schemes under the SEBI Master Circular for Mutual Funds dated March 20, 2026 (Circular No. HO/24/13/11(1)2026-IMD-POD-1/I/7602/2026, https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf) and Clause 1 of the Seventh Schedule of SEBI (Mutual Funds) Regulations, 1996 (with exceptions for Index Funds and ETFs tracking benchmark indices). "
+                    "Diversification can reduce unsystematic (company-specific and sector-specific) risk, but it does not eliminate market risk (systematic risk). It does NOT guarantee that other holdings will remain unaffected or offset losses, and it does not guarantee protection against investment losses."
                 ),
             }
         ],
