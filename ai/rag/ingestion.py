@@ -50,6 +50,15 @@ APPROVED_LOCAL_DOCUMENTS = [
         "source_url": "https://rbi.org.in/financialeducation/literacy-guide.html",
         "local_file": "data/documents/rbi_financial_literacy_guide.txt",
     },
+    {
+        "document_id": "FINEX-ED-DIVERSIFICATION-2026",
+        "title": "FinEx Educational Summary: Portfolio Diversification & Risk Allocation Heuristics",
+        "doc_type": "EDUCATIONAL_SUMMARY",
+        "publisher": "FinEx Educational Summary",
+        "publishing_date": date(2026, 10, 16),
+        "source_url": "local://finex/educational-summary/diversification",
+        "local_file": "data/documents/finex_educational_summary_diversification.txt",
+    },
 ]
 
 
@@ -237,12 +246,18 @@ async def ensure_documents_indexed_db(
             return await _index_and_clean(session)
 
 
-def ingest_corpus_documents() -> List[DocumentChunk]:
+def ingest_corpus_documents(include_educational_summaries: bool = False) -> List[DocumentChunk]:
     """Legacy/demo fallback: Ingest hardcoded regulatory documents for isolated tests without DB."""
+    from ai.rag.corpus import FINEX_EDUCATIONAL_DOCUMENTS
+
+    docs = list(REGULATORY_DOCUMENTS)
+    if include_educational_summaries:
+        docs.extend(FINEX_EDUCATIONAL_DOCUMENTS)
+
     chunks: List[DocumentChunk] = []
     seen_ids = set()
 
-    for doc in REGULATORY_DOCUMENTS:
+    for doc in docs:
         doc_id = doc["document_id"]
         doc_title = doc["title"]
         publisher = doc.get("publisher", "SEBI / Regulatory Authority")

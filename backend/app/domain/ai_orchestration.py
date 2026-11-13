@@ -297,13 +297,23 @@ class AIOrchestrator:
             for chunk in retrieved_chunks
         ]
 
-        # Structure response
-        headline = f"Regulatory Insights: {primary.section or primary.title}"
+        # Structure response with accurate source attribution
+        is_official_regulatory = any(
+            reg in (primary.publisher or "")
+            for reg in ["Securities and Exchange Board of India", "SEBI", "Reserve Bank of India", "RBI", "NSE", "NISM", "AMFI"]
+        )
+        if is_official_regulatory:
+            headline = f"Regulatory Insights: {primary.section or primary.title}"
+            source_intro = f"Based on verified regulatory guidance from {primary.publisher} ({primary.title}):\n\n"
+        else:
+            headline = f"Educational Summary: {primary.section or primary.title}"
+            source_intro = f"Based on educational summary from {primary.publisher} ({primary.title}):\n\n"
+
         content_body = (
-            f"Based on verified regulatory guidance from {primary.publisher} ({primary.title}):\n\n"
+            f"{source_intro}"
             f"{primary.content}\n\n"
             f"Key Takeaway: Capital market participation requires balancing expected returns with prudent risk limits. "
-            f"Holding diversified assets and reviewing regulatory disclosures provides structural resilience."
+            f"Holding diversified assets across sectors helps reduce unsystematic risk, but does not eliminate market risk or guarantee protection against losses."
         )
 
         # Enhance with live LLM synthesis (Groq) when available
@@ -323,11 +333,12 @@ class AIOrchestrator:
                     "Ground your explanation strictly in the following verified regulatory context:\n"
                     f"{evidence_text}\n\n"
                     "Strict Regulatory & Compliance Guidelines:\n"
-                    "1. Only attribute rules, mandates, or limits to SEBI if they are explicit official regulations.\n"
-                    "2. Do NOT state or imply that SEBI mandates percentage holding caps (such as 10-15% single-stock or 25-30% sector caps) on individual retail investors. "
-                    "Clarify that individual retail portfolios do not have statutory percentage exposure caps; any such figures are illustrative financial planning rules of thumb or institutional/mutual-fund scheme guidelines.\n"
-                    "3. Ensure all cited sources directly support the claims made. Never cite internal engineering documents or blueprints.\n"
-                    "4. Maintain strict SEBI educational compliance: all paper trading is virtual, and no personalized investment advice or guaranteed return promises are made."
+                    "1. Accurate Source Attribution: Only attribute rules, mandates, or guidance to SEBI if they are from verified official SEBI sources (e.g. SEBI Mutual Funds Regulations, 1996 or official SEBI Investor Education). Never attribute project-written explanations, internal formulations, or exact project phrasing to SEBI without verification.\n"
+                    "2. Clearly Label Educational Summaries: If discussing practical portfolio heuristics (such as capping single-stock exposure under 10–15% or single-sector exposure under 25–30%), clearly label them as 'FinEx Educational Summary' or illustrative financial planning heuristics, NEVER as statutory SEBI rules. Clarify that SEBI does NOT prescribe mandatory percentage holding caps for individual retail investors in direct equities.\n"
+                    "3. Mutual Fund Concentration Limit Scope & Exceptions: When explaining the 10% concentration limit under Clause 1 of the Seventh Schedule of SEBI (Mutual Funds) Regulations, 1996, accurately state its scope and exceptions. It applies specifically to actively managed mutual fund schemes (not individual retail investors, and not universally to all funds). Explicitly note exceptions for Index Funds and ETFs tracking benchmark indices (under SEBI portfolio concentration norms), sectoral/thematic funds, and separate single-issuer limits for debt schemes.\n"
+                    "4. Prudent Risk Characterization: Describe diversification as a risk-mitigation strategy that helps reduce some risks (specifically unsystematic or firm-specific risk); explicitly state that diversification does NOT eliminate market (systematic) risk and does NOT guarantee protection against losses or guarantee positive returns.\n"
+                    "5. Source Integrity: Ensure all cited sources directly support the claims made. Never cite internal engineering blueprints or unapproved documents.\n"
+                    "6. Maintain strict SEBI educational compliance: all paper trading is virtual, and no personalized investment advice or guaranteed return promises are made."
                 )
                 ai_text = await gemini_assistant.call_llm_api(query, sys_instruct)
                 if ai_text:

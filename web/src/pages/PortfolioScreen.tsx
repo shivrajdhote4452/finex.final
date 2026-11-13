@@ -702,13 +702,13 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
           <div className="modal-content" style={{ maxWidth: '600px', padding: '32px' }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <h3 style={{ fontSize: '20px', fontWeight: 700, color: '#FFFFFF', margin: 0 }}>
-                SEBI Asset Allocation & Rebalance Simulator
+                FinEx Asset Allocation & Rebalance Simulator
               </h3>
               <button onClick={() => setShowRebalanceModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '20px', cursor: 'pointer' }}>✕</button>
             </div>
 
             <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '20px' }}>
-              Current portfolio has <strong>50.8%</strong> allocation in Technology (TCS + INFY). SEBI investor guidelines advise diversifying across uncorrelated sectors.
+              Current portfolio has <strong>50.8%</strong> allocation in Technology (TCS + INFY). FinEx educational guidelines advise diversifying across uncorrelated sectors to help reduce unsystematic risk (note: diversification reduces some risks, but does not eliminate market risk or guarantee against loss).
             </p>
 
             <div style={{ backgroundColor: 'rgba(0,0,0,0.3)', padding: '16px', borderRadius: 'var(--radius-sm)', marginBottom: '20px', fontSize: '13px' }}>

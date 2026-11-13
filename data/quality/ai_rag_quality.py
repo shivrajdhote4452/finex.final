@@ -54,6 +54,8 @@ class AIRAGQualityChecker:
             "National Stock Exchange (NSE)",
             "AMFI",
             "Association of Mutual Funds in India (AMFI)",
+            "FinEx Educational Summary",
+            "FinEx Investor Education",
         }
 
     def evaluate(

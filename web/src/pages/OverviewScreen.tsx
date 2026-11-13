@@ -426,7 +426,7 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ onNavigate }) =>
             High IT Concentration
           </h3>
           <p style={{ fontSize: '13px', lineHeight: 1.6, color: 'var(--text-muted)', marginBottom: '18px', wordBreak: 'break-word', whiteSpace: 'normal', overflowWrap: 'break-word' }}>
-            TCS and Infosys represent <strong>50.8%</strong> of your invested equity holdings. While both are market leaders, prudent diversification principles suggest avoiding heavy sector concentration (e.g. keeping single-sector exposure under 25–30% as an illustrative guideline) to mitigate industry downturns.
+            TCS and Infosys represent <strong>50.8%</strong> of your invested equity holdings. While both are market leaders, FinEx educational heuristics suggest avoiding heavy sector concentration (e.g. keeping single-sector exposure under 25–30% as an illustrative rule of thumb) to help reduce unsystematic risk. Note: Diversification reduces some risks, but does not guarantee protection against market-wide losses.
           </p>
 
           <div
@@ -443,7 +443,7 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ onNavigate }) =>
               lineHeight: 1.45,
             }}
           >
-            Reference: SEBI Investor Education Guide (Chapter 3: Asset Allocation Principles). Note: Individual retail investors are not subject to statutory percentage holding caps.
+            Reference: FinEx Educational Summary (Asset Allocation Heuristics) & SEBI Investor Education (Risk Management). Note: SEBI does not prescribe statutory percentage holding caps for individual retail investors.
           </div>
 
           <button onClick={() => onNavigate('ask-finex')} className="btn btn-secondary" style={{ width: '100%' }}>

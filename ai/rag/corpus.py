@@ -39,13 +39,14 @@ REGULATORY_DOCUMENTS: List[Dict[str, Any]] = [
                 "section": "Chapter 3: Asset Allocation and Diversification Principles",
                 "page_number": 12,
                 "content": (
-                    "Diversification is the primary protection against unsystematic risk in capital markets. Holding securities across unrelated economic sectors "
-                    "ensures that severe drawdowns in a single industry (such as Technology or Energy) do not impair total portfolio solvency. "
-                    "SEBI regulations do not prescribe mandatory percentage exposure limits or portfolio caps for individual retail investors in their personal "
-                    "direct equity holdings. While statutory concentration restrictions (such as a 10% single-issuer NAV limit under the Seventh Schedule of "
-                    "SEBI Mutual Funds Regulations) apply to mutual fund schemes, individual retail investors manage their own asset allocation. "
-                    "As an illustrative financial planning rule of thumb, market practitioners often suggest capping single-stock exposure under 10% to 15% "
-                    "and single-sector exposure under 25% to 30% of total equity holdings as a prudent personal risk-management example, not as a statutory SEBI regulation."
+                    "Asset allocation and portfolio diversification are foundational risk-mitigation principles in securities markets. "
+                    "Diversification involves spreading investments across different asset classes (such as equity, debt, and cash equivalents), market sectors, "
+                    "and issuers to reduce unsystematic (company-specific and sector-specific) risk. "
+                    "Diversification helps reduce some risks, but it does not eliminate market risk (systematic risk) and does not guarantee protection against investment losses or guarantee positive returns during market downturns. "
+                    "Under SEBI regulations, there are no statutory percentage holding limits or mandatory concentration caps for individual retail investors in their direct equity holdings; retail investors determine their own asset allocation based on their financial goals and risk tolerance. "
+                    "For mutual funds, Clause 1 of the Seventh Schedule of the SEBI (Mutual Funds) Regulations, 1996 restricts a mutual fund scheme from investing more than 10% of its Net Asset Value (NAV) in equity shares or equity-related instruments of a single company. "
+                    "This concentration limit applies specifically to actively managed mutual fund schemes and does not apply to individual retail investors. "
+                    "Furthermore, it is not a universal rule for all funds: exceptions exist for Index Funds and Exchange Traded Funds (ETFs) tracking benchmark indices under SEBI portfolio concentration norms (SEBI Circular SEBI/HO/IMD/DF3/CIR/P/2019/17), sectoral and thematic schemes investing within their defined mandate, and distinct single-issuer limits governing debt instruments."
                 ),
             },
             {
@@ -235,4 +236,32 @@ REGULATORY_DOCUMENTS: List[Dict[str, Any]] = [
             },
         ],
     },
+]
+
+# Separate FinEx educational summary documents containing practical heuristics clearly labeled as FinEx research
+FINEX_EDUCATIONAL_DOCUMENTS: List[Dict[str, Any]] = [
+    {
+        "document_id": "FINEX-ED-DIVERSIFICATION-2026",
+        "title": "FinEx Educational Summary: Portfolio Diversification & Risk Allocation Heuristics",
+        "doc_type": "EDUCATIONAL_SUMMARY",
+        "publisher": "FinEx Educational Summary",
+        "source_url": "local://finex/educational-summary/diversification",
+        "document_date": "2026-10-16",
+        "sections": [
+            {
+                "section": "Section 1: Portfolio Diversification Heuristics for Retail Investors",
+                "page_number": 1,
+                "content": (
+                    "FinEx Educational Summary: Practical Portfolio Diversification Heuristics. "
+                    "While SEBI regulations do not prescribe statutory portfolio caps or percentage limits for individual retail investors in their personal direct equity holdings, "
+                    "financial planning practitioners and FinEx educational research commonly recommend the following illustrative heuristics to help reduce unsystematic risk: "
+                    "1. Single-Stock Heuristic: Consider capping individual equity holdings under 10% to 15% of total equity to avoid disproportionate firm-specific downside. "
+                    "2. Single-Sector Heuristic: Consider capping total exposure to a single industry under 25% to 30% of total equity holdings to mitigate sectoral downturns. "
+                    "Regulatory & Risk Disclosures: These figures are illustrative FinEx educational summaries and financial planning heuristics; they are NOT statutory SEBI regulations for retail investors. "
+                    "Statutory 10% single-company concentration limits apply to actively managed mutual fund schemes under Clause 1 of the Seventh Schedule of SEBI (Mutual Funds) Regulations, 1996 (with exceptions for Index Funds and ETFs tracking benchmark indices), not to individual retail investors. "
+                    "Diversification helps reduce unsystematic (company-specific and sector-specific) risk, but does not eliminate systematic market risk and does not guarantee protection against investment losses."
+                ),
+            }
+        ],
+    }
 ]

@@ -165,17 +165,79 @@ async def test_diversification_query_does_not_assert_unsupported_sebi_caps():
     assert "sebi rules mandate 10%" not in content_lower
 
     # 2. Must explicitly clarify that SEBI does not prescribe mandatory caps for retail investors
-    assert "sebi regulations do not prescribe mandatory percentage" in content_lower or \
+    assert "no statutory percentage holding limits" in content_lower or \
+           "sebi regulations do not prescribe mandatory percentage" in content_lower or \
            "not as a statutory sebi regulation" in content_lower or \
            "illustrative" in content_lower
 
-    # 3. Verified citations must include SEBI education document and NEVER reference internal blueprints
+    # 3. Must accurately explain mutual fund Seventh Schedule concentration limits with scope and exceptions
+    assert "clause 1 of the seventh schedule" in content_lower or "seventh schedule" in content_lower
+    assert "actively managed mutual fund schemes" in content_lower or "mutual fund scheme" in content_lower
+    assert "does not apply to individual" in content_lower
+    assert "index funds" in content_lower or "etfs" in content_lower
+
+    # 4. Must describe diversification as reducing some risks, not guaranteeing protection against losses
+    assert "reduces some risks" in content_lower or "reduce some risks" in content_lower or "unsystematic" in content_lower
+    assert "not guarantee protection against" in content_lower or "does not eliminate market risk" in content_lower
+
+    # 5. Verified citations must include SEBI education document and NEVER reference internal blueprints
     doc_ids = [cit.document_id for cit in resp.citations]
     assert "SEBI-ED-2024-01" in doc_ids
     for cit in resp.citations:
         assert "FINEX" not in cit.document_id
         assert "blueprint" not in cit.title.lower()
         assert "sprint plan" not in cit.title.lower()
+
+
+@pytest.mark.asyncio
+async def test_sebi_document_excludes_team_written_heuristics():
+    """Verify the SEBI-attributed document contains only verified official guidance and excludes project heuristics."""
+    chunks = ingest_corpus_documents()
+    sebi_chunks = [c for c in chunks if c.document_id == "SEBI-ED-2024-01"]
+    assert len(sebi_chunks) == 5
+
+    ch3 = [c for c in sebi_chunks if "Diversification" in c.section][0]
+
+    # Team-written heuristics (10-15% single-stock, 25-30% single-sector) must NOT be attributed to SEBI
+    assert "10% to 15%" not in ch3.content
+    assert "25% to 30%" not in ch3.content
+    assert "capping single-stock" not in ch3.content.lower()
+
+    # Must contain verified official SEBI mutual fund concentration limits and exceptions
+    assert "Seventh Schedule of the SEBI (Mutual Funds) Regulations, 1996" in ch3.content
+    assert "Clause 1" in ch3.content
+    assert "actively managed mutual fund schemes" in ch3.content
+    assert "Index Funds and Exchange Traded Funds (ETFs)" in ch3.content
+    assert "does not apply to individual retail investors" in ch3.content
+
+    # Must state diversification reduces some risks without guaranteeing protection against losses
+    assert "reduces some risks" in ch3.content or "reduce some risks" in ch3.content
+    assert "does not guarantee protection against investment losses" in ch3.content
+
+
+@pytest.mark.asyncio
+async def test_finex_educational_summary_source_attribution():
+    """Verify FinEx educational summaries are clearly attributed to FinEx and never presented as SEBI documents."""
+    from ai.rag.corpus import FINEX_EDUCATIONAL_DOCUMENTS
+
+    all_chunks = ingest_corpus_documents(include_educational_summaries=True)
+    finex_chunks = [c for c in all_chunks if c.document_id == "FINEX-ED-DIVERSIFICATION-2026"]
+    assert len(finex_chunks) == 1
+
+    chk = finex_chunks[0]
+    assert chk.publisher == "FinEx Educational Summary"
+    assert "FinEx Educational Summary" in chk.title
+    assert "SEBI" not in chk.publisher
+
+    # Orchestrator formats FinEx summary with Educational Summary headline, not Regulatory
+    retriever = RegulatoryDocumentRetriever(chunks=[chk])
+    orchestrator = AIOrchestrator(retriever=retriever)
+    resp = await orchestrator.answer_query("What are FinEx diversification heuristics?")
+
+    assert resp.headline.startswith("Educational Summary:")
+    assert "Based on educational summary from FinEx Educational Summary" in resp.content
+    assert len(resp.citations) == 1
+    assert resp.citations[0].publisher == "FinEx Educational Summary"
 
 
 @pytest.mark.asyncio
@@ -248,6 +310,11 @@ async def test_groq_synthesis_receives_anti_hallucination_diversification_instru
         assert "does not prescribe mandatory percentage" in resp.content
         assert captured_sys_instruct is not None
         # Assert strict compliance prompt directives are present
-        assert "Do NOT state or imply that SEBI mandates percentage holding caps" in captured_sys_instruct
-        assert "Never cite internal engineering documents or blueprints" in captured_sys_instruct
+        assert "Accurate Source Attribution" in captured_sys_instruct
+        assert "Never attribute project-written explanations" in captured_sys_instruct
+        assert "Clearly Label Educational Summaries" in captured_sys_instruct
+        assert "Mutual Fund Concentration Limit Scope & Exceptions" in captured_sys_instruct
+        assert "Prudent Risk Characterization" in captured_sys_instruct
+        assert "Do NOT state or imply that SEBI mandates percentage holding caps" not in captured_sys_instruct or "SEBI does NOT prescribe mandatory percentage holding caps" in captured_sys_instruct
+        assert "Never cite internal engineering blueprints" in captured_sys_instruct
 
