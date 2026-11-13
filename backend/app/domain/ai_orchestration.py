@@ -298,9 +298,12 @@ class AIOrchestrator:
         ]
 
         # Structure response with accurate source attribution
-        is_official_regulatory = any(
-            reg in (primary.publisher or "")
-            for reg in ["Securities and Exchange Board of India", "SEBI", "Reserve Bank of India", "RBI", "NSE", "NISM", "AMFI"]
+        is_official_regulatory = (
+            not (primary.publisher or "").startswith("FinEx")
+            and any(
+                reg in (primary.publisher or "")
+                for reg in ["Securities and Exchange Board of India", "SEBI", "Reserve Bank of India", "RBI", "NSE", "NISM", "AMFI"]
+            )
         )
         if is_official_regulatory:
             headline = f"Regulatory Insights: {primary.section or primary.title}"
@@ -345,9 +348,10 @@ class AIOrchestrator:
                     "     * Exceptions: Index Funds and ETFs passively replicating benchmark indices are exempt under portfolio concentration norms (subject to index-level capping rules); sectoral/thematic funds invest according to their designated mandates; debt instruments follow credit-rated single-issuer frameworks.\n"
                     "   - Make it clear that the relevant official circular is linked, directly citing the official circular: SEBI Master Circular for Mutual Funds dated March 20, 2026 (Circular No. HO/24/13/11(1)2026-IMD-POD-1/I/7602/2026, https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf).\n"
                     "3. Accurate Labeling of Team-Written Summaries & Citation Mapping:\n"
-                    "   - Clearly label team-written explanations and practical heuristics (such as capping single-stock exposure under 10–15% or single-sector exposure under 25–30%) as 'FinEx Educational Summary' (e.g. [1]), NOT as statutory regulations.\n"
+                    "   - Clearly label team-written explanations based on official SEBI sources as 'FinEx Educational Summary based on official SEBI sources' (e.g. [1]), and retain the relevant official SEBI links (https://investor.sebi.gov.in/investment_risk_managment.html and https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf).\n"
+                    "   - Only label content as an original SEBI publication when citing authentic, verified extracts directly from that publication. Do not attribute team-written formulations or summaries to SEBI as author/publisher.\n"
                     "   - Clearly cite the official SEBI publication on risk management (https://investor.sebi.gov.in/investment_risk_managment.html) when discussing general asset allocation and unsystematic risk reduction.\n"
-                    "   - Make sure citation numbers, labels, and links correspond strictly to the specific claims they support. Do not attribute regulatory rules to FinEx summaries when citing official circular provisions, and do not attribute team-written formulations to SEBI.\n"
+                    "   - Make sure citation numbers, labels, and links correspond strictly to the specific claims they support.\n"
                     "4. Prudent Risk Characterization & No Guaranteed Offset:\n"
                     "   - State that diversification can reduce some risks (specifically unsystematic or company/sector-specific risk), but does NOT eliminate market (systematic) risk and does NOT guarantee protection against investment losses.\n"
                     "   - Correct and avoid any example or claim implying that other investments will always remain unaffected or will automatically offset losses during market declines, because broader economic or market downturns can cause multiple holdings or sectors to decline simultaneously.\n"

@@ -40,14 +40,14 @@ Approved real documents for Sprint 1 & Sprint 4 RAG ingestion:
    - *Publisher:* FinEx Educational Summary
    - *Source URL:* `local://finex/educational-summary/financial-planning`
    - *Topic:* Emergency funds, asset allocation, SIP compounding, grievance redressal
-2. **SEBI Investor Education Official Publication:**
-   - *Title:* SEBI Investor Education: How to Manage Investment Risks
-   - *Publisher:* Securities and Exchange Board of India (SEBI)
+2. **FinEx Educational Summary (Based on SEBI Investor Education):**
+   - *Title:* FinEx Educational Summary: How to Manage Investment Risks (Based on SEBI Investor Education)
+   - *Publisher:* FinEx Educational Summary based on official SEBI sources
    - *Source URL:* `https://investor.sebi.gov.in/investment_risk_managment.html`
    - *Topic:* Asset allocation, reducing unsystematic risk via diversification, risk limitation disclosures
-3. **SEBI Mutual Funds Regulatory Circular:**
-   - *Title:* SEBI Master Circular for Mutual Funds: Portfolio Concentration Norms
-   - *Publisher:* Securities and Exchange Board of India (SEBI)
+3. **FinEx Educational Summary (Based on SEBI Master Circular):**
+   - *Title:* FinEx Educational Summary: Mutual Fund Concentration Norms (Based on SEBI Master Circular)
+   - *Publisher:* FinEx Educational Summary based on official SEBI sources
    - *Source URL:* `https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf`
    - *Topic:* Mutual fund scheme single-issuer concentration limits (10% NAV cap, exceptions for Index Funds & ETFs)
 4. **FinEx Educational Summary - Heuristics:**

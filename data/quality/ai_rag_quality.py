@@ -58,6 +58,7 @@ class AIRAGQualityChecker:
             "AMFI",
             "Association of Mutual Funds in India (AMFI)",
             "FinEx Educational Summary",
+            "FinEx Educational Summary based on official SEBI sources",
             "FinEx Investor Education",
         }
 

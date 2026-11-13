@@ -215,7 +215,8 @@ async def test_returned_citation_publisher_source_link_and_attribution():
     sebi_risk_cits = [c for c in resp_risk.citations if c.document_id == "SEBI-INVESTOR-ED-RISK"]
     assert len(sebi_risk_cits) > 0
     risk_cit = sebi_risk_cits[0]
-    assert risk_cit.publisher == "Securities and Exchange Board of India (SEBI)"
+    assert risk_cit.publisher == "FinEx Educational Summary based on official SEBI sources"
+    assert risk_cit.publisher != "Securities and Exchange Board of India (SEBI)"
     assert "How to Manage Investment Risks" in risk_cit.title
     assert risk_cit.source_url == "https://investor.sebi.gov.in/investment_risk_managment.html"
     assert risk_cit.page_number is None  # Unpaged web source has no page number
@@ -226,8 +227,9 @@ async def test_returned_citation_publisher_source_link_and_attribution():
     resp_mf = await orchestrator.answer_query("What are mutual fund concentration limits according to SEBI?")
     assert len(resp_mf.citations) >= 1
     mf_cit = [c for c in resp_mf.citations if c.document_id == "SEBI-CIRC-MF-2026"][0]
-    assert mf_cit.publisher == "Securities and Exchange Board of India (SEBI)"
-    assert "SEBI Master Circular" in mf_cit.title
+    assert mf_cit.publisher == "FinEx Educational Summary based on official SEBI sources"
+    assert mf_cit.publisher != "Securities and Exchange Board of India (SEBI)"
+    assert "Mutual Fund Concentration Norms" in mf_cit.title
     assert mf_cit.source_url == "https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf"
     assert mf_cit.page_number is None  # Unverified page number removed
 
@@ -345,13 +347,15 @@ async def test_sebi_explanation_source_labels_and_page_reference_removal():
     doc_map = {d["document_id"]: d for d in APPROVED_LOCAL_DOCUMENTS}
 
     risk_meta = doc_map["SEBI-INVESTOR-ED-RISK"]
-    assert risk_meta["publisher"] == "Securities and Exchange Board of India (SEBI)"
-    assert "SEBI Investor Education" in risk_meta["title"]
+    assert risk_meta["publisher"] == "FinEx Educational Summary based on official SEBI sources"
+    assert risk_meta["publisher"] != "Securities and Exchange Board of India (SEBI)"
+    assert "How to Manage Investment Risks" in risk_meta["title"]
     assert risk_meta["source_url"] == "https://investor.sebi.gov.in/investment_risk_managment.html"
 
     mf_meta = doc_map["SEBI-CIRC-MF-2026"]
-    assert mf_meta["publisher"] == "Securities and Exchange Board of India (SEBI)"
-    assert "SEBI Master Circular" in mf_meta["title"]
+    assert mf_meta["publisher"] == "FinEx Educational Summary based on official SEBI sources"
+    assert mf_meta["publisher"] != "Securities and Exchange Board of India (SEBI)"
+    assert "Mutual Fund Concentration Norms" in mf_meta["title"]
     assert mf_meta["source_url"] == "https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf"
 
     # Team-written educational guides are labeled FinEx Educational Summary
@@ -367,24 +371,26 @@ async def test_sebi_explanation_source_labels_and_page_reference_removal():
     _, risk_sections = extract_document_from_file(risk_meta["local_file"])
     assert len(risk_sections) == 1
     assert risk_sections[0]["page_number"] is None
-    assert "Official Publication: Securities and Exchange Board of India (SEBI) Investor Education" in risk_sections[0]["content"]
+    assert "FinEx Educational Summary based on official SEBI sources" in risk_sections[0]["content"]
     assert "unaffected or will offset losses" in risk_sections[0]["content"]
 
     _, mf_sections = extract_document_from_file(mf_meta["local_file"])
     assert len(mf_sections) == 1
     assert mf_sections[0]["page_number"] is None  # Page 1 removed because Master Circular is 748 pages
-    assert "Official Regulatory Publication: Securities and Exchange Board of India (SEBI) Master Circular" in mf_sections[0]["content"]
+    assert "FinEx Educational Summary based on official SEBI sources" in mf_sections[0]["content"]
     assert "statutory caps apply only to mutual funds" not in mf_sections[0]["content"].lower()
 
     # 3. Check fallback corpus
     corpus_map = {d["document_id"]: d for d in REGULATORY_DOCUMENTS}
     c_risk = corpus_map["SEBI-INVESTOR-ED-RISK"]
-    assert c_risk["publisher"] == "Securities and Exchange Board of India (SEBI)"
+    assert c_risk["publisher"] == "FinEx Educational Summary based on official SEBI sources"
+    assert c_risk["publisher"] != "Securities and Exchange Board of India (SEBI)"
     assert c_risk["source_url"] == "https://investor.sebi.gov.in/investment_risk_managment.html"
     assert c_risk["sections"][0]["page_number"] is None
 
     c_mf = corpus_map["SEBI-CIRC-MF-2026"]
-    assert c_mf["publisher"] == "Securities and Exchange Board of India (SEBI)"
+    assert c_mf["publisher"] == "FinEx Educational Summary based on official SEBI sources"
+    assert c_mf["publisher"] != "Securities and Exchange Board of India (SEBI)"
     assert c_mf["source_url"] == "https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf"
     assert c_mf["sections"][0]["page_number"] is None
 
@@ -392,8 +398,8 @@ async def test_sebi_explanation_source_labels_and_page_reference_removal():
     chunk_unpaged = DocumentChunk(
         chunk_id="chk_test_01",
         document_id="SEBI-CIRC-MF-2026",
-        title="SEBI Master Circular for Mutual Funds: Portfolio Concentration Norms",
-        publisher="Securities and Exchange Board of India (SEBI)",
+        title="FinEx Educational Summary: Mutual Fund Concentration Norms (Based on SEBI Master Circular)",
+        publisher="FinEx Educational Summary based on official SEBI sources",
         source_url="https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf",
         section="Section 1: Portfolio Concentration Limits for Mutual Fund Schemes",
         page_number=None,
@@ -403,7 +409,7 @@ async def test_sebi_explanation_source_labels_and_page_reference_removal():
     formatted = format_citation(chunk_unpaged)
     assert "p." not in formatted
     assert "None" not in formatted
-    assert formatted == "[SEBI Master Circular for Mutual Funds: Portfolio Concentration Norms, Section 1: Portfolio Concentration Limits for Mutual Fund Schemes]"
+    assert formatted == "[FinEx Educational Summary: Mutual Fund Concentration Norms (Based on SEBI Master Circular), Section 1: Portfolio Concentration Limits for Mutual Fund Schemes]"
 
 
 @pytest.mark.asyncio
@@ -429,12 +435,14 @@ async def test_regulatory_wording_no_broad_claims_and_accurate_circular_links():
 
     if "SEBI-CIRC-MF-2026" in citations_by_doc:
         mf_cit = citations_by_doc["SEBI-CIRC-MF-2026"]
-        assert mf_cit.publisher == "Securities and Exchange Board of India (SEBI)"
+        assert mf_cit.publisher == "FinEx Educational Summary based on official SEBI sources"
+        assert mf_cit.publisher != "Securities and Exchange Board of India (SEBI)"
         assert mf_cit.source_url == "https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf"
 
     if "SEBI-INVESTOR-ED-RISK" in citations_by_doc:
         risk_cit = citations_by_doc["SEBI-INVESTOR-ED-RISK"]
-        assert risk_cit.publisher == "Securities and Exchange Board of India (SEBI)"
+        assert risk_cit.publisher == "FinEx Educational Summary based on official SEBI sources"
+        assert risk_cit.publisher != "Securities and Exchange Board of India (SEBI)"
         assert risk_cit.source_url == "https://investor.sebi.gov.in/investment_risk_managment.html"
 
     if "FINEX-ED-DIVERSIFICATION-2026" in citations_by_doc:

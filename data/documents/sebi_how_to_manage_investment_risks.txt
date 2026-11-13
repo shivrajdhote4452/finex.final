@@ -1,5 +1,5 @@
 ## Section 1: How to Manage Investment Risks
-Official Publication: Securities and Exchange Board of India (SEBI) Investor Education, "How to Manage Investment Risks" (https://investor.sebi.gov.in/investment_risk_managment.html). Asset allocation and portfolio diversification are foundational risk-mitigation principles in securities markets.
+FinEx Educational Summary based on official SEBI sources ("How to Manage Investment Risks", https://investor.sebi.gov.in/investment_risk_managment.html). Asset allocation and portfolio diversification are foundational risk-mitigation principles in securities markets.
 
 Key Principles of Managing Investment Risk:
 1. Asset Allocation: Distributing investments across distinct asset classes such as equity, debt, and cash equivalents based on individual investment horizon, financial goals, and risk profile. Equities offer potential for long-term inflation-beating growth but entail short-term volatility, whereas fixed income debt instruments offer stability and income while bearing purchasing-power risk.

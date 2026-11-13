@@ -1,5 +1,5 @@
 ## Section 1: Portfolio Concentration Limits for Mutual Fund Schemes
-Official Regulatory Publication: Securities and Exchange Board of India (SEBI) Master Circular for Mutual Funds dated March 20, 2026 (Circular No. HO/24/13/11(1)2026-IMD-POD-1/I/7602/2026, effective April 1, 2026, https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf), originating in Clause 1 of the Seventh Schedule of the SEBI (Mutual Funds) Regulations, 1996.
+FinEx Educational Summary based on official SEBI sources (Master Circular for Mutual Funds dated March 20, 2026, Circular No. HO/24/13/11(1)2026-IMD-POD-1/I/7602/2026, effective April 1, 2026, https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf), originating in Clause 1 of the Seventh Schedule of the SEBI (Mutual Funds) Regulations, 1996.
 
 Applicable Regulatory Rule:
 Under the SEBI portfolio concentration framework for mutual funds, a mutual fund scheme shall not invest more than 10% of its Net Asset Value (NAV) in equity shares or equity-related instruments of any single company.

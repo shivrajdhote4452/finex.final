@@ -79,8 +79,8 @@ REGULATORY_DOCUMENTS: List[Dict[str, Any]] = [
     },
     {
         "document_id": "SEBI-INVESTOR-ED-RISK",
-        "title": "SEBI Investor Education: How to Manage Investment Risks",
-        "publisher": "Securities and Exchange Board of India (SEBI)",
+        "title": "FinEx Educational Summary: How to Manage Investment Risks (Based on SEBI Investor Education)",
+        "publisher": "FinEx Educational Summary based on official SEBI sources",
         "source_url": "https://investor.sebi.gov.in/investment_risk_managment.html",
         "document_date": "2024-01-15",
         "sections": [
@@ -88,8 +88,8 @@ REGULATORY_DOCUMENTS: List[Dict[str, Any]] = [
                 "section": "Section 1: How to Manage Investment Risks",
                 "page_number": None,
                 "content": (
-                    "Official Publication: Securities and Exchange Board of India (SEBI) Investor Education, 'How to Manage Investment Risks' "
-                    "(https://investor.sebi.gov.in/investment_risk_managment.html). Asset allocation and portfolio diversification are foundational "
+                    "FinEx Educational Summary based on official SEBI sources ('How to Manage Investment Risks', "
+                    "https://investor.sebi.gov.in/investment_risk_managment.html). Asset allocation and portfolio diversification are foundational "
                     "risk-mitigation principles in securities markets. Key Principles: 1. Asset Allocation: Distributing investments across distinct "
                     "asset classes such as equity, debt, and cash equivalents based on individual investment horizon, financial goals, and risk profile. "
                     "2. Portfolio Diversification: Spreading capital across diverse securities, industries, sectors, and issuers to reduce unsystematic "
@@ -104,8 +104,8 @@ REGULATORY_DOCUMENTS: List[Dict[str, Any]] = [
     },
     {
         "document_id": "SEBI-CIRC-MF-2026",
-        "title": "SEBI Master Circular for Mutual Funds: Portfolio Concentration Norms",
-        "publisher": "Securities and Exchange Board of India (SEBI)",
+        "title": "FinEx Educational Summary: Mutual Fund Concentration Norms (Based on SEBI Master Circular)",
+        "publisher": "FinEx Educational Summary based on official SEBI sources",
         "source_url": "https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf",
         "document_date": "2026-03-20",
         "sections": [
@@ -113,8 +113,8 @@ REGULATORY_DOCUMENTS: List[Dict[str, Any]] = [
                 "section": "Section 1: Portfolio Concentration Limits for Mutual Fund Schemes",
                 "page_number": None,
                 "content": (
-                    "Official Regulatory Publication: Securities and Exchange Board of India (SEBI) Master Circular for Mutual Funds dated March 20, 2026 "
-                    "(Circular No. HO/24/13/11(1)2026-IMD-POD-1/I/7602/2026, effective April 1, 2026, https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf), "
+                    "FinEx Educational Summary based on official SEBI sources (Master Circular for Mutual Funds dated March 20, 2026, "
+                    "Circular No. HO/24/13/11(1)2026-IMD-POD-1/I/7602/2026, effective April 1, 2026, https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf), "
                     "originating in Clause 1 of the Seventh Schedule of the SEBI (Mutual Funds) Regulations, 1996. Applicable Regulatory Rule: Under the SEBI portfolio "
                     "concentration framework for mutual funds, a mutual fund scheme shall not invest more than 10% of its Net Asset Value (NAV) in equity shares or "
                     "equity-related instruments of any single company. Scope and Regulatory Exceptions: 1. Scheme-Level Application: This statutory 10% NAV single-issuer "
