@@ -168,6 +168,7 @@ async def test_diversification_query_does_not_assert_unsupported_sebi_caps():
     assert "no statutory percentage holding limits" in content_lower or \
            "sebi regulations do not prescribe mandatory percentage" in content_lower or \
            "not as a statutory sebi regulation" in content_lower or \
+           "does not apply to individual retail investors" in content_lower or \
            "illustrative" in content_lower
 
     # 3. Must accurately explain mutual fund concentration limits with current Master Circular, historical context, scope and exceptions
@@ -190,22 +191,36 @@ async def test_diversification_query_does_not_assert_unsupported_sebi_caps():
 
 @pytest.mark.asyncio
 async def test_returned_citation_publisher_source_link_and_attribution():
-    """Verify returned citations match actual sources:
-    - SEBI Investor Education citations are labelled 'SEBI Investor Education' linking to investor.sebi.gov.in
-    - Mutual fund regulatory circular citations link directly to the official Master Circular PDF
-    - FinEx heuristics citations are labelled 'FinEx Educational Summary'."""
+    """Verify returned citations and content provenance:
+    - Project-written content is strictly labelled 'FinEx Educational Summary', never original SEBI.
+    - Official SEBI risk management is registered separately, linking to official portal without false retail limit claims.
+    - Official mutual fund circular is registered separately, linking directly to the official Master Circular PDF.
+    - FinEx heuristics are labelled 'FinEx Educational Summary'."""
     retriever = RegulatoryDocumentRetriever(chunks=ingest_corpus_documents())
     orchestrator = AIOrchestrator(retriever=retriever)
 
-    # 1. SEBI Investor Education citation check
-    resp_sebi = await orchestrator.answer_query("What is the recommended emergency fund and asset allocation according to SEBI?")
+    # 1. Project-written educational summary provenance check
+    resp_sebi = await orchestrator.answer_query("What is the recommended emergency fund and asset allocation?")
     assert len(resp_sebi.citations) >= 1
-    sebi_ed_cit = [c for c in resp_sebi.citations if c.document_id == "SEBI-ED-2024-01"][0]
-    assert sebi_ed_cit.publisher == "SEBI Investor Education"
-    assert "SEBI Investor Education" in sebi_ed_cit.title
-    assert sebi_ed_cit.source_url == "https://investor.sebi.gov.in/investment_risk_managment.html"
+    ed_cit = [c for c in resp_sebi.citations if c.document_id == "SEBI-ED-2024-01"][0]
+    assert ed_cit.publisher == "FinEx Educational Summary"
+    assert "FinEx Educational Summary" in ed_cit.title
+    assert ed_cit.publisher != "Securities and Exchange Board of India (SEBI)"
+    assert ed_cit.source_url == "local://finex/educational-summary/financial-planning"
 
-    # 2. Mutual Fund regulatory circular citation check
+    # 2. Official SEBI risk management publication provenance check
+    resp_risk = await orchestrator.answer_query("How to manage investment risks in capital markets according to SEBI?")
+    assert len(resp_risk.citations) >= 1
+    sebi_risk_cits = [c for c in resp_risk.citations if c.document_id == "SEBI-INVESTOR-ED-RISK"]
+    assert len(sebi_risk_cits) > 0
+    risk_cit = sebi_risk_cits[0]
+    assert risk_cit.publisher == "Securities and Exchange Board of India (SEBI)"
+    assert risk_cit.source_url == "https://investor.sebi.gov.in/investment_risk_managment.html"
+    assert "How to Manage Investment Risks" in risk_cit.title
+    # Must NOT claim this page proves a broad absence of statutory retail limits
+    assert "statutory percentage holding limits" not in risk_cit.excerpt.lower()
+
+    # 3. Official Mutual Fund regulatory circular citation check
     resp_mf = await orchestrator.answer_query("What are mutual fund concentration limits according to SEBI?")
     assert len(resp_mf.citations) >= 1
     mf_cit = [c for c in resp_mf.citations if c.document_id == "SEBI-CIRC-MF-2026"][0]
@@ -213,12 +228,14 @@ async def test_returned_citation_publisher_source_link_and_attribution():
     assert "SEBI Master Circular for Mutual Funds" in mf_cit.title
     assert mf_cit.source_url == "https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf"
 
-    # 3. Content contains verifiable official source citations and current Master Circular reference
+    # 4. Verified content chunks inspection
     chunks = ingest_corpus_documents()
-    ch3 = [c for c in chunks if c.document_id == "SEBI-ED-2024-01" and "Diversification" in c.section][0]
-    assert "https://investor.sebi.gov.in/investment_risk_managment.html" in ch3.content
-    assert "does not apply to individual retail investors" in ch3.content.lower()
-    assert "does not guarantee protection against investment losses" in ch3.content
+    sebi_risk_chunks = [c for c in chunks if c.document_id == "SEBI-INVESTOR-ED-RISK"]
+    assert len(sebi_risk_chunks) > 0
+    sr_chk = sebi_risk_chunks[0]
+    assert "https://investor.sebi.gov.in/investment_risk_managment.html" in sr_chk.content
+    assert "does not eliminate market risk" in sr_chk.content.lower()
+    assert "no statutory percentage holding limits" not in sr_chk.content.lower()
 
     mf_chunks = [c for c in chunks if c.document_id == "SEBI-CIRC-MF-2026"]
     assert len(mf_chunks) > 0
@@ -250,9 +267,9 @@ async def test_engineering_blueprint_excluded_from_retrieval_and_citations():
         DocumentChunk(
             chunk_id="chk_sebi_01",
             document_id="SEBI-ED-2024-01",
-            title="SEBI Investor Education: Guide to Financial Planning & Risk Management",
-            publisher="SEBI Investor Education",
-            source_url="https://investor.sebi.gov.in/investment_risk_managment.html",
+            title="FinEx Educational Summary: Guide to Financial Planning & Regulatory Principles",
+            publisher="FinEx Educational Summary",
+            source_url="local://finex/educational-summary/financial-planning",
             section="Chapter 3: Asset Allocation and Diversification Principles",
             page_number=12,
             content="FinEx Educational Summary: Asset allocation and portfolio diversification are foundational risk-mitigation principles in securities markets.",

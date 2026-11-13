@@ -10,69 +10,91 @@ from typing import Any, Dict, List
 REGULATORY_DOCUMENTS: List[Dict[str, Any]] = [
     {
         "document_id": "SEBI-ED-2024-01",
-        "title": "SEBI Investor Education: Guide to Financial Planning & Risk Management",
-        "publisher": "SEBI Investor Education",
-        "source_url": "https://investor.sebi.gov.in/investment_risk_managment.html",
+        "title": "FinEx Educational Summary: Guide to Financial Planning & Regulatory Principles",
+        "publisher": "FinEx Educational Summary",
+        "source_url": "local://finex/educational-summary/financial-planning",
         "document_date": "2024-01-15",
         "sections": [
             {
                 "section": "Chapter 1: The Foundations of Financial Planning",
                 "page_number": 4,
                 "content": (
-                    "Financial planning begins with establishing realistic goals and a disciplined savings rate "
-                    "(Official Source: SEBI Investor Education, https://investor.sebi.gov.in/). Before investing in market instruments, "
-                    "every individual should maintain an emergency fund and liquidity buffer equal to at least 3 to 6 months of basic living expenses in safe, "
-                    "liquid instruments such as bank fixed deposits or overnight mutual funds. Investing without an emergency reserve forces premature "
-                    "liquidation of equities during downturns."
+                    "FinEx Educational Summary: Financial planning begins with establishing realistic goals and a disciplined savings rate. "
+                    "Before investing in market instruments, every individual should maintain an emergency fund and liquidity buffer equal "
+                    "to at least 3 to 6 months of basic living expenses in safe, liquid instruments such as bank fixed deposits or overnight "
+                    "mutual funds. Investing without an emergency reserve forces premature liquidation of equities during downturns."
                 ),
             },
             {
                 "section": "Chapter 2: Understanding Risk and Return in Securities",
                 "page_number": 8,
                 "content": (
-                    "Risk and expected return are inextricably linked in capital markets "
-                    "(Official Source: SEBI Investor Education, 'How to Manage Investment Risks', https://investor.sebi.gov.in/investment_risk_managment.html). "
-                    "Equities represent ownership in companies and offer inflation-beating growth over long horizons (5+ years), but subject investors to short-term volatility. "
-                    "Debt securities and government bonds offer capital preservation and predictable coupon returns, but expose long-term "
-                    "holders to purchasing-power risk from inflation. A prudent asset allocation balances growth equities with stabilizing fixed income."
+                    "FinEx Educational Summary: Risk and expected return are inextricably linked in capital markets. "
+                    "Equities represent ownership in companies and offer inflation-beating growth over long horizons (5+ years), but subject "
+                    "investors to short-term volatility. Debt securities and government bonds offer capital preservation and predictable coupon "
+                    "returns, but expose long-term holders to purchasing-power risk from inflation. A prudent asset allocation balances "
+                    "growth equities with stabilizing fixed income."
                 ),
             },
             {
                 "section": "Chapter 3: Asset Allocation and Diversification Principles",
                 "page_number": 12,
                 "content": (
-                    "Asset allocation and portfolio diversification are foundational risk-mitigation principles in securities markets "
-                    "(Official Source: SEBI Investor Education, 'How to Manage Investment Risks', https://investor.sebi.gov.in/investment_risk_managment.html). "
-                    "Diversification involves spreading investments across different asset classes (equity, debt, and cash equivalents), market sectors, and issuers "
-                    "to reduce unsystematic (company-specific and sector-specific) risk. Diversification helps reduce some risks, but it does not eliminate market risk "
-                    "(systematic risk) and does not guarantee protection against investment losses or guarantee positive returns during market downturns. "
-                    "Under SEBI regulations, there are no statutory percentage holding limits or mandatory concentration caps for individual retail investors in their "
-                    "direct equity holdings; retail investors determine their own asset allocation based on their financial goals and risk tolerance. "
-                    "For mutual fund schemes, statutory single-issuer limits (such as the 10% NAV cap under the SEBI Master Circular for Mutual Funds) apply "
-                    "specifically to actively managed mutual funds (with exceptions for Index Funds and ETFs tracking benchmark indices); "
-                    "this statutory restriction does not apply to individual retail investors."
+                    "FinEx Educational Summary: Asset allocation and portfolio diversification are foundational risk-mitigation principles "
+                    "in securities markets. Diversification involves spreading investments across different asset classes (equity, debt, "
+                    "and cash equivalents), market sectors, and issuers to reduce unsystematic (company-specific and sector-specific) risk. "
+                    "Diversification helps reduce some risks, but it does not eliminate market risk (systematic risk) and does not guarantee "
+                    "protection against investment losses or guarantee positive returns during market downturns. In Indian securities regulations, "
+                    "statutory concentration boundaries (such as the 10% NAV cap under the SEBI Master Circular for Mutual Funds) apply specifically "
+                    "to actively managed mutual funds (with exceptions for Index Funds and ETFs tracking benchmark indices); this statutory "
+                    "restriction does not apply to individual retail investors. Retail investors determine their own asset allocation based on "
+                    "their personal financial goals and risk tolerance. Financial planning practitioners commonly suggest illustrative heuristics "
+                    "(such as capping individual stock holdings below 10–15% or single-sector exposure below 25–30%) as practical rules of thumb "
+                    "to avoid disproportionate firm-specific downside, but these are illustrative heuristics, not statutory regulations."
                 ),
             },
             {
                 "section": "Chapter 4: Systematic Investment Plans (SIP) and Compounding",
                 "page_number": 16,
                 "content": (
-                    "A Systematic Investment Plan (SIP) allows retail investors to invest a predetermined amount periodically, "
-                    "enforcing rupee cost averaging (Official Source: SEBI Investor Education, https://investor.sebi.gov.in/). "
-                    "By buying more units when prices fall and fewer when prices rise, SIP eliminates the need to time the market. "
-                    "Compounding functions as an exponential force: starting 5 years earlier at age 25 with modest contributions yields substantially higher "
-                    "wealth than starting at age 35 with double the capital contribution."
+                    "FinEx Educational Summary: A Systematic Investment Plan (SIP) allows retail investors to invest a predetermined amount "
+                    "periodically, enforcing rupee cost averaging. By buying more units when prices fall and fewer when prices rise, SIP eliminates "
+                    "the need to time the market. Compounding functions as an exponential force: starting 5 years earlier at age 25 with modest "
+                    "contributions yields substantially higher wealth than starting at age 35 with double the capital contribution."
                 ),
             },
             {
                 "section": "Chapter 5: Grievance Redressal and SCORES Portal",
                 "page_number": 22,
                 "content": (
-                    "All registered intermediaries (brokers, depository participants, mutual funds) are bound by SEBI regulations "
-                    "(Official Source: SEBI SCORES 2.0 Portal, https://scores.sebi.gov.in/ and SMART ODR Platform, https://smartodr.in/). "
+                    "FinEx Educational Summary: All registered intermediaries (brokers, depository participants, mutual funds) are bound by SEBI regulations. "
                     "In the event of unresolved disputes or service failures, investors should first lodge complaints directly with the entity. "
                     "If unaddressed within 30 days, investors may escalate claims to the SEBI Complaints Redress System (SCORES 2.0) portal "
                     "or initiate online dispute resolution (ODR) through the SMART ODR platform."
+                ),
+            },
+        ],
+    },
+    {
+        "document_id": "SEBI-INVESTOR-ED-RISK",
+        "title": "SEBI Investor Education: How to Manage Investment Risks",
+        "publisher": "Securities and Exchange Board of India (SEBI)",
+        "source_url": "https://investor.sebi.gov.in/investment_risk_managment.html",
+        "document_date": "2024-01-15",
+        "sections": [
+            {
+                "section": "Section 1: How to Manage Investment Risks",
+                "page_number": 1,
+                "content": (
+                    "Asset allocation and portfolio diversification are foundational risk-mitigation principles in securities markets "
+                    "(Official Publication: Securities and Exchange Board of India (SEBI) Investor Education, 'How to Manage Investment Risks', "
+                    "https://investor.sebi.gov.in/investment_risk_managment.html). Asset allocation involves distributing investments across "
+                    "distinct asset classes such as equity, debt, and cash equivalents based on individual investment horizon, financial goals, "
+                    "and risk profile. Portfolio diversification involves spreading capital across diverse securities, industries, sectors, and issuers "
+                    "to reduce unsystematic (company-specific and sector-specific) risk because adverse events impacting an individual company "
+                    "or sector do not affect the entire portfolio equally. Prudent Risk Limitation: While asset allocation and diversification help "
+                    "manage and mitigate specific risks, diversification does not eliminate market risk (systematic risk) and does not guarantee "
+                    "protection against investment losses or assure positive returns during broad market downturns."
                 ),
             },
         ],

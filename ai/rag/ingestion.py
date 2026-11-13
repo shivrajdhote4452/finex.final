@@ -25,12 +25,21 @@ from backend.app.ports.retriever import DocumentChunk
 APPROVED_LOCAL_DOCUMENTS = [
     {
         "document_id": "SEBI-ED-2024-01",
-        "title": "SEBI Investor Education: Guide to Financial Planning & Risk Management",
+        "title": "FinEx Educational Summary: Guide to Financial Planning & Regulatory Principles",
+        "doc_type": "EDUCATIONAL_SUMMARY",
+        "publisher": "FinEx Educational Summary",
+        "publishing_date": date(2024, 1, 15),
+        "source_url": "local://finex/educational-summary/financial-planning",
+        "local_file": "data/documents/sebi_financial_education_guide.txt",
+    },
+    {
+        "document_id": "SEBI-INVESTOR-ED-RISK",
+        "title": "SEBI Investor Education: How to Manage Investment Risks",
         "doc_type": "INVESTOR_EDUCATION",
-        "publisher": "SEBI Investor Education",
+        "publisher": "Securities and Exchange Board of India (SEBI)",
         "publishing_date": date(2024, 1, 15),
         "source_url": "https://investor.sebi.gov.in/investment_risk_managment.html",
-        "local_file": "data/documents/sebi_financial_education_guide.txt",
+        "local_file": "data/documents/sebi_how_to_manage_investment_risks.txt",
     },
     {
         "document_id": "SEBI-CIRC-MF-2026",

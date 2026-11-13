@@ -93,7 +93,7 @@ async def test_ai_rag_educational_question_with_citations(app, auth_headers):
         # Verify citation references authentic educational summary and official regulatory source
         citation = asst_msg["citations"][0]
         assert "FinEx Educational Summary" in citation["publisher"] or "SEBI" in citation["publisher"]
-        assert "sebi.gov.in" in citation["source_url"]
+        assert "local://finex" in citation["source_url"] or "sebi.gov.in" in citation["source_url"]
         assert "EDUCATIONAL DISCLAIMER" in asst_msg["legal_disclaimer"]
         assert asst_msg["correlation_id"] is not None
 
