@@ -36,7 +36,7 @@ def test_corpus_documents_have_verifiable_metadata():
 
         for sec in doc["sections"]:
             assert sec["section"], "section title must be non-empty"
-            assert isinstance(sec["page_number"], int) and sec["page_number"] > 0
+            assert sec.get("page_number") is None or (isinstance(sec["page_number"], int) and sec["page_number"] > 0)
             assert len(sec["content"].strip()) > 50, "section content must be substantive"
 
 
@@ -56,12 +56,13 @@ def test_ingest_corpus_documents_chunking_integrity():
         assert chunk.publisher
         assert chunk.source_url
         assert chunk.section
-        assert chunk.page_number
+        assert chunk.page_number is None or chunk.page_number > 0
         assert len(chunk.content) > 50
 
         citation = format_citation(chunk)
         assert chunk.title in citation
-        assert str(chunk.page_number) in citation
+        if chunk.page_number is not None:
+            assert str(chunk.page_number) in citation
 
 
 # =====================================================================

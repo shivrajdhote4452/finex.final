@@ -25,7 +25,7 @@ def test_ingest_corpus_documents():
     for c in chunks:
         assert c.chunk_id.startswith("chk_")
         assert c.document_id in approved_doc_ids
-        assert c.page_number is not None and c.page_number > 0
+        assert c.page_number is None or c.page_number > 0
         assert len(c.content) > 50
         assert c.title
 

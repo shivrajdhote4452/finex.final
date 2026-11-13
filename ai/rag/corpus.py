@@ -77,18 +77,18 @@ REGULATORY_DOCUMENTS: List[Dict[str, Any]] = [
     },
     {
         "document_id": "SEBI-INVESTOR-ED-RISK",
-        "title": "SEBI Investor Education: How to Manage Investment Risks",
-        "publisher": "Securities and Exchange Board of India (SEBI)",
+        "title": "FinEx Educational Summary: How to Manage Investment Risks (Based on SEBI Investor Education)",
+        "publisher": "FinEx Educational Summary",
         "source_url": "https://investor.sebi.gov.in/investment_risk_managment.html",
         "document_date": "2024-01-15",
         "sections": [
             {
                 "section": "Section 1: How to Manage Investment Risks",
-                "page_number": 1,
+                "page_number": None,
                 "content": (
-                    "Asset allocation and portfolio diversification are foundational risk-mitigation principles in securities markets "
-                    "(Official Publication: Securities and Exchange Board of India (SEBI) Investor Education, 'How to Manage Investment Risks', "
-                    "https://investor.sebi.gov.in/investment_risk_managment.html). Asset allocation involves distributing investments across "
+                    "FinEx Educational Summary based on official SEBI Investor Education publication ('How to Manage Investment Risks', "
+                    "https://investor.sebi.gov.in/investment_risk_managment.html). Asset allocation and portfolio diversification are foundational "
+                    "risk-mitigation principles in securities markets. Asset allocation involves distributing investments across "
                     "distinct asset classes such as equity, debt, and cash equivalents based on individual investment horizon, financial goals, "
                     "and risk profile. Portfolio diversification involves spreading capital across diverse securities, industries, sectors, and issuers "
                     "to reduce unsystematic (company-specific and sector-specific) risk because adverse events impacting an individual company "
@@ -101,24 +101,24 @@ REGULATORY_DOCUMENTS: List[Dict[str, Any]] = [
     },
     {
         "document_id": "SEBI-CIRC-MF-2026",
-        "title": "SEBI Master Circular for Mutual Funds: Portfolio Concentration Norms",
-        "publisher": "Securities and Exchange Board of India (SEBI)",
+        "title": "FinEx Educational Summary: Mutual Fund Concentration Norms (Based on SEBI Master Circular)",
+        "publisher": "FinEx Educational Summary",
         "source_url": "https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf",
         "document_date": "2026-03-20",
         "sections": [
             {
                 "section": "Section 1: Portfolio Concentration Limits for Mutual Fund Schemes",
-                "page_number": 1,
+                "page_number": None,
                 "content": (
-                    "Under current applicable regulations consolidated in the SEBI Master Circular for Mutual Funds dated March 20, 2026 "
+                    "FinEx Educational Summary based on official SEBI Master Circular for Mutual Funds dated March 20, 2026 "
                     "(Circular No. HO/24/13/11(1)2026-IMD-POD-1/I/7602/2026, effective April 1, 2026, https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf), "
-                    "historically originating in Regulation 44(1) and Clause 1 of the Seventh Schedule of the SEBI (Mutual Funds) Regulations, 1996, mutual fund schemes are "
+                    "historically originating in Regulation 44(1) and Clause 1 of the Seventh Schedule of the SEBI (Mutual Funds) Regulations, 1996. Mutual fund schemes are "
                     "subject to single-issuer concentration boundaries: a mutual fund scheme shall not invest more than 10% of its Net Asset Value (NAV) in equity shares "
                     "or equity-related instruments of any single company. Scope and Exceptions: This statutory 10% NAV restriction applies specifically to actively managed "
-                    "mutual fund schemes to avoid concentration of scheme NAV in a single corporate issuer; it does NOT apply to individual retail investors in their personal "
-                    "direct equity portfolios. Furthermore, Index Funds and Exchange Traded Funds (ETFs) that passively replicate benchmark indices are exempt from the 10% "
-                    "single-company limit to replicate index constituents under SEBI portfolio concentration norms (subject to index-level capping rules); sectoral and "
-                    "thematic funds invest according to their designated mandates where sector concentration exceeds broad diversified limits; and debt instruments are "
+                    "mutual fund schemes to avoid concentration of scheme NAV in a single corporate issuer; this statutory restriction does not apply to individual retail "
+                    "investors in their personal direct equity portfolios. Furthermore, Index Funds and Exchange Traded Funds (ETFs) that passively replicate benchmark indices "
+                    "are exempt from the 10% single-company limit to replicate index constituents under SEBI portfolio concentration norms (subject to index-level capping rules); "
+                    "sectoral and thematic funds invest according to their designated mandates where sector concentration exceeds broad diversified limits; and debt instruments are "
                     "governed by distinct credit-rating-based single-issuer limits under the debt exposure framework."
                 ),
             },

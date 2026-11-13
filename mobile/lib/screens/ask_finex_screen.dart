@@ -71,7 +71,8 @@ class _MobileAskFinExScreenState extends State<MobileAskFinExScreen> {
 
         if (citations.isNotEmpty) {
           final first = citations[0];
-          citationLabel = "[1] ${first['publisher'] ?? 'SEBI'} (p. ${first['page_number'] ?? 1})";
+          final pageStr = first['page_number'] != null ? " (p. ${first['page_number']})" : "";
+          citationLabel = "[1] ${first['publisher'] ?? 'FinEx Educational Summary'}$pageStr";
           evidenceText = first['excerpt'] ?? first['title'] ?? evidenceText;
         }
 

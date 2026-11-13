@@ -34,18 +34,18 @@ APPROVED_LOCAL_DOCUMENTS = [
     },
     {
         "document_id": "SEBI-INVESTOR-ED-RISK",
-        "title": "SEBI Investor Education: How to Manage Investment Risks",
-        "doc_type": "INVESTOR_EDUCATION",
-        "publisher": "Securities and Exchange Board of India (SEBI)",
+        "title": "FinEx Educational Summary: How to Manage Investment Risks (Based on SEBI Investor Education)",
+        "doc_type": "EDUCATIONAL_SUMMARY",
+        "publisher": "FinEx Educational Summary",
         "publishing_date": date(2024, 1, 15),
         "source_url": "https://investor.sebi.gov.in/investment_risk_managment.html",
         "local_file": "data/documents/sebi_how_to_manage_investment_risks.txt",
     },
     {
         "document_id": "SEBI-CIRC-MF-2026",
-        "title": "SEBI Master Circular for Mutual Funds: Portfolio Concentration Norms",
-        "doc_type": "REGULATORY_CIRCULAR",
-        "publisher": "Securities and Exchange Board of India (SEBI)",
+        "title": "FinEx Educational Summary: Mutual Fund Concentration Norms (Based on SEBI Master Circular)",
+        "doc_type": "EDUCATIONAL_SUMMARY",
+        "publisher": "FinEx Educational Summary",
         "publishing_date": date(2026, 3, 20),
         "source_url": "https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf",
         "local_file": "data/documents/sebi_master_circular_mutual_funds.txt",
@@ -102,14 +102,14 @@ def parse_text_document(raw_bytes: bytes) -> Tuple[str, List[Dict[str, Any]]]:
                 try:
                     page = int(line.replace("Page:", "").strip())
                 except ValueError:
-                    page = idx + 1
+                    page = None
             else:
                 content_lines.append(line)
         body = "\n".join(content_lines).strip()
         sections.append(
             {
                 "section": title[:190],
-                "page_number": page or (idx + 1),
+                "page_number": page,
                 "content": body,
                 "word_count": len(body.split()),
             }
@@ -216,7 +216,7 @@ async def ingest_document_file_to_db(
 
     # Insert chunks
     for idx, sec in enumerate(sections):
-        p_num = sec.get("page_number", idx + 1)
+        p_num = sec.get("page_number")
         chunk_id = f"chk_{hashlib.sha256(f'{doc_id}:{idx}:{p_num}'.encode()).hexdigest()[:12]}"
         chunk = DocumentChunkModel(
             id=chunk_id,
@@ -291,7 +291,7 @@ def ingest_corpus_documents(include_educational_summaries: bool = False) -> List
 
         for sec in doc.get("sections", []):
             section_title = sec["section"]
-            page_num = sec["page_number"]
+            page_num = sec.get("page_number")
             raw_content = sec["content"].strip()
 
             chunk_hash_input = f"{doc_id}:{section_title}:{page_num}"
@@ -332,7 +332,7 @@ def ingest_document_payload(doc: dict) -> List[DocumentChunk]:
     chunks: List[DocumentChunk] = []
     for sec in doc.get("sections", []):
         section_title = sec.get("section", "General")
-        page_num = sec.get("page_number", 1)
+        page_num = sec.get("page_number")
         raw_content = sec.get("content", "").strip()
 
         chunk_hash_input = f"{doc_id}:{section_title}:{page_num}"
@@ -359,4 +359,6 @@ def ingest_document_payload(doc: dict) -> List[DocumentChunk]:
 
 def format_citation(chunk: DocumentChunk) -> str:
     """Format citation according to SEBI/NSE educational answer policy."""
-    return f"[{chunk.title}, {chunk.section}, p. {chunk.page_number}]"
+    if chunk.page_number is not None:
+        return f"[{chunk.title}, {chunk.section}, p. {chunk.page_number}]"
+    return f"[{chunk.title}, {chunk.section}]"

@@ -208,25 +208,30 @@ async def test_returned_citation_publisher_source_link_and_attribution():
     assert ed_cit.publisher != "Securities and Exchange Board of India (SEBI)"
     assert ed_cit.source_url == "local://finex/educational-summary/financial-planning"
 
-    # 2. Official SEBI risk management publication provenance check
+    # 2. SEBI risk management explanation provenance check
     resp_risk = await orchestrator.answer_query("How to manage investment risks in capital markets according to SEBI?")
     assert len(resp_risk.citations) >= 1
     sebi_risk_cits = [c for c in resp_risk.citations if c.document_id == "SEBI-INVESTOR-ED-RISK"]
     assert len(sebi_risk_cits) > 0
     risk_cit = sebi_risk_cits[0]
-    assert risk_cit.publisher == "Securities and Exchange Board of India (SEBI)"
-    assert risk_cit.source_url == "https://investor.sebi.gov.in/investment_risk_managment.html"
+    assert risk_cit.publisher == "FinEx Educational Summary"
+    assert "FinEx Educational Summary" in risk_cit.title
     assert "How to Manage Investment Risks" in risk_cit.title
+    assert "SEBI Investor Education" in risk_cit.title
+    assert risk_cit.source_url == "https://investor.sebi.gov.in/investment_risk_managment.html"
+    assert risk_cit.page_number is None  # Unpaged web source has no page number
     # Must NOT claim this page proves a broad absence of statutory retail limits
     assert "statutory percentage holding limits" not in risk_cit.excerpt.lower()
 
-    # 3. Official Mutual Fund regulatory circular citation check
+    # 3. Mutual Fund concentration norms explanation provenance check
     resp_mf = await orchestrator.answer_query("What are mutual fund concentration limits according to SEBI?")
     assert len(resp_mf.citations) >= 1
     mf_cit = [c for c in resp_mf.citations if c.document_id == "SEBI-CIRC-MF-2026"][0]
-    assert mf_cit.publisher == "Securities and Exchange Board of India (SEBI)"
-    assert "SEBI Master Circular for Mutual Funds" in mf_cit.title
+    assert mf_cit.publisher == "FinEx Educational Summary"
+    assert "FinEx Educational Summary" in mf_cit.title
+    assert "SEBI Master Circular" in mf_cit.title
     assert mf_cit.source_url == "https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf"
+    assert mf_cit.page_number is None  # Unverified page number removed
 
     # 4. Verified content chunks inspection
     chunks = ingest_corpus_documents()
@@ -326,4 +331,68 @@ async def test_groq_synthesis_receives_anti_hallucination_diversification_instru
         assert "Prudent Risk Characterization" in captured_sys_instruct
         assert "Do NOT state or imply that SEBI mandates percentage holding caps" not in captured_sys_instruct or "SEBI does NOT prescribe mandatory percentage holding caps" in captured_sys_instruct
         assert "Never cite internal engineering blueprints" in captured_sys_instruct
+
+
+@pytest.mark.asyncio
+async def test_sebi_explanation_source_labels_and_page_reference_removal():
+    """Verify that SEBI explanation files are labeled as FinEx educational summaries with correct links and no unverified page numbers."""
+    from ai.rag.corpus import REGULATORY_DOCUMENTS
+    from ai.rag.ingestion import APPROVED_LOCAL_DOCUMENTS, extract_document_from_file, format_citation
+    from backend.app.ports.retriever import DocumentChunk
+
+    # 1. Check catalog entries
+    doc_map = {d["document_id"]: d for d in APPROVED_LOCAL_DOCUMENTS}
+
+    risk_meta = doc_map["SEBI-INVESTOR-ED-RISK"]
+    assert risk_meta["publisher"] == "FinEx Educational Summary"
+    assert "FinEx Educational Summary" in risk_meta["title"]
+    assert "SEBI Investor Education" in risk_meta["title"]
+    assert risk_meta["source_url"] == "https://investor.sebi.gov.in/investment_risk_managment.html"
+
+    mf_meta = doc_map["SEBI-CIRC-MF-2026"]
+    assert mf_meta["publisher"] == "FinEx Educational Summary"
+    assert "FinEx Educational Summary" in mf_meta["title"]
+    assert "SEBI Master Circular" in mf_meta["title"]
+    assert mf_meta["source_url"] == "https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf"
+
+    # 2. Check extracted document files (verifying Page: 1 was removed and parsed as None)
+    _, risk_sections = extract_document_from_file(risk_meta["local_file"])
+    assert len(risk_sections) == 1
+    assert risk_sections[0]["page_number"] is None
+    assert "FinEx Educational Summary based on official SEBI Investor Education" in risk_sections[0]["content"]
+
+    _, mf_sections = extract_document_from_file(mf_meta["local_file"])
+    assert len(mf_sections) == 1
+    assert mf_sections[0]["page_number"] is None  # Page 1 removed because Master Circular is 748 pages
+    assert "FinEx Educational Summary based on official SEBI Master Circular" in mf_sections[0]["content"]
+
+    # 3. Check fallback corpus
+    corpus_map = {d["document_id"]: d for d in REGULATORY_DOCUMENTS}
+    c_risk = corpus_map["SEBI-INVESTOR-ED-RISK"]
+    assert c_risk["publisher"] == "FinEx Educational Summary"
+    assert c_risk["source_url"] == "https://investor.sebi.gov.in/investment_risk_managment.html"
+    assert c_risk["sections"][0]["page_number"] is None
+
+    c_mf = corpus_map["SEBI-CIRC-MF-2026"]
+    assert c_mf["publisher"] == "FinEx Educational Summary"
+    assert c_mf["source_url"] == "https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf"
+    assert c_mf["sections"][0]["page_number"] is None
+
+    # 4. Check citation formatting for unpaged chunks
+    chunk_unpaged = DocumentChunk(
+        chunk_id="chk_test_01",
+        document_id="SEBI-CIRC-MF-2026",
+        title="FinEx Educational Summary: Mutual Fund Concentration Norms (Based on SEBI Master Circular)",
+        publisher="FinEx Educational Summary",
+        source_url="https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf",
+        section="Section 1: Portfolio Concentration Limits for Mutual Fund Schemes",
+        page_number=None,
+        content="Test content",
+        score=1.0,
+    )
+    formatted = format_citation(chunk_unpaged)
+    assert "p." not in formatted
+    assert "None" not in formatted
+    assert formatted == "[FinEx Educational Summary: Mutual Fund Concentration Norms (Based on SEBI Master Circular), Section 1: Portfolio Concentration Limits for Mutual Fund Schemes]"
+
 

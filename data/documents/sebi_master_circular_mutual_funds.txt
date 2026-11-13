@@ -1,10 +1,8 @@
 ## Section 1: Portfolio Concentration Limits for Mutual Fund Schemes
-Page: 1
-Under current applicable regulations consolidated in the SEBI Master Circular for Mutual Funds dated March 20, 2026 (Circular No. HO/24/13/11(1)2026-IMD-POD-1/I/7602/2026, effective April 1, 2026, https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf), historically originating in Regulation 44(1) and Clause 1 of the Seventh Schedule of the SEBI (Mutual Funds) Regulations, 1996, mutual fund schemes are subject to single-issuer concentration boundaries: a mutual fund scheme shall not invest more than 10% of its Net Asset Value (NAV) in equity shares or equity-related instruments of any single company.
+FinEx Educational Summary based on official SEBI Master Circular for Mutual Funds dated March 20, 2026 (Circular No. HO/24/13/11(1)2026-IMD-POD-1/I/7602/2026, effective April 1, 2026, https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf), historically originating in Regulation 44(1) and Clause 1 of the Seventh Schedule of the SEBI (Mutual Funds) Regulations, 1996. Mutual fund schemes are subject to single-issuer concentration boundaries: a mutual fund scheme shall not invest more than 10% of its Net Asset Value (NAV) in equity shares or equity-related instruments of any single company.
 
 Scope and Regulatory Exceptions:
-1. Scheme-Specific Scope: This statutory 10% NAV restriction applies specifically to actively managed mutual fund schemes to avoid concentration of scheme NAV in a single corporate issuer; it does NOT apply to individual retail investors in their personal direct equity portfolios.
+1. Scheme-Specific Scope: This statutory 10% NAV restriction applies specifically to actively managed mutual fund schemes to avoid concentration of scheme NAV in a single corporate issuer; this statutory restriction does not apply to individual retail investors in their personal direct equity portfolios.
 2. Passive Index Funds and ETFs: Index Funds and Exchange Traded Funds (ETFs) that passively replicate benchmark indices are exempt from the 10% single-company limit to replicate index constituents under SEBI portfolio concentration norms (subject to index-level capping rules).
 3. Sectoral and Thematic Funds: Sectoral and thematic mutual funds invest according to their designated investment mandates where sector concentration exceeds broad diversified limits.
 4. Debt Instruments: Debt instruments are governed by distinct credit-rating-based single-issuer limits under the SEBI debt exposure framework.
-
