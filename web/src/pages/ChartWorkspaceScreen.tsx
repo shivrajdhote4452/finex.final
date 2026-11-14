@@ -168,7 +168,6 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
   const [orderFeedback, setOrderFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // AI Assistant State
-  const [aiProviderBadge, setAiProviderBadge] = useState<string>('Groq');
   const [aiMessages, setAiMessages] = useState<Array<{
     id: string;
     role: 'user' | 'assistant';
@@ -226,20 +225,6 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
         console.warn('Could not fetch drawings:', err);
       }
 
-      try {
-        const aiStatus = await apiClient.aiAssistant.getStatus();
-        if (isMounted && aiStatus) {
-          const provider = ((aiStatus as any)?.provider || '').toLowerCase();
-          const model = ((aiStatus as any)?.model || '').toLowerCase();
-          if (provider.includes('groq') || model.includes('oss') || model.includes('llama') || model.includes('qwen')) {
-            setAiProviderBadge('Groq');
-          } else {
-            setAiProviderBadge('FinEx AI');
-          }
-        }
-      } catch {
-        // Fallback gracefully
-      }
 
       try {
         const q = (await apiClient.market.getQuote(selectedSymbol)) as any;
@@ -1960,9 +1945,6 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                   }}
                 >
                   <span>✨ Ask FinEx AI</span>
-                  <span style={{ fontSize: '9px', backgroundColor: 'rgba(242, 154, 96, 0.2)', color: '#F29A60', padding: '1px 5px', borderRadius: '4px', textTransform: 'uppercase' }}>
-                    {aiProviderBadge}
-                  </span>
                 </button>
                 <button
                   onClick={() => setRightPanelTab('watchlist')}

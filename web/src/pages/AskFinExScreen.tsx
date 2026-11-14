@@ -54,34 +54,10 @@ export const AskFinExScreen: React.FC = () => {
   const [selectedCitation, setSelectedCitation] = useState<any | null>(null);
   const [showSourcesPanel, setShowSourcesPanel] = useState<boolean>(false);
 
-  // Model & Provider Info
-  const [modelInfo, setModelInfo] = useState<{ model: string; provider: string }>({
-    model: 'openai/gpt-oss-120b',
-    provider: 'Groq Cloud LPU',
-  });
-
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // 1. Fetch AI Provider Status on Mount
-  useEffect(() => {
-    const fetchStatus = async () => {
-      try {
-        const statusRes = await apiClient.ai.getAssistantStatus();
-        if (statusRes) {
-          setModelInfo({
-            model: statusRes.model || 'openai/gpt-oss-120b',
-            provider: statusRes.provider === 'groq-live' ? 'Groq LPU (120B Flagship)' : statusRes.provider,
-          });
-        }
-      } catch (e) {
-        // Fallback default
-      }
-    };
-    fetchStatus();
-  }, []);
-
-  // 2. Load Previous Chat History on mount
+  // 1. Load Previous Chat History on mount
   // Modern AI Chat UX: Always start in a fresh NEW CHAT state on open!
   useEffect(() => {
     const loadChatHistory = async () => {
@@ -558,20 +534,6 @@ export const AskFinExScreen: React.FC = () => {
                     ? conversations.find((c) => c.id === activeConversationId)?.title || 'FinEx AI Assistant'
                     : 'New Chat'}
                 </h2>
-                <span
-                  style={{
-                    fontSize: '11px',
-                    padding: '2px 8px',
-                    borderRadius: '10px',
-                    backgroundColor: 'rgba(38, 166, 154, 0.12)',
-                    border: '1px solid rgba(38, 166, 154, 0.3)',
-                    color: '#26A69A',
-                    fontWeight: 600,
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  ✨ {modelInfo.model}
-                </span>
               </div>
               <p style={{ margin: '2px 0 0 0', fontSize: '11.5px', color: '#787B86', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 Document-grounded market intelligence, technical momentum screening & regulatory citations.
