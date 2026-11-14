@@ -58,7 +58,7 @@ class Settings(BaseSettings):
 
     # Database Settings
     DATABASE_URL: str = Field(
-        default="postgresql+asyncpg://neondb_owner:npg_werMu9iFyo2P@ep-gentle-frog-b4qvoy1o-pooler.c-6.us-east-2.aws.neon.tech/neondb?ssl=require",
+        default="postgresql+asyncpg://postgres:postgres@localhost:5432/finex_db",
         description="Async database connection URL",
     )
     DATABASE_POOL_SIZE: int = 10
@@ -150,18 +150,29 @@ class Settings(BaseSettings):
             raise ValueError("DATABASE_URL is required and cannot be empty.")
         sanitized = sanitize_asyncpg_url(v)
         env = info.data.get("ENVIRONMENT", Environment.DEVELOPMENT)
+
+        if env == Environment.PRODUCTION:
+            if "localhost" in sanitized.lower() or "127.0.0.1" in sanitized.lower() or "postgres:postgres@" in sanitized:
+                raise ValueError(
+                    "Production requires a valid external DATABASE_URL provided via environment variables."
+                )
+
         is_test = (
             env == Environment.TESTING
             or "pytest" in sys.modules
             or "PYTEST_CURRENT_TEST" in os.environ
         )
         if is_test:
-            # Prevent default production database from silently becoming the test database
-            if any(m in sanitized.lower() for m in ["neon.tech", "ep-gentle-frog", "aws.neon.tech"]):
+            # Prevent remote database from silently becoming the test database
+            if any(m in sanitized.lower() for m in ["neon.tech", "ep-gentle-frog", "aws.neon.tech", "render.com", "supabase.co"]):
                 from dotenv import dotenv_values
                 _backend_env = dotenv_values("backend/.env")
-                _local_url = _backend_env.get("DATABASE_URL", "postgresql+asyncpg://postgres:Shivraj4452@127.0.0.1:5432/finex_db")
-                return os.environ.get("TEST_DATABASE_URL") or (_local_url.rsplit("/", 1)[0] + "/finex_test_db")
+                _local_url = os.environ.get("TEST_DATABASE_URL") or _backend_env.get(
+                    "DATABASE_URL", "postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/finex_test_db"
+                )
+                if "test" not in _local_url.rsplit("/", 1)[-1]:
+                    _local_url = _local_url.rsplit("/", 1)[0] + "/finex_test_db"
+                return _local_url
         return sanitized
 
     @field_validator("ALLOWED_ORIGINS", mode="before")

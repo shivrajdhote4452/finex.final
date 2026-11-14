@@ -11,7 +11,7 @@ import sys
 # Fail-closed test environment setup: Ensure tests never point to production
 from dotenv import dotenv_values
 _backend_env = dotenv_values("backend/.env")
-_local_url = _backend_env.get("DATABASE_URL", "postgresql+asyncpg://postgres:Shivraj4452@127.0.0.1:5432/finex_db")
+_local_url = _backend_env.get("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/finex_db")
 DEFAULT_TEST_DB_URL = os.environ.get("TEST_DATABASE_URL") or (_local_url.rsplit("/", 1)[0] + "/finex_test_db")
 
 current_db = os.environ.get("DATABASE_URL", "")

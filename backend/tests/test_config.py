@@ -36,6 +36,16 @@ def test_empty_database_url_rejected():
         Settings(DATABASE_URL="")
 
 
+def test_production_rejects_localhost_database_url():
+    with pytest.raises(ValidationError) as exc_info:
+        Settings(
+            ENVIRONMENT=Environment.PRODUCTION,
+            JWT_SECRET_KEY="very-strong-production-cryptographic-key-1234567890",
+            DATABASE_URL="postgresql+asyncpg://postgres:postgres@localhost:5432/finex_db",
+        )
+    assert "Production requires a valid external DATABASE_URL" in str(exc_info.value)
+
+
 def test_cors_origins_assembled_from_string():
     settings = Settings(ALLOWED_ORIGINS="https://finex.app, https://admin.finex.app")
     assert "https://finex.app" in settings.ALLOWED_ORIGINS
