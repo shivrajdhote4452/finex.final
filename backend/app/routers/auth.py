@@ -312,6 +312,7 @@ async def get_current_user_profile(
     )
 
     profile_data = {
+        "id": uid,
         "user_id": uid,
         "email": resolved_email,
         "full_name": profile.full_name,

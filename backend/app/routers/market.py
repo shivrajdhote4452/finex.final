@@ -12,7 +12,7 @@ Exposes:
 
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from typing import List, Optional
 
 from backend.app.adapters.market_data_provider import INSTRUMENT_REGISTRY
@@ -185,7 +185,25 @@ async def get_instrument_history(
             if candles:
                 if as_of_dt:
                     as_of_ts = int(as_of_dt.timestamp())
-                    candles = [c for c in candles if c.get("time", 0) <= as_of_ts]
+                    filtered_candles = []
+                    for c in candles:
+                        if c.get("time", 0) > as_of_ts:
+                            continue
+                        c_date = c.get("date")
+                        if c_date:
+                            try:
+                                bar_close_utc = datetime.combine(
+                                    date.fromisoformat(c_date),
+                                    time(10, 0),
+                                    tzinfo=timezone.utc,
+                                )
+                                if as_of_dt < bar_close_utc:
+                                    continue
+                            except Exception:
+                                if c_date > as_of_dt.strftime("%Y-%m-%d"):
+                                    continue
+                        filtered_candles.append(c)
+                    candles = filtered_candles
 
                 market_is_open = is_nse_market_open(as_of_dt)
                 freshness_status = "LIVE" if market_is_open else "CLOSED"
@@ -502,6 +520,16 @@ async def get_index_history(
     elif not s_date:
         s_date = (now_utc - timedelta(days=365)).strftime("%Y-%m-%d")
 
+    as_of_dt: Optional[datetime] = None
+    if as_of:
+        try:
+            as_of_dt = datetime.fromisoformat(as_of.replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Invalid as_of timestamp format: '{as_of}'. Expected ISO 8601 string.",
+            )
+
     candles = []
     source = "ANGEL_ONE_SMARTAPI"
     served_from_cache = False
@@ -517,6 +545,27 @@ async def get_index_history(
                 to_date=f"{e_date} 15:30",
             )
             if candles:
+                if as_of_dt:
+                    as_of_ts = int(as_of_dt.timestamp())
+                    filtered_candles = []
+                    for c in candles:
+                        if c.get("time", 0) > as_of_ts:
+                            continue
+                        c_date = c.get("date")
+                        if c_date:
+                            try:
+                                bar_close_utc = datetime.combine(
+                                    date.fromisoformat(c_date),
+                                    time(10, 0),
+                                    tzinfo=timezone.utc,
+                                )
+                                if as_of_dt < bar_close_utc:
+                                    continue
+                            except Exception:
+                                if c_date > as_of_dt.strftime("%Y-%m-%d"):
+                                    continue
+                        filtered_candles.append(c)
+                    candles = filtered_candles
                 source = "ANGEL_ONE_SMARTAPI"
                 served_from_cache = False
         except Exception as e:
@@ -533,6 +582,7 @@ async def get_index_history(
                 end_date=e_date,
                 interval=interval,
                 range_param=range,
+                as_of=as_of_dt,
             )
             candles = [
                 {

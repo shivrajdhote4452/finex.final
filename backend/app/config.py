@@ -1,3 +1,5 @@
+import os
+import sys
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 
@@ -146,7 +148,21 @@ class Settings(BaseSettings):
     def validate_database_url(cls, v: str, info) -> str:
         if not v or not v.strip():
             raise ValueError("DATABASE_URL is required and cannot be empty.")
-        return sanitize_asyncpg_url(v)
+        sanitized = sanitize_asyncpg_url(v)
+        env = info.data.get("ENVIRONMENT", Environment.DEVELOPMENT)
+        is_test = (
+            env == Environment.TESTING
+            or "pytest" in sys.modules
+            or "PYTEST_CURRENT_TEST" in os.environ
+        )
+        if is_test:
+            # Prevent default production database from silently becoming the test database
+            if any(m in sanitized.lower() for m in ["neon.tech", "ep-gentle-frog", "aws.neon.tech"]):
+                from dotenv import dotenv_values
+                _backend_env = dotenv_values("backend/.env")
+                _local_url = _backend_env.get("DATABASE_URL", "postgresql+asyncpg://postgres:Shivraj4452@127.0.0.1:5432/finex_db")
+                return os.environ.get("TEST_DATABASE_URL") or (_local_url.rsplit("/", 1)[0] + "/finex_test_db")
+        return sanitized
 
     @field_validator("ALLOWED_ORIGINS", mode="before")
     @classmethod
@@ -166,7 +182,7 @@ class Settings(BaseSettings):
         else:
             origins = ["http://localhost:3000"]
 
-        dev_origins = [
+        standard_origins = [
             "http://localhost:3000",
             "http://127.0.0.1:3000",
             "http://localhost:5173",
@@ -175,8 +191,10 @@ class Settings(BaseSettings):
             "http://127.0.0.1:8085",
             "http://localhost:8080",
             "http://127.0.0.1:8080",
+            "https://www.finexai.tech",
+            "https://finexai.tech",
         ]
-        for d in dev_origins:
+        for d in standard_origins:
             if d not in origins:
                 origins.append(d)
         return origins

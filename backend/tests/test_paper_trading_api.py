@@ -73,6 +73,19 @@ def setup_paper_trading_module():
     _ACCOUNTS_STORE.clear()
 
 
+@pytest.fixture
+def auth_headers():
+    from backend.app.routers.auth import create_access_token
+    token = create_access_token(
+        user_id="usr-test-isolated-fixture",
+        email="shivrajdhote4452@gmail.com",
+        name="Test Isolated Fixture",
+        provider="google",
+    )
+    return {"Authorization": f"Bearer {token}"}
+
+
+
 @pytest.mark.asyncio
 async def test_paper_account_bootstrap_and_get(app, auth_headers):
     transport = ASGITransport(app=app)

@@ -14,7 +14,7 @@ import hashlib
 import logging
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -555,12 +555,27 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
         if candles:
             bars = []
             for c in candles:
-                bar_dt = datetime.fromtimestamp(c["time"], tz=timezone.utc)
-                if as_of and bar_dt > as_of:
-                    continue
+                c_date = c.get("date")
+                if as_of and c_date:
+                    try:
+                        bar_close_utc = datetime.combine(
+                            date.fromisoformat(c_date),
+                            datetime.min.time().replace(hour=10),
+                            tzinfo=timezone.utc,
+                        )
+                        if as_of < bar_close_utc:
+                            continue
+                    except Exception:
+                        if c_date > as_of.strftime("%Y-%m-%d"):
+                            continue
+                elif as_of:
+                    bar_dt = datetime.fromtimestamp(c["time"], tz=timezone.utc)
+                    if bar_dt > as_of:
+                        continue
+                bar_date = c_date or datetime.fromtimestamp(c["time"], tz=timezone.utc).strftime("%Y-%m-%d")
                 bars.append(
                     HistoricalBar(
-                        date=bar_dt.strftime("%Y-%m-%d"),
+                        date=bar_date,
                         time=c["time"],
                         open=Decimal(str(c["open"])),
                         high=Decimal(str(c["high"])),

@@ -29,7 +29,7 @@ def app():
 
 @pytest.fixture
 def auth_headers():
-    token = create_access_token("usr-shivraj-001", "shivraj.dhote@finex.internal", "Shivraj Dhote")
+    token = create_access_token("usr-test-goals-fixture", "goals.test@finex.internal", "Test Investor")
     return {
         "Authorization": f"Bearer {token}",
         "X-Correlation-ID": "corr-sprint7-test-001",
@@ -38,7 +38,7 @@ def auth_headers():
 
 @pytest.fixture
 def other_user_headers():
-    token = create_access_token("usr-other-002", "other@finex.internal", "Other Investor")
+    token = create_access_token("usr-test-other-fixture", "other.test@finex.internal", "Other Test Investor")
     return {
         "Authorization": f"Bearer {token}",
         "X-Correlation-ID": "corr-sprint7-other-user",
@@ -60,16 +60,16 @@ async def clean_stores():
 
         async with AsyncSessionLocal() as session:
             await session.execute(
-                delete(Transaction).where(Transaction.user_id.in_(["usr-shivraj-001", "usr-other-002"]))
+                delete(Transaction).where(Transaction.user_id.in_(["usr-test-goals-fixture", "usr-test-other-fixture"]))
             )
             await session.execute(
-                delete(TransactionUpload).where(TransactionUpload.user_id.in_(["usr-shivraj-001", "usr-other-002"]))
+                delete(TransactionUpload).where(TransactionUpload.user_id.in_(["usr-test-goals-fixture", "usr-test-other-fixture"]))
             )
             await session.execute(
-                delete(GoalContribution).where(GoalContribution.user_id.in_(["usr-shivraj-001", "usr-other-002"]))
+                delete(GoalContribution).where(GoalContribution.user_id.in_(["usr-test-goals-fixture", "usr-test-other-fixture"]))
             )
             await session.execute(
-                delete(FinancialGoal).where(FinancialGoal.user_id.in_(["usr-shivraj-001", "usr-other-002"]))
+                delete(FinancialGoal).where(FinancialGoal.user_id.in_(["usr-test-goals-fixture", "usr-test-other-fixture"]))
             )
             await session.commit()
     except Exception:
@@ -90,16 +90,16 @@ async def clean_stores():
 
         async with AsyncSessionLocal() as session:
             await session.execute(
-                delete(Transaction).where(Transaction.user_id.in_(["usr-shivraj-001", "usr-other-002"]))
+                delete(Transaction).where(Transaction.user_id.in_(["usr-test-goals-fixture", "usr-test-other-fixture"]))
             )
             await session.execute(
-                delete(TransactionUpload).where(TransactionUpload.user_id.in_(["usr-shivraj-001", "usr-other-002"]))
+                delete(TransactionUpload).where(TransactionUpload.user_id.in_(["usr-test-goals-fixture", "usr-test-other-fixture"]))
             )
             await session.execute(
-                delete(GoalContribution).where(GoalContribution.user_id.in_(["usr-shivraj-001", "usr-other-002"]))
+                delete(GoalContribution).where(GoalContribution.user_id.in_(["usr-test-goals-fixture", "usr-test-other-fixture"]))
             )
             await session.execute(
-                delete(FinancialGoal).where(FinancialGoal.user_id.in_(["usr-shivraj-001", "usr-other-002"]))
+                delete(FinancialGoal).where(FinancialGoal.user_id.in_(["usr-test-goals-fixture", "usr-test-other-fixture"]))
             )
             await session.commit()
     except Exception:
