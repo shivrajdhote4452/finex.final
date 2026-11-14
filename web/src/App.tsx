@@ -17,6 +17,8 @@ import { AlertsScreen } from './pages/AlertsScreen';
 import { GoalsScreen } from './pages/GoalsScreen';
 import { SpendingScreen } from './pages/SpendingScreen';
 import { SettingsScreen } from './pages/SettingsScreen';
+import { PrivacyPolicyScreen } from './pages/PrivacyPolicyScreen';
+import { TermsOfServiceScreen } from './pages/TermsOfServiceScreen';
 import { apiClient } from './api/client';
 
 const VALID_TABS: NavigationTab[] = [
@@ -50,9 +52,80 @@ const getSavedTab = (): NavigationTab => {
   return 'overview';
 };
 
+type PublicPage = 'privacy' | 'terms' | null;
+
+const detectPublicPage = (): PublicPage => {
+  if (typeof window === 'undefined') return null;
+  const path = window.location.pathname.toLowerCase().replace(/\/$/, '');
+  const hash = window.location.hash.toLowerCase().replace('#', '').trim();
+  if (
+    path === '/privacy' ||
+    path === '/privacy-policy' ||
+    path === '/privacy.html' ||
+    hash === 'privacy' ||
+    hash === '/privacy'
+  ) {
+    return 'privacy';
+  }
+  if (
+    path === '/terms' ||
+    path === '/terms-of-service' ||
+    path === '/terms.html' ||
+    hash === 'terms' ||
+    hash === '/terms'
+  ) {
+    return 'terms';
+  }
+  return null;
+};
+
 export const AppContent: React.FC = () => {
   const [authState, setAuthState] = useState<'checking' | 'welcome' | 'onboarding' | 'authenticated'>('checking');
   const [currentTab, setCurrentTab] = useState<NavigationTab>(getSavedTab);
+  const [publicPage, setPublicPage] = useState<PublicPage>(detectPublicPage);
+
+  const openPrivacy = () => {
+    window.history.pushState(null, '', '/privacy');
+    setPublicPage('privacy');
+  };
+
+  const openTerms = () => {
+    window.history.pushState(null, '', '/terms');
+    setPublicPage('terms');
+  };
+
+  const closePublicPage = () => {
+    const currentPath = window.location.pathname.toLowerCase().replace(/\/$/, '');
+    if (
+      currentPath === '/privacy' ||
+      currentPath === '/terms' ||
+      currentPath === '/privacy-policy' ||
+      currentPath === '/terms-of-service' ||
+      currentPath === '/privacy.html' ||
+      currentPath === '/terms.html'
+    ) {
+      window.history.pushState(null, '', '/');
+    }
+    const currentHash = window.location.hash.toLowerCase().replace('#', '').trim();
+    if (currentHash === 'privacy' || currentHash === 'terms' || currentHash === '/privacy' || currentHash === '/terms') {
+      window.location.hash = '';
+    }
+    setPublicPage(null);
+  };
+
+  // Listen to browser navigation (back/forward) and hash changes for public pages
+  useEffect(() => {
+    const handleLocationChange = () => {
+      setPublicPage(detectPublicPage());
+    };
+
+    window.addEventListener('popstate', handleLocationChange);
+    window.addEventListener('hashchange', handleLocationChange);
+    return () => {
+      window.removeEventListener('popstate', handleLocationChange);
+      window.removeEventListener('hashchange', handleLocationChange);
+    };
+  }, []);
 
   const handleNavigate = (tab: NavigationTab) => {
     setCurrentTab(tab);
@@ -125,6 +198,14 @@ export const AppContent: React.FC = () => {
     };
   }, []);
 
+  // Priority: If viewing a public legal page, render immediately without requiring auth
+  if (publicPage === 'privacy') {
+    return <PrivacyPolicyScreen onBack={closePublicPage} />;
+  }
+  if (publicPage === 'terms') {
+    return <TermsOfServiceScreen onBack={closePublicPage} />;
+  }
+
   // Sleek Pure-Black Loading Splash
   if (authState === 'checking') {
     return (
@@ -154,6 +235,8 @@ export const AppContent: React.FC = () => {
   if (authState === 'welcome') {
     return (
       <WelcomeScreen
+        onOpenPrivacy={openPrivacy}
+        onOpenTerms={openTerms}
         onLoginSuccess={async () => {
           try {
             const user = await apiClient.auth.getMe();

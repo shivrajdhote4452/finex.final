@@ -271,6 +271,35 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
                     FinEx AI strictly cites authentic regulatory corpus documents (SEBI Master Circular, RBI Master Directions, NSE Guidelines). Hallucinated recommendations or speculative stock tips are deterministically rejected.
                   </p>
                 </div>
+
+                <div style={{ padding: '16px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <strong style={{ color: '#FFFFFF', fontSize: '13px' }}>Public Legal &amp; Governance Documents</strong>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                      Review our verified data privacy commitments and terms of service.
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    <a
+                      href="/privacy"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn btn-secondary"
+                      style={{ fontSize: '12px', padding: '6px 12px', textDecoration: 'none' }}
+                    >
+                      Privacy Policy ↗
+                    </a>
+                    <a
+                      href="/terms"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn btn-secondary"
+                      style={{ fontSize: '12px', padding: '6px 12px', textDecoration: 'none' }}
+                    >
+                      Terms of Service ↗
+                    </a>
+                  </div>
+                </div>
               </div>
             </div>
           )}

@@ -3,6 +3,8 @@ import { apiClient } from '../api/client';
 
 interface WelcomeScreenProps {
   onLoginSuccess: () => void;
+  onOpenPrivacy?: () => void;
+  onOpenTerms?: () => void;
 }
 
 declare global {
@@ -11,7 +13,11 @@ declare global {
   }
 }
 
-export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onLoginSuccess }) => {
+export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
+  onLoginSuccess,
+  onOpenPrivacy,
+  onOpenTerms,
+}) => {
   const [consentChecked, setConsentChecked] = useState(true);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -320,7 +326,35 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onLoginSuccess }) 
               style={{ marginTop: '2px', accentColor: 'var(--color-action)', cursor: 'pointer' }}
             />
             <span>
-              I accept the <strong style={{ color: '#FFFFFF' }}>Terms and Privacy Policy</strong>, and understand FinEx is an <strong style={{ color: 'var(--color-action)' }}>educational platform</strong>.
+              I accept the{' '}
+              <a
+                href="/terms"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onOpenTerms) {
+                    e.preventDefault();
+                    onOpenTerms();
+                  }
+                }}
+                style={{ color: '#FFFFFF', textDecoration: 'underline' }}
+              >
+                Terms of Service
+              </a>{' '}
+              and{' '}
+              <a
+                href="/privacy"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onOpenPrivacy) {
+                    e.preventDefault();
+                    onOpenPrivacy();
+                  }
+                }}
+                style={{ color: '#FFFFFF', textDecoration: 'underline' }}
+              >
+                Privacy Policy
+              </a>
+              , and understand FinEx is an <strong style={{ color: 'var(--color-action)' }}>educational platform</strong>.
             </span>
           </label>
 
@@ -410,11 +444,38 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onLoginSuccess }) 
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginTop: '20px', fontSize: '11px', color: '#A1A1AA' }}>
-            <span style={{ cursor: 'pointer', textDecoration: 'underline' }}>Privacy policy</span>
+            <a
+              href="/privacy"
+              onClick={(e) => {
+                if (onOpenPrivacy) {
+                  e.preventDefault();
+                  onOpenPrivacy();
+                }
+              }}
+              style={{ color: '#A1A1AA', textDecoration: 'underline', cursor: 'pointer' }}
+            >
+              Privacy Policy
+            </a>
             <span>·</span>
-            <span style={{ cursor: 'pointer', textDecoration: 'underline' }}>Terms</span>
+            <a
+              href="/terms"
+              onClick={(e) => {
+                if (onOpenTerms) {
+                  e.preventDefault();
+                  onOpenTerms();
+                }
+              }}
+              style={{ color: '#A1A1AA', textDecoration: 'underline', cursor: 'pointer' }}
+            >
+              Terms of Service
+            </a>
             <span>·</span>
-            <span style={{ cursor: 'pointer', textDecoration: 'underline' }}>Need help?</span>
+            <a
+              href="mailto:shivrajdhote4452@gmail.com"
+              style={{ color: '#A1A1AA', textDecoration: 'underline', cursor: 'pointer' }}
+            >
+              Need help?
+            </a>
           </div>
         </div>
       </div>

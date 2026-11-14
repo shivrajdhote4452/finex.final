@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+    <title>Privacy Policy — FinEx</title>
+    <meta name="description" content="FinEx Privacy Policy: Transparent data governance, Google OAuth authentication details, educational paper trading boundaries, and user privacy protections." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://www.finexai.tech/privacy" />
+
+    <!-- Favicons -->
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png" />
+    <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/favicon-192x192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <style>
+      :root {
+        --color-action: #F29A60;
+        --color-positive: #4DD5AD;
+        --border-subtle: #1F1F1F;
+        --border-medium: #27272A;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        background-color: #000000;
+        color: #D4D4D8;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        line-height: 1.65;
+        font-size: 14px;
+        -webkit-font-smoothing: antialiased;
+      }
+      header {
+        background-color: #080808;
+        border-bottom: 1px solid var(--border-subtle);
+        position: sticky;
+        top: 0;
+        z-index: 50;
+      }
+      .nav-inner {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 16px 24px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+      .logo {
+        display: flex;
+        align-items: baseline;
+        gap: 4px;
+        text-decoration: none;
+      }
+      .logo-white { font-size: 24px; font-weight: 900; color: #FFFFFF; letter-spacing: -0.03em; }
+      .logo-orange { font-size: 24px; font-weight: 900; color: var(--color-action); letter-spacing: -0.03em; }
+      .logo-pill {
+        font-size: 11px;
+        color: #71717A;
+        font-family: 'JetBrains Mono', monospace;
+        letter-spacing: 0.05em;
+        margin-left: 8px;
+      }
+      .nav-links { display: flex; align-items: center; gap: 12px; }
+      .btn-link {
+        font-size: 13px;
+        color: #A1A1AA;
+        text-decoration: none;
+        padding: 6px 12px;
+        border-radius: 4px;
+        border: 1px solid var(--border-medium);
+        background-color: #121214;
+        transition: color 0.15s;
+      }
+      .btn-link:hover { color: #FFFFFF; }
+      .btn-action {
+        font-size: 13px;
+        font-weight: 600;
+        color: #000000;
+        background-color: var(--color-action);
+        text-decoration: none;
+        padding: 6px 16px;
+        border-radius: 4px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      main {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 48px 24px 80px;
+      }
+      .doc-header {
+        border-bottom: 1px solid var(--border-subtle);
+        padding-bottom: 24px;
+        margin-bottom: 32px;
+      }
+      .version-tag {
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--color-action);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-family: 'JetBrains Mono', monospace;
+        margin-bottom: 8px;
+      }
+      h1 {
+        font-size: 34px;
+        font-weight: 800;
+        letter-spacing: -0.025em;
+        color: #FFFFFF;
+        line-height: 1.2;
+        margin-bottom: 10px;
+      }
+      .meta { font-size: 13.5px; color: #8E8E93; }
+      .card {
+        background-color: #0A0A0C;
+        border: 1px solid var(--border-subtle);
+        border-radius: 6px;
+        padding: 20px;
+        margin-bottom: 24px;
+      }
+      .card-notice {
+        border-left: 4px solid var(--color-action);
+        margin-bottom: 32px;
+      }
+      .card-limited-use {
+        background-color: #0B132B;
+        border: 1px solid #1C2541;
+      }
+      h2 {
+        font-size: 20px;
+        font-weight: 700;
+        color: #FFFFFF;
+        margin: 32px 0 12px 0;
+      }
+      h3 {
+        font-size: 15px;
+        font-weight: 700;
+        color: #FFFFFF;
+        margin-bottom: 6px;
+      }
+      p { margin-bottom: 12px; }
+      ul { padding-left: 20px; margin-bottom: 14px; }
+      li { margin-bottom: 6px; }
+      strong { color: #FFFFFF; }
+      a { color: var(--color-action); text-decoration: underline; }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+        text-align: left;
+        margin-top: 12px;
+      }
+      th {
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--border-medium);
+        color: #8E8E93;
+        font-weight: 600;
+      }
+      td {
+        padding: 12px;
+        border-bottom: 1px solid var(--border-subtle);
+      }
+      footer {
+        border-top: 1px solid var(--border-subtle);
+        padding-top: 24px;
+        margin-top: 48px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 13px;
+        color: #71717A;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="nav-inner">
+        <a href="/" class="logo">
+          <span class="logo-white">Fin</span><span class="logo-orange">Ex</span>
+          <span class="logo-pill">LEGAL &amp; PRIVACY</span>
+        </a>
+        <div class="nav-links">
+          <a href="/terms" class="btn-link">Terms of Service</a>
+          <a href="/" class="btn-action">← Return to FinEx</a>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <div class="doc-header">
+        <div class="version-tag">Data Governance &amp; Compliance · Version 1.0</div>
+        <h1>FinEx Privacy Policy</h1>
+        <div class="meta">
+          Effective Date: <strong>November 15, 2026</strong> · Application URL: <strong>https://www.finexai.tech</strong>
+        </div>
+      </div>
+
+      <div class="card card-notice">
+        <h3>Educational Platform &amp; Paper-Trading Notice</h3>
+        <p style="margin: 0; color: #A1A1AA;">
+          FinEx is strictly an educational financial simulation and learning platform designed to teach market mechanics, order types, risk profiling, and regulatory awareness. All trading on FinEx uses simulated virtual capital (₹1,00,000 virtual balance). FinEx is not a broker, does not connect to real demat accounts, does not hold customer funds or securities, and does not provide investment advisory services.
+        </p>
+      </div>
+
+      <section>
+        <h2>1. Overview and Scope</h2>
+        <p>
+          This Privacy Policy describes how FinEx ("we", "us", or "our") collects, uses, stores, and discloses information when you visit <strong>https://www.finexai.tech</strong> (the "Site") or access the FinEx Terminal application.
+        </p>
+        <p>
+          We are committed to transparent data practices and data minimization. We only collect information that is strictly necessary to authenticate your access, deliver educational paper trading, maintain compliance records, and provide AI-assisted financial explanations.
+        </p>
+      </section>
+
+      <section>
+        <h2>2. Information We Collect and Process</h2>
+        <p>Based on the actual technical implementation of FinEx, the platform processes the following categories of information:</p>
+
+        <div class="card">
+          <h3 style="color: var(--color-action);">A. Google Account Information (Google Sign-In / OAuth 2.0)</h3>
+          <p>
+            When you sign in using Google OAuth, Google Identity Services issues a cryptographically signed OpenID Connect ID token. Our backend verifies this token with Google's servers. From this token, we extract and store:
+          </p>
+          <ul>
+            <li><strong>Unique Google Subject Identifier (sub):</strong> A persistent numeric identifier used to securely map your account across logins.</li>
+            <li><strong>Email Address:</strong> Your primary Google account email, used as your unique login handle and for essential administrative notices.</li>
+            <li><strong>Full Name:</strong> Your display name as provided by Google, used to personalize your workspace interface.</li>
+            <li><strong>Profile Picture URL:</strong> If provided by your Google profile, used solely for displaying your avatar inside the terminal.</li>
+          </ul>
+          <p style="font-size: 12px; color: #71717A; margin-top: 10px; margin-bottom: 0;">
+            <em>Note: We never receive, request, or store your Google account password, Google Drive files, contacts, or any other unrelated Google account data.</em>
+          </p>
+        </div>
+
+        <div class="card">
+          <h3 style="color: var(--color-positive);">B. Simulated Paper Trading &amp; Portfolio Data</h3>
+          <p>To simulate order execution and portfolio management without financial risk, we store:</p>
+          <ul>
+            <li>Your virtual cash balance (initialized at ₹1,00,000 virtual funds, with user-initiated resets supported).</li>
+            <li>Simulated orders placed (stock symbol, order side, quantity, order type, simulated price, fill status).</li>
+            <li>Paper portfolio holdings, average cost basis, realized/unrealized profit-and-loss calculations, and cash ledger records.</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3 style="color: #A5B4FC;">C. Educational Questionnaire &amp; Preference Data</h3>
+          <p>To illustrate how personal risk appetite shapes asset allocation:</p>
+          <ul>
+            <li>Responses to our 4-question behavioral risk questionnaire and investment horizon selections, which compute an educational risk tier (Conservative, Moderate, or Aggressive).</li>
+            <li>User-created market price alerts and watchlist selections.</li>
+            <li>Simulated goal targets and spending category summaries (processed if you choose to test the budgeting CSV upload feature).</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3 style="color: #38BDF8;">D. AskFinEx AI Assistant Queries</h3>
+          <p style="margin-bottom: 0;">
+            Text prompts entered into the AskFinEx search and chat interface are processed to retrieve citations from official public regulatory corpora (SEBI Master Circulars, RBI Directions). Prompts are used exclusively to generate real-time educational responses and are not used to train proprietary public models.
+          </p>
+        </div>
+
+        <div class="card">
+          <h3 style="color: #E0E0E0;">E. Technical, Audit &amp; Consent Records</h3>
+          <p>To maintain operational security and compliance auditability:</p>
+          <ul>
+            <li><strong>Consent Records:</strong> Policy version acknowledged (e.g., v1.0), timestamp of consent, and client IP/user agent.</li>
+            <li><strong>Session Management:</strong> Signed JSON Web Tokens (JWT) with 60-minute expiration, and a server-side revoked token blacklist to ensure instant revocation upon sign-out.</li>
+            <li><strong>Error &amp; Diagnostic Logs:</strong> Anonymized HTTP status codes, correlation IDs, and application events to maintain platform reliability.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section>
+        <h2>3. Google API Services User Data Policy &amp; Limited Use Disclosure</h2>
+        <div class="card card-limited-use">
+          <p style="font-size: 13.5px; color: #E2E8F0; line-height: 1.7; margin-bottom: 12px;">
+            FinEx's use and transfer to any other app of information received from Google APIs adheres to the 
+            <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer" style="color: #38BDF8;">Google API Services User Data Policy</a>, including the <strong>Limited Use</strong> requirements.
+          </p>
+          <p style="font-size: 13px; color: #94A3B8; margin-bottom: 0;">
+            Specifically, Google user data is accessed solely to establish user identity for educational paper trading. We do not transfer, sell, or disclose Google user data to third parties, advertising brokers, data resellers, or information brokers. We do not use Google user data for advertising, marketing campaigns, or credit scoring.
+          </p>
+        </div>
+      </section>
+
+      <section>
+        <h2>4. Third-Party Service Providers</h2>
+        <p>We partner with reliable cloud and service providers to operate FinEx securely:</p>
+        <div style="overflow-x: auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>Provider</th>
+                <th>Purpose</th>
+                <th>Data Handled</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Google Identity Services</strong></td>
+                <td>OAuth 2.0 Identity Authentication</td>
+                <td>ID token verification (email, name, sub)</td>
+              </tr>
+              <tr>
+                <td><strong>Neon (PostgreSQL on AWS)</strong></td>
+                <td>Operational Cloud Database</td>
+                <td>Encrypted user profiles, orders, paper positions</td>
+              </tr>
+              <tr>
+                <td><strong>Render</strong></td>
+                <td>Backend API Web Service</td>
+                <td>FastAPI endpoints, simulated order matching</td>
+              </tr>
+              <tr>
+                <td><strong>Vercel</strong></td>
+                <td>Frontend Static Hosting &amp; CDN</td>
+                <td>Web application distribution (https://www.finexai.tech)</td>
+              </tr>
+              <tr>
+                <td><strong>Yahoo Finance / Angel SmartAPI</strong></td>
+                <td>Market Observation Feeds</td>
+                <td>Public Indian market symbols &amp; candles (no user data)</td>
+              </tr>
+              <tr>
+                <td><strong>Groq API / Google Gemini</strong></td>
+                <td>Educational AI Question Answering</td>
+                <td>User text queries on financial concepts &amp; regulations</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>5. Security &amp; Session Protection</h2>
+        <p>We implement strict security measures to protect user data and maintain service integrity:</p>
+        <ul>
+          <li><strong>Fail-Closed Authentication:</strong> All protected API endpoints verify cryptographic JWT tokens. Missing, malformed, expired, or revoked tokens return HTTP 401.</li>
+          <li><strong>Session Expiration &amp; Immediate Revocation:</strong> Access tokens expire after 60 minutes. When a user clicks Sign Out, the token is recorded in the server-side revocation list to prevent replay attacks.</li>
+          <li><strong>Transport Encryption:</strong> All communications between the browser, Vercel frontend, Render backend, and database use TLS/HTTPS encryption.</li>
+          <li><strong>No Financial Asset Exposure:</strong> Because FinEx operates strictly with virtual funds and has no access to real bank or brokerage accounts, users face zero financial asset exposure.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>6. Data Retention, Deletion &amp; User Inquiries</h2>
+        <p>
+          Your account profile and virtual trading records remain stored in our database while your account is active, enabling you to resume your learning and review order histories across browser sessions.
+        </p>
+        <div class="card">
+          <h3 style="color: #FFFFFF;">Account Deletion and Data Purge Requests</h3>
+          <p style="color: #A1A1AA; margin-bottom: 0;">
+            If you wish to delete your account, remove your Google identity mapping, or wipe your paper-trading history from our database, you may submit a request to the platform administrator at 
+            <a href="mailto:shivrajdhote4452@gmail.com">shivrajdhote4452@gmail.com</a>. Requests are verified and processed manually by the administrator.
+          </p>
+        </div>
+        <p style="font-size: 13px; color: #8E8E93; margin-top: 10px;">
+          <em>Owner Confirmation Note:</em> Specific automated data retention schedules and self-service account deletion workflows are subject to administrative confirmation prior to official store or marketplace publication.
+        </p>
+      </section>
+
+      <section>
+        <h2>7. Children's Privacy</h2>
+        <p>
+          FinEx is designed for university students, educators, and adult retail learners. We do not knowingly collect personal information from individuals under 13 years of age. If we learn that personal data of a minor has been collected without verifiable parental consent, we will promptly delete that information.
+        </p>
+      </section>
+
+      <section>
+        <h2>8. Contact Information</h2>
+        <p>If you have questions, feedback, or data requests regarding this Privacy Policy or FinEx's educational workspace, please contact:</p>
+        <div class="card">
+          <h3>FinEx Platform Team</h3>
+          <p style="margin-bottom: 4px;">Lead Developer &amp; Administrator: <strong>Shivraj Dhote</strong></p>
+          <p style="margin-bottom: 4px;">Inquiries &amp; Privacy: <a href="mailto:shivrajdhote4452@gmail.com">shivrajdhote4452@gmail.com</a></p>
+          <p style="color: #71717A; margin-bottom: 0;">Website: https://www.finexai.tech</p>
+        </div>
+      </section>
+
+      <footer>
+        <div>© 2026 FinEx. Educational Simulation Platform.</div>
+        <div style="display: flex; gap: 16px;">
+          <a href="/terms" style="color: #A1A1AA; text-decoration: none;">Terms of Service</a>
+          <span>·</span>
+          <a href="/" style="color: var(--color-action); text-decoration: none;">Return to FinEx Terminal</a>
+        </div>
+      </footer>
+    </main>
+  </body>
+</html>
