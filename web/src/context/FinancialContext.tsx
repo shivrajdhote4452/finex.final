@@ -133,14 +133,26 @@ const INSTRUMENT_METADATA: Record<string, { name: string; sector: string; color:
 };
 
 export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const getCashStorageKey = useCallback(() => {
+    try {
+      const payload = apiClient.getTokenPayload();
+      const uid = payload?.sub || payload?.user_id;
+      return uid ? `finex_virtual_cash_${uid}` : 'finex_virtual_cash_guest';
+    } catch {
+      return 'finex_virtual_cash_guest';
+    }
+  }, []);
+
   const [virtualCash, setVirtualCash] = useState<number>(() => {
     try {
-      const saved = localStorage.getItem('finex_virtual_cash');
+      const payload = apiClient.getTokenPayload();
+      const uid = payload?.sub || payload?.user_id;
+      const key = uid ? `finex_virtual_cash_${uid}` : 'finex_virtual_cash_guest';
+      const saved = localStorage.getItem(key);
       if (saved !== null && saved !== undefined && saved !== '') {
         const val = Number(saved);
-        if (Number.isFinite(val)) return val;
+        if (Number.isFinite(val) && val >= 0) return val;
       }
-      localStorage.setItem('finex_virtual_cash', '100000');
       return 100000;
     } catch {
       return 100000;
@@ -150,13 +162,14 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
   const updateVirtualCash = useCallback((updater: number | ((prev: number) => number)) => {
     setVirtualCash((prev) => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
-      const safeNext = Number.isFinite(next) ? next : 0;
+      const safeNext = Number.isFinite(next) && next >= 0 ? next : 0;
       try {
-        localStorage.setItem('finex_virtual_cash', String(safeNext));
+        const key = getCashStorageKey();
+        localStorage.setItem(key, String(safeNext));
       } catch {}
       return safeNext;
     });
-  }, []);
+  }, [getCashStorageKey]);
 
   const [holdings, setHoldings] = useState<HoldingItem[]>([]);
   const [ledger, setLedger] = useState<LedgerEntry[]>([]);
@@ -195,15 +208,7 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
   // Clear private client state on logout or session expiration
   const clearPrivateState = useCallback(() => {
     sessionGenerationRef.current += 1;
-    let initialCash = 100000;
-    try {
-      const saved = localStorage.getItem('finex_virtual_cash');
-      if (saved !== null && saved !== undefined && saved !== '') {
-        const val = Number(saved);
-        if (Number.isFinite(val)) initialCash = val;
-      }
-    } catch {}
-    setVirtualCash(initialCash);
+    setVirtualCash(100000);
     setHoldings([]);
     setLedger([]);
     setNotifications([]);
@@ -245,23 +250,14 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
       if (thisGen !== sessionGenerationRef.current) return;
       if (acct) {
         // Normalize cash_balance and current_cash defensively
+        // Authoritative backend cash balance (including legitimate ₹0.00) is preserved
         const rawCash = acct.cash_balance ?? acct.current_cash;
         const normalizedCash = Number(rawCash);
-        if (Number.isFinite(normalizedCash) && normalizedCash > 0) {
+        if (Number.isFinite(normalizedCash) && normalizedCash >= 0) {
           updateVirtualCash(normalizedCash);
         } else {
-          // If backend returned 0 or unseeded, check local persistence
-          try {
-            const saved = localStorage.getItem('finex_virtual_cash');
-            if (saved !== null && saved !== undefined && saved !== '') {
-              const val = Number(saved);
-              if (Number.isFinite(val)) {
-                setVirtualCash(val);
-              }
-            } else {
-              updateVirtualCash(100000);
-            }
-          } catch {}
+          // Fallback only if backend returned null, undefined, or NaN
+          updateVirtualCash(100000);
         }
 
         if (acct.positions && Array.isArray(acct.positions)) {

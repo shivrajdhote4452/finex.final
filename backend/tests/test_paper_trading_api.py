@@ -37,7 +37,7 @@ def setup_paper_trading_module():
 
     async def _clean():
         async with AsyncSessionLocal() as session:
-            stmt_acct = select(PaperAccount).where(PaperAccount.user_id == "usr-shivraj-001")
+            stmt_acct = select(PaperAccount).where(PaperAccount.user_id == "usr-test-isolated-fixture")
             res = await session.execute(stmt_acct)
             acct = res.scalar_one_or_none()
             if acct:
@@ -215,7 +215,7 @@ async def test_paper_buy_and_partial_sell_lifecycle(app, auth_headers):
 async def test_paper_trading_reconciliation_zero_breaks(app, auth_headers):
     """Verify that ledger entries sum exactly to cash balance, and positions equal trade totals."""
     engine = PaperTradingEngine()
-    user_id = "usr-shivraj-001"
+    user_id = "usr-test-isolated-fixture"
     acct = engine.get_or_create_account(user_id)
     acct_id = acct["id"]
 

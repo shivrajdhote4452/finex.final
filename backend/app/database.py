@@ -4,6 +4,7 @@ Task ID: S1-DAT-02, W0-PAL
 Implements AbstractOperationalStorage from backend.app.ports.storage.
 """
 
+import os
 import sys
 from typing import Any, AsyncGenerator, Dict
 from urllib.parse import urlparse
@@ -26,6 +27,24 @@ from backend.app.config import sanitize_asyncpg_url
 
 # Normalize and sanitize DATABASE_URL to asyncpg dialect defensively
 db_url = sanitize_asyncpg_url(settings.DATABASE_URL)
+
+# FAIL-CLOSED SAFEGUARD: Prevent tests from connecting to production database
+is_test_env = (
+    "pytest" in sys.modules
+    or settings.ENVIRONMENT == Environment.TESTING
+    or "PYTEST_CURRENT_TEST" in os.environ
+)
+is_production_host = any(
+    marker in db_url.lower()
+    for marker in ["neon.tech", "ep-gentle-frog", "aws.neon.tech"]
+)
+
+if is_test_env and is_production_host:
+    raise RuntimeError(
+        "CRITICAL FAIL-CLOSED ERROR: Automated tests detected an active connection to the production "
+        "database host (neon.tech). Executing tests against production is strictly prohibited to prevent data loss. "
+        "Tests must run against an isolated test database (e.g. finex_test_db on localhost or SQLite)."
+    )
 
 if "sqlite" in db_url or settings.ENVIRONMENT == Environment.TESTING or "pytest" in sys.modules:
     engine_kwargs["poolclass"] = NullPool
