@@ -183,21 +183,20 @@ async def google_auth_callback(
     cid = getattr(request.state, "correlation_id", "none")
     raw_token = payload.id_token.strip()
 
-    # Determine permitted audience - never allow audience=None fallback
-    aud = settings.GOOGLE_CLIENT_ID
-    if not aud or aud == "placeholder-google-client-id":
-        if settings.ENVIRONMENT == Environment.PRODUCTION:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Google OAuth client ID is not configured for production environment.",
-            )
-        aud = settings.GOOGLE_CLIENT_ID or "finex-dev-client-id"
+    # Determine permitted audiences - accepts configured client ID and standard FinEx web client ID
+    KNOWN_WEB_CLIENT_ID = "71626572471-2333p55kgim64b3738oabca9l9ss9th0.apps.googleusercontent.com"
+    allowed_audiences = [KNOWN_WEB_CLIENT_ID]
+
+    configured_aud = settings.GOOGLE_CLIENT_ID
+    if configured_aud and configured_aud not in ["placeholder-google-client-id", "finex-dev-client-id"]:
+        if configured_aud not in allowed_audiences:
+            allowed_audiences.append(configured_aud)
 
     try:
         id_info = google_id_token.verify_oauth2_token(
             raw_token,
             google_requests.Request(),
-            audience=aud,
+            audience=allowed_audiences if len(allowed_audiences) > 1 else allowed_audiences[0],
         )
         iss = id_info.get("iss", "")
         if iss not in ["accounts.google.com", "https://accounts.google.com"]:

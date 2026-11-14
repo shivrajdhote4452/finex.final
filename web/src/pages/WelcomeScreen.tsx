@@ -36,19 +36,23 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onLoginSuccess }) 
           setLoading(true);
           setErrorMessage(null);
           try {
-            await apiClient.auth.googleLogin(response.credential);
+            const loginRes = await apiClient.auth.googleLogin(response.credential);
+            if (!loginRes?.access_token) {
+              throw new Error('Authentication succeeded but server returned no access token.');
+            }
             try {
               await apiClient.auth.recordConsent('v1.0');
-            } catch {}
+            } catch (consentErr) {
+              console.warn('Consent recording deferred:', consentErr);
+            }
             onLoginSuccess();
           } catch (err: any) {
-            // When backend is not hosted on Vercel (404/network), gracefully establish local session
-            if (err?.status === 404 || err?.message?.includes('404') || err?.message?.includes('Failed to fetch')) {
-              apiClient.setToken(response.credential);
-              onLoginSuccess();
-              return;
-            }
-            setErrorMessage(err?.message || 'Google token verification failed.');
+            console.error('Google Sign-In backend verification error:', err);
+            const isTimeout = err?.code === 'TIMEOUT' || err?.status === 408 || err?.message?.includes('timed out');
+            const msg = isTimeout
+              ? 'The FinEx backend server is warming up. Please click Continue with Google again in a moment.'
+              : err?.message || 'Google sign-in verification failed. Please try again.';
+            setErrorMessage(msg);
           } finally {
             setLoading(false);
           }

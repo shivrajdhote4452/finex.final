@@ -76,7 +76,10 @@ class Settings(BaseSettings):
     )
 
     # Google OAuth
-    GOOGLE_CLIENT_ID: Optional[str] = "placeholder-google-client-id"
+    GOOGLE_CLIENT_ID: Optional[str] = Field(
+        default="71626572471-2333p55kgim64b3738oabca9l9ss9th0.apps.googleusercontent.com",
+        description="Google OAuth web client ID",
+    )
     GOOGLE_CLIENT_SECRET: Optional[str] = "placeholder-google-client-secret"
     GOOGLE_REDIRECT_URI: str = "http://localhost:3000/auth/callback"
 

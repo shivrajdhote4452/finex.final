@@ -164,6 +164,37 @@ class ApiClient {
     }
   }
 
+  public isTokenExpired(token?: string | null): boolean {
+    const t = token ?? this.token ?? localStorage.getItem('finex_access_token');
+    if (!t) return true;
+    try {
+      const parts = t.split('.');
+      if (parts.length !== 3) return true;
+      const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const json = JSON.parse(atob(base64));
+      if (typeof json.exp === 'number') {
+        // Expired if current time in seconds is >= exp (with 30s grace window)
+        return Date.now() / 1000 >= json.exp - 30;
+      }
+      return false;
+    } catch {
+      return true;
+    }
+  }
+
+  public getTokenPayload(): any | null {
+    const t = this.getToken();
+    if (!t) return null;
+    try {
+      const parts = t.split('.');
+      if (parts.length !== 3) return null;
+      const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      return JSON.parse(atob(base64));
+    } catch {
+      return null;
+    }
+  }
+
   public setToken(token: string | null): void {
     const prev = this.token;
     this.token = token;
@@ -181,11 +212,16 @@ class ApiClient {
     if (!this.token) {
       this.token = localStorage.getItem('finex_access_token');
     }
+    if (this.token && this.isTokenExpired(this.token)) {
+      this.token = null;
+      localStorage.removeItem('finex_access_token');
+    }
     return this.token;
   }
 
   public isAuthenticated(): boolean {
-    return Boolean(this.getToken());
+    const t = this.getToken();
+    return Boolean(t && !this.isTokenExpired(t));
   }
 
   private async request<T>(
@@ -205,7 +241,14 @@ class ApiClient {
     }
 
     const controller = new AbortController();
-    const timeoutMs = options.timeoutMs ?? (endpoint.includes('/market/') || endpoint.includes('/ai/') ? 15000 : 8000);
+    const defaultTimeout = (
+      endpoint.includes('/auth/') || endpoint.includes('/users/') || endpoint.includes('/paper-trading/')
+        ? 30000 // 30s to comfortably tolerate Render cold starts on auth & accounts
+        : endpoint.includes('/market/') || endpoint.includes('/ai/')
+          ? 20000
+          : 12000
+    );
+    const timeoutMs = options.timeoutMs ?? defaultTimeout;
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     let response: Response;
     try {
@@ -214,13 +257,20 @@ class ApiClient {
         headers,
         signal: options.signal || controller.signal,
       });
+    } catch (fetchErr: any) {
+      if (fetchErr.name === 'AbortError') {
+        throw new ApiError('Request timed out while connecting to FinEx server. The server may be waking up.', 408, 'TIMEOUT');
+      }
+      throw new ApiError(fetchErr.message || 'Network error connecting to FinEx server.', 0, 'NETWORK_ERROR');
     } finally {
       clearTimeout(timeoutId);
     }
 
-    // Handle 401 Unauthorized globally
+    // Handle 401 Unauthorized globally (except for public auth check)
     if (response.status === 401) {
-      this.setToken(null);
+      if (!endpoint.includes('/auth/google') && !endpoint.includes('/auth/login')) {
+        this.setToken(null);
+      }
       throw new ApiError('Authentication required or session expired', 401, 'UNAUTHORIZED');
     }
 

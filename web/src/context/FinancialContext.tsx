@@ -140,10 +140,10 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
         const val = Number(saved);
         if (Number.isFinite(val)) return val;
       }
-      localStorage.setItem('finex_virtual_cash', '1000000');
-      return 1000000;
+      localStorage.setItem('finex_virtual_cash', '100000');
+      return 100000;
     } catch {
-      return 1000000;
+      return 100000;
     }
   });
 
@@ -195,7 +195,7 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
   // Clear private client state on logout or session expiration
   const clearPrivateState = useCallback(() => {
     sessionGenerationRef.current += 1;
-    let initialCash = 1000000;
+    let initialCash = 100000;
     try {
       const saved = localStorage.getItem('finex_virtual_cash');
       if (saved !== null && saved !== undefined && saved !== '') {
@@ -259,7 +259,7 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
                 setVirtualCash(val);
               }
             } else {
-              updateVirtualCash(1000000);
+              updateVirtualCash(100000);
             }
           } catch {}
         }
@@ -362,11 +362,13 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
       if (thisGen === sessionGenerationRef.current) {
         if (e?.status === 401) {
           clearPrivateState();
-        } else if (e?.status === 404 || e?.message?.includes('404') || e?.message?.includes('Failed to fetch')) {
-          // Static demo mode on Vercel: suppress error banner, keep local simulator running cleanly
-          setAccountError(null);
         } else {
-          setAccountError(e?.message || 'Failed to sync with server');
+          const isNetwork = e?.code === 'TIMEOUT' || e?.code === 'NETWORK_ERROR' || e?.message?.includes('Failed to fetch') || e?.message?.includes('waking up');
+          setAccountError(
+            isNetwork
+              ? 'Unable to connect to FinEx server. The service may be waking up.'
+              : e?.message || 'Failed to sync portfolio with server.'
+          );
         }
       }
     } finally {

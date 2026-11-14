@@ -85,20 +85,32 @@ export const AppContent: React.FC = () => {
 
   // Fail-closed initial session check against FastAPI /users/me
   useEffect(() => {
+    let isMounted = true;
     const checkSession = async () => {
-      if (!apiClient.isAuthenticated()) {
-        setAuthState('welcome');
+      const token = apiClient.getToken();
+      if (!token || apiClient.isTokenExpired(token)) {
+        if (isMounted) setAuthState('welcome');
         return;
       }
+
       try {
         const user = await apiClient.auth.getMe();
+        if (!isMounted) return;
         if (user && user.onboarding_completed) {
           setAuthState('authenticated');
         } else {
           setAuthState('onboarding');
         }
       } catch (err: any) {
-        // If backend is offline or static Vercel (404/network error), allow authenticated session if token exists
+        if (!isMounted) return;
+        // If 401 Unauthorized, session has been revoked or invalidated by server
+        if (err?.status === 401) {
+          apiClient.setToken(null);
+          setAuthState('welcome');
+          return;
+        }
+
+        // If backend is sleeping/temporarily unreachable (network or cold start), preserve session
         if (apiClient.isAuthenticated()) {
           setAuthState('authenticated');
         } else {
@@ -108,6 +120,9 @@ export const AppContent: React.FC = () => {
     };
 
     checkSession();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // Sleek Pure-Black Loading Splash

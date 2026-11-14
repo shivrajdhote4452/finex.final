@@ -18,6 +18,7 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
     unrealizedPnL,
     totalPortfolioValue,
     isAccountLoading,
+    accountError,
     openQuickTrade,
     depositFunds,
     refreshAccount,
@@ -143,6 +144,36 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
         </div>
       </div>
 
+      {/* Server Sync Warning Banner */}
+      {accountError && (
+        <div
+          className="glass-card"
+          style={{
+            padding: '16px 20px',
+            border: '1px solid var(--color-loss-border)',
+            backgroundColor: 'var(--color-loss-bg)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: '14px',
+            flexWrap: 'wrap',
+          }}
+        >
+          <div style={{ fontSize: '13px', color: 'var(--color-loss)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span>⚠️</span>
+            <span>{accountError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => refreshAccount()}
+            className="btn btn-secondary"
+            style={{ fontSize: '12px', padding: '6px 14px' }}
+          >
+            Retry Sync
+          </button>
+        </div>
+      )}
+
       {/* Empty Wallet State Banner when no cash and no positions */}
       {virtualCash === 0 && holdings.length === 0 && (
         <div
@@ -168,11 +199,11 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
           </div>
           <button
             type="button"
-            onClick={() => depositFunds(1000000)}
+            onClick={() => depositFunds(100000)}
             className="btn btn-action"
             style={{ whiteSpace: 'nowrap', cursor: 'pointer' }}
           >
-            Start with ₹10,00,000
+            Seed ₹1,00,000 Virtual Funds
           </button>
         </div>
       )}
@@ -469,10 +500,45 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
                   </tr>
                 </thead>
                 <tbody>
-                  {holdings.length === 0 ? (
+                  {isAccountLoading ? (
                     <tr>
                       <td colSpan={8} style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                        No active holdings. Trade any Indian equity to initiate paper positions.
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
+                          <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%', border: '2px solid var(--accent)', borderTopColor: 'transparent', animation: 'spin 1s linear infinite' }}></span>
+                          Syncing holdings with server...
+                        </div>
+                      </td>
+                    </tr>
+                  ) : holdings.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} style={{ padding: '40px 24px', textAlign: 'center' }}>
+                        <div style={{ maxWidth: '440px', margin: '0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ color: '#FFFFFF', fontWeight: 600, fontSize: '14px' }}>
+                            No active equity positions
+                          </div>
+                          <div style={{ color: 'var(--text-muted)', fontSize: '12px', lineHeight: 1.5 }}>
+                            Your simulated paper trading account is active with ₹{virtualCash.toLocaleString('en-IN')} in virtual cash. Place a simulated buy order to initiate your first position.
+                          </div>
+                          <button
+                            onClick={() => onNavigate('markets')}
+                            style={{
+                              marginTop: '8px',
+                              padding: '6px 14px',
+                              background: 'rgba(59, 130, 246, 0.15)',
+                              color: '#60a5fa',
+                              border: '1px solid rgba(59, 130, 246, 0.3)',
+                              borderRadius: '6px',
+                              fontSize: '12px',
+                              fontWeight: 500,
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                            }}
+                          >
+                            Explore Markets &amp; Trade &rarr;
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ) : (
