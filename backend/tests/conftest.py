@@ -20,9 +20,38 @@ if not current_db or any(k in current_db.lower() for k in ["neon.tech", "ep-gent
 os.environ["ENVIRONMENT"] = "testing"
 
 import pytest
+import sqlalchemy
+import sqlalchemy.ext.asyncio
 from backend.app.config import get_settings
+from backend.app.database import validate_test_database_allowlist
 from backend.app.factory import create_app
 from backend.app.routers.auth import create_access_token
+
+# Universal fail-closed interception hook: prevents any direct create_async_engine or create_engine bypass
+_orig_create_async_engine = sqlalchemy.ext.asyncio.create_async_engine
+_orig_create_engine = sqlalchemy.create_engine
+
+
+def _guarded_create_async_engine(url, *args, **kwargs):
+    url_str = str(url)
+    allow_maintenance = kwargs.pop("allow_maintenance", False)
+    if kwargs.get("isolation_level") == "AUTOCOMMIT":
+        allow_maintenance = True
+    validate_test_database_allowlist(url_str, allow_maintenance=allow_maintenance)
+    return _orig_create_async_engine(url, *args, **kwargs)
+
+
+def _guarded_create_engine(url, *args, **kwargs):
+    url_str = str(url)
+    allow_maintenance = kwargs.pop("allow_maintenance", False)
+    if kwargs.get("isolation_level") == "AUTOCOMMIT":
+        allow_maintenance = True
+    validate_test_database_allowlist(url_str, allow_maintenance=allow_maintenance)
+    return _orig_create_engine(url, *args, **kwargs)
+
+
+sqlalchemy.ext.asyncio.create_async_engine = _guarded_create_async_engine
+sqlalchemy.create_engine = _guarded_create_engine
 
 
 @pytest.fixture(autouse=True)

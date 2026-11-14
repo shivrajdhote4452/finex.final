@@ -24,8 +24,13 @@ def do_run_migrations(connection):
 async def run_async_migrations():
     settings = get_settings()
     db_url = config.get_main_option("sqlalchemy.url") or settings.DATABASE_URL
-    # For SQLite, check same thread
-    is_sqlite = "sqlite" in db_url
+    
+    from urllib.parse import urlparse
+    from backend.app.database import APPROVED_SQLITE_SCHEMES, is_test_env, validate_test_database_allowlist
+    if is_test_env:
+        validate_test_database_allowlist(db_url)
+
+    is_sqlite = urlparse(db_url).scheme.lower() in APPROVED_SQLITE_SCHEMES
     engine_kwargs = {}
     if is_sqlite:
         engine_kwargs["connect_args"] = {"check_same_thread": False}
@@ -45,6 +50,9 @@ def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""
     settings = get_settings()
     url = config.get_main_option("sqlalchemy.url") or settings.DATABASE_URL
+    from backend.app.database import is_test_env, validate_test_database_allowlist
+    if is_test_env:
+        validate_test_database_allowlist(url)
     context.configure(
         url=url,
         target_metadata=target_metadata,

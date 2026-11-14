@@ -35,63 +35,133 @@ is_test_env = (
     or "PYTEST_CURRENT_TEST" in os.environ
 )
 
-def validate_test_database_allowlist(url_str: str) -> None:
+APPROVED_SQLITE_SCHEMES = frozenset({"sqlite", "sqlite+aiosqlite", "sqlite+pysqlite"})
+APPROVED_POSTGRES_SCHEMES = frozenset({
+    "postgresql",
+    "postgresql+asyncpg",
+    "postgresql+psycopg",
+    "postgresql+psycopg2",
+    "postgres",
+})
+
+REMOTE_CLOUD_MARKERS = (
+    "neon.tech",
+    "ep-gentle-frog",
+    "aws.neon.tech",
+    "render.com",
+    "onrender.com",
+    "amazonaws.com",
+    "rds.amazonaws.com",
+    "supabase.co",
+    "supabase.com",
+    "google.com",
+    "cloud.google.com",
+    "azure.com",
+    "digitalocean.com",
+    "clever-cloud.com",
+)
+
+
+def validate_test_database_allowlist(url_str: str, allow_maintenance: bool = False) -> None:
     """Validate that the database connection points to an approved isolated test database.
     
-    Allowlist Policy:
-    1. SQLite databases (e.g., sqlite+aiosqlite:///:memory:) are approved.
-    2. PostgreSQL databases are approved ONLY if:
-       - Host is strictly '127.0.0.1' or 'localhost'.
-       - Database name path explicitly contains 'test' (e.g., 'finex_test_db', 'finex_test_clean_...').
-       - Host does NOT contain any remote, cloud, or production host markers.
-    3. Any unapproved, remote, or production database raises a fatal RuntimeError.
+    Fail-Closed Policy:
+    1. Parse the actual database scheme/driver:
+       - Approved SQLite schemes: 'sqlite', 'sqlite+aiosqlite', 'sqlite+pysqlite'
+       - Approved PostgreSQL schemes: 'postgresql', 'postgresql+asyncpg', 'postgresql+psycopg', 'postgresql+psycopg2', 'postgres'
+       - Any unsupported, remote, or malformed scheme raises a fatal RuntimeError.
+    2. Check for remote/cloud host markers across the entire URL (including username, password, host, path, query):
+       - If any cloud host marker is detected, raises a fatal RuntimeError.
+    3. For SQLite:
+       - Host must be empty or local (127.0.0.1 / localhost). Remote network hosts are forbidden.
+       - Database target must either be in-memory (':memory:' or empty) OR the file path must explicitly
+         contain 'test' (e.g. 'test.db', 'finex_test.db'). Non-test SQLite files (e.g. 'production.db') are rejected.
+    4. For PostgreSQL:
+       - Host must strictly be '127.0.0.1' or 'localhost'.
+       - Target database path must explicitly contain 'test' (e.g. 'finex_test_db', 'finex_test_clean_8f3a92b1').
+       - If allow_maintenance is True, maintenance databases ('postgres', 'template1') on local host are permitted
+         exclusively for test lifecycle database creation/dropping.
     """
-    if not url_str:
-        raise RuntimeError("CRITICAL FAIL-CLOSED ERROR: Automated tests received an empty DATABASE_URL.")
-    
-    url_lower = url_str.lower()
-    if "sqlite" in url_lower:
-        return
-        
+    if not url_str or not isinstance(url_str, str) or not url_str.strip():
+        raise RuntimeError("CRITICAL FAIL-CLOSED ERROR: Automated tests received an empty or invalid DATABASE_URL.")
+
+    clean_url = url_str.strip()
     try:
-        parsed = urlparse(url_str)
+        parsed = urlparse(clean_url)
+    except Exception as exc:
+        raise RuntimeError(f"CRITICAL FAIL-CLOSED ERROR: Failed to parse database URL: {exc}")
+
+    scheme = (parsed.scheme or "").lower().strip()
+    if scheme not in APPROVED_SQLITE_SCHEMES and scheme not in APPROVED_POSTGRES_SCHEMES:
+        raise RuntimeError(
+            f"CRITICAL FAIL-CLOSED ERROR: Unsupported or unapproved database scheme '{scheme}'. "
+            f"Tests must use an approved PostgreSQL or SQLite test driver."
+        )
+
+    url_lower = clean_url.lower()
+
+    # Reject any remote cloud host markers anywhere in the URL
+    matched_marker = next((m for m in REMOTE_CLOUD_MARKERS if m in url_lower), None)
+    if matched_marker:
+        raise RuntimeError(
+            f"CRITICAL FAIL-CLOSED ERROR: Automated tests detected a remote/cloud database host ({matched_marker}). "
+            f"Executing tests against remote or production databases is strictly prohibited to prevent data loss. "
+            f"Tests must run against an isolated test database (e.g. finex_test_db on localhost or SQLite)."
+        )
+
+    # Validate SQLite targets
+    if scheme in APPROVED_SQLITE_SCHEMES:
         host = (parsed.hostname or "").lower().strip()
-        path = (parsed.path or "").lower().lstrip("/")
-        
-        # Disallow remote/cloud host markers
-        remote_markers = [
-            "neon.tech", "ep-gentle-frog", "aws.neon.tech", "render.com", 
-            "onrender.com", "amazonaws.com", "supabase.co", "google.com", "azure.com"
-        ]
-        matched_marker = next((m for m in remote_markers if m in url_lower), None)
-        if matched_marker:
+        if host and host not in ("127.0.0.1", "localhost"):
             raise RuntimeError(
-                f"CRITICAL FAIL-CLOSED ERROR: Automated tests detected a remote/cloud database host ({matched_marker}). "
-                f"Executing tests against remote or production databases is strictly prohibited to prevent data loss. "
-                f"Tests must run against an isolated test database (e.g. finex_test_db on localhost or SQLite)."
+                f"CRITICAL FAIL-CLOSED ERROR: SQLite test database specified unexpected non-local host '{host}'."
             )
-            
-        if host not in ("127.0.0.1", "localhost"):
+
+        raw_path = (parsed.path or "").strip()
+        clean_path = raw_path.lstrip("/")
+
+        # In-memory SQLite is always approved
+        if clean_path in (":memory:", "") or ":memory:" in url_lower:
+            return
+
+        # File-based SQLite: file name/path must explicitly contain 'test'
+        if "test" not in clean_path.lower():
+            raise RuntimeError(
+                f"CRITICAL FAIL-CLOSED ERROR: SQLite database file '{clean_path}' does not contain 'test' in its name. "
+                f"File-based SQLite test databases must contain 'test' to prevent modifying non-test or production database files."
+            )
+        return
+
+    # Validate PostgreSQL targets
+    if scheme in APPROVED_POSTGRES_SCHEMES:
+        host = (parsed.hostname or "").lower().strip()
+        if not host or host not in ("127.0.0.1", "localhost"):
             raise RuntimeError(
                 f"CRITICAL FAIL-CLOSED ERROR: Automated tests attempted to connect to non-local host '{host}'. "
-                f"Tests are strictly restricted to local test databases on 127.0.0.1/localhost or SQLite."
+                f"Tests are strictly restricted to local test databases on 127.0.0.1 or localhost."
             )
-            
+
+        path = (parsed.path or "").lower().lstrip("/")
+        if not path:
+            raise RuntimeError("CRITICAL FAIL-CLOSED ERROR: Automated tests attempted to connect without specifying a database name.")
+
+        if allow_maintenance and path in ("postgres", "template1"):
+            return
+
         if "test" not in path:
             raise RuntimeError(
                 f"CRITICAL FAIL-CLOSED ERROR: Automated tests attempted to connect to database '{path}', "
                 f"which does not contain 'test' in its name. Tests must use an explicitly designated test database "
                 f"(e.g. finex_test_db) to prevent modifying local development or production data."
             )
-    except RuntimeError:
-        raise
-    except Exception as exc:
-        raise RuntimeError(f"CRITICAL FAIL-CLOSED ERROR: Failed to validate test database URL: {exc}")
+        return
+
 
 if is_test_env:
     validate_test_database_allowlist(db_url)
 
-if "sqlite" in db_url or settings.ENVIRONMENT == Environment.TESTING or "pytest" in sys.modules:
+is_sqlite_scheme = urlparse(db_url).scheme.lower() in APPROVED_SQLITE_SCHEMES
+if is_sqlite_scheme or settings.ENVIRONMENT == Environment.TESTING or "pytest" in sys.modules:
     engine_kwargs["poolclass"] = NullPool
 else:
     engine_kwargs["pool_size"] = settings.DATABASE_POOL_SIZE
