@@ -225,11 +225,16 @@ export const PrivacyPolicyScreen: React.FC<PrivacyPolicyScreenProps> = ({ onBack
             {/* AskFinEx Assistant Interactions */}
             <div style={{ backgroundColor: '#0A0A0C', border: '1px solid #1F1F1F', borderRadius: '6px', padding: '18px' }}>
               <div style={{ fontSize: '14px', fontWeight: 700, color: '#38BDF8', marginBottom: '6px' }}>
-                D. AskFinEx AI Assistant Queries
+                D. AskFinEx AI Assistant Queries (Groq Cloud API)
               </div>
-              <p style={{ fontSize: '13px', color: '#A1A1AA', lineHeight: 1.6, margin: 0 }}>
-                Text prompts entered into the AskFinEx search and chat interface are processed to retrieve citations from official public regulatory corpora (SEBI Master Circulars, RBI Directions). Prompts are used exclusively to generate real-time educational responses and are not used to train proprietary public models.
+              <p style={{ fontSize: '13px', color: '#A1A1AA', lineHeight: 1.6, margin: '0 0 8px 0' }}>
+                Text prompts entered into the AskFinEx search and chat interface are processed by our backend orchestrator using the Groq Cloud API (running open-weight models such as openai/gpt-oss-120b) to retrieve educational citations from public regulatory corpora (SEBI Master Circulars, RBI Directions).
               </p>
+              <ul style={{ fontSize: '13px', color: '#D4D4D8', lineHeight: 1.6, paddingLeft: '20px', margin: 0 }}>
+                <li>Prompts are transmitted solely to synthesize real-time educational explanations. FinEx does not use user queries to train proprietary AI models.</li>
+                <li>Inference through Groq is governed by Groq's developer API terms, which state that customer API inputs are not used for model training.</li>
+                <li>If external AI connectivity is paused or unconfigured, AskFinEx falls back to deterministic local document retrieval without external AI processing.</li>
+              </ul>
             </div>
 
             {/* Compliance, Consent & Session Logs */}
@@ -321,12 +326,12 @@ export const PrivacyPolicyScreen: React.FC<PrivacyPolicyScreenProps> = ({ onBack
                 <tr style={{ borderBottom: '1px solid #1F1F1F' }}>
                   <td style={{ padding: '12px', fontWeight: 600, color: '#FFFFFF' }}>Yahoo Finance / Angel SmartAPI</td>
                   <td style={{ padding: '12px' }}>Market Observation Feeds</td>
-                  <td style={{ padding: '12px' }}>Public Indian market symbols &amp; candles (no user data)</td>
+                  <td style={{ padding: '12px' }}>Public Indian market symbols &amp; historical candles (no user data transmitted)</td>
                 </tr>
                 <tr style={{ borderBottom: '1px solid #1F1F1F' }}>
-                  <td style={{ padding: '12px', fontWeight: 600, color: '#FFFFFF' }}>Groq API / Google Gemini</td>
-                  <td style={{ padding: '12px' }}>Educational AI Question Answering</td>
-                  <td style={{ padding: '12px' }}>User text queries on financial concepts &amp; regulations</td>
+                  <td style={{ padding: '12px', fontWeight: 600, color: '#FFFFFF' }}>Groq Cloud API</td>
+                  <td style={{ padding: '12px' }}>Educational AI Inference (AskFinEx Assistant)</td>
+                  <td style={{ padding: '12px' }}>User text queries submitted to AskFinEx for real-time educational synthesis (no financial balances or credentials transmitted)</td>
                 </tr>
               </tbody>
             </table>
@@ -339,23 +344,26 @@ export const PrivacyPolicyScreen: React.FC<PrivacyPolicyScreenProps> = ({ onBack
             5. Security &amp; Session Protection
           </h2>
           <p style={{ fontSize: '14px', color: '#D4D4D8', lineHeight: 1.7, margin: '0 0 12px 0' }}>
-            We implement strict security measures to protect user data and maintain service integrity:
+            We implement practical technical safeguards to protect user session integrity and stored profile data:
           </p>
-          <ul style={{ fontSize: '13.5px', color: '#D4D4D8', lineHeight: 1.7, paddingLeft: '20px', margin: 0 }}>
-            <li><strong>Fail-Closed Authentication:</strong> All protected API endpoints verify cryptographic JWT tokens. Missing, malformed, expired, or revoked tokens return HTTP 401.</li>
+          <ul style={{ fontSize: '13.5px', color: '#D4D4D8', lineHeight: 1.7, paddingLeft: '20px', margin: '0 0 12px 0' }}>
+            <li><strong>Fail-Closed Authentication:</strong> Protected API endpoints strictly require a valid JSON Web Token (JWT). Missing, malformed, expired, or revoked tokens return HTTP 401.</li>
             <li><strong>Session Expiration &amp; Immediate Revocation:</strong> Access tokens expire after 60 minutes. When a user clicks Sign Out, the token is recorded in the server-side revocation list to prevent replay attacks.</li>
-            <li><strong>Transport Encryption:</strong> All communications between the browser, Vercel frontend, Render backend, and database use TLS/HTTPS encryption.</li>
-            <li><strong>No Financial Asset Exposure:</strong> Because FinEx operates strictly with virtual funds and has no access to real bank or brokerage accounts, users face zero financial asset exposure.</li>
+            <li><strong>Transport Encryption:</strong> All communications between the browser, Vercel frontend, Render backend, and Neon database use TLS/HTTPS encryption.</li>
+            <li><strong>Zero Financial Asset Exposure:</strong> Because FinEx operates strictly with virtual funds and does not connect to bank accounts or real brokerages, your real-world financial assets are never accessible or exposed.</li>
           </ul>
+          <p style={{ fontSize: '12.5px', color: '#8E8E93', lineHeight: 1.6, margin: 0 }}>
+            <em>Security Disclaimer:</em> While we maintain industry-standard security practices, no method of transmission over the Internet or electronic storage is 100% secure. We cannot guarantee absolute, impenetrable security against all potential vulnerabilities.
+          </p>
         </section>
 
         {/* Section 6: Data Retention & User Rights */}
         <section style={{ marginBottom: '32px' }}>
           <h2 style={{ fontSize: '20px', fontWeight: 700, color: '#FFFFFF', marginBottom: '12px' }}>
-            6. Data Retention, Deletion &amp; User Inquiries
+            6. Data Retention, Account Deletion &amp; User Requests
           </h2>
           <p style={{ fontSize: '14px', color: '#D4D4D8', lineHeight: 1.7, margin: '0 0 12px 0' }}>
-            Your account profile and virtual trading records remain stored in our database while your account is active, enabling you to resume your learning and review order histories across browser sessions.
+            Your account profile and simulated trading records remain stored in our operational PostgreSQL database while your account is active, enabling you to retain order history and review simulated portfolio performance across browser sessions.
           </p>
           <div
             style={{
@@ -366,18 +374,34 @@ export const PrivacyPolicyScreen: React.FC<PrivacyPolicyScreenProps> = ({ onBack
               marginBottom: '14px',
             }}
           >
-            <strong style={{ fontSize: '13.5px', color: '#FFFFFF' }}>Account Deletion and Data Purge Requests</strong>
-            <p style={{ fontSize: '13px', color: '#A1A1AA', lineHeight: 1.6, marginTop: '4px', margin: 0 }}>
-              If you wish to delete your account, remove your Google identity mapping, or wipe your paper-trading history from our database, you may submit a request to the platform administrator at{' '}
+            <strong style={{ fontSize: '13.5px', color: '#FFFFFF' }}>Manual Account Deletion Process</strong>
+            <p style={{ fontSize: '13px', color: '#A1A1AA', lineHeight: 1.6, marginTop: '4px', margin: '4px 0 8px 0' }}>
+              FinEx does not currently offer an automated, self-service account deletion button in the user interface. Users who wish to delete their account profile and associated simulation history may submit a manual request to the platform administrator at{' '}
               <a href="mailto:shivrajdhote4452@gmail.com" style={{ color: 'var(--color-action, #F29A60)' }}>
                 shivrajdhote4452@gmail.com
               </a>
-              . Requests are verified and processed manually by the administrator.
+              .
             </p>
+            <ul style={{ fontSize: '12.5px', color: '#D4D4D8', lineHeight: 1.6, paddingLeft: '18px', margin: '0 0 8px 0' }}>
+              <li><strong>Data Coverage:</strong> When an administrator manually deletes a user record from the database, database cascading foreign keys remove the user profile, paper trading account, simulated orders, trade execution receipts, paper positions, cash ledger entries, and consent logs.</li>
+              <li><strong>Verification Requirement:</strong> Deletion requests require manual confirmation of account ownership via the registered Google email address to prevent unauthorized erasure.</li>
+              <li><strong>Backup &amp; Log Retention:</strong> System access logs and automated cloud database snapshots (managed by Neon/AWS) may temporarily retain archived data until standard retention windows cycle and overwrite them.</li>
+              <li><strong>No Automated Purge SLA:</strong> The platform does not currently implement an automated cron-based data purge or a guaranteed response-time SLA.</li>
+            </ul>
           </div>
-          <p style={{ fontSize: '13px', color: '#8E8E93', lineHeight: 1.6, margin: 0 }}>
-            <em>Owner Confirmation Note:</em> Specific automated data retention schedules and self-service account deletion workflows are subject to administrative confirmation prior to official store or marketplace publication.
-          </p>
+          <div
+            style={{
+              backgroundColor: '#121214',
+              border: '1px solid #27272A',
+              borderRadius: '6px',
+              padding: '12px 16px',
+              fontSize: '12.5px',
+              color: '#8E8E93',
+              lineHeight: 1.6,
+            }}
+          >
+            <strong style={{ color: '#E4E4E7' }}>Owner Confirmation Required Before Publication:</strong> The platform owner must review and confirm: (1) that <code>shivrajdhote4452@gmail.com</code> is the designated operational mailbox for privacy inquiries, (2) the exact administrative turnaround protocol for processing manual deletion requests, and (3) any formal policy regarding retention of inactive accounts.
+          </div>
         </section>
 
         {/* Section 7: Children's Privacy */}
@@ -405,6 +429,9 @@ export const PrivacyPolicyScreen: React.FC<PrivacyPolicyScreenProps> = ({ onBack
               Inquiries &amp; Privacy: <a href="mailto:shivrajdhote4452@gmail.com" style={{ color: 'var(--color-action, #F29A60)' }}>shivrajdhote4452@gmail.com</a>
             </div>
             <div style={{ fontSize: '13px', color: '#71717A', marginTop: '4px' }}>Website: https://www.finexai.tech</div>
+            <div style={{ fontSize: '12px', color: '#71717A', marginTop: '8px', borderTop: '1px solid #1F1F1F', paddingTop: '8px' }}>
+              <em>Note for Owner Confirmation: The platform owner should confirm whether shivrajdhote4452@gmail.com is the desired public channel for privacy inquiries or if an organization alias should be used.</em>
+            </div>
           </div>
         </section>
 

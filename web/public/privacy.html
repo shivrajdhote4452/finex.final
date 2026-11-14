@@ -264,10 +264,15 @@
         </div>
 
         <div class="card">
-          <h3 style="color: #38BDF8;">D. AskFinEx AI Assistant Queries</h3>
-          <p style="margin-bottom: 0;">
-            Text prompts entered into the AskFinEx search and chat interface are processed to retrieve citations from official public regulatory corpora (SEBI Master Circulars, RBI Directions). Prompts are used exclusively to generate real-time educational responses and are not used to train proprietary public models.
+          <h3 style="color: #38BDF8;">D. AskFinEx AI Assistant Queries (Groq Cloud API)</h3>
+          <p>
+            Text prompts entered into the AskFinEx search and chat interface are processed by our backend orchestrator using the Groq Cloud API (running open-weight models such as openai/gpt-oss-120b) to retrieve educational citations from public regulatory corpora (SEBI Master Circulars, RBI Directions).
           </p>
+          <ul>
+            <li>Prompts are transmitted solely to synthesize real-time educational explanations. FinEx does not use user queries to train proprietary AI models.</li>
+            <li>Inference through Groq is governed by Groq's developer API terms, which state that customer API inputs are not used for model training.</li>
+            <li>If external AI connectivity is paused or unconfigured, AskFinEx falls back to deterministic local document retrieval without external AI processing.</li>
+          </ul>
         </div>
 
         <div class="card">
@@ -330,12 +335,12 @@
               <tr>
                 <td><strong>Yahoo Finance / Angel SmartAPI</strong></td>
                 <td>Market Observation Feeds</td>
-                <td>Public Indian market symbols &amp; candles (no user data)</td>
+                <td>Public Indian market symbols &amp; historical candles (no user data transmitted)</td>
               </tr>
               <tr>
-                <td><strong>Groq API / Google Gemini</strong></td>
-                <td>Educational AI Question Answering</td>
-                <td>User text queries on financial concepts &amp; regulations</td>
+                <td><strong>Groq Cloud API</strong></td>
+                <td>Educational AI Inference (AskFinEx Assistant)</td>
+                <td>User text queries submitted to AskFinEx for real-time educational synthesis (no financial balances or credentials transmitted)</td>
               </tr>
             </tbody>
           </table>
@@ -344,30 +349,39 @@
 
       <section>
         <h2>5. Security &amp; Session Protection</h2>
-        <p>We implement strict security measures to protect user data and maintain service integrity:</p>
+        <p>We implement practical technical safeguards to protect user session integrity and stored profile data:</p>
         <ul>
-          <li><strong>Fail-Closed Authentication:</strong> All protected API endpoints verify cryptographic JWT tokens. Missing, malformed, expired, or revoked tokens return HTTP 401.</li>
+          <li><strong>Fail-Closed Authentication:</strong> Protected API endpoints strictly require a valid JSON Web Token (JWT). Missing, malformed, expired, or revoked tokens return HTTP 401.</li>
           <li><strong>Session Expiration &amp; Immediate Revocation:</strong> Access tokens expire after 60 minutes. When a user clicks Sign Out, the token is recorded in the server-side revocation list to prevent replay attacks.</li>
-          <li><strong>Transport Encryption:</strong> All communications between the browser, Vercel frontend, Render backend, and database use TLS/HTTPS encryption.</li>
-          <li><strong>No Financial Asset Exposure:</strong> Because FinEx operates strictly with virtual funds and has no access to real bank or brokerage accounts, users face zero financial asset exposure.</li>
+          <li><strong>Transport Encryption:</strong> All communications between the browser, Vercel frontend, Render backend, and Neon database use TLS/HTTPS encryption.</li>
+          <li><strong>Zero Financial Asset Exposure:</strong> Because FinEx operates strictly with virtual funds and does not connect to bank accounts or real brokerages, your real-world financial assets are never accessible or exposed.</li>
         </ul>
+        <p style="font-size: 12.5px; color: #8E8E93; line-height: 1.6; margin-top: 10px;">
+          <em>Security Disclaimer:</em> While we maintain industry-standard security practices, no method of transmission over the Internet or electronic storage is 100% secure. We cannot guarantee absolute, impenetrable security against all potential vulnerabilities.
+        </p>
       </section>
 
       <section>
-        <h2>6. Data Retention, Deletion &amp; User Inquiries</h2>
+        <h2>6. Data Retention, Account Deletion &amp; User Requests</h2>
         <p>
-          Your account profile and virtual trading records remain stored in our database while your account is active, enabling you to resume your learning and review order histories across browser sessions.
+          Your account profile and simulated trading records remain stored in our operational PostgreSQL database while your account is active, enabling you to retain order history and review simulated portfolio performance across browser sessions.
         </p>
         <div class="card">
-          <h3 style="color: #FFFFFF;">Account Deletion and Data Purge Requests</h3>
-          <p style="color: #A1A1AA; margin-bottom: 0;">
-            If you wish to delete your account, remove your Google identity mapping, or wipe your paper-trading history from our database, you may submit a request to the platform administrator at 
-            <a href="mailto:shivrajdhote4452@gmail.com">shivrajdhote4452@gmail.com</a>. Requests are verified and processed manually by the administrator.
+          <h3 style="color: #FFFFFF;">Manual Account Deletion Process</h3>
+          <p style="color: #A1A1AA; margin-bottom: 8px;">
+            FinEx does not currently offer an automated, self-service account deletion button in the user interface. Users who wish to delete their account profile and associated simulation history may submit a manual request to the platform administrator at 
+            <a href="mailto:shivrajdhote4452@gmail.com">shivrajdhote4452@gmail.com</a>.
           </p>
+          <ul style="font-size: 12.5px; color: #D4D4D8; line-height: 1.6; padding-left: 18px; margin-bottom: 0;">
+            <li><strong>Data Coverage:</strong> When an administrator manually deletes a user record from the database, database cascading foreign keys remove the user profile, paper trading account, simulated orders, trade execution receipts, paper positions, cash ledger entries, and consent logs.</li>
+            <li><strong>Verification Requirement:</strong> Deletion requests require manual confirmation of account ownership via the registered Google email address to prevent unauthorized erasure.</li>
+            <li><strong>Backup &amp; Log Retention:</strong> System access logs and automated cloud database snapshots (managed by Neon/AWS) may temporarily retain archived data until standard retention windows cycle and overwrite them.</li>
+            <li><strong>No Automated Purge SLA:</strong> The platform does not currently implement an automated cron-based data purge or a guaranteed response-time SLA.</li>
+          </ul>
         </div>
-        <p style="font-size: 13px; color: #8E8E93; margin-top: 10px;">
-          <em>Owner Confirmation Note:</em> Specific automated data retention schedules and self-service account deletion workflows are subject to administrative confirmation prior to official store or marketplace publication.
-        </p>
+        <div style="background-color: #121214; border: 1px solid #27272A; border-radius: 6px; padding: 12px 16px; font-size: 12.5px; color: #8E8E93; line-height: 1.6;">
+          <strong style="color: #E4E4E7;">Owner Confirmation Required Before Publication:</strong> The platform owner must review and confirm: (1) that <code>shivrajdhote4452@gmail.com</code> is the designated operational mailbox for privacy inquiries, (2) the exact administrative turnaround protocol for processing manual deletion requests, and (3) any formal policy regarding retention of inactive accounts.
+        </div>
       </section>
 
       <section>
@@ -384,7 +398,10 @@
           <h3>FinEx Platform Team</h3>
           <p style="margin-bottom: 4px;">Lead Developer &amp; Administrator: <strong>Shivraj Dhote</strong></p>
           <p style="margin-bottom: 4px;">Inquiries &amp; Privacy: <a href="mailto:shivrajdhote4452@gmail.com">shivrajdhote4452@gmail.com</a></p>
-          <p style="color: #71717A; margin-bottom: 0;">Website: https://www.finexai.tech</p>
+          <p style="color: #71717A; margin-bottom: 6px;">Website: https://www.finexai.tech</p>
+          <p style="font-size: 12px; color: #71717A; margin-top: 8px; border-top: 1px solid #1F1F1F; padding-top: 8px; margin-bottom: 0;">
+            <em>Note for Owner Confirmation: The platform owner should confirm whether shivrajdhote4452@gmail.com is the desired public channel for privacy inquiries or if an organization alias should be used.</em>
+          </p>
         </div>
       </section>
 
