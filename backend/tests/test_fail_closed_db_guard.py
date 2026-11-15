@@ -70,6 +70,36 @@ def test_allowlist_accepts_sqlite():
     validate_test_database_allowlist("sqlite+aiosqlite:///:memory:")
     validate_test_database_allowlist("sqlite:///test.db")
     validate_test_database_allowlist("sqlite+aiosqlite:///./finex_test.db")
+    validate_test_database_allowlist("sqlite:///:memory:?cache=shared")
+    validate_test_database_allowlist("sqlite://")
+    validate_test_database_allowlist("sqlite:///var/test_data/my_test.db")
+
+
+def test_allowlist_rejects_non_test_sqlite_with_memory_in_query():
+    """Verify that SQLite file targets cannot bypass allowlist by putting ':memory:' in query parameters."""
+    with pytest.raises(RuntimeError, match="does not contain 'test' in its filename"):
+        validate_test_database_allowlist("sqlite:///production.db?:memory:")
+    with pytest.raises(RuntimeError, match="does not contain 'test' in its filename"):
+        validate_test_database_allowlist("sqlite:///production.db?cache=:memory:")
+    with pytest.raises(RuntimeError, match="does not contain 'test' in its filename"):
+        validate_test_database_allowlist("sqlite+aiosqlite:///production.db?mode=:memory:")
+
+
+def test_allowlist_rejects_non_test_sqlite_in_test_directory():
+    """Verify that SQLite files in 'test' directories are rejected if filename does not contain 'test'."""
+    with pytest.raises(RuntimeError, match="does not contain 'test' in its filename"):
+        validate_test_database_allowlist("sqlite:///test/production.db")
+    with pytest.raises(RuntimeError, match="does not contain 'test' in its filename"):
+        validate_test_database_allowlist("sqlite:///tests/fixtures/live_data.db")
+    with pytest.raises(RuntimeError, match="does not contain 'test' in its filename"):
+        validate_test_database_allowlist("sqlite+aiosqlite:///var/test/production.db?:memory:")
+
+
+def test_allowlist_rejects_postgres_with_test_in_path_prefix_only():
+    """Verify that PostgreSQL URLs with 'test' only in directory/path prefix but not in database name are rejected."""
+    url = "postgresql+asyncpg://postgres:pass@127.0.0.1:5432/test/production_db"
+    with pytest.raises(RuntimeError, match="does not contain 'test' in its name"):
+        validate_test_database_allowlist(url)
 
 
 def test_allowlist_rejects_remote_postgres_with_sqlite_in_username():
@@ -116,9 +146,9 @@ def test_allowlist_rejects_local_postgres_with_sqlite_in_username_for_non_test_d
 
 def test_allowlist_rejects_non_test_sqlite_files():
     """Verify that file-based SQLite databases without 'test' in the filename are rejected."""
-    with pytest.raises(RuntimeError, match="does not contain 'test' in its name"):
+    with pytest.raises(RuntimeError, match="does not contain 'test' in its filename"):
         validate_test_database_allowlist("sqlite+aiosqlite:///production.db")
-    with pytest.raises(RuntimeError, match="does not contain 'test' in its name"):
+    with pytest.raises(RuntimeError, match="does not contain 'test' in its filename"):
         validate_test_database_allowlist("sqlite:///users_data.db")
 
 

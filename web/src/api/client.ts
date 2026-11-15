@@ -674,6 +674,7 @@ class ApiClient {
           gross_value: number;
           cash_balance_after?: number;
           created_at: string;
+          idempotency_key?: string;
         }>;
         total: number;
       }>(`/paper-trading/orders?limit=${limit}`);

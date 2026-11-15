@@ -120,15 +120,24 @@ def validate_test_database_allowlist(url_str: str, allow_maintenance: bool = Fal
         raw_path = (parsed.path or "").strip()
         clean_path = raw_path.lstrip("/")
 
-        # In-memory SQLite is always approved
-        if clean_path in (":memory:", "") or ":memory:" in url_lower:
+        # In-memory SQLite: target path must explicitly be :memory: or empty
+        # Note: Query parameters containing ':memory:' MUST NOT approve a file-based path.
+        if clean_path in (":memory:", ""):
             return
 
-        # File-based SQLite: file name/path must explicitly contain 'test'
-        if "test" not in clean_path.lower():
+        # File-based SQLite: the database filename itself must explicitly contain 'test'
+        norm_path = clean_path.replace("\\", "/")
+        if norm_path.endswith("/"):
             raise RuntimeError(
-                f"CRITICAL FAIL-CLOSED ERROR: SQLite database file '{clean_path}' does not contain 'test' in its name. "
-                f"File-based SQLite test databases must contain 'test' to prevent modifying non-test or production database files."
+                "CRITICAL FAIL-CLOSED ERROR: SQLite database file target is invalid or missing."
+            )
+
+        filename = os.path.basename(norm_path).lower()
+        if not filename or "test" not in filename:
+            target_name = filename or clean_path
+            raise RuntimeError(
+                f"CRITICAL FAIL-CLOSED ERROR: SQLite database file '{target_name}' does not contain 'test' in its filename. "
+                f"File-based SQLite test databases must contain 'test' in their filename to prevent modifying non-test or production database files."
             )
         return
 
@@ -141,16 +150,22 @@ def validate_test_database_allowlist(url_str: str, allow_maintenance: bool = Fal
                 f"Tests are strictly restricted to local test databases on 127.0.0.1 or localhost."
             )
 
-        path = (parsed.path or "").lower().lstrip("/")
-        if not path:
+        raw_path = (parsed.path or "").strip()
+        clean_path = raw_path.lstrip("/")
+        if not clean_path:
             raise RuntimeError("CRITICAL FAIL-CLOSED ERROR: Automated tests attempted to connect without specifying a database name.")
 
-        if allow_maintenance and path in ("postgres", "template1"):
+        norm_path = clean_path.replace("\\", "/")
+        dbname = os.path.basename(norm_path).lower()
+        if not dbname:
+            raise RuntimeError("CRITICAL FAIL-CLOSED ERROR: Automated tests attempted to connect without specifying a database name.")
+
+        if allow_maintenance and dbname in ("postgres", "template1"):
             return
 
-        if "test" not in path:
+        if "test" not in dbname:
             raise RuntimeError(
-                f"CRITICAL FAIL-CLOSED ERROR: Automated tests attempted to connect to database '{path}', "
+                f"CRITICAL FAIL-CLOSED ERROR: Automated tests attempted to connect to database '{dbname}', "
                 f"which does not contain 'test' in its name. Tests must use an explicitly designated test database "
                 f"(e.g. finex_test_db) to prevent modifying local development or production data."
             )
