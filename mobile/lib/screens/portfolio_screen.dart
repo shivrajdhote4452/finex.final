@@ -23,7 +23,10 @@ class _MobilePortfolioScreenState extends State<MobilePortfolioScreen> {
   double _dayPnL = 0.0;
   double _dayPnLPct = 0.0;
   List<Map<String, dynamic>> _holdings = [];
-  bool _isLoading = false;
+  bool _isLoading = true;
+  bool _portfolioLoaded = false;
+  String? _portfolioError;
+  bool _isStale = false;
 
   final _currencyFmt = NumberFormat.currency(symbol: '₹ ', locale: 'en_IN', decimalDigits: 2);
 
@@ -34,11 +37,14 @@ class _MobilePortfolioScreenState extends State<MobilePortfolioScreen> {
   }
 
   Future<void> _loadPortfolio() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _portfolioError = null;
+    });
     try {
       final acct = await apiClient.getAccount();
       if (mounted) {
-        final cash = (acct['cash_balance'] ?? acct['current_cash'] as num?)?.toDouble() ?? 100000.0;
+        final cash = (acct['cash_balance'] ?? acct['current_cash'] as num?)?.toDouble() ?? 0.0;
         final rawPos = List<Map<String, dynamic>>.from(acct['positions'] ?? []);
         
         double totalVal = 0.0;
@@ -82,11 +88,22 @@ class _MobilePortfolioScreenState extends State<MobilePortfolioScreen> {
           _dayPnL = totalDayPnL;
           _dayPnLPct = dayReturnPct;
           _holdings = processed;
+          _portfolioLoaded = true;
+          _isStale = false;
           _isLoading = false;
         });
       }
-    } catch (_) {
-      if (mounted) setState(() => _isLoading = false);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          if (_portfolioLoaded) {
+            _isStale = true;
+          } else {
+            _portfolioError = e.toString().replaceFirst('Exception: ', '');
+          }
+        });
+      }
     }
   }
 
@@ -266,7 +283,66 @@ class _MobilePortfolioScreenState extends State<MobilePortfolioScreen> {
             ),
             const SizedBox(height: 16),
 
-            if (_isLoading && _holdings.isEmpty)
+            if (_isStale)
+              Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0x26F59E0B),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: const Color(0x66F59E0B)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.history, size: 14, color: Color(0xFFFBBF24)),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        "Showing cached portfolio snapshot. Pull to refresh.",
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFFFBBF24)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+            if (_portfolioError != null && !_portfolioLoaded)
+              Container(
+                padding: const EdgeInsets.all(24),
+                margin: const EdgeInsets.symmetric(vertical: 24),
+                decoration: BoxDecoration(
+                  color: TerminalColors.panel,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: TerminalColors.borderSubtle),
+                ),
+                child: Column(
+                  children: [
+                    const Icon(Icons.cloud_off_outlined, size: 40, color: TerminalColors.negative),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Failed to Load Portfolio',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: TerminalColors.textMain),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      _portfolioError!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 12, color: TerminalColors.textMuted),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: TerminalColors.action,
+                        foregroundColor: Colors.black,
+                      ),
+                      onPressed: _loadPortfolio,
+                      icon: const Icon(Icons.refresh, size: 16),
+                      label: const Text('Retry Connection'),
+                    ),
+                  ],
+                ),
+              )
+            else if (_isLoading && !_portfolioLoaded)
               const PortfolioSkeleton()
             else ...[
               // Portfolio Hero Upgrade Card (Web PR #28 Parity)

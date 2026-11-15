@@ -15,7 +15,7 @@ class MobileSettingsScreen extends StatefulWidget {
 
 class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
   String _activeTab = 'profile'; // 'profile' | 'sandbox' | 'compliance'
-  double _virtualCash = 50000.0;
+  double _virtualCash = 100000.0;
   bool _isLoading = false;
   bool _resetSuccess = false;
   bool _notificationsEnabled = true;
@@ -46,7 +46,7 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
       final acct = await apiClient.getAccount();
       if (mounted) {
         setState(() {
-          _virtualCash = (acct['cash_balance'] ?? acct['current_cash'] as num?)?.toDouble() ?? 50000.0;
+          _virtualCash = (acct['cash_balance'] ?? acct['current_cash'] as num?)?.toDouble() ?? 100000.0;
         });
       }
     } catch (_) {
@@ -60,13 +60,13 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
       final res = await apiClient.resetAccount(confirmReset: true);
       if (mounted) {
         setState(() {
-          _virtualCash = (res['cash_balance'] ?? res['current_cash'] as num?)?.toDouble() ?? 50000.0;
+          _virtualCash = (res['cash_balance'] ?? res['current_cash'] as num?)?.toDouble() ?? 100000.0;
           _resetSuccess = true;
           _isLoading = false;
         });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text("Simulated sandbox account successfully reset to ₹50,000."),
+            content: Text("Simulated sandbox account successfully reset to ₹1,00,000."),
             backgroundColor: TerminalColors.positive,
             behavior: SnackBarBehavior.floating,
           ),
@@ -433,7 +433,7 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
                     children: [
                       Text("Reset Sandbox Account", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: TerminalColors.textMain)),
                       SizedBox(height: 2),
-                      Text("Restores virtual cash to ₹50,000 and clears positions", style: TextStyle(fontSize: 11, color: TerminalColors.textMuted)),
+                      Text("Restores virtual cash to ₹1,00,000 and clears positions", style: TextStyle(fontSize: 11, color: TerminalColors.textMuted)),
                     ],
                   ),
                 ),
@@ -448,7 +448,7 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
                   ),
                   onPressed: _isLoading ? null : _handleReset,
                   child: Text(
-                    _resetSuccess ? "Reset ✓" : "Reset ₹50k",
+                    _resetSuccess ? "Reset ✓" : "Reset ₹1L",
                     style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
                   ),
                 ),

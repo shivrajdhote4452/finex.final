@@ -72,11 +72,21 @@ class _RecentTransactionsFeedState extends State<RecentTransactionsFeed> {
     final total = qty * price;
     final isBuy = side == 'BUY';
     final status = (entry['status'] ?? 'FILLED').toString().toUpperCase();
+    final isRejected = status == 'REJECTED';
+    final isPending = status == 'PENDING' || status == 'ACCEPTED';
     final orderId = entry['order_id'] ?? entry['id'] ?? 'ORD-REF';
     final isReplay = entry['is_replay'] == true ||
         (entry['notes'] != null && entry['notes'].toString().contains('REPLAY'));
     final realizedPnl = (entry['realized_pnl'] as num?)?.toDouble();
     final timestamp = entry['created_at'] ?? entry['timestamp'] ?? 'N/A';
+    final rejectionReason = entry['rejection_reason'] as String?;
+
+    Color statusColor = TerminalColors.positive;
+    if (isRejected) {
+      statusColor = TerminalColors.negative;
+    } else if (isPending) {
+      statusColor = TerminalColors.action;
+    }
 
     showModalBottomSheet(
       context: context,
@@ -164,7 +174,11 @@ class _RecentTransactionsFeedState extends State<RecentTransactionsFeed> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                _buildDetailRow('Execution Status', status, valueColor: TerminalColors.positive),
+                _buildDetailRow('Execution Status', status, valueColor: statusColor),
+                if (isRejected && rejectionReason != null && rejectionReason.isNotEmpty) ...[
+                  const Divider(color: TerminalColors.borderSubtle, height: 16),
+                  _buildDetailRow('Rejection Reason', rejectionReason, valueColor: TerminalColors.negative),
+                ],
                 const Divider(color: TerminalColors.borderSubtle, height: 16),
                 _buildDetailRow('Order ID', orderId, isMono: true),
                 const Divider(color: TerminalColors.borderSubtle, height: 16),
@@ -437,6 +451,9 @@ class _RecentTransactionsFeedState extends State<RecentTransactionsFeed> {
                         (item['notes'] != null && item['notes'].toString().contains('REPLAY'));
                     final realizedPnl = (item['realized_pnl'] as num?)?.toDouble();
                     final timeStr = _formatTime(item['created_at'] ?? item['timestamp']);
+                    final itemStatus = (item['status'] ?? 'FILLED').toString().toUpperCase();
+                    final itemIsRejected = itemStatus == 'REJECTED';
+                    final itemIsPending = itemStatus == 'PENDING' || itemStatus == 'ACCEPTED';
 
                     return InkWell(
                       onTap: () => _showTransactionDetails(item),
@@ -508,29 +525,43 @@ class _RecentTransactionsFeedState extends State<RecentTransactionsFeed> {
                             ),
 
                             // Right: Price & Total & Realized P&L
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  _currencyFmt.format(total),
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontFamily: 'monospace',
-                                    fontWeight: FontWeight.w700,
-                                    color: TerminalColors.textMain,
-                                  ),
-                                ),
-                                if (!isBuy && realizedPnl != null)
-                                  Text(
-                                    '${realizedPnl >= 0 ? '+' : ''}${_currencyFmt.format(realizedPnl)}',
+                            if (itemIsRejected)
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  const Text(
+                                    'REJECTED',
                                     style: TextStyle(
-                                      fontSize: 10.5,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w800,
                                       fontFamily: 'monospace',
-                                      fontWeight: FontWeight.w700,
-                                      color: realizedPnl >= 0 ? TerminalColors.positive : TerminalColors.negative,
+                                      color: TerminalColors.negative,
                                     ),
-                                  )
-                                else
+                                  ),
+                                  Text(
+                                    item['rejection_reason']?.toString() ?? 'Pre-Trade Check',
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      color: TerminalColors.textMuted,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              )
+                            else if (itemIsPending)
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  const Text(
+                                    'PENDING',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w800,
+                                      fontFamily: 'monospace',
+                                      color: TerminalColors.action,
+                                    ),
+                                  ),
                                   Text(
                                     '@ ₹${price.toStringAsFixed(2)}',
                                     style: const TextStyle(
@@ -539,8 +570,42 @@ class _RecentTransactionsFeedState extends State<RecentTransactionsFeed> {
                                       color: TerminalColors.textMuted,
                                     ),
                                   ),
-                              ],
-                            ),
+                                ],
+                              )
+                            else
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    _currencyFmt.format(total),
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontFamily: 'monospace',
+                                      fontWeight: FontWeight.w700,
+                                      color: TerminalColors.textMain,
+                                    ),
+                                  ),
+                                  if (!isBuy && realizedPnl != null)
+                                    Text(
+                                      '${realizedPnl >= 0 ? '+' : ''}${_currencyFmt.format(realizedPnl)}',
+                                      style: TextStyle(
+                                        fontSize: 10.5,
+                                        fontFamily: 'monospace',
+                                        fontWeight: FontWeight.w700,
+                                        color: realizedPnl >= 0 ? TerminalColors.positive : TerminalColors.negative,
+                                      ),
+                                    )
+                                  else
+                                    Text(
+                                      '@ ₹${price.toStringAsFixed(2)}',
+                                      style: const TextStyle(
+                                        fontSize: 10.5,
+                                        fontFamily: 'monospace',
+                                        color: TerminalColors.textMuted,
+                                      ),
+                                    ),
+                                ],
+                              ),
                           ],
                         ),
                       ),

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' hide TextDirection;
 import '../theme/terminal_theme.dart';
 import '../services/api_client.dart';
+import '../services/order_execution_service.dart';
 
 enum DrawingTool {
   none,
@@ -151,6 +152,8 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
     return s.startsWith('NIFTY') || s == 'SENSEX' || s.startsWith('BSE:') || s.startsWith('NSE:');
   }
 
+  int _chartRequestId = 0;
+
   @override
   void dispose() {
     _liveRefreshTimer?.cancel();
@@ -161,11 +164,14 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
     _liveRefreshTimer?.cancel();
     _liveRefreshTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
       if (!mounted || _bars.isEmpty) return;
+      final String pollingSymbol = _symbol;
+      final bool pollingIsIndex = _isIndex;
       try {
         double? p;
-        if (_isIndex) {
-          final q = await apiClient.getIndexQuote(_symbol);
-          if (mounted && q != null) {
+        if (pollingIsIndex) {
+          final q = await apiClient.getIndexQuote(pollingSymbol);
+          if (!mounted || pollingSymbol != _symbol) return;
+          if (q != null) {
             if (q['freshness'] != null) {
               _freshnessStatus = q['freshness'].toString().toUpperCase();
             }
@@ -178,8 +184,9 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
           }
           p = ((q?['price'] ?? q?['last_price']) as num?)?.toDouble();
         } else {
-          final q = await apiClient.getQuote(_symbol);
-          if (mounted && q != null) {
+          final q = await apiClient.getQuote(pollingSymbol);
+          if (!mounted || pollingSymbol != _symbol) return;
+          if (q != null) {
             if (q['freshness'] != null) {
               _freshnessStatus = q['freshness'].toString().toUpperCase();
             }
@@ -192,7 +199,7 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
           }
           p = (q?['price'] as num?)?.toDouble();
         }
-        if (p != null && p > 0 && mounted && _bars.isNotEmpty) {
+        if (p != null && p > 0 && mounted && _bars.isNotEmpty && pollingSymbol == _symbol) {
           setState(() {
             final last = Map<String, dynamic>.from(_bars.last);
             final high = (last['high'] as num?)?.toDouble() ?? p!;
@@ -220,6 +227,9 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
   }
 
   Future<void> _fetchChartData() async {
+    final int requestId = ++_chartRequestId;
+    final String targetSymbol = _symbol;
+
     setState(() {
       _loading = true;
       _error = null;
@@ -237,11 +247,11 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
 
       if (_isIndex) {
         try {
-          await apiClient.getIndexQuote(_symbol);
+          await apiClient.getIndexQuote(targetSymbol);
         } catch (_) {}
 
         final historyRes = await apiClient.getIndexHistory(
-          _symbol,
+          targetSymbol,
           interval: _timeframe,
           range: _range,
         );
@@ -250,7 +260,7 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
         rawBars = List<Map<String, dynamic>>.from(list);
       } else {
         final historyRes = await apiClient.getMarketHistory(
-          _symbol,
+          targetSymbol,
           interval: _timeframe,
           range: _range,
         );
@@ -258,7 +268,12 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
         rawBars = List<Map<String, dynamic>>.from(historyRes['bars'] ?? []);
       }
 
-      final cacheKey = '${_symbol}_${_timeframe}_$_range';
+      // Discard stale asynchronous responses from previous symbol selections
+      if (!mounted || requestId != _chartRequestId || targetSymbol != _symbol) {
+        return;
+      }
+
+      final cacheKey = '${targetSymbol}_${_timeframe}_$_range';
 
       if (rawBars.isNotEmpty) {
         rawBars.sort((a, b) => (a['date'] ?? a['time'] ?? '').toString().compareTo((b['date'] ?? b['time'] ?? '').toString()));
@@ -317,7 +332,11 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
         _loading = false;
       });
     } catch (e) {
-      final cacheKey = '${_symbol}_${_timeframe}_$_range';
+      if (!mounted || requestId != _chartRequestId || targetSymbol != _symbol) {
+        return;
+      }
+
+      final cacheKey = '${targetSymbol}_${_timeframe}_$_range';
       if (_candleCache.containsKey(cacheKey)) {
         final cached = _candleCache[cacheKey]!;
         setState(() {
@@ -586,7 +605,11 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
                               setState(() {
                                 _symbol = item['symbol']!;
                                 _isIndex = _isKnownIndex(_symbol);
+                                _bars = [];
+                                _loading = true;
+                                _error = null;
                               });
+                              _startLivePricePolling();
                               _fetchChartData();
                             },
                           );
@@ -690,10 +713,12 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
         return StatefulBuilder(
           builder: (context, setSheetState) {
             final latestBar = _bars.isNotEmpty ? _bars.last : null;
-            final double currentPrice = latestBar != null
-                ? double.tryParse(latestBar['close'].toString()) ?? 2500.0
-                : 2500.0;
-            final effectivePrice = _orderType == 'LIMIT' && _limitPrice != null ? _limitPrice! : currentPrice;
+            final double? currentPrice = latestBar != null
+                ? double.tryParse(latestBar['close'].toString())
+                : null;
+            final effectivePrice = _orderType == 'LIMIT' && _limitPrice != null
+                ? _limitPrice!
+                : (currentPrice ?? 0.0);
             final total = _orderQty * effectivePrice;
 
             return Padding(
@@ -822,34 +847,67 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
-                      onPressed: _orderSubmitting
+                      onPressed: (_orderSubmitting || (currentPrice == null && _orderType == 'MARKET'))
                           ? null
                           : () async {
+                              final messenger = ScaffoldMessenger.of(context);
                               setSheetState(() => _orderSubmitting = true);
                               try {
-                                await apiClient.submitOrder(
+                                final res = await orderExecutionService.executePaperOrder(
                                   symbol: _symbol,
                                   side: _orderSide,
                                   orderType: _orderType,
                                   quantity: _orderQty,
                                   limitPrice: _orderType == 'LIMIT' ? _limitPrice : null,
                                 );
-                                setSheetState(() {
-                                  _orderSubmitting = false;
-                                  _orderFeedback = "Simulated fill recorded successfully!";
-                                });
-                                if (ctx.mounted) {
-                                  Navigator.pop(ctx);
+                                if (res.isFilled) {
+                                  setSheetState(() {
+                                    _orderSubmitting = false;
+                                    _orderFeedback = "Simulated fill recorded successfully at ₹${res.fillPrice?.toStringAsFixed(2)}!";
+                                  });
+                                  if (ctx.mounted) Navigator.pop(ctx);
+                                  messenger.showSnackBar(
+                                    SnackBar(
+                                      content: Text("$_orderSide order for ${_orderQty.toInt()} $_symbol filled @ ₹${res.fillPrice?.toStringAsFixed(2)}"),
+                                      backgroundColor: TerminalColors.surface,
+                                    ),
+                                  );
+                                } else if (res.isPending) {
+                                  setSheetState(() {
+                                    _orderSubmitting = false;
+                                    _orderFeedback = "Limit order placed (Pending fill in order book)";
+                                  });
+                                  if (ctx.mounted) Navigator.pop(ctx);
+                                  messenger.showSnackBar(
+                                    SnackBar(
+                                      content: Text("Limit order for ${_orderQty.toInt()} $_symbol placed (Pending)"),
+                                      backgroundColor: TerminalColors.surface,
+                                    ),
+                                  );
+                                } else if (res.isRejected) {
+                                  setSheetState(() {
+                                    _orderSubmitting = false;
+                                    _orderFeedback = "Order rejected: ${res.rejectionReason ?? res.error}";
+                                  });
+                                } else if (res.isUncertain) {
+                                  setSheetState(() {
+                                    _orderSubmitting = false;
+                                    _orderFeedback = res.error;
+                                  });
                                 }
                               } catch (e) {
                                 setSheetState(() {
                                   _orderSubmitting = false;
-                                  _orderFeedback = "Order rejected: ${e.toString()}";
+                                  _orderFeedback = "Order failed: ${e.toString()}";
                                 });
                               }
                             },
                       child: Text(
-                        _orderSubmitting ? "Submitting..." : "Submit Paper $_orderSide",
+                        _orderSubmitting
+                            ? "Submitting..."
+                            : (currentPrice == null && _orderType == 'MARKET'
+                                ? "Market Price Unavailable"
+                                : "Submit Paper $_orderSide"),
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ),
@@ -1113,15 +1171,18 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
   @override
   Widget build(BuildContext context) {
     final latestBar = _bars.isNotEmpty ? _bars.last : null;
-    final double currentPrice = latestBar != null
-        ? double.tryParse(latestBar['close'].toString()) ?? 2500.0
-        : 2500.0;
-    final double openPrice = latestBar != null
-        ? double.tryParse(latestBar['open'].toString()) ?? currentPrice
-        : currentPrice;
-    final double changeVal = currentPrice - openPrice;
-    final double changePct = openPrice > 0 ? (changeVal / openPrice) * 100 : 0.0;
-    final bool isPositive = changeVal >= 0;
+    final double? currentPrice = latestBar != null
+        ? double.tryParse(latestBar['close'].toString())
+        : null;
+    final double? openPrice = latestBar != null
+        ? double.tryParse(latestBar['open'].toString())
+        : null;
+    final double? changeVal = (currentPrice != null && openPrice != null)
+        ? currentPrice - openPrice
+        : null;
+    final double? changePct = (changeVal != null && openPrice != null && openPrice > 0)
+        ? (changeVal / openPrice) * 100
+        : null;
 
     return Scaffold(
       backgroundColor: TerminalColors.canvas,
@@ -1190,18 +1251,43 @@ class _MobileChartScreenState extends State<MobileChartScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          "${_modeInfo?['currency'] == 'USD' ? '\$' : '₹'}${currentPrice.toStringAsFixed(2)}",
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
-                        ),
-                        Text(
-                          "${isPositive ? '+' : ''}${changeVal.toStringAsFixed(2)} (${isPositive ? '+' : ''}${changePct.toStringAsFixed(2)}%)",
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: isPositive ? TerminalColors.positive : TerminalColors.negative,
+                        if (currentPrice != null)
+                          Text(
+                            "${_modeInfo?['currency'] == 'USD' ? '\$' : '₹'}${currentPrice.toStringAsFixed(2)}",
+                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, fontFamily: 'monospace'),
+                          )
+                        else
+                          const Text(
+                            "—",
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              fontFamily: 'monospace',
+                              color: TerminalColors.textMuted,
+                            ),
                           ),
-                        ),
+                        if (changeVal != null && changePct != null)
+                          Text(
+                            changeVal == 0.0
+                                ? "0.00 (0.00%)"
+                                : "${changeVal > 0 ? '+' : ''}${changeVal.toStringAsFixed(2)} (${changeVal > 0 ? '+' : ''}${changePct.toStringAsFixed(2)}%)",
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: changeVal == 0.0
+                                  ? TerminalColors.textMuted
+                                  : (changeVal > 0 ? TerminalColors.positive : TerminalColors.negative),
+                            ),
+                          )
+                        else
+                          const Text(
+                            "—",
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: TerminalColors.textMuted,
+                            ),
+                          ),
                       ],
                     ),
                     Row(

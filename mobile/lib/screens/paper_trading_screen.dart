@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/api_client.dart';
+import '../services/order_execution_service.dart';
 import '../theme/terminal_theme.dart';
 
 class MobilePaperTradingScreen extends StatefulWidget {
@@ -18,16 +19,7 @@ class _MobilePaperTradingScreenState extends State<MobilePaperTradingScreen> {
   bool _isSubmitting = false;
   String? _pendingOrderIdempotencyKey;
 
-  final Map<String, double> _marketPrices = {
-    "RELIANCE": 2500.00,
-    "TCS": 3600.00,
-    "INFY": 1450.00,
-    "HDFCBANK": 1600.00,
-    "ICICIBANK": 1240.00,
-    "TATAMOTORS": 924.50,
-    "SBIN": 815.20,
-    "ITC": 502.80,
-  };
+  final Map<String, double> _marketPrices = {};
 
   final List<Map<String, dynamic>> _positions = [];
   final List<Map<String, dynamic>> _orderHistory = [];
@@ -50,7 +42,7 @@ class _MobilePaperTradingScreenState extends State<MobilePaperTradingScreen> {
     try {
       final acct = await apiClient.getAccount();
       if (mounted) {
-        final cash = (acct['cash_balance'] ?? acct['current_cash'] as num?)?.toDouble() ?? 100000.0;
+        final cash = (acct['cash_balance'] ?? acct['current_cash'] as num?)?.toDouble() ?? 0.0;
         final rawPos = List<Map<String, dynamic>>.from(acct['positions'] ?? []);
         final mapped = rawPos.map<Map<String, dynamic>>((p) {
           final sym = p['symbol'] ?? '';
@@ -137,12 +129,12 @@ class _MobilePaperTradingScreenState extends State<MobilePaperTradingScreen> {
     if (_isSubmitting) return;
 
     // Preserve pending order identity through interruptions
-    _pendingOrderIdempotencyKey ??= 'mob-ord-${DateTime.now().millisecondsSinceEpoch}';
+    _pendingOrderIdempotencyKey ??= OrderExecutionService.generateIdempotencyKey();
 
     setState(() => _isSubmitting = true);
 
     try {
-      final result = await apiClient.submitOrder(
+      final result = await orderExecutionService.executePaperOrder(
         symbol: _selectedSymbol,
         side: _orderSide,
         orderType: "MARKET",
@@ -150,31 +142,42 @@ class _MobilePaperTradingScreenState extends State<MobilePaperTradingScreen> {
         idempotencyKey: _pendingOrderIdempotencyKey,
       );
 
-      // Order executed or replayed from backend
-      final status = result['status'] ?? 'FILLED';
-      final reason = result['rejection_reason'];
-      final fillPrice = (result['fill_price'] as num?)?.toDouble() ?? (_marketPrices[_selectedSymbol] ?? 0.0);
-
-      _pendingOrderIdempotencyKey = null; // Reconciled successfully
-
       await _loadAccountAndPositions();
       await _loadOrders();
 
       if (!mounted) return;
 
-      if (status == 'REJECTED') {
-        _showCoachingDialog(
-          title: "Order Rejected: ${result['symbol']}",
-          explanation: reason ?? "Order was rejected by the paper execution engine.",
-          learning: "Pre-Trade Discipline: FinEx enforces strict cash verification and short-selling restrictions.",
-          isSuccess: false,
-        );
-      } else {
+      if (result.isFilled) {
+        _pendingOrderIdempotencyKey = null; // Reconciled successfully
+        final fillPrice = result.fillPrice ?? _marketPrices[_selectedSymbol] ?? 0.0;
         _showCoachingDialog(
           title: "$_orderSide Order Filled: $_quantity $_selectedSymbol @ ₹${fillPrice.toStringAsFixed(2)}",
           explanation: "Simulated order filled deterministically per live market quotes. Authoritative ledger updated.",
           learning: "Opportunity Cost: Trading virtual cash for equity stakes balances potential upside against liquidity flexibility.",
           isSuccess: true,
+        );
+      } else if (result.isPending) {
+        _pendingOrderIdempotencyKey = null; // Reconciled successfully
+        _showCoachingDialog(
+          title: "Limit Order Placed (Pending): $_selectedSymbol",
+          explanation: "Order placed into the FinEx simulated order book awaiting price execution. Cash and holdings remain unchanged until fill.",
+          learning: "Execution Timing: Pending orders preserve capital until your target price condition is satisfied.",
+          isSuccess: true,
+        );
+      } else if (result.isRejected) {
+        _pendingOrderIdempotencyKey = null; // Terminal rejection
+        _showCoachingDialog(
+          title: "Order Rejected: $_selectedSymbol",
+          explanation: result.rejectionReason ?? result.error ?? "Order was rejected by the paper execution engine.",
+          learning: "Pre-Trade Discipline: FinEx enforces strict cash verification and short-selling restrictions.",
+          isSuccess: false,
+        );
+      } else if (result.isUncertain) {
+        _showCoachingDialog(
+          title: "Order Interrupted (Outcome Uncertain)",
+          explanation: result.error ?? "Network or server timeout occurred. Please check Order History before retrying to prevent duplicate trades.",
+          learning: "Idempotent Recovery: Retrying with the same idempotency key reconciles against the original receipt without double-executing.",
+          isSuccess: false,
         );
       }
     } catch (e) {
