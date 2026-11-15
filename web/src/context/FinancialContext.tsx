@@ -67,6 +67,9 @@ export interface MarketQuote {
   isDelayed?: boolean;
   isStale?: boolean;
   lastTick?: 'up' | 'down' | 'none';
+  isPriceUnavailable?: boolean;
+  isChangeUnavailable?: boolean;
+  isHighLowUnavailable?: boolean;
 }
 
 export interface UserProfileData {

@@ -52,6 +52,13 @@ def _guarded_create_engine(url, *args, **kwargs):
 
 sqlalchemy.ext.asyncio.create_async_engine = _guarded_create_async_engine
 sqlalchemy.create_engine = _guarded_create_engine
+try:
+    import sqlalchemy.ext.asyncio.engine
+    sqlalchemy.ext.asyncio.engine.create_async_engine = _guarded_create_async_engine
+    import sqlalchemy.engine
+    sqlalchemy.engine.create_engine = _guarded_create_engine
+except ImportError:
+    pass
 
 
 @pytest.fixture(autouse=True)

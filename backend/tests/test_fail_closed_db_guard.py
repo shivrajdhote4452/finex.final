@@ -33,7 +33,7 @@ def test_allowlist_rejects_remote_render_host():
 
 def test_allowlist_rejects_local_non_test_database():
     """Verify that local development database (without 'test' in name) is blocked to prevent wiping dev data."""
-    url = "postgresql+asyncpg://postgres:pass@127.0.0.1:5432/finex_db"
+    url = "postgresql+asyncpg://postgres:pass@127.0.0.1:5432/my_dev_database"
     with pytest.raises(RuntimeError, match="does not contain 'test' in its name"):
         validate_test_database_allowlist(url)
 
@@ -139,7 +139,7 @@ def test_allowlist_rejects_local_postgres_with_sqlite_in_non_test_path():
 
 def test_allowlist_rejects_local_postgres_with_sqlite_in_username_for_non_test_db():
     """Verify that local PostgreSQL URL with 'sqlite' in username for non-test db is rejected."""
-    url = "postgresql+asyncpg://sqlite:pass@127.0.0.1:5432/finex_db"
+    url = "postgresql+asyncpg://sqlite:pass@127.0.0.1:5432/my_dev_database"
     with pytest.raises(RuntimeError, match="does not contain 'test' in its name"):
         validate_test_database_allowlist(url)
 
@@ -178,6 +178,51 @@ def test_direct_create_engine_sync_call_intercepted_and_blocked():
     url = "postgresql://admin:pass@remote-cloud.com/test_db"
     with pytest.raises(RuntimeError, match="non-local host"):
         sqlalchemy.create_engine(url)
+
+
+def test_allowlist_rejects_production_credentials_even_on_localhost():
+    """Verify that production credentials (e.g. neondb_owner, cloud_admin) are rejected even on localhost."""
+    url1 = "postgresql+asyncpg://neondb_owner:secret@127.0.0.1:5432/finex_test_db"
+    with pytest.raises(RuntimeError, match="prohibited production database user 'neondb_owner'"):
+        validate_test_database_allowlist(url1)
+
+    url2 = "postgresql+asyncpg://cloud_admin:secret@localhost:5432/test_db"
+    with pytest.raises(RuntimeError, match="prohibited production database user 'cloud_admin'"):
+        validate_test_database_allowlist(url2)
+
+
+def test_allowlist_rejects_sqlite_directory_traversal():
+    """Verify that directory traversal sequences ('..') are blocked in SQLite paths."""
+    with pytest.raises(RuntimeError, match="Directory traversal"):
+        validate_test_database_allowlist("sqlite:///tests/../production.db")
+    with pytest.raises(RuntimeError, match="Directory traversal"):
+        validate_test_database_allowlist("sqlite:///./fixtures/../../test.db")
+
+
+def test_allowlist_rejects_explicit_production_database_names():
+    """Verify that known production database names (e.g. neondb, finex_db) are rejected."""
+    url1 = "postgresql+asyncpg://postgres:pass@127.0.0.1:5432/neondb"
+    with pytest.raises(RuntimeError, match="prohibited production database 'neondb'"):
+        validate_test_database_allowlist(url1)
+
+    url2 = "postgresql+asyncpg://postgres:pass@127.0.0.1:5432/finex_db"
+    with pytest.raises(RuntimeError, match="prohibited production database 'finex_db'"):
+        validate_test_database_allowlist(url2)
+
+
+def test_allowlist_rejects_symlink_to_non_test_target(tmp_path):
+    """Verify that symlinks named with 'test' but pointing to non-test database targets are rejected."""
+    target_non_test = tmp_path / "production_vault.db"
+    target_non_test.write_text("dummy")
+    symlink_test = tmp_path / "test_link.db"
+    try:
+        import os
+        os.symlink(target_non_test, symlink_test)
+    except (OSError, NotImplementedError):
+        pytest.skip("Symlink creation not supported in current execution environment")
+
+    with pytest.raises(RuntimeError, match="points to non-test target"):
+        validate_test_database_allowlist(f"sqlite:///{symlink_test}")
 
 
 def test_maintenance_database_access_enforcement():

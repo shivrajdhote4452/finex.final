@@ -44,6 +44,24 @@ APPROVED_POSTGRES_SCHEMES = frozenset({
     "postgres",
 })
 
+DISALLOWED_PROD_USERNAMES = frozenset({
+    "neondb_owner",
+    "cloud_admin",
+    "render",
+    "rds_admin",
+    "prod_admin",
+    "prod_user",
+})
+
+DISALLOWED_PROD_DBNAMES = frozenset({
+    "neondb",
+    "finex_db",
+    "finex",
+    "production",
+    "prod",
+    "live",
+})
+
 REMOTE_CLOUD_MARKERS = (
     "neon.tech",
     "ep-gentle-frog",
@@ -72,15 +90,31 @@ def validate_test_database_allowlist(url_str: str, allow_maintenance: bool = Fal
        - Any unsupported, remote, or malformed scheme raises a fatal RuntimeError.
     2. Check for remote/cloud host markers across the entire URL (including username, password, host, path, query):
        - If any cloud host marker is detected, raises a fatal RuntimeError.
-    3. For SQLite:
-       - Host must be empty or local (127.0.0.1 / localhost). Remote network hosts are forbidden.
-       - Database target must either be in-memory (':memory:' or empty) OR the file path must explicitly
-         contain 'test' (e.g. 'test.db', 'finex_test.db'). Non-test SQLite files (e.g. 'production.db') are rejected.
-    4. For PostgreSQL:
+    3. Dedicated Test Credentials & Explicit Test Database Designation (PostgreSQL):
        - Host must strictly be '127.0.0.1' or 'localhost'.
-       - Target database path must explicitly contain 'test' (e.g. 'finex_test_db', 'finex_test_clean_8f3a92b1').
+       - Production credentials (e.g. 'neondb_owner', 'cloud_admin') are strictly forbidden.
+       - Target database name must explicitly contain 'test' (e.g. 'finex_test_db', 'finex_test_clean_8f3a92b1')
+         and cannot match known production database names (e.g. 'finex_db', 'neondb').
        - If allow_maintenance is True, maintenance databases ('postgres', 'template1') on local host are permitted
          exclusively for test lifecycle database creation/dropping.
+    4. Path Traversal & Symlink Protection (SQLite):
+       - Host must be empty or local (127.0.0.1 / localhost). Remote network hosts are forbidden.
+       - Database target must either be in-memory (':memory:' or empty) OR the file path must explicitly
+         contain 'test' in its filename (e.g. 'test.db', 'finex_test.db').
+       - Directory traversal ('..') is strictly rejected.
+       - Symlinks pointing to non-test target databases are strictly rejected.
+       - Non-test SQLite files (e.g. 'production.db') are rejected.
+
+    LIMITATION & ARCHITECTURAL BOUNDARY NOTICE:
+    Application-level URL validation, scheme allowlisting, and monkeypatching provide
+    essential defense-in-depth within python runtime and pytest runners. However,
+    application-level checks alone CANNOT guarantee absolute database isolation:
+    - They cannot prevent external host processes, direct CLI tools (e.g. psql, sqlite3),
+      or unmonitored scripts from accessing production if credentials exist in the environment.
+    - Genuine isolation requires physical or network infrastructure separation:
+      1. Distinct database instances/clusters for testing vs production (no shared endpoints).
+      2. Dedicated test credentials with zero permissions or network routes to production VPCs.
+      3. Network firewall / security group boundaries restricting test runners to local or ephemeral containers.
     """
     if not url_str or not isinstance(url_str, str) or not url_str.strip():
         raise RuntimeError("CRITICAL FAIL-CLOSED ERROR: Automated tests received an empty or invalid DATABASE_URL.")
@@ -125,6 +159,12 @@ def validate_test_database_allowlist(url_str: str, allow_maintenance: bool = Fal
         if clean_path in (":memory:", ""):
             return
 
+        # Path traversal rejection
+        if ".." in clean_path:
+            raise RuntimeError(
+                "CRITICAL FAIL-CLOSED ERROR: Directory traversal ('..') is strictly prohibited in SQLite test database paths."
+            )
+
         # File-based SQLite: the database filename itself must explicitly contain 'test'
         norm_path = clean_path.replace("\\", "/")
         if norm_path.endswith("/"):
@@ -139,6 +179,20 @@ def validate_test_database_allowlist(url_str: str, allow_maintenance: bool = Fal
                 f"CRITICAL FAIL-CLOSED ERROR: SQLite database file '{target_name}' does not contain 'test' in its filename. "
                 f"File-based SQLite test databases must contain 'test' in their filename to prevent modifying non-test or production database files."
             )
+
+        # Symlink target inspection: prevent symlinks from pointing to non-test target files
+        try:
+            if os.path.islink(norm_path) or os.path.islink(clean_path):
+                real_target = os.path.realpath(norm_path if os.path.islink(norm_path) else clean_path)
+                real_filename = os.path.basename(real_target.replace("\\", "/")).lower()
+                if "test" not in real_filename:
+                    raise RuntimeError(
+                        f"CRITICAL FAIL-CLOSED ERROR: SQLite database symlink '{norm_path}' points to non-test target '{real_target}'. "
+                        f"Symlinks targeting non-test database files are strictly prohibited in automated tests."
+                    )
+        except OSError:
+            pass
+
         return
 
     # Validate PostgreSQL targets
@@ -148,6 +202,14 @@ def validate_test_database_allowlist(url_str: str, allow_maintenance: bool = Fal
             raise RuntimeError(
                 f"CRITICAL FAIL-CLOSED ERROR: Automated tests attempted to connect to non-local host '{host}'. "
                 f"Tests are strictly restricted to local test databases on 127.0.0.1 or localhost."
+            )
+
+        # Dedicated test credentials enforcement: reject production roles/credentials
+        username = (parsed.username or "").lower().strip()
+        if username in DISALLOWED_PROD_USERNAMES:
+            raise RuntimeError(
+                f"CRITICAL FAIL-CLOSED ERROR: Automated tests detected prohibited production database user '{username}'. "
+                f"Tests must use dedicated isolated test credentials with no access to production data."
             )
 
         raw_path = (parsed.path or "").strip()
@@ -162,6 +224,12 @@ def validate_test_database_allowlist(url_str: str, allow_maintenance: bool = Fal
 
         if allow_maintenance and dbname in ("postgres", "template1"):
             return
+
+        if dbname in DISALLOWED_PROD_DBNAMES:
+            raise RuntimeError(
+                f"CRITICAL FAIL-CLOSED ERROR: Automated tests attempted to connect to prohibited production database '{dbname}'. "
+                f"Tests are forbidden from connecting to production databases."
+            )
 
         if "test" not in dbname:
             raise RuntimeError(
