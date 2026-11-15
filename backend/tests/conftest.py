@@ -10,13 +10,27 @@ import os
 # Fail-closed test environment setup: Ensure tests never point to production
 from dotenv import dotenv_values
 
-_backend_env = dotenv_values("backend/.env")
-_local_url = _backend_env.get("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/finex_db")
-DEFAULT_TEST_DB_URL = os.environ.get("TEST_DATABASE_URL") or (_local_url.rsplit("/", 1)[0] + "/finex_test_db")
+_current_db = os.environ.get("DATABASE_URL", "").strip()
+_is_safe_existing = False
+if _current_db and not any(
+    k in _current_db.lower() for k in ["neon.tech", "ep-gentle-frog", "aws.neon.tech", "render.com"]
+):
+    try:
+        from backend.app.database import validate_test_database_allowlist
 
-current_db = os.environ.get("DATABASE_URL", "")
-if not current_db or any(k in current_db.lower() for k in ["neon.tech", "ep-gentle-frog", "aws.neon.tech"]):
+        validate_test_database_allowlist(_current_db)
+        _is_safe_existing = True
+    except Exception:
+        _is_safe_existing = False
+
+if _is_safe_existing:
+    DEFAULT_TEST_DB_URL = _current_db
+else:
+    _backend_env = dotenv_values("backend/.env")
+    _local_url = _backend_env.get("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/finex_db")
+    DEFAULT_TEST_DB_URL = os.environ.get("TEST_DATABASE_URL") or (_local_url.rsplit("/", 1)[0] + "/finex_test_db")
     os.environ["DATABASE_URL"] = DEFAULT_TEST_DB_URL
+
 os.environ["ENVIRONMENT"] = "testing"
 
 import pytest  # noqa: E402

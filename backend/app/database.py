@@ -181,15 +181,18 @@ def validate_test_database_allowlist(url_str: str, allow_maintenance: bool = Fal
             )
 
         # Symlink target inspection: prevent symlinks from pointing to non-test target files
+        candidate_paths = [p for p in (raw_path, norm_path, clean_path) if p]
         try:
-            if os.path.islink(norm_path) or os.path.islink(clean_path):
-                real_target = os.path.realpath(norm_path if os.path.islink(norm_path) else clean_path)
-                real_filename = os.path.basename(real_target.replace("\\", "/")).lower()
-                if "test" not in real_filename:
-                    raise RuntimeError(
-                        f"CRITICAL FAIL-CLOSED ERROR: SQLite database symlink '{norm_path}' points to non-test target '{real_target}'. "
-                        f"Symlinks targeting non-test database files are strictly prohibited in automated tests."
-                    )
+            for path_to_check in candidate_paths:
+                if os.path.islink(path_to_check):
+                    real_target = os.path.realpath(path_to_check)
+                    real_filename = os.path.basename(real_target.replace("\\", "/")).lower()
+                    if "test" not in real_filename:
+                        raise RuntimeError(
+                            f"CRITICAL FAIL-CLOSED ERROR: SQLite database symlink '{path_to_check}' points to non-test target '{real_target}'. "
+                            f"Symlinks targeting non-test database files are strictly prohibited in automated tests."
+                        )
+                    break
         except OSError:
             pass
 
