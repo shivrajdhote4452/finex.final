@@ -76,6 +76,7 @@ def setup_paper_trading_module():
 @pytest.fixture
 def auth_headers():
     from backend.app.routers.auth import create_access_token
+
     token = create_access_token(
         user_id="usr-test-isolated-fixture",
         email="shivrajdhote4452@gmail.com",
@@ -83,7 +84,6 @@ def auth_headers():
         provider="google",
     )
     return {"Authorization": f"Bearer {token}"}
-
 
 
 @pytest.mark.asyncio
@@ -578,3 +578,42 @@ async def test_paper_trading_idempotency_limit_price_change_conflict(app, auth_h
         )
         assert res_conflict_qty.status_code == 409
         assert "conflict" in res_conflict_qty.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_paper_trading_orders_history_contract_includes_idempotency_key(app, auth_headers):
+    """Contract test: Verify GET /orders includes idempotency_key for frontend timeout reconciliation."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        unique_key = "idemp-contract-verify-order-444"
+
+        # Submit an order with idempotency_key
+        res = await client.post(
+            "/api/v1/paper-trading/orders",
+            json={
+                "symbol": "TCS",
+                "side": "BUY",
+                "quantity": 1.0,
+                "order_type": "LIMIT",
+                "limit_price": 3000.0,
+                "idempotency_key": unique_key,
+            },
+            headers=auth_headers,
+        )
+        assert res.status_code == 200
+        order_data = res.json()["data"]
+        order_id = order_data["order_id"]
+
+        # Fetch orders history
+        orders_res = await client.get("/api/v1/paper-trading/orders", headers=auth_headers)
+        assert orders_res.status_code == 200
+        orders_payload = orders_res.json()
+        assert orders_payload["success"] is True
+
+        orders = orders_payload["data"]["orders"]
+        assert isinstance(orders, list)
+
+        # Locate the order by order_id and verify idempotency_key is exposed
+        matching = [o for o in orders if o.get("order_id") == order_id or o.get("id") == order_id]
+        assert len(matching) == 1, f"Expected order {order_id} in orders history"
+        assert matching[0]["idempotency_key"] == unique_key

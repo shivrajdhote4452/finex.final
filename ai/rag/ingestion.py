@@ -246,14 +246,10 @@ async def ensure_documents_indexed_db(
     async def _index_and_clean(session: AsyncSession) -> List[DocumentRegistryModel]:
         # Purge legacy non-regulatory / planning blueprint documents from investor RAG tables
         await session.execute(
-            delete(DocumentChunkModel).where(
-                DocumentChunkModel.document_id.in_(["FINEX-SOLO-SPRINT-PLAN-2026"])
-            )
+            delete(DocumentChunkModel).where(DocumentChunkModel.document_id.in_(["FINEX-SOLO-SPRINT-PLAN-2026"]))
         )
         await session.execute(
-            delete(DocumentRegistryModel).where(
-                DocumentRegistryModel.id.in_(["FINEX-SOLO-SPRINT-PLAN-2026"])
-            )
+            delete(DocumentRegistryModel).where(DocumentRegistryModel.id.in_(["FINEX-SOLO-SPRINT-PLAN-2026"]))
         )
         await session.commit()
 

@@ -15,7 +15,7 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_DB: finex_ci_db
+          POSTGRES_DB: finex_test_ci_db
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres_ci_password
         ports:
@@ -27,7 +27,7 @@ jobs:
           --health-retries 5
 
     env:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres_ci_password@localhost:5432/finex_ci_db
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres_ci_password@localhost:5432/finex_test_ci_db
       ENVIRONMENT: testing
 
     steps:

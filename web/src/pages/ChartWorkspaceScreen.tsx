@@ -9,6 +9,16 @@ import {
 } from 'lightweight-charts';
 import { apiClient } from '../api/client';
 import { useFinancial, MarketQuote, OrderExecutionType } from '../context/FinancialContext';
+import {
+  cleanSymbol,
+  createDefaultQuote,
+  parseRawQuote,
+  formatQuotePrice,
+  formatQuoteChange,
+  formatQuoteHighLow,
+  calculateRangeSliderWidth,
+  getFeedStatusBadge,
+} from '../domain/chartQuoteProcessing';
 import { FinExLiveChart } from '../components/market/FinExLiveChart';
 import { TradeTimeMachine } from '../components/market/TradeTimeMachine';
 import { CleanFormattedText } from '../components/common/CleanFormattedText';
@@ -194,21 +204,22 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   const indicatorSeriesRefs = useRef<{ [key: string]: ISeriesApi<any> }>({});
 
-  // Active Quote with dynamic lookup fallback
-  const currentQuote: MarketQuote = activeQuote || marketQuotes[selectedSymbol] || {
-    symbol: selectedSymbol,
-    name: selectedSymbol,
-    price: 2500.0,
-    changeVal: 15.0,
-    changePct: 0.6,
-    isPositive: true,
-    high: 2525.0,
-    low: 2480.0,
-    volume: '3.4M',
-  };
+  // Clean selected symbol (e.g. "RELIANCE" without ".NS" or "NSE:")
+  const cleanSelectedSymbol = cleanSymbol(selectedSymbol);
+
+  // Active Quote with strict symbol-matching to prevent showing previous symbol's data on switch
+  const matchingActiveQuote = activeQuote && cleanSymbol(activeQuote.symbol) === cleanSelectedSymbol ? activeQuote : null;
+  const matchingMarketQuote = (marketQuotes[selectedSymbol] || marketQuotes[cleanSelectedSymbol]) &&
+    cleanSymbol((marketQuotes[selectedSymbol] || marketQuotes[cleanSelectedSymbol]).symbol) === cleanSelectedSymbol
+      ? (marketQuotes[selectedSymbol] || marketQuotes[cleanSelectedSymbol])
+      : null;
+
+  const currentQuote: MarketQuote = matchingActiveQuote || matchingMarketQuote || createDefaultQuote(cleanSelectedSymbol);
 
   // 1. Fetch Mode, Drawings, Quote & Instruments on Mount or Symbol Change
   useEffect(() => {
+    // Immediately clear activeQuote so the previous symbol's quote is never shown for the newly selected symbol
+    setActiveQuote(null);
     let isMounted = true;
     const fetchModeAndDrawings = async () => {
       try {
@@ -225,24 +236,11 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
         console.warn('Could not fetch drawings:', err);
       }
 
-
       try {
         const q = (await apiClient.market.getQuote(selectedSymbol)) as any;
         if (isMounted && q) {
-          const p = typeof q.price === 'string' ? parseFloat(q.price) : q.price;
-          const chg = q.change !== undefined && q.change !== null ? Number(q.change) : p * 0.0075;
-          const chgPct = q.change_pct !== undefined && q.change_pct !== null ? Number(q.change_pct) : 0.75;
-          setActiveQuote({
-            symbol: q.symbol.replace('.NS', ''),
-            name: q.canonical_id || q.symbol,
-            price: p,
-            changeVal: chg,
-            changePct: chgPct,
-            isPositive: chg >= 0,
-            high: q.high_price ? Number(q.high_price) : p * 1.018,
-            low: q.low_price ? Number(q.low_price) : p * 0.982,
-            volume: q.volume ? `${(Number(q.volume) / 1e6).toFixed(1)}M` : '5.2M',
-          });
+          const parsed = parseRawQuote(q, cleanSelectedSymbol);
+          if (parsed) setActiveQuote(parsed);
         }
       } catch (err) {
         console.warn('Could not fetch latest quote for symbol:', err);
@@ -262,21 +260,9 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
       try {
         const q = (await apiClient.market.getQuote(selectedSymbol)) as any;
         if (isMounted && q) {
-          const p = typeof q.price === 'string' ? parseFloat(q.price) : q.price;
           setActiveQuote((prev) => {
-            const chg = q.change !== undefined && q.change !== null ? Number(q.change) : (prev?.changeVal || 0);
-            const chgPct = q.change_pct !== undefined && q.change_pct !== null ? Number(q.change_pct) : (prev?.changePct || 0);
-            return {
-              symbol: q.symbol.replace('.NS', ''),
-              name: q.canonical_id || q.symbol,
-              price: p,
-              changeVal: chg,
-              changePct: chgPct,
-              isPositive: chg >= 0,
-              high: q.high_price ? Number(q.high_price) : Math.max(prev?.high || p, p),
-              low: q.low_price ? Number(q.low_price) : Math.min(prev?.low || p, p),
-              volume: q.volume ? `${(Number(q.volume) / 1e6).toFixed(1)}M` : (prev?.volume || '5.2M'),
-            };
+            if (prev && cleanSymbol(prev.symbol) !== cleanSelectedSymbol) return null;
+            return parseRawQuote(q, cleanSelectedSymbol, prev);
           });
         }
       } catch {}
@@ -444,6 +430,35 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
           low: Number(b.low),
           close: Number(b.close),
           volume: Number(b.volume || 0),
+        });
+      }
+
+      // If active quote has no price, seed price from the latest verified historical candle
+      if (formattedBars.length > 0) {
+        const lastBar = formattedBars[formattedBars.length - 1];
+        setActiveQuote((prev) => {
+          if (!prev || prev.price === 0 || prev.isPriceUnavailable || prev.symbol !== cleanSelectedSymbol) {
+            const prevBar = formattedBars.length > 1 ? formattedBars[formattedBars.length - 2] : null;
+            const hasCandleChg = prevBar !== null && prevBar.close > 0;
+            const barChg = hasCandleChg ? lastBar.close - prevBar.close : 0;
+            const barChgPct = hasCandleChg ? (barChg / prevBar.close) * 100 : 0;
+            return {
+              symbol: cleanSelectedSymbol,
+              name: cleanSelectedSymbol,
+              price: lastBar.close,
+              changeVal: Number(barChg.toFixed(2)),
+              changePct: Number(barChgPct.toFixed(2)),
+              isPositive: barChg >= 0,
+              high: lastBar.high,
+              low: lastBar.low,
+              volume: lastBar.volume > 0 ? `${(lastBar.volume / 1e6).toFixed(1)}M` : '—',
+              source: 'HISTORICAL_CANDLES',
+              isPriceUnavailable: false,
+              isChangeUnavailable: !hasCandleChg,
+              isHighLowUnavailable: false,
+            };
+          }
+          return prev;
         });
       }
 
@@ -637,6 +652,14 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
   // 4. Handle Paper Order Placement from Chart Ticket
   const handlePlaceOrder = async () => {
     setOrderFeedback(null);
+    if (orderType === 'MARKET' && (!currentQuote.price || currentQuote.price <= 0)) {
+      setOrderFeedback({
+        type: 'error',
+        message: 'Current market quote is unavailable for this instrument. Please enter a limit price or wait for the quote to load.',
+      });
+      return;
+    }
+
     setOrderExecuting(true);
     try {
       const res = await executeOrder(
@@ -650,7 +673,9 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
       if (res.success && res.receipt) {
         setOrderFeedback({
           type: 'success',
-          message: `Paper ${orderSide} filled for ${orderShares} ${selectedSymbol} @ ₹${res.receipt.fillPrice.toFixed(2)}`,
+          message: res.receipt.status === 'PENDING'
+            ? `Paper ${orderSide} order placed (Pending Fill) for ${orderShares} ${selectedSymbol}`
+            : `Paper ${orderSide} filled for ${orderShares} ${selectedSymbol} @ ₹${res.receipt.fillPrice.toFixed(2)}`,
         });
         loadChartData();
       } else {
@@ -803,9 +828,10 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
     setActiveTool(tool);
     if (tool === 'crosshair') return;
     try {
+      const basePrice = currentQuote.price || 1000;
       const dummyCoord = [
-        { time: Math.floor(Date.now() / 1000) - 86400 * 5, price: currentQuote.price * 0.98 },
-        { time: Math.floor(Date.now() / 1000), price: currentQuote.price * 1.02 },
+        { time: Math.floor(Date.now() / 1000) - 86400 * 5, price: basePrice * 0.98 },
+        { time: Math.floor(Date.now() / 1000), price: basePrice * 1.02 },
       ];
       const res = await apiClient.charts.saveDrawing({
         symbol: selectedSymbol,
@@ -833,7 +859,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
   // Owned quantity for active symbol
   const activeHolding = holdings.find((h) => h.symbol === selectedSymbol);
   const ownedShares = activeHolding?.shares || 0;
-  const targetPrice = orderType === 'LIMIT' && orderLimitPrice > 0 ? orderLimitPrice : currentQuote.price;
+  const targetPrice = orderType === 'LIMIT' && orderLimitPrice > 0 ? orderLimitPrice : (currentQuote.price || 0);
   const orderEstTotal = orderShares * targetPrice;
 
   return (
@@ -930,20 +956,42 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
             {/* Live Price Tag */}
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '5px', marginLeft: '2px', minWidth: 0, flexShrink: 1 }}>
               <span style={{ fontSize: '14px', fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", color: '#FFFFFF', whiteSpace: 'nowrap' }}>
-                {marketMode.currency === 'USD' ? '$' : '₹'}
-                {currentQuote.price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                {!currentQuote.isPriceUnavailable && currentQuote.price > 0 ? (
+                  formatQuotePrice(currentQuote, marketMode.currency === 'USD' ? '$' : '₹')
+                ) : (
+                  <span style={{ color: '#8E8E93' }}>—</span>
+                )}
               </span>
-              <span
-                style={{
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  color: currentQuote.isPositive ? '#26A69A' : '#EF5350',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                <span className="desktop-only">{currentQuote.isPositive ? '+' : ''}{currentQuote.changeVal.toFixed(2)} </span>
-                <span>{currentQuote.isPositive ? '+' : ''}{currentQuote.changePct.toFixed(2)}%</span>
-              </span>
+              {(() => {
+                const chg = formatQuoteChange(currentQuote);
+                if (chg.isUnavailable) {
+                  return (
+                    <span style={{ fontSize: '11px', fontWeight: 500, color: '#8E8E93', whiteSpace: 'nowrap' }}>
+                      —
+                    </span>
+                  );
+                }
+                if (chg.isZero) {
+                  return (
+                    <span style={{ fontSize: '11px', fontWeight: 500, color: '#8E8E93', whiteSpace: 'nowrap' }}>
+                      0.00 (0.00%)
+                    </span>
+                  );
+                }
+                return (
+                  <span
+                    style={{
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      color: chg.color,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    <span className="desktop-only">{chg.valFormatted} </span>
+                    <span>{chg.pctFormatted}</span>
+                  </span>
+                );
+              })()}
             </div>
           </div>
 
@@ -1126,21 +1174,30 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
               border: '1px solid #2C2C2E',
             }}
           >
-            <div
-              style={{
-                width: '7px',
-                height: '7px',
-                borderRadius: '50%',
-                backgroundColor: (marketMode.mode === 'INDIAN_LIVE_DATA' || marketMode.mode?.includes('US')) ? '#26A69A' : '#F29A60',
-              }}
-            />
-            <span style={{ fontSize: '10px', color: (marketMode.mode === 'INDIAN_LIVE_DATA' || marketMode.mode?.includes('US')) ? '#26A69A' : '#8E8E93', fontWeight: 600 }}>
-              {marketMode.mode === 'INDIAN_LIVE_DATA'
-                ? ((marketMode as any).feed_label || 'Angel One SmartAPI (Live NSE Feed)')
-                : (marketMode.mode?.includes('US')
-                  ? 'Live IEX (USD Paper)'
-                  : `NSE Historical Replay (${(marketMode as any).sebi_educational_lag_days || marketMode.lag_days || 30}D Lag)`)}
-            </span>
+            {(() => {
+              const badge = getFeedStatusBadge(currentQuote, marketMode);
+              return (
+                <>
+                  <div
+                    style={{
+                      width: '7px',
+                      height: '7px',
+                      borderRadius: '50%',
+                      backgroundColor: badge.dotColor,
+                    }}
+                  />
+                  <span
+                    style={{
+                      fontSize: '10px',
+                      color: badge.textColor,
+                      fontWeight: 600,
+                    }}
+                  >
+                    {badge.label}
+                  </span>
+                </>
+              );
+            })()}
           </div>
 
           {/* Replay Speed & Session Button */}
@@ -1673,7 +1730,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                           <input
                             type="number"
                             step="0.05"
-                            value={orderLimitPrice || currentQuote.price}
+                            value={orderLimitPrice || (currentQuote.price ?? '')}
                             onChange={(e) => setOrderLimitPrice(parseFloat(e.target.value) || 0)}
                             style={{
                               width: '80px',
@@ -1827,8 +1884,8 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                       {/* Today's Range Slider */}
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#8E8E93' }}>
-                          <span>Today's Low: <strong style={{ color: '#FFFFFF' }}>₹{(currentQuote.low || currentQuote.price * 0.985).toFixed(2)}</strong></span>
-                          <span>Today's High: <strong style={{ color: '#FFFFFF' }}>₹{(currentQuote.high || currentQuote.price * 1.015).toFixed(2)}</strong></span>
+                          <span>Today's Low: <strong style={{ color: '#FFFFFF' }}>{formatQuoteHighLow(currentQuote.low, currentQuote.isHighLowUnavailable)}</strong></span>
+                          <span>Today's High: <strong style={{ color: '#FFFFFF' }}>{formatQuoteHighLow(currentQuote.high, currentQuote.isHighLowUnavailable)}</strong></span>
                         </div>
                         <div style={{ height: '6px', backgroundColor: '#1C1C1E', borderRadius: '3px', position: 'relative', overflow: 'hidden' }}>
                           <div
@@ -1837,7 +1894,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                               left: '0',
                               top: '0',
                               bottom: '0',
-                              width: '58%',
+                              width: calculateRangeSliderWidth(currentQuote.price, currentQuote.high, currentQuote.low, currentQuote.isPriceUnavailable, currentQuote.isHighLowUnavailable),
                               background: 'linear-gradient(90deg, #EF5350, #F29A60, #26A69A)',
                               borderRadius: '3px',
                             }}
@@ -1848,8 +1905,8 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                       {/* 52-Week Range Slider */}
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#8E8E93' }}>
-                          <span>52W Low: <strong style={{ color: '#FFFFFF' }}>₹{(currentQuote.price * 0.72).toFixed(2)}</strong></span>
-                          <span>52W High: <strong style={{ color: '#FFFFFF' }}>₹{(currentQuote.price * 1.28).toFixed(2)}</strong></span>
+                          <span>52W Low: <strong style={{ color: '#FFFFFF' }}>—</strong></span>
+                          <span>52W High: <strong style={{ color: '#FFFFFF' }}>—</strong></span>
                         </div>
                         <div style={{ height: '6px', backgroundColor: '#1C1C1E', borderRadius: '3px', position: 'relative', overflow: 'hidden' }}>
                           <div
@@ -1858,7 +1915,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                               left: '0',
                               top: '0',
                               bottom: '0',
-                              width: '64%',
+                              width: '0%',
                               background: 'linear-gradient(90deg, #EF5350, #F29A60, #26A69A)',
                               borderRadius: '3px',
                             }}
@@ -1872,7 +1929,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                       <div>
                         <div style={{ fontSize: '10px', color: '#8E8E93' }}>Market Cap</div>
                         <div style={{ fontSize: '13px', fontWeight: 700, color: '#FFFFFF', marginTop: '2px' }}>
-                          ₹{(currentQuote.price * 6.2).toFixed(0)}K Cr
+                          —
                         </div>
                       </div>
                       <div>

@@ -63,13 +63,19 @@ async def clean_stores():
                 delete(Transaction).where(Transaction.user_id.in_(["usr-test-goals-fixture", "usr-test-other-fixture"]))
             )
             await session.execute(
-                delete(TransactionUpload).where(TransactionUpload.user_id.in_(["usr-test-goals-fixture", "usr-test-other-fixture"]))
+                delete(TransactionUpload).where(
+                    TransactionUpload.user_id.in_(["usr-test-goals-fixture", "usr-test-other-fixture"])
+                )
             )
             await session.execute(
-                delete(GoalContribution).where(GoalContribution.user_id.in_(["usr-test-goals-fixture", "usr-test-other-fixture"]))
+                delete(GoalContribution).where(
+                    GoalContribution.user_id.in_(["usr-test-goals-fixture", "usr-test-other-fixture"])
+                )
             )
             await session.execute(
-                delete(FinancialGoal).where(FinancialGoal.user_id.in_(["usr-test-goals-fixture", "usr-test-other-fixture"]))
+                delete(FinancialGoal).where(
+                    FinancialGoal.user_id.in_(["usr-test-goals-fixture", "usr-test-other-fixture"])
+                )
             )
             await session.commit()
     except Exception:
@@ -93,13 +99,19 @@ async def clean_stores():
                 delete(Transaction).where(Transaction.user_id.in_(["usr-test-goals-fixture", "usr-test-other-fixture"]))
             )
             await session.execute(
-                delete(TransactionUpload).where(TransactionUpload.user_id.in_(["usr-test-goals-fixture", "usr-test-other-fixture"]))
+                delete(TransactionUpload).where(
+                    TransactionUpload.user_id.in_(["usr-test-goals-fixture", "usr-test-other-fixture"])
+                )
             )
             await session.execute(
-                delete(GoalContribution).where(GoalContribution.user_id.in_(["usr-test-goals-fixture", "usr-test-other-fixture"]))
+                delete(GoalContribution).where(
+                    GoalContribution.user_id.in_(["usr-test-goals-fixture", "usr-test-other-fixture"])
+                )
             )
             await session.execute(
-                delete(FinancialGoal).where(FinancialGoal.user_id.in_(["usr-test-goals-fixture", "usr-test-other-fixture"]))
+                delete(FinancialGoal).where(
+                    FinancialGoal.user_id.in_(["usr-test-goals-fixture", "usr-test-other-fixture"])
+                )
             )
             await session.commit()
     except Exception:

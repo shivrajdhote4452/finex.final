@@ -51,7 +51,6 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
         # Startup phase 0: Ensure all database tables exist in PostgreSQL
         try:
-            import backend.app.models  # Register all entity tables in Base.metadata
             from backend.app.database import engine as db_engine
             from backend.app.models.core import Base
 
@@ -59,6 +58,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
                 await conn.run_sync(Base.metadata.create_all)
         except Exception as e:
             import logging
+
             logging.getLogger("startup").warning(f"Database schema auto-creation skipped or failed: {e}")
 
         # Startup phase: Ensure seed identities exist in PostgreSQL

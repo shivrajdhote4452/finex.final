@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import jwt
-from backend.app.config import Environment, get_settings
+from backend.app.config import get_settings
 from backend.app.core.envelope import create_response_envelope
 from backend.app.database import get_db
 from backend.app.domain.user_store import user_store

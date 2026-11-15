@@ -6,26 +6,40 @@ runtime mock-token backdoors.
 """
 
 import os
-import sys
 
 # Fail-closed test environment setup: Ensure tests never point to production
 from dotenv import dotenv_values
-_backend_env = dotenv_values("backend/.env")
-_local_url = _backend_env.get("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/finex_db")
-DEFAULT_TEST_DB_URL = os.environ.get("TEST_DATABASE_URL") or (_local_url.rsplit("/", 1)[0] + "/finex_test_db")
 
-current_db = os.environ.get("DATABASE_URL", "")
-if not current_db or any(k in current_db.lower() for k in ["neon.tech", "ep-gentle-frog", "aws.neon.tech"]):
+_current_db = os.environ.get("DATABASE_URL", "").strip()
+_is_safe_existing = False
+if _current_db and not any(
+    k in _current_db.lower() for k in ["neon.tech", "ep-gentle-frog", "aws.neon.tech", "render.com"]
+):
+    try:
+        from backend.app.database import validate_test_database_allowlist
+
+        validate_test_database_allowlist(_current_db)
+        _is_safe_existing = True
+    except Exception:
+        _is_safe_existing = False
+
+if _is_safe_existing:
+    DEFAULT_TEST_DB_URL = _current_db
+else:
+    _backend_env = dotenv_values("backend/.env")
+    _local_url = _backend_env.get("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/finex_db")
+    DEFAULT_TEST_DB_URL = os.environ.get("TEST_DATABASE_URL") or (_local_url.rsplit("/", 1)[0] + "/finex_test_db")
     os.environ["DATABASE_URL"] = DEFAULT_TEST_DB_URL
+
 os.environ["ENVIRONMENT"] = "testing"
 
-import pytest
-import sqlalchemy
-import sqlalchemy.ext.asyncio
-from backend.app.config import get_settings
-from backend.app.database import validate_test_database_allowlist
-from backend.app.factory import create_app
-from backend.app.routers.auth import create_access_token
+import pytest  # noqa: E402
+import sqlalchemy  # noqa: E402
+import sqlalchemy.ext.asyncio  # noqa: E402
+from backend.app.config import get_settings  # noqa: E402
+from backend.app.database import validate_test_database_allowlist  # noqa: E402
+from backend.app.factory import create_app  # noqa: E402
+from backend.app.routers.auth import create_access_token  # noqa: E402
 
 # Universal fail-closed interception hook: prevents any direct create_async_engine or create_engine bypass
 _orig_create_async_engine = sqlalchemy.ext.asyncio.create_async_engine
@@ -52,6 +66,15 @@ def _guarded_create_engine(url, *args, **kwargs):
 
 sqlalchemy.ext.asyncio.create_async_engine = _guarded_create_async_engine
 sqlalchemy.create_engine = _guarded_create_engine
+try:
+    import sqlalchemy.ext.asyncio.engine
+
+    sqlalchemy.ext.asyncio.engine.create_async_engine = _guarded_create_async_engine
+    import sqlalchemy.engine
+
+    sqlalchemy.engine.create_engine = _guarded_create_engine
+except ImportError:
+    pass
 
 
 @pytest.fixture(autouse=True)

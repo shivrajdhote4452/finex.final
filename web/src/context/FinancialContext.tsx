@@ -1,5 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useRef, ReactNode, useCallback } from 'react';
 import { apiClient } from '../api/client';
+import { INSTRUMENT_METADATA, processOrderExecution } from '../domain/orderExecution';
+
+export { INSTRUMENT_METADATA };
 
 export interface HoldingItem {
   symbol: string;
@@ -67,6 +70,9 @@ export interface MarketQuote {
   isDelayed?: boolean;
   isStale?: boolean;
   lastTick?: 'up' | 'down' | 'none';
+  isPriceUnavailable?: boolean;
+  isChangeUnavailable?: boolean;
+  isHighLowUnavailable?: boolean;
 }
 
 export interface UserProfileData {
@@ -119,18 +125,6 @@ interface FinancialContextType {
 }
 
 const FinancialContext = createContext<FinancialContextType | undefined>(undefined);
-
-// Sector and color taxonomy for UI presentation
-const INSTRUMENT_METADATA: Record<string, { name: string; sector: string; color: string }> = {
-  RELIANCE: { name: 'Reliance Industries Ltd', sector: 'Energy & Retail', color: '#F29A60' },
-  TCS: { name: 'Tata Consultancy Services', sector: 'Technology', color: '#4DD5AD' },
-  INFY: { name: 'Infosys Limited', sector: 'Technology', color: '#E0854B' },
-  HDFCBANK: { name: 'HDFC Bank Limited', sector: 'Banking & Financials', color: '#A1A1AA' },
-  ICICIBANK: { name: 'ICICI Bank Limited', sector: 'Banking & Financials', color: '#8E8E93' },
-  TATAMOTORS: { name: 'Tata Motors Limited', sector: 'Automobile', color: '#60A5FA' },
-  SBIN: { name: 'State Bank of India', sector: 'Banking & Financials', color: '#34D399' },
-  ITC: { name: 'ITC Limited', sector: 'Consumer Goods', color: '#FBBF24' },
-};
 
 export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const getCashStorageKey = useCallback(() => {
@@ -574,217 +568,28 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
     isReplay?: boolean,
     replayDate?: string
   ): Promise<{ success: boolean; receipt?: LedgerEntry; error?: string }> => {
-    const side = type === 'BUY' || type === 'SIP' ? 'BUY' : 'SELL';
-    const idempotencyKey = `web-ord-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-
-    if (isReplay && customPrice !== undefined && customPrice > 0) {
-      const fill = customPrice;
-      const gross = fill * shares;
-      if (side === 'BUY' && gross > virtualCash) {
-        return {
-          success: false,
-          error: `Insufficient virtual cash balance (₹${virtualCash.toLocaleString('en-IN')}) for replay trade of ₹${gross.toLocaleString('en-IN')}.`,
-        };
-      }
-      const cashAfter = side === 'BUY' ? Math.max(0, virtualCash - gross) : virtualCash + gross;
-      updateVirtualCash(cashAfter);
-
-      setHoldings((prev) => {
-        const existing = prev.find((h) => h.symbol === symbol);
-        if (side === 'BUY') {
-          if (existing) {
-            const totalShares = existing.shares + shares;
-            const avgCost = (existing.shares * existing.avgPrice + gross) / totalShares;
-            return prev.map((h) => (h.symbol === symbol ? { ...h, shares: totalShares, avgPrice: avgCost } : h));
-          } else {
-            const meta = INSTRUMENT_METADATA[symbol] || { name: symbol, sector: 'Equities', color: '#F29A60' };
-            return [
-              ...prev,
-              {
-                symbol,
-                name: meta.name,
-                shares,
-                avgPrice: fill,
-                currentPrice: fill,
-                dayChangePct: 0,
-                assetClass: meta.sector,
-                color: meta.color,
-              },
-            ];
-          }
-        } else {
-          if (!existing) return prev;
-          if (existing.shares <= shares) return prev.filter((h) => h.symbol !== symbol);
-          return prev.map((h) => (h.symbol === symbol ? { ...h, shares: h.shares - shares } : h));
-        }
-      });
-
-      const existingHolding = holdings.find((h) => h.symbol === symbol);
-      const replayRealizedPnL =
-        side === 'SELL' && existingHolding
-          ? (fill - existingHolding.avgPrice) * shares
-          : undefined;
-
-      const receipt: LedgerEntry = {
-        id: `ord-rep-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-        timestamp: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'medium' }),
-        type: side,
-        orderType,
+    return processOrderExecution(
+      {
         symbol,
-        name: INSTRUMENT_METADATA[symbol]?.name || symbol,
+        type,
         shares,
-        fillPrice: fill,
-        total: gross,
-        realizedPnL: replayRealizedPnL,
-        brokerageFee: 0,
-        regulatoryFees: 0,
-        cashAfter,
-        status: 'FILLED',
-        notes: `[REPLAY - ${replayDate || 'Past NSE'}] Executed via Trade Time Machine at ₹${fill.toLocaleString('en-IN')}`,
-        isReplay: true,
-        replayDate: replayDate || 'Past NSE',
-      };
-
-      setLedger((prev) => [receipt, ...prev]);
-
-      addNotification(
-        'Replay Order Executed',
-        `[REPLAY] ${side === 'BUY' ? 'Bought' : 'Sold'} ${shares} shares of ${symbol} at ₹${fill.toLocaleString('en-IN')} (${replayDate || 'Past NSE'})`,
-        'execution'
-      );
-
-      return { success: true, receipt };
-    }
-
-    try {
-      if (apiClient.isAuthenticated()) {
-        const res = await apiClient.paperTrading.submitOrder(
-          {
-            symbol,
-            side,
-            order_type: orderType,
-            quantity: shares,
-            limit_price: customPrice,
-          },
-          idempotencyKey
-        );
-
-        if (res.status === 'FILLED' || res.status === 'ACCEPTED') {
-          const fill = Number(res.fill_price) || 0;
-          const gross = Number(res.gross_value) || 0;
-          const cashAfter = Number(res.cash_balance_after) || 0;
-          updateVirtualCash(cashAfter);
-
-          const receipt: LedgerEntry = {
-            id: res.order_id,
-            timestamp: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'medium' }),
-            type: side,
-            orderType,
-            symbol: res.symbol,
-            name: INSTRUMENT_METADATA[res.symbol]?.name || res.symbol,
-            shares: Number(res.quantity) || shares,
-            fillPrice: fill,
-            total: gross,
-            brokerageFee: 0,
-            regulatoryFees: 0,
-            cashAfter,
-            status: 'FILLED',
-            notes: `Executed via FinEx Paper Matching Engine at ₹${fill.toLocaleString('en-IN')}`,
-          };
-
-          await refreshAccount();
-
-          addNotification(
-            'Order Executed',
-            `${side === 'BUY' ? 'Bought' : 'Sold'} ${shares} shares of ${symbol} at ₹${fill.toLocaleString('en-IN')}`,
-            'execution'
-          );
-          return { success: true, receipt };
-        } else {
-          return {
-            success: false,
-            error: `Order ${res.status}: Order could not be filled at the requested price.`,
-          };
-        }
-      }
-      throw new Error('Not authenticated');
-    } catch (e: any) {
-      // Local fallback for offline/preview environments so paper trading always functions
-      const currentQuote = marketQuotesRef.current[symbol];
-      const fill = customPrice || (currentQuote && currentQuote.price ? currentQuote.price : 1000);
-      const gross = fill * shares;
-      if (side === 'BUY' && gross > virtualCash) {
-        return {
-          success: false,
-          error: `Insufficient virtual cash balance (₹${virtualCash.toLocaleString('en-IN')}) for trade of ₹${gross.toLocaleString('en-IN')}.`,
-        };
-      }
-      const cashAfter = side === 'BUY' ? Math.max(0, virtualCash - gross) : virtualCash + gross;
-      updateVirtualCash(cashAfter);
-
-      setHoldings((prev) => {
-        const existing = prev.find((h) => h.symbol === symbol);
-        if (side === 'BUY') {
-          if (existing) {
-            const totalShares = existing.shares + shares;
-            const avgCost = (existing.shares * existing.avgPrice + gross) / totalShares;
-            return prev.map((h) => (h.symbol === symbol ? { ...h, shares: totalShares, avgPrice: avgCost } : h));
-          } else {
-            const meta = INSTRUMENT_METADATA[symbol] || { name: symbol, sector: 'Equities', color: '#F29A60' };
-            return [
-              ...prev,
-              {
-                symbol,
-                name: meta.name,
-                shares,
-                avgPrice: fill,
-                currentPrice: fill,
-                dayChangePct: 0,
-                assetClass: meta.sector,
-                color: meta.color,
-              },
-            ];
-          }
-        } else {
-          if (!existing) return prev;
-          if (existing.shares <= shares) return prev.filter((h) => h.symbol !== symbol);
-          return prev.map((h) => (h.symbol === symbol ? { ...h, shares: h.shares - shares } : h));
-        }
-      });
-
-      const existingHolding = holdings.find((h) => h.symbol === symbol);
-      const fallbackRealizedPnL =
-        side === 'SELL' && existingHolding
-          ? (fill - existingHolding.avgPrice) * shares
-          : undefined;
-
-      const receipt: LedgerEntry = {
-        id: `ord-${Date.now()}`,
-        timestamp: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'medium' }),
-        type: side,
         orderType,
-        symbol,
-        name: INSTRUMENT_METADATA[symbol]?.name || symbol,
-        shares,
-        fillPrice: fill,
-        total: gross,
-        realizedPnL: fallbackRealizedPnL,
-        brokerageFee: 0,
-        regulatoryFees: 0,
-        cashAfter,
-        status: 'FILLED',
-        notes: `Executed via FinEx Paper Matching Engine at ₹${fill.toLocaleString('en-IN')}`,
-      };
-
-      setLedger((prev) => [receipt, ...prev]);
-
-      addNotification(
-        'Order Executed',
-        `${side === 'BUY' ? 'Bought' : 'Sold'} ${shares} shares of ${symbol} at ₹${fill.toLocaleString('en-IN')}`,
-        'execution'
-      );
-      return { success: true, receipt };
-    }
+        customPrice,
+        isReplay,
+        replayDate,
+      },
+      {
+        virtualCash,
+        updateVirtualCash,
+        getHoldings: () => holdings,
+        setHoldings,
+        setLedger,
+        addNotification,
+        refreshAccount,
+        apiClient,
+        getQuotePrice: (s: string) => marketQuotesRef.current[s]?.price,
+      }
+    );
   };
 
   return (

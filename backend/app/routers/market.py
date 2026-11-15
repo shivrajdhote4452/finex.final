@@ -123,7 +123,11 @@ async def get_instrument_quote(
     data["clean_symbol"] = clean_sym
     data["ltp"] = float(quote.price)
     market_is_open = is_nse_market_open()
-    freshness_val = "LIVE" if (getattr(quote, "data_status", "fresh") == "fresh" and market_is_open and not quote.served_from_cache) else ("CLOSED" if not market_is_open else "END_OF_DAY")
+    freshness_val = (
+        "LIVE"
+        if (getattr(quote, "data_status", "fresh") == "fresh" and market_is_open and not quote.served_from_cache)
+        else ("CLOSED" if not market_is_open else "END_OF_DAY")
+    )
     data["freshness"] = freshness_val
     data["market_open"] = market_is_open
     data["served_from_cache"] = quote.served_from_cache
@@ -586,7 +590,9 @@ async def get_index_history(
             )
             candles = [
                 {
-                    "time": int(b.timestamp.timestamp()) if hasattr(b, "timestamp") else (b.time or int(b.observed_at.timestamp())),
+                    "time": int(b.timestamp.timestamp())
+                    if hasattr(b, "timestamp")
+                    else (b.time or int(b.observed_at.timestamp())),
                     "date": b.date if hasattr(b, "date") else b.observed_at.strftime("%Y-%m-%d"),
                     "open": float(b.open),
                     "high": float(b.high),
@@ -605,7 +611,9 @@ async def get_index_history(
         if candles and "time" in candles[-1]
         else None
     )
-    freshness_status = "LIVE" if (not served_from_cache and market_is_open) else ("CLOSED" if not served_from_cache else "END_OF_DAY")
+    freshness_status = (
+        "LIVE" if (not served_from_cache and market_is_open) else ("CLOSED" if not served_from_cache else "END_OF_DAY")
+    )
 
     return create_response_envelope(
         data={

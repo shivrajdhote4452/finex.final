@@ -591,6 +591,7 @@ async def test_angel_smartapi_live_quote_market_hours():
 # Diagnostic & Provenance Tests (Fix Verification)
 # =============================================================================
 
+
 def test_angel_adapter_diagnostic_status_reporting():
     """Verify diagnostic status reports missing/placeholder fields without revealing secrets."""
     # Incomplete credentials
@@ -607,7 +608,7 @@ def test_angel_adapter_diagnostic_status_reporting():
     assert "ANGEL_TOTP_SECRET" in status["missing_fields"]
     assert "ANGEL_CLIENT_ID" not in status["missing_fields"]
     # Verify no secret values are returned in status dictionary
-    for k, v in status.items():
+    for _k, v in status.items():
         assert not isinstance(v, str) or ("your_" not in v and "placeholder" not in v)
 
     # Valid mock credentials

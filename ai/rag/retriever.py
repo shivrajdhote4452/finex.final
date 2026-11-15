@@ -238,7 +238,11 @@ class RegulatoryDocumentRetriever(AbstractDocumentRetriever):
             # Strictly exclude internal engineering / blueprint documents from investor responses
             doc_id = getattr(chunk, "document_id", "") or ""
             doc_title = (getattr(chunk, "title", "") or "").lower()
-            if doc_id == "FINEX-SOLO-SPRINT-PLAN-2026" or "sprint plan" in doc_title or "planning blueprint" in doc_title:
+            if (
+                doc_id == "FINEX-SOLO-SPRINT-PLAN-2026"
+                or "sprint plan" in doc_title
+                or "planning blueprint" in doc_title
+            ):
                 continue
 
             # Apply metadata filters if provided
