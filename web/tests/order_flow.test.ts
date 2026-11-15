@@ -1,496 +1,386 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import {
+  processOrderExecution,
+  isNetworkOrTimeoutError,
+  calculateNewHoldings,
+  generateIdempotencyKey,
+  type OrderExecutionParams,
+  type OrderExecutionContext,
+} from '../src/domain/orderExecution.ts';
+import type { HoldingItem, LedgerEntry } from '../src/context/FinancialContext.ts';
 
 /**
- * Frontend Paper-Order Execution Engine Simulation
- * Mirroring the exact state machine and backend integration in web/src/context/FinancialContext.tsx
+ * Frontend Paper-Order Verification Suite.
+ *
+ * This test suite directly exercises the production paper-order execution logic in
+ * `web/src/domain/orderExecution.ts` (used by `web/src/context/FinancialContext.tsx`).
+ * It tests real business logic, error paths, and state transitions without copying code.
  */
-interface OrderPayload {
-  symbol: string;
-  side: 'BUY' | 'SELL';
-  order_type: 'MARKET' | 'LIMIT' | 'STOP_LOSS' | 'SIP';
-  quantity: number;
-  limit_price?: number;
+
+interface TestHarnessOptions {
+  isAuthenticated?: boolean;
+  submitOrderMock?: (order: any, idempotencyKey?: string) => Promise<any>;
+  getOrdersMock?: (limit?: number) => Promise<{ orders: any[]; total: number }>;
+  quotePrice?: number;
 }
 
-interface LedgerEntry {
-  id: string;
-  timestamp: string;
-  type: 'BUY' | 'SELL' | 'SIP' | 'DEPOSIT';
-  orderType: string;
-  symbol: string;
-  name?: string;
-  shares: number;
-  fillPrice: number;
-  total: number;
-  cashAfter: number;
-  status: 'FILLED' | 'SETTLED' | 'PENDING' | 'REJECTED';
-  notes?: string;
-  isReplay?: boolean;
-}
-
-interface Holding {
-  symbol: string;
-  name: string;
-  shares: number;
-  avgPrice: number;
-  currentPrice: number;
-}
-
-interface TestState {
-  virtualCash: number;
-  holdings: Holding[];
-  ledger: LedgerEntry[];
-  accountRefreshed: boolean;
-  notifications: Array<{ title: string; message: string }>;
-}
-
-function createOrderEngine(
-  initialState: { virtualCash?: number; holdings?: Holding[]; ledger?: LedgerEntry[] } = {},
-  options: {
-    isAuthenticated?: boolean;
-    submitOrderMock?: (payload: OrderPayload, key: string) => Promise<any>;
-    getOrdersMock?: () => Promise<{ orders: any[]; total: number }>;
-  } = {}
+function createTestHarness(
+  initialState: { virtualCash?: number; holdings?: HoldingItem[]; ledger?: LedgerEntry[] } = {},
+  options: TestHarnessOptions = {}
 ) {
-  const state: TestState = {
+  const state = {
     virtualCash: initialState.virtualCash ?? 100000,
     holdings: initialState.holdings ? [...initialState.holdings] : [],
     ledger: initialState.ledger ? [...initialState.ledger] : [],
     accountRefreshed: false,
-    notifications: [],
+    notifications: [] as Array<{ title: string; message: string; type?: string }>,
   };
 
-  const isAuthenticated = options.isAuthenticated ?? true;
-
-  const updateVirtualCash = (val: number) => {
-    state.virtualCash = val;
+  const context: OrderExecutionContext = {
+    virtualCash: state.virtualCash,
+    updateVirtualCash: (newCash: number) => {
+      state.virtualCash = newCash;
+      context.virtualCash = newCash;
+    },
+    getHoldings: () => state.holdings,
+    setHoldings: (updater) => {
+      state.holdings = updater(state.holdings);
+    },
+    setLedger: (updater) => {
+      state.ledger = updater(state.ledger);
+    },
+    addNotification: (title, message, type) => {
+      state.notifications.push({ title, message, type });
+    },
+    refreshAccount: async () => {
+      state.accountRefreshed = true;
+    },
+    apiClient: {
+      isAuthenticated: () => options.isAuthenticated ?? true,
+      paperTrading: {
+        submitOrder: options.submitOrderMock || (async () => { throw new Error('submitOrder not mocked'); }),
+        getOrders: options.getOrdersMock || (async () => ({ orders: [], total: 0 })),
+      },
+    },
+    getQuotePrice: () => options.quotePrice ?? 1000,
   };
 
-  const refreshAccount = async () => {
-    state.accountRefreshed = true;
-  };
+  const execute = (params: OrderExecutionParams) => processOrderExecution(params, context);
 
-  const addNotification = (title: string, message: string) => {
-    state.notifications.push({ title, message });
-  };
-
-  const executeOrder = async (
-    symbol: string,
-    type: 'BUY' | 'SELL' | 'SIP',
-    shares: number,
-    orderType: 'MARKET' | 'LIMIT' = 'MARKET',
-    customPrice?: number,
-    isReplay?: boolean,
-    replayDate?: string
-  ): Promise<{ success: boolean; receipt?: LedgerEntry; error?: string }> => {
-    const side = type === 'BUY' || type === 'SIP' ? 'BUY' : 'SELL';
-    const idempotencyKey = `web-test-key-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-
-    // Replay mode isolation
-    if (isReplay && customPrice !== undefined && customPrice > 0) {
-      const fill = customPrice;
-      const gross = fill * shares;
-      if (side === 'BUY' && gross > state.virtualCash) {
-        return {
-          success: false,
-          error: `Insufficient virtual cash balance for replay trade.`,
-        };
-      }
-      const cashAfter = side === 'BUY' ? Math.max(0, state.virtualCash - gross) : state.virtualCash + gross;
-      updateVirtualCash(cashAfter);
-
-      const receipt: LedgerEntry = {
-        id: `ord-rep-test`,
-        timestamp: new Date().toISOString(),
-        type: side,
-        orderType,
-        symbol,
-        name: symbol,
-        shares,
-        fillPrice: fill,
-        total: gross,
-        cashAfter,
-        status: 'FILLED',
-        notes: `[REPLAY - ${replayDate || 'Past NSE'}] Executed via Trade Time Machine`,
-        isReplay: true,
-      };
-      state.ledger.unshift(receipt);
-      addNotification('Replay Order Executed', `[REPLAY] ${side} ${shares} shares of ${symbol}`);
-      return { success: true, receipt };
-    }
-
-    if (isAuthenticated) {
-      try {
-        if (!options.submitOrderMock) {
-          throw new Error('submitOrderMock not configured');
-        }
-        const res = await options.submitOrderMock(
-          {
-            symbol,
-            side,
-            order_type: orderType,
-            quantity: shares,
-            limit_price: customPrice,
-          },
-          idempotencyKey
-        );
-
-        if (res.status === 'FILLED') {
-          const fill = Number(res.fill_price) || 0;
-          const gross = Number(res.gross_value) || fill * shares;
-          const cashAfter = Number(res.cash_balance_after);
-          if (!isNaN(cashAfter) && res.cash_balance_after !== undefined) {
-            updateVirtualCash(cashAfter);
-          }
-
-          const receipt: LedgerEntry = {
-            id: res.order_id,
-            timestamp: new Date().toISOString(),
-            type: side,
-            orderType,
-            symbol: res.symbol,
-            name: res.symbol,
-            shares: Number(res.quantity) || shares,
-            fillPrice: fill,
-            total: gross,
-            cashAfter: !isNaN(cashAfter) ? cashAfter : state.virtualCash,
-            status: 'FILLED',
-            notes: `Executed via FinEx Paper Matching Engine at ₹${fill}`,
-          };
-
-          await refreshAccount();
-          addNotification('Order Executed', `${side} ${shares} ${symbol}`);
-          return { success: true, receipt };
-        } else if (res.status === 'ACCEPTED' || res.status === 'PENDING') {
-          const receipt: LedgerEntry = {
-            id: res.order_id,
-            timestamp: new Date().toISOString(),
-            type: side,
-            orderType,
-            symbol: res.symbol,
-            name: res.symbol,
-            shares: Number(res.quantity) || shares,
-            fillPrice: 0,
-            total: (customPrice || 0) * (Number(res.quantity) || shares),
-            cashAfter: state.virtualCash,
-            status: 'PENDING',
-            notes: `Order placed and pending fill in FinEx Order Book. Limit: ₹${customPrice || 0}`,
-          };
-          state.ledger.unshift(receipt);
-          await refreshAccount();
-          addNotification('Order Placed (Pending)', `Order pending fill`);
-          return { success: true, receipt };
-        } else {
-          const rejectionReason = res.rejection_reason || res.error || `Order ${res.status}: Order could not be filled.`;
-          return {
-            success: false,
-            error: rejectionReason,
-          };
-        }
-      } catch (err: any) {
-        const isNetworkOrTimeout =
-          err?.code === 'TIMEOUT' ||
-          err?.code === 'NETWORK_ERROR' ||
-          err?.status === 408 ||
-          err?.status === 0 ||
-          err?.name === 'TypeError' ||
-          err?.message?.includes('fetch') ||
-          err?.message?.includes('timeout') ||
-          err?.message?.includes('NetworkError');
-
-        if (isNetworkOrTimeout) {
-          try {
-            await refreshAccount();
-            if (options.getOrdersMock) {
-              const orderList = await options.getOrdersMock();
-              const matchedOrder = orderList?.orders?.find((o: any) => o.idempotency_key === idempotencyKey);
-              if (matchedOrder) {
-                if (matchedOrder.status === 'FILLED') {
-                  const fill = Number(matchedOrder.fill_price) || 0;
-                  const gross = Number(matchedOrder.gross_value) || fill * shares;
-                  const cashAfter = Number(matchedOrder.cash_balance_after);
-                  if (!isNaN(cashAfter)) {
-                    updateVirtualCash(cashAfter);
-                  }
-                  const receipt: LedgerEntry = {
-                    id: matchedOrder.id,
-                    timestamp: new Date().toISOString(),
-                    type: side,
-                    orderType,
-                    symbol: matchedOrder.symbol,
-                    shares: Number(matchedOrder.quantity) || shares,
-                    fillPrice: fill,
-                    total: gross,
-                    cashAfter: !isNaN(cashAfter) ? cashAfter : state.virtualCash,
-                    status: 'FILLED',
-                    notes: `Reconciled order via FinEx Paper Matching Engine at ₹${fill}`,
-                  };
-                  state.ledger.unshift(receipt);
-                  return { success: true, receipt };
-                } else if (matchedOrder.status === 'ACCEPTED' || matchedOrder.status === 'PENDING') {
-                  const receipt: LedgerEntry = {
-                    id: matchedOrder.id,
-                    timestamp: new Date().toISOString(),
-                    type: side,
-                    orderType,
-                    symbol: matchedOrder.symbol,
-                    shares: Number(matchedOrder.quantity) || shares,
-                    fillPrice: 0,
-                    total: (customPrice || 0) * (Number(matchedOrder.quantity) || shares),
-                    cashAfter: state.virtualCash,
-                    status: 'PENDING',
-                    notes: 'Reconciled pending order in FinEx Order Book.',
-                  };
-                  state.ledger.unshift(receipt);
-                  return { success: true, receipt };
-                }
-              }
-            }
-          } catch (reconcileErr) {
-            // Reconcile error handled gracefully
-          }
-
-          return {
-            success: false,
-            error:
-              'Order status uncertain due to network timeout. FinEx is reconciling your account. Please check your order activity before retrying to prevent duplicate trades.',
-          };
-        }
-
-        return {
-          success: false,
-          error: err?.message || 'Order failed on the server.',
-        };
-      }
-    }
-
-    // Unauthenticated demo sandbox mode
-    const fill = customPrice || 1000;
-    const gross = fill * shares;
-    if (side === 'BUY' && gross > state.virtualCash) {
-      return {
-        success: false,
-        error: `Insufficient virtual cash balance for trade.`,
-      };
-    }
-    const cashAfter = side === 'BUY' ? Math.max(0, state.virtualCash - gross) : state.virtualCash + gross;
-    updateVirtualCash(cashAfter);
-
-    const receipt: LedgerEntry = {
-      id: `ord-demo-test`,
-      timestamp: new Date().toISOString(),
-      type: side,
-      orderType,
-      symbol,
-      shares,
-      fillPrice: fill,
-      total: gross,
-      cashAfter,
-      status: 'FILLED',
-      notes: `[DEMO - Unauthenticated Sandbox] Simulated locally at ₹${fill}. Log in for persistent paper trading.`,
-    };
-    state.ledger.unshift(receipt);
-    addNotification('Demo Order Executed', `[Demo] ${side} ${shares} ${symbol}`);
-    return { success: true, receipt };
-  };
-
-  return { state, executeOrder };
+  return { state, context, execute };
 }
 
-describe('Frontend Paper-Order Execution Verification Suite', () => {
+describe('Frontend Paper-Order Execution (Actual Production Logic)', () => {
   it('1. Backend rejection does NOT mutate cash, holdings, or create fake filled receipt', async () => {
-    const { state, executeOrder } = createOrderEngine(
-      { virtualCash: 100000, holdings: [{ symbol: 'RELIANCE', name: 'Reliance', shares: 10, avgPrice: 2400, currentPrice: 2450 }] },
-      {
-        isAuthenticated: true,
-        submitOrderMock: async () => ({
-          status: 'REJECTED',
-          rejection_reason: 'Risk limit exceeded: maximum allocation 25% of virtual cash portfolio',
-        }),
-      }
-    );
-
-    const res = await executeOrder('TCS', 'BUY', 50, 'MARKET');
-
-    assert.equal(res.success, false);
-    assert.match(res.error || '', /Risk limit exceeded/);
-    assert.equal(state.virtualCash, 100000, 'Cash balance must not be modified on rejection');
-    assert.equal(state.holdings.length, 1, 'Holdings must not change on rejection');
-    assert.equal(state.ledger.length, 0, 'No fake filled receipt should be added to ledger');
-  });
-
-  it('2. Backend HTTP 500 error does NOT mutate cash, holdings, or create local fill receipt', async () => {
-    const { state, executeOrder } = createOrderEngine(
-      { virtualCash: 85000 },
+    let submitCallCount = 0;
+    const { state, execute } = createTestHarness(
+      { virtualCash: 100000, holdings: [], ledger: [] },
       {
         isAuthenticated: true,
         submitOrderMock: async () => {
-          const err: any = new Error('HTTP 500: Internal Server Error');
+          submitCallCount++;
+          return {
+            status: 'REJECTED',
+            rejection_reason: 'Market quote is stale or unavailable. Trade rejected.',
+          };
+        },
+      }
+    );
+
+    const result = await execute({
+      symbol: 'RELIANCE',
+      type: 'BUY',
+      shares: 10,
+      orderType: 'MARKET',
+    });
+
+    assert.equal(result.success, false, 'Expected order execution to fail');
+    assert.match(result.error || '', /stale/i, 'Expected error message to explain stale quote rejection');
+    assert.equal(result.receipt, undefined, 'Must not return an order receipt on rejection');
+    assert.equal(submitCallCount, 1, 'Expected exactly one submission');
+    assert.equal(state.virtualCash, 100000, 'Virtual cash must NOT be deducted');
+    assert.equal(state.holdings.length, 0, 'Holdings must NOT be mutated');
+    assert.equal(state.ledger.length, 0, 'No ledger receipt should be recorded');
+  });
+
+  it('2. Backend HTTP 500 error does NOT mutate cash, holdings, or create local fill receipt', async () => {
+    const { state, execute } = createTestHarness(
+      { virtualCash: 85000, holdings: [], ledger: [] },
+      {
+        isAuthenticated: true,
+        submitOrderMock: async () => {
+          const err: any = new Error('Database transaction lock conflict in paper trading engine');
           err.status = 500;
           throw err;
         },
       }
     );
 
-    const res = await executeOrder('INFY', 'BUY', 20, 'MARKET');
+    const result = await execute({
+      symbol: 'TCS',
+      type: 'BUY',
+      shares: 5,
+      orderType: 'MARKET',
+    });
 
-    assert.equal(res.success, false);
-    assert.match(res.error || '', /HTTP 500/);
+    assert.equal(result.success, false, 'HTTP 500 must report failure');
+    assert.match(result.error || '', /lock conflict/i, 'Must propagate error message');
+    assert.equal(result.receipt, undefined, 'No receipt on HTTP 500');
     assert.equal(state.virtualCash, 85000, 'Virtual cash must remain intact');
-    assert.equal(state.ledger.length, 0, 'Ledger must not record a fake order receipt');
+    assert.equal(state.holdings.length, 0, 'Holdings must not change');
+    assert.equal(state.ledger.length, 0, 'Ledger must not contain fake fill');
   });
 
   it('3. Network timeout treats outcome as uncertain and instructs user to check order activity before retry', async () => {
-    const { state, executeOrder } = createOrderEngine(
-      { virtualCash: 50000 },
+    let reconcileOrdersCalled = false;
+    const { state, execute } = createTestHarness(
+      { virtualCash: 50000, holdings: [], ledger: [] },
       {
         isAuthenticated: true,
         submitOrderMock: async () => {
-          const err: any = new Error('Request timed out while connecting to FinEx server.');
+          const err: any = new Error('Request timed out while connecting to FinEx server. The server may be waking up.');
           err.code = 'TIMEOUT';
           err.status = 408;
           throw err;
         },
-        getOrdersMock: async () => ({ orders: [], total: 0 }), // Order not found in backend history yet
+        getOrdersMock: async () => {
+          reconcileOrdersCalled = true;
+          // Orders list does not yet have this key (outcome still uncertain)
+          return { orders: [], total: 0 };
+        },
       }
     );
 
-    const res = await executeOrder('HDFCBANK', 'BUY', 10, 'MARKET');
+    const result = await execute({
+      symbol: 'INFY',
+      type: 'BUY',
+      shares: 10,
+      orderType: 'MARKET',
+      idempotencyKey: 'idemp-timeout-test-123',
+    });
 
-    assert.equal(res.success, false);
-    assert.match(res.error || '', /Order status uncertain due to network timeout/);
-    assert.match(res.error || '', /Please check your order activity before retrying/);
-    assert.equal(state.virtualCash, 50000, 'Cash must not be prematurely deducted');
-    assert.equal(state.ledger.length, 0, 'No premature filled receipt should exist');
+    assert.equal(result.success, false, 'Must fail closed with uncertain status');
+    assert.match(result.error || '', /network timeout/i, 'Must explain timeout reason');
+    assert.match(result.error || '', /check your order activity/i, 'Must advise user before retrying');
+    assert.equal(reconcileOrdersCalled, true, 'Must have attempted reconciliation');
+    assert.equal(result.receipt, undefined, 'Must not manufacture a local fill receipt');
+    assert.equal(state.virtualCash, 50000, 'Must not mutate cash on timeout');
+    assert.equal(state.holdings.length, 0, 'Must not mutate holdings on timeout');
+    assert.equal(state.ledger.length, 0, 'Must not append uncertain order to ledger');
   });
 
-  it('4. Successful order reconciled during timeout is adopted without duplicate receipts', async () => {
-    let capturedKey = '';
-    const { state, executeOrder } = createOrderEngine(
-      { virtualCash: 100000 },
+  it('4. Successful order found during reconciliation is adopted without duplicate receipts', async () => {
+    const idempKey = 'idemp-reconcile-success-456';
+    const { state, execute } = createTestHarness(
+      { virtualCash: 100000, holdings: [], ledger: [] },
       {
         isAuthenticated: true,
-        submitOrderMock: async (_payload, key) => {
-          capturedKey = key;
+        submitOrderMock: async () => {
+          // Network connection dropped while awaiting backend response
           const err: any = new Error('Network error connecting to FinEx server.');
           err.code = 'NETWORK_ERROR';
-          err.status = 0;
           throw err;
         },
-        getOrdersMock: async () => ({
-          orders: [
-            {
-              id: 'ord-server-reconciled-99',
-              symbol: 'WIPRO',
-              quantity: 25,
-              fill_price: 450.0,
-              gross_value: 11250.0,
-              cash_balance_after: 88750.0,
-              status: 'FILLED',
-              idempotency_key: capturedKey,
-            },
-          ],
-          total: 1,
-        }),
+        getOrdersMock: async () => {
+          return {
+            orders: [
+              {
+                id: 'ord-backend-rec-888',
+                order_id: 'ord-backend-rec-888',
+                symbol: 'RELIANCE',
+                side: 'BUY',
+                quantity: 10,
+                fill_price: 2500.0,
+                gross_value: 25000.0,
+                cash_balance_after: 75000.0,
+                status: 'FILLED',
+                idempotency_key: idempKey,
+              },
+            ],
+            total: 1,
+          };
+        },
       }
     );
 
-    const res = await executeOrder('WIPRO', 'BUY', 25, 'MARKET');
+    const result = await execute({
+      symbol: 'RELIANCE',
+      type: 'BUY',
+      shares: 10,
+      orderType: 'MARKET',
+      idempotencyKey: idempKey,
+    });
 
-    assert.equal(res.success, true);
-    assert.ok(res.receipt);
-    assert.equal(res.receipt.status, 'FILLED');
-    assert.equal(res.receipt.fillPrice, 450.0);
-    assert.equal(res.receipt.id, 'ord-server-reconciled-99');
-    assert.equal(state.virtualCash, 88750.0, 'Cash balance updated from server cash_balance_after');
-    assert.equal(state.ledger.length, 1, 'Only one reconciled receipt should be recorded');
+    assert.equal(result.success, true, 'Order reconciliation should succeed');
+    assert.ok(result.receipt, 'Must provide reconciled receipt');
+    assert.equal(result.receipt?.id, 'ord-backend-rec-888', 'Must use backend order id');
+    assert.equal(result.receipt?.status, 'FILLED');
+    assert.equal(result.receipt?.fillPrice, 2500.0);
+    assert.equal(result.receipt?.total, 25000.0);
+    assert.equal(state.virtualCash, 75000.0, 'Virtual cash updated to authoritative server value');
+    assert.equal(state.ledger.length, 1, 'Only one receipt added to ledger');
+    assert.match(state.ledger[0].notes || '', /reconciled order/i, 'Receipt must note reconciliation');
   });
 
   it('5. ACCEPTED / PENDING limit order creates pending receipt without cash deduction or fill price', async () => {
-    const { state, executeOrder } = createOrderEngine(
-      { virtualCash: 100000 },
+    const { state, execute } = createTestHarness(
+      { virtualCash: 100000, holdings: [], ledger: [] },
       {
         isAuthenticated: true,
-        submitOrderMock: async () => ({
-          order_id: 'ord-limit-pending-01',
-          symbol: 'RELIANCE',
-          side: 'BUY',
-          quantity: 10,
-          limit_price: 2350.0,
-          status: 'PENDING',
-        }),
+        submitOrderMock: async (payload) => {
+          return {
+            order_id: 'ord-limit-pending-999',
+            symbol: payload.symbol,
+            side: payload.side,
+            quantity: payload.quantity,
+            status: 'PENDING',
+            limit_price: payload.limit_price,
+            fill_price: null,
+            cash_balance_after: 100000,
+          };
+        },
       }
     );
 
-    const res = await executeOrder('RELIANCE', 'BUY', 10, 'LIMIT', 2350.0);
+    const result = await execute({
+      symbol: 'TCS',
+      type: 'BUY',
+      shares: 5,
+      orderType: 'LIMIT',
+      customPrice: 3200.0,
+    });
 
-    assert.equal(res.success, true);
-    assert.ok(res.receipt);
-    assert.equal(res.receipt.status, 'PENDING');
-    assert.equal(res.receipt.fillPrice, 0, 'Pending order must have fillPrice = 0');
-    assert.equal(state.virtualCash, 100000, 'Cash must NOT be deducted while order is pending');
-    assert.equal(state.ledger.length, 1);
+    assert.equal(result.success, true, 'Pending order should be acknowledged');
+    assert.ok(result.receipt, 'Must return pending receipt');
+    assert.equal(result.receipt?.status, 'PENDING');
+    assert.equal(result.receipt?.fillPrice, 0, 'Fill price must be 0 while pending');
+    assert.equal(result.receipt?.total, 16000.0, 'Limit total calculated');
+    assert.equal(state.virtualCash, 100000, 'Cash must NOT be deducted while order is pending fill');
+    assert.equal(state.holdings.length, 0, 'Holdings must NOT be added while order is pending');
+    assert.equal(state.ledger.length, 1, 'Pending order recorded in ledger');
     assert.equal(state.ledger[0].status, 'PENDING');
   });
 
   it('6. FILLED order synchronizes cash balance and triggers backend account refresh', async () => {
-    const { state, executeOrder } = createOrderEngine(
-      { virtualCash: 100000 },
+    let refreshCalled = false;
+    const { state, execute } = createTestHarness(
+      { virtualCash: 100000, holdings: [], ledger: [] },
       {
         isAuthenticated: true,
-        submitOrderMock: async () => ({
-          order_id: 'ord-filled-101',
-          symbol: 'TCS',
-          side: 'BUY',
-          quantity: 5,
-          fill_price: 3400.0,
-          gross_value: 17000.0,
-          cash_balance_after: 83000.0,
-          status: 'FILLED',
-        }),
+        submitOrderMock: async () => {
+          return {
+            order_id: 'ord-fill-777',
+            symbol: 'INFY',
+            side: 'BUY',
+            quantity: 20,
+            fill_price: 1500.0,
+            gross_value: 30000.0,
+            cash_balance_after: 70000.0,
+            status: 'FILLED',
+          };
+        },
       }
     );
 
-    const res = await executeOrder('TCS', 'BUY', 5, 'MARKET');
+    // Track refreshAccount
+    const origRefresh = state.accountRefreshed;
 
-    assert.equal(res.success, true);
-    assert.ok(res.receipt);
-    assert.equal(res.receipt.status, 'FILLED');
-    assert.equal(res.receipt.fillPrice, 3400.0);
-    assert.equal(state.virtualCash, 83000.0);
-    assert.equal(state.accountRefreshed, true, 'Backend refreshAccount must be called');
+    const result = await execute({
+      symbol: 'INFY',
+      type: 'BUY',
+      shares: 20,
+      orderType: 'MARKET',
+    });
+
+    assert.equal(result.success, true);
+    assert.ok(result.receipt);
+    assert.equal(result.receipt?.id, 'ord-fill-777');
+    assert.equal(result.receipt?.fillPrice, 1500.0);
+    assert.equal(result.receipt?.status, 'FILLED');
+    assert.equal(state.virtualCash, 70000.0, 'Authoritative cash synchronized');
+    assert.equal(state.accountRefreshed, true, 'refreshAccount must be called');
   });
 
   it('7. Replay trading remains segregated with [REPLAY] notes and notifications', async () => {
-    const { state, executeOrder } = createOrderEngine(
-      { virtualCash: 50000 },
+    const { state, execute } = createTestHarness(
+      { virtualCash: 50000, holdings: [], ledger: [] },
       { isAuthenticated: true }
     );
 
-    const res = await executeOrder('RELIANCE', 'BUY', 10, 'LIMIT', 2200.0, true, '2024-03-15');
+    const result = await execute({
+      symbol: 'RELIANCE',
+      type: 'BUY',
+      shares: 10,
+      orderType: 'MARKET',
+      customPrice: 2000.0,
+      isReplay: true,
+      replayDate: '2025-01-15',
+    });
 
-    assert.equal(res.success, true);
-    assert.ok(res.receipt);
-    assert.equal(res.receipt.isReplay, true);
-    assert.match(res.receipt.notes || '', /\[REPLAY - 2024-03-15\]/);
-    assert.equal(state.notifications[0].title, 'Replay Order Executed');
+    assert.equal(result.success, true);
+    assert.ok(result.receipt);
+    assert.equal(result.receipt?.isReplay, true);
+    assert.equal(result.receipt?.replayDate, '2025-01-15');
+    assert.match(result.receipt?.notes || '', /\[REPLAY - 2025-01-15\]/);
+    assert.equal(state.virtualCash, 30000.0);
+    assert.equal(state.holdings.length, 1);
+    assert.equal(state.holdings[0].shares, 10);
+    assert.equal(state.notifications.length, 1);
     assert.match(state.notifications[0].message, /\[REPLAY\]/);
   });
 
   it('8. Unauthenticated demo sandbox mode explicitly labels simulated trades with [DEMO]', async () => {
-    const { state, executeOrder } = createOrderEngine(
-      { virtualCash: 100000 },
-      { isAuthenticated: false }
+    const { state, execute } = createTestHarness(
+      { virtualCash: 100000, holdings: [], ledger: [] },
+      {
+        isAuthenticated: false, // Unauthenticated sandbox
+        quotePrice: 2400.0,
+      }
     );
 
-    const res = await executeOrder('INFY', 'BUY', 10, 'MARKET', 1500.0);
+    const result = await execute({
+      symbol: 'TATAMOTORS',
+      type: 'BUY',
+      shares: 10,
+      orderType: 'MARKET',
+    });
 
-    assert.equal(res.success, true);
-    assert.ok(res.receipt);
-    assert.match(res.receipt.notes || '', /\[DEMO - Unauthenticated Sandbox\]/);
-    assert.equal(state.notifications[0].title, 'Demo Order Executed');
-    assert.match(state.notifications[0].message, /\[Demo\]/);
+    assert.equal(result.success, true);
+    assert.ok(result.receipt);
+    assert.match(result.receipt?.id || '', /^ord-demo-/);
+    assert.match(result.receipt?.notes || '', /\[DEMO - Unauthenticated Sandbox\]/);
+    assert.equal(state.virtualCash, 76000.0);
+    assert.equal(state.holdings.length, 1);
+    assert.equal(state.notifications.length, 1);
+    assert.match(state.notifications[0].title, /Demo Order/);
+  });
+
+  it('9. Helper functions: isNetworkOrTimeoutError, calculateNewHoldings, and generateIdempotencyKey', () => {
+    assert.equal(isNetworkOrTimeoutError({ code: 'TIMEOUT' }), true);
+    assert.equal(isNetworkOrTimeoutError({ status: 408 }), true);
+    assert.equal(isNetworkOrTimeoutError({ status: 500, message: 'Internal Server Error' }), false);
+
+    const key = generateIdempotencyKey();
+    assert.match(key, /^web-ord-\d+-[a-z0-9]+$/);
+
+    const initialHoldings: HoldingItem[] = [];
+    const afterBuy = calculateNewHoldings(initialHoldings, 'TCS', 'BUY', 10, 3000, 30000);
+    assert.equal(afterBuy.length, 1);
+    assert.equal(afterBuy[0].shares, 10);
+    assert.equal(afterBuy[0].avgPrice, 3000);
+
+    const afterSecondBuy = calculateNewHoldings(afterBuy, 'TCS', 'BUY', 10, 4000, 40000);
+    assert.equal(afterSecondBuy.length, 1);
+    assert.equal(afterSecondBuy[0].shares, 20);
+    assert.equal(afterSecondBuy[0].avgPrice, 3500);
+
+    const afterSell = calculateNewHoldings(afterSecondBuy, 'TCS', 'SELL', 5, 4500, 22500);
+    assert.equal(afterSell.length, 1);
+    assert.equal(afterSell[0].shares, 15);
+    assert.equal(afterSell[0].avgPrice, 3500);
+
+    const afterCompleteSell = calculateNewHoldings(afterSell, 'TCS', 'SELL', 15, 4500, 67500);
+    assert.equal(afterCompleteSell.length, 0);
   });
 });
-

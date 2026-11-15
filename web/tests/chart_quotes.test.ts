@@ -1,222 +1,229 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-
-interface MarketQuote {
-  symbol: string;
-  name: string;
-  price: number;
-  changeVal: number;
-  changePct: number;
-  isPositive: boolean;
-  high: number;
-  low: number;
-  volume: string;
-  source?: string;
-  observedAt?: string;
-  isDelayed?: boolean;
-  isStale?: boolean;
-  isPriceUnavailable?: boolean;
-  isChangeUnavailable?: boolean;
-  isHighLowUnavailable?: boolean;
-}
+import {
+  cleanSymbol,
+  createDefaultQuote,
+  parseRawQuote,
+  formatQuotePrice,
+  formatQuoteChange,
+  formatQuoteHighLow,
+  calculateRangeSliderWidth,
+  getFeedStatusBadge,
+} from '../src/domain/chartQuoteProcessing.ts';
+import type { MarketQuote } from '../src/context/FinancialContext.ts';
 
 /**
- * Mirroring the exact quote transformation and UI display logic in ChartWorkspaceScreen.tsx
+ * Chart Workspace Quotes & Market Data Processing Suite.
+ *
+ * This test suite directly exercises the production quote handling functions in
+ * `web/src/domain/chartQuoteProcessing.ts` (used by `web/src/pages/ChartWorkspaceScreen.tsx`).
  */
-function processQuoteResponse(
-  q: any,
-  cleanSelectedSymbol: string,
-  prevQuote: MarketQuote | null
-): MarketQuote | null {
-  const cleanQSymbol = (q.symbol || '').replace('.NS', '').replace('NSE:', '').trim();
-  if (cleanQSymbol !== cleanSelectedSymbol) {
-    return null; // Discard stale or mismatched symbol response
-  }
 
-  const hasPrice = q.price !== undefined && q.price !== null && !isNaN(Number(q.price)) && Number(q.price) > 0;
-  const p = hasPrice ? (typeof q.price === 'string' ? parseFloat(q.price) : Number(q.price)) : 0;
-
-  const hasChg = q.change !== undefined && q.change !== null && !isNaN(Number(q.change));
-  const hasChgPct = q.change_pct !== undefined && q.change_pct !== null && !isNaN(Number(q.change_pct));
-  const isChangeMissing = !hasChg || !hasChgPct;
-  const chg = hasChg ? Number(q.change) : 0;
-  const chgPct = hasChgPct ? Number(q.change_pct) : 0;
-
-  const hasHigh = q.high_price !== undefined && q.high_price !== null && !isNaN(Number(q.high_price)) && Number(q.high_price) > 0;
-  const hasLow = q.low_price !== undefined && q.low_price !== null && !isNaN(Number(q.low_price)) && Number(q.low_price) > 0;
-  const isHighLowMissing = !hasHigh || !hasLow;
-  const high = hasHigh ? Number(q.high_price) : 0;
-  const low = hasLow ? Number(q.low_price) : 0;
-
-  const vol = q.volume !== undefined && q.volume !== null && Number(q.volume) > 0
-    ? `${(Number(q.volume) / 1e6).toFixed(1)}M`
-    : '—';
-
-  return {
-    symbol: cleanQSymbol,
-    name: q.canonical_id || q.symbol,
-    price: hasPrice ? p : (prevQuote?.price ?? 0),
-    changeVal: !isChangeMissing ? chg : (prevQuote?.changeVal ?? 0),
-    changePct: !isChangeMissing ? chgPct : (prevQuote?.changePct ?? 0),
-    isPositive: !isChangeMissing ? chg >= 0 : (prevQuote?.isPositive ?? false),
-    high: hasHigh ? high : (prevQuote?.high ?? 0),
-    low: hasLow ? low : (prevQuote?.low ?? 0),
-    volume: vol !== '—' ? vol : (prevQuote?.volume || '—'),
-    source: q.source || prevQuote?.source,
-    observedAt: q.observed_at || prevQuote?.observedAt,
-    isDelayed: q.is_delayed ?? prevQuote?.isDelayed,
-    isStale: q.is_stale ?? prevQuote?.isStale,
-    isPriceUnavailable: !hasPrice && (prevQuote?.isPriceUnavailable ?? true),
-    isChangeUnavailable: isChangeMissing && (prevQuote?.isChangeUnavailable ?? true),
-    isHighLowUnavailable: isHighLowMissing && (prevQuote?.isHighLowUnavailable ?? true),
-  };
-}
-
-function renderPriceDisplay(quote: MarketQuote, currency: string = 'INR'): { priceText: string; changeText: string; changeClass: string } {
-  const priceText = !quote.isPriceUnavailable && quote.price > 0
-    ? `${currency === 'USD' ? '$' : '₹'}${quote.price.toFixed(2)}`
-    : '—';
-
-  let changeText = '—';
-  let changeClass = 'neutral';
-
-  if (!quote.isChangeUnavailable) {
-    if (quote.changeVal === 0) {
-      changeText = '0.00 (0.00%)';
-      changeClass = 'neutral';
-    } else if (quote.changeVal > 0) {
-      changeText = `+${quote.changeVal.toFixed(2)} (+${quote.changePct.toFixed(2)}%)`;
-      changeClass = 'positive';
-    } else {
-      changeText = `${quote.changeVal.toFixed(2)} (${quote.changePct.toFixed(2)}%)`;
-      changeClass = 'negative';
-    }
-  }
-
-  return { priceText, changeText, changeClass };
-}
-
-describe('Chart Workspace Quotes & Symbol Switching Suite', () => {
+describe('Chart Workspace Quotes (Actual Production Logic)', () => {
   it('1. Missing price, change, and high/low are marked unavailable and display neutral "—"', () => {
-    const rawQuote = {
+    // Backend returns raw quote with missing change and missing high/low
+    const rawQuoteMissing = {
       symbol: 'RELIANCE',
       price: null,
-      change: null,
+      change: undefined,
       change_pct: null,
       high_price: null,
       low_price: null,
       volume: null,
     };
 
-    const quote = processQuoteResponse(rawQuote, 'RELIANCE', null);
-    assert.ok(quote);
-    assert.equal(quote.isPriceUnavailable, true, 'Price must be flagged as unavailable');
-    assert.equal(quote.isChangeUnavailable, true, 'Change must be flagged as unavailable');
-    assert.equal(quote.isHighLowUnavailable, true, 'High/Low must be flagged as unavailable');
+    const parsed = parseRawQuote(rawQuoteMissing, 'RELIANCE');
+    assert.ok(parsed, 'Quote for matching symbol must be parsed');
+    assert.equal(parsed.isPriceUnavailable, true, 'Price must be flagged as unavailable');
+    assert.equal(parsed.isChangeUnavailable, true, 'Change must be flagged as unavailable');
+    assert.equal(parsed.isHighLowUnavailable, true, 'High/low must be flagged as unavailable');
 
-    const display = renderPriceDisplay(quote);
-    assert.equal(display.priceText, '—', 'Missing price must render as "—", not 0');
-    assert.equal(display.changeText, '—', 'Missing change must render as "—", not 0.00%');
-    assert.equal(display.changeClass, 'neutral');
+    // Display formatting
+    const priceText = formatQuotePrice(parsed);
+    assert.equal(priceText, '—', 'Missing price must render as neutral "—", NOT 0 or ₹0.00');
+
+    const changeFormatted = formatQuoteChange(parsed);
+    assert.equal(changeFormatted.text, '—', 'Missing change must render as neutral "—"');
+    assert.equal(changeFormatted.isUnavailable, true);
+    assert.equal(changeFormatted.color, '#8E8E93', 'Must use neutral grey color');
+
+    const highText = formatQuoteHighLow(parsed.high, parsed.isHighLowUnavailable);
+    assert.equal(highText, '—', 'Missing high must render as "—"');
+
+    const lowText = formatQuoteHighLow(parsed.low, parsed.isHighLowUnavailable);
+    assert.equal(lowText, '—', 'Missing low must render as "—"');
+
+    const sliderWidth = calculateRangeSliderWidth(
+      parsed.price,
+      parsed.high,
+      parsed.low,
+      parsed.isPriceUnavailable,
+      parsed.isHighLowUnavailable
+    );
+    assert.equal(sliderWidth, '0%', 'Slider width must be 0% when range is unavailable');
   });
 
   it('2. Legitimate zero change (0.00 / 0.00%) is preserved and displayed as genuine zero, not unavailable', () => {
-    const rawQuote = {
+    // Valid unchanged trading session (0.00 change)
+    const rawUnchanged = {
       symbol: 'TCS',
-      price: 3500.0,
+      price: 3450.5,
       change: 0.0,
       change_pct: 0.0,
-      high_price: 3520.0,
-      low_price: 3480.0,
+      high_price: 3460.0,
+      low_price: 3440.0,
       volume: 1200000,
     };
 
-    const quote = processQuoteResponse(rawQuote, 'TCS', null);
-    assert.ok(quote);
-    assert.equal(quote.isPriceUnavailable, false);
-    assert.equal(quote.isChangeUnavailable, false, 'Legitimate 0 change must NOT be flagged as unavailable');
-    assert.equal(quote.changeVal, 0.0);
-    assert.equal(quote.changePct, 0.0);
+    const parsed = parseRawQuote(rawUnchanged, 'TCS');
+    assert.ok(parsed);
+    assert.equal(parsed.price, 3450.5);
+    assert.equal(parsed.isPriceUnavailable, false);
+    assert.equal(parsed.isChangeUnavailable, false, 'Genuine zero change must NOT be flagged as unavailable');
+    assert.equal(parsed.changeVal, 0);
+    assert.equal(parsed.changePct, 0);
 
-    const display = renderPriceDisplay(quote);
-    assert.equal(display.priceText, '₹3500.00');
-    assert.equal(display.changeText, '0.00 (0.00%)', 'Legitimate zero change must render as "0.00 (0.00%)"');
-    assert.equal(display.changeClass, 'neutral');
+    const changeFormatted = formatQuoteChange(parsed);
+    assert.equal(changeFormatted.isZero, true);
+    assert.equal(changeFormatted.isUnavailable, false);
+    assert.equal(changeFormatted.text, '0.00 (0.00%)', 'Must display exact 0.00 (0.00%) format');
+    assert.equal(changeFormatted.color, '#8E8E93', 'Zero change must use neutral grey (#8E8E93), not green or red');
   });
 
   it('3. Genuine positive and negative changes render with correct sign and color class', () => {
-    const positiveQuote = processQuoteResponse(
-      { symbol: 'INFY', price: 1600.0, change: 24.5, change_pct: 1.55, high_price: 1610, low_price: 1580, volume: 500000 },
-      'INFY',
-      null
-    );
-    assert.ok(positiveQuote);
-    const posDisplay = renderPriceDisplay(positiveQuote);
-    assert.equal(posDisplay.priceText, '₹1600.00');
-    assert.equal(posDisplay.changeText, '+24.50 (+1.55%)');
-    assert.equal(posDisplay.changeClass, 'positive');
+    // Positive change
+    const positiveQuote: MarketQuote = {
+      symbol: 'INFY',
+      name: 'Infosys Limited',
+      price: 1520.0,
+      changeVal: 15.25,
+      changePct: 1.01,
+      isPositive: true,
+      high: 1530.0,
+      low: 1500.0,
+      volume: '2.5M',
+      isPriceUnavailable: false,
+      isChangeUnavailable: false,
+      isHighLowUnavailable: false,
+    };
 
-    const negativeQuote = processQuoteResponse(
-      { symbol: 'INFY', price: 1580.0, change: -20.0, change_pct: -1.25, high_price: 1610, low_price: 1575, volume: 600000 },
-      'INFY',
-      null
-    );
-    assert.ok(negativeQuote);
-    const negDisplay = renderPriceDisplay(negativeQuote);
-    assert.equal(negDisplay.priceText, '₹1580.00');
-    assert.equal(negDisplay.changeText, '-20.00 (-1.25%)');
-    assert.equal(negDisplay.changeClass, 'negative');
+    const posFormatted = formatQuoteChange(positiveQuote);
+    assert.equal(posFormatted.valFormatted, '+15.25');
+    assert.equal(posFormatted.pctFormatted, '+1.01%');
+    assert.equal(posFormatted.text, '+15.25 (+1.01%)');
+    assert.equal(posFormatted.color, '#26A69A', 'Positive change must use green (#26A69A)');
+
+    // Negative change
+    const negativeQuote: MarketQuote = {
+      symbol: 'HDFCBANK',
+      name: 'HDFC Bank Limited',
+      price: 1650.0,
+      changeVal: -22.5,
+      changePct: -1.35,
+      isPositive: false,
+      high: 1680.0,
+      low: 1640.0,
+      volume: '4.1M',
+      isPriceUnavailable: false,
+      isChangeUnavailable: false,
+      isHighLowUnavailable: false,
+    };
+
+    const negFormatted = formatQuoteChange(negativeQuote);
+    assert.equal(negFormatted.valFormatted, '-22.50');
+    assert.equal(negFormatted.pctFormatted, '-1.35%');
+    assert.equal(negFormatted.text, '-22.50 (-1.35%)');
+    assert.equal(negFormatted.color, '#EF5350', 'Negative change must use red (#EF5350)');
   });
 
   it('4. Switching symbols immediately rejects stale responses from previous symbol', () => {
-    // Current symbol in workspace is TCS, but an async response for previous symbol RELIANCE arrives
+    // Current selected symbol is TCS, but an async response for previous symbol RELIANCE arrives
     const staleResponse = {
       symbol: 'RELIANCE',
       price: 2600.0,
-      change: 15.0,
-      change_pct: 0.58,
+      change: 12.0,
+      change_pct: 0.46,
     };
 
-    const quote = processQuoteResponse(staleResponse, 'TCS', null);
-    assert.equal(quote, null, 'Response for RELIANCE must be discarded when selectedSymbol is TCS');
+    const targetSymbol = 'TCS';
+    const result = parseRawQuote(staleResponse, targetSymbol);
+
+    assert.equal(result, null, 'Must return null and discard response for non-selected symbol');
+
+    // Now test response for active symbol TCS with .NS suffix
+    const validResponse = {
+      symbol: 'TCS.NS',
+      price: 3450.0,
+      change: -10.0,
+      change_pct: -0.29,
+    };
+    const validResult = parseRawQuote(validResponse, targetSymbol);
+    assert.ok(validResult, 'Must accept matching symbol regardless of .NS suffix');
+    assert.equal(validResult?.symbol, 'TCS');
+    assert.equal(validResult?.price, 3450.0);
   });
 
   it('5. Switching symbol isolates active quote state and displays placeholder until new quote loads', () => {
-    const previousSymbolQuote: MarketQuote = {
+    const defaultPlaceholder = createDefaultQuote('INFY');
+
+    assert.equal(defaultPlaceholder.symbol, 'INFY');
+    assert.equal(defaultPlaceholder.price, 0);
+    assert.equal(defaultPlaceholder.isPriceUnavailable, true);
+    assert.equal(defaultPlaceholder.isChangeUnavailable, true);
+    assert.equal(defaultPlaceholder.isHighLowUnavailable, true);
+    assert.equal(formatQuotePrice(defaultPlaceholder), '—');
+    assert.equal(formatQuoteChange(defaultPlaceholder).text, '—');
+  });
+
+  it('6. Feed status badge accurately reflects stale cache, delayed feed, live NSE, and replay modes', () => {
+    const baseQuote: MarketQuote = {
       symbol: 'RELIANCE',
-      name: 'Reliance Industries',
-      price: 2500.0,
-      changeVal: 15.0,
-      changePct: 0.6,
+      name: 'Reliance',
+      price: 2500,
+      changeVal: 10,
+      changePct: 0.4,
       isPositive: true,
       high: 2520,
       low: 2480,
-      volume: '3.2M',
+      volume: '1.2M',
     };
 
-    // User switches to WIPRO; activeQuote is cleared (null) or symbol checked
-    const cleanSelectedSymbol = 'WIPRO';
-    const matchingActiveQuote = previousSymbolQuote.symbol === cleanSelectedSymbol ? previousSymbolQuote : null;
-    assert.equal(matchingActiveQuote, null, 'Active quote from previous symbol must not match newly selected symbol');
+    // Stale offline cache
+    const staleBadge = getFeedStatusBadge({ ...baseQuote, isStale: true });
+    assert.equal(staleBadge.label, 'Market Offline (Stale Cache)');
+    assert.equal(staleBadge.dotColor, '#8E8E93');
 
-    const defaultQuote: MarketQuote = {
-      symbol: cleanSelectedSymbol,
-      name: cleanSelectedSymbol,
-      price: 0,
-      changeVal: 0,
-      changePct: 0,
-      isPositive: false,
-      high: 0,
-      low: 0,
-      volume: '—',
-      isPriceUnavailable: true,
-      isChangeUnavailable: true,
-      isHighLowUnavailable: true,
-    };
+    // Delayed feed
+    const delayedBadge = getFeedStatusBadge({ ...baseQuote, isDelayed: true });
+    assert.equal(delayedBadge.label, 'Delayed Feed');
+    assert.equal(delayedBadge.dotColor, '#F29A60');
 
-    const display = renderPriceDisplay(defaultQuote);
-    assert.equal(display.priceText, '—', 'New symbol must show "—" until quote arrives');
-    assert.equal(display.changeText, '—');
+    // Indian live data
+    const liveBadge = getFeedStatusBadge(baseQuote, { mode: 'INDIAN_LIVE_DATA', feed_label: 'Angel One SmartAPI (Live NSE Feed)' });
+    assert.equal(liveBadge.label, 'Angel One SmartAPI (Live NSE Feed)');
+    assert.equal(liveBadge.dotColor, '#26A69A');
+
+    // Replay mode with educational lag
+    const replayBadge = getFeedStatusBadge(baseQuote, { mode: 'INDIAN_OFFLINE_EDUCATIONAL', sebi_educational_lag_days: 45 });
+    assert.equal(replayBadge.label, 'NSE Historical Replay (45D Lag)');
+    assert.equal(replayBadge.dotColor, '#F29A60');
+  });
+
+  it('7. Today\'s range slider width calculation conforms to boundaries', () => {
+    // Normal range
+    const widthMid = calculateRangeSliderWidth(2500, 2600, 2400, false, false);
+    assert.equal(widthMid, '50%');
+
+    // At low boundary (clamps to min 5%)
+    const widthLow = calculateRangeSliderWidth(2400, 2600, 2400, false, false);
+    assert.equal(widthLow, '5%');
+
+    // At high boundary (clamps to max 100%)
+    const widthHigh = calculateRangeSliderWidth(2600, 2600, 2400, false, false);
+    assert.equal(widthHigh, '100%');
+
+    // Inverted or invalid high/low
+    const widthInvalid = calculateRangeSliderWidth(2500, 2400, 2600, false, false);
+    assert.equal(widthInvalid, '0%');
   });
 });
-

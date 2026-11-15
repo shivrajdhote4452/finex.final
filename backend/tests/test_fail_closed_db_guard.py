@@ -239,3 +239,75 @@ def test_maintenance_database_access_enforcement():
     url_remote = "postgresql+asyncpg://postgres:pass@ep-gentle-frog.neon.tech/postgres"
     with pytest.raises(RuntimeError, match="remote/cloud database host"):
         validate_test_database_allowlist(url_remote, allow_maintenance=True)
+
+
+def test_allowlist_rejects_remote_network_ips_even_with_test_name_and_clean_user():
+    """Verify that remote network IPs are blocked by host boundary alone, regardless of db name or username."""
+    # Public IP
+    url1 = "postgresql+asyncpg://safe_test_user:pass@198.51.100.22:5432/finex_test_clean_8f3a92b1"
+    with pytest.raises(RuntimeError, match="non-local host '198.51.100.22'"):
+        validate_test_database_allowlist(url1)
+
+    # Private LAN IP
+    url2 = "postgresql+asyncpg://safe_test_user:pass@10.0.0.50:5432/test_db"
+    with pytest.raises(RuntimeError, match="non-local host '10.0.0.50'"):
+        validate_test_database_allowlist(url2)
+
+    # Alternate private LAN IP
+    url3 = "postgresql+asyncpg://safe_test_user:pass@172.16.20.10:5432/test_db"
+    with pytest.raises(RuntimeError, match="non-local host '172.16.20.10'"):
+        validate_test_database_allowlist(url3)
+
+
+def test_allowlist_rejects_unapproved_driver_schemes():
+    """Verify that unapproved driver schemes are rejected immediately, preventing non-approved driver invocations."""
+    unapproved_urls = [
+        "mysql://safe_user:pass@127.0.0.1:3306/finex_test_db",
+        "oracle://safe_user:pass@127.0.0.1:1521/finex_test_db",
+        "redis://127.0.0.1:6379/test_db",
+        "mongodb://safe_user:pass@127.0.0.1:27017/test_db",
+        "http://127.0.0.1:8000/test.db",
+    ]
+    for url in unapproved_urls:
+        with pytest.raises(RuntimeError, match="Unsupported or unapproved database scheme"):
+            validate_test_database_allowlist(url)
+
+
+def test_allowlist_rejects_remote_sqlite_hosts():
+    """Verify that SQLite connection strings cannot specify remote network shares or hosts."""
+    url = "sqlite://remote-fileshare.corp.internal/test.db"
+    with pytest.raises(RuntimeError, match="unexpected non-local host"):
+        validate_test_database_allowlist(url)
+
+
+def test_allowlist_rejects_sqlite_query_parameter_memory_spoofing():
+    """Verify that query parameters attempting to fake in-memory SQLite do not approve non-test files."""
+    url = "sqlite:///production_vault.db?mode=memory&cache=shared"
+    with pytest.raises(RuntimeError, match="does not contain 'test' in its filename"):
+        validate_test_database_allowlist(url)
+
+
+def test_active_test_environment_database_isolation():
+    """Verify that the currently active test environment DATABASE_URL is verified safe and isolated."""
+    import os
+    from urllib.parse import urlparse
+    from backend.app.config import get_settings
+
+    active_url = os.environ.get("DATABASE_URL", "")
+    assert active_url, "DATABASE_URL must be configured in active test environment"
+
+    # Must pass validation without raising
+    validate_test_database_allowlist(active_url)
+
+    # Confirm host is strictly local
+    parsed = urlparse(active_url)
+    scheme = parsed.scheme.lower()
+    if "postgres" in scheme:
+        assert parsed.hostname in ("127.0.0.1", "localhost"), f"Postgres test host must be loopback, got {parsed.hostname}"
+    elif "sqlite" in scheme:
+        assert parsed.hostname in ("", None, "127.0.0.1", "localhost"), f"SQLite host must be empty or loopback, got {parsed.hostname}"
+
+    # Confirm no remote cloud markers in environment
+    for marker in ("neon.tech", "ep-gentle-frog", "aws.neon.tech", "render.com"):
+        assert marker not in active_url.lower(), f"Detected cloud marker {marker} in active test DATABASE_URL"
+
