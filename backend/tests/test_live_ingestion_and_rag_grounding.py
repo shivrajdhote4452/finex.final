@@ -153,7 +153,9 @@ async def test_diversification_query_does_not_assert_unsupported_sebi_caps():
     retriever = RegulatoryDocumentRetriever(chunks=ingest_corpus_documents())
     orchestrator = AIOrchestrator(retriever=retriever)
 
-    resp = await orchestrator.answer_query("What are the single stock and single sector limits under SEBI diversification rules?")
+    resp = await orchestrator.answer_query(
+        "What are the single stock and single sector limits under SEBI diversification rules?"
+    )
     assert resp.intent == AIIntent.FINANCIAL_EDUCATION
     assert resp.is_fallback is False
     assert len(resp.citations) >= 1
@@ -165,21 +167,29 @@ async def test_diversification_query_does_not_assert_unsupported_sebi_caps():
     assert "sebi rules mandate 10%" not in content_lower
 
     # 2. Must clarify that the circular rule does not govern individual personal direct equity portfolios
-    assert "no statutory percentage holding limits" in content_lower or \
-           "sebi regulations do not prescribe mandatory percentage" in content_lower or \
-           "not as a statutory sebi regulation" in content_lower or \
-           "does not apply to individual" in content_lower or \
-           "does not govern individual" in content_lower or \
-           "illustrative" in content_lower
+    assert (
+        "no statutory percentage holding limits" in content_lower
+        or "sebi regulations do not prescribe mandatory percentage" in content_lower
+        or "not as a statutory sebi regulation" in content_lower
+        or "does not apply to individual" in content_lower
+        or "does not govern individual" in content_lower
+        or "illustrative" in content_lower
+    )
 
     # 3. Must accurately explain mutual fund concentration limits with current Master Circular, historical context, scope and exceptions
-    assert "master circular for mutual funds" in content_lower or "seventh schedule" in content_lower or "1774024028162.pdf" in content_lower
+    assert (
+        "master circular for mutual funds" in content_lower
+        or "seventh schedule" in content_lower
+        or "1774024028162.pdf" in content_lower
+    )
     assert "actively managed mutual fund schemes" in content_lower or "mutual fund scheme" in content_lower
     assert "does not apply to individual" in content_lower or "does not govern individual" in content_lower
     assert "index funds" in content_lower or "etfs" in content_lower
 
     # 4. Must describe diversification as reducing some risks, not guaranteeing protection against losses
-    assert "reduces some risks" in content_lower or "reduce some risks" in content_lower or "unsystematic" in content_lower
+    assert (
+        "reduces some risks" in content_lower or "reduce some risks" in content_lower or "unsystematic" in content_lower
+    )
     assert "not guarantee protection against" in content_lower or "does not eliminate market risk" in content_lower
 
     # 5. Verified citations must include FinEx educational summary and NEVER reference internal blueprints
@@ -299,7 +309,8 @@ async def test_engineering_blueprint_excluded_from_retrieval_and_citations():
 @pytest.mark.asyncio
 async def test_groq_synthesis_receives_anti_hallucination_diversification_instructions():
     """Verify system prompt passed to Groq contains explicit directives against inventing SEBI retail caps."""
-    from unittest.mock import AsyncMock, patch
+    from unittest.mock import patch
+
     from backend.app.domain.gemini_assistant import gemini_assistant
 
     retriever = RegulatoryDocumentRetriever(chunks=ingest_corpus_documents())
@@ -317,8 +328,10 @@ async def test_groq_synthesis_receives_anti_hallucination_diversification_instru
             "whereas statutory 10% caps apply to mutual fund schemes under SEBI regulations."
         )
 
-    with patch.object(gemini_assistant, "is_llm_ready", return_value=True), \
-         patch.object(gemini_assistant, "call_llm_api", side_effect=mock_call_llm):
+    with (
+        patch.object(gemini_assistant, "is_llm_ready", return_value=True),
+        patch.object(gemini_assistant, "call_llm_api", side_effect=mock_call_llm),
+    ):
         resp = await orchestrator.answer_query("Explain SEBI rules on 10% stock diversification")
 
         assert resp.intent == AIIntent.FINANCIAL_EDUCATION
@@ -411,7 +424,10 @@ async def test_sebi_explanation_source_labels_and_page_reference_removal():
     formatted = format_citation(chunk_unpaged)
     assert "p." not in formatted
     assert "None" not in formatted
-    assert formatted == "[SEBI Master Circular for Mutual Funds: Portfolio Concentration Norms, Section 1: Portfolio Concentration Limits for Mutual Fund Schemes]"
+    assert (
+        formatted
+        == "[SEBI Master Circular for Mutual Funds: Portfolio Concentration Norms, Section 1: Portfolio Concentration Limits for Mutual Fund Schemes]"
+    )
 
 
 @pytest.mark.asyncio
@@ -424,7 +440,9 @@ async def test_regulatory_wording_no_broad_claims_and_accurate_circular_links():
     retriever = RegulatoryDocumentRetriever(chunks=ingest_corpus_documents(include_educational_summaries=True))
     orchestrator = AIOrchestrator(retriever=retriever)
 
-    resp = await orchestrator.answer_query("What are the diversification rules and single-stock exposure limits under SEBI regulations?")
+    resp = await orchestrator.answer_query(
+        "What are the diversification rules and single-stock exposure limits under SEBI regulations?"
+    )
     assert resp.intent == AIIntent.FINANCIAL_EDUCATION
     content_lower = resp.content.lower()
 
@@ -453,7 +471,10 @@ async def test_regulatory_wording_no_broad_claims_and_accurate_circular_links():
 
     # 3. Prudent risk characterization
     assert "does not guarantee" in content_lower or "not eliminate market risk" in content_lower
-    assert "unaffected or will offset losses" not in content_lower or "does not guarantee that other investments will be unaffected" in content_lower
+    assert (
+        "unaffected or will offset losses" not in content_lower
+        or "does not guarantee that other investments will be unaffected" in content_lower
+    )
 
 
 @pytest.mark.asyncio
@@ -468,9 +489,10 @@ async def test_source_to_claim_mapping_and_stray_reference_cleanup():
        - Incomplete trailing references headers are removed.
        - Duplicate citation labels ('FinEx Educational Summary: FinEx Educational Summary') are cleaned.
     """
+    from unittest.mock import patch
+
     from backend.app.domain.ai_orchestration import clean_orchestrated_response_text
     from backend.app.domain.gemini_assistant import gemini_assistant
-    from unittest.mock import patch
 
     # 1. Test clean_orchestrated_response_text on stray numbering and duplicate labels
     dirty_text_1 = (
@@ -484,19 +506,13 @@ async def test_source_to_claim_mapping_and_stray_reference_cleanup():
     assert "2." not in cleaned_1
     assert "1. [SEBI Master Circular for Mutual Funds: Portfolio Concentration Norms]" in cleaned_1
 
-    dirty_text_2 = (
-        "Educational overview of asset allocation.\n\n"
-        "References:\n"
-        "2.  "
-    )
+    dirty_text_2 = "Educational overview of asset allocation.\n\nReferences:\n2.  "
     cleaned_2 = clean_orchestrated_response_text(dirty_text_2)
     assert "2." not in cleaned_2
     assert "References:" not in cleaned_2
     assert cleaned_2 == "Educational overview of asset allocation."
 
-    dirty_text_3 = (
-        "Source: FinEx Educational Summary based on official SEBI sources: FinEx Educational Summary: Mutual Fund Concentration Norms"
-    )
+    dirty_text_3 = "Source: FinEx Educational Summary based on official SEBI sources: FinEx Educational Summary: Mutual Fund Concentration Norms"
     cleaned_3 = clean_orchestrated_response_text(dirty_text_3)
     assert "FinEx Educational Summary: FinEx Educational Summary" not in cleaned_3
     assert "FinEx Educational Summary based on official SEBI sources: Mutual Fund Concentration Norms" in cleaned_3
@@ -505,7 +521,9 @@ async def test_source_to_claim_mapping_and_stray_reference_cleanup():
     retriever = RegulatoryDocumentRetriever(chunks=ingest_corpus_documents(include_educational_summaries=True))
     orchestrator = AIOrchestrator(retriever=retriever)
 
-    resp = await orchestrator.answer_query("What are the diversification rules and single-stock exposure limits under SEBI regulations?")
+    resp = await orchestrator.answer_query(
+        "What are the diversification rules and single-stock exposure limits under SEBI regulations?"
+    )
     assert resp.intent == AIIntent.FINANCIAL_EDUCATION
     # Check that response text has no stray trailing '2.'
     assert not resp.content.strip().endswith("2.")
@@ -526,20 +544,22 @@ async def test_source_to_claim_mapping_and_stray_reference_cleanup():
     # 3. Test behavior when official circular is NOT among retrieved sources
     # Supply chunks lacking the SEBI circular
     heuristics_only_chunks = [
-        c for c in ingest_corpus_documents(include_educational_summaries=True)
-        if c.document_id != "SEBI-CIRC-MF-2026"
+        c for c in ingest_corpus_documents(include_educational_summaries=True) if c.document_id != "SEBI-CIRC-MF-2026"
     ]
     retriever_no_mf = RegulatoryDocumentRetriever(chunks=heuristics_only_chunks)
     orchestrator_no_mf = AIOrchestrator(retriever=retriever_no_mf)
 
     captured_prompt = None
+
     async def mock_call(prompt, sys_instruct):
         nonlocal captured_prompt
         captured_prompt = sys_instruct
         return "Heuristics suggest 10-15% single-stock exposure. No official SEBI circular was retrieved to verify statutory limits."
 
-    with patch.object(gemini_assistant, "is_llm_ready", return_value=True), \
-         patch.object(gemini_assistant, "call_llm_api", side_effect=mock_call):
+    with (
+        patch.object(gemini_assistant, "is_llm_ready", return_value=True),
+        patch.object(gemini_assistant, "call_llm_api", side_effect=mock_call),
+    ):
         resp_no_mf = await orchestrator_no_mf.answer_query("What are the mutual fund single-stock concentration rules?")
         assert captured_prompt is not None
         assert "If that specific circular source was NOT retrieved" in captured_prompt
@@ -559,7 +579,3 @@ async def test_source_to_claim_mapping_and_stray_reference_cleanup():
         )
         assert "Statutory Mutual Fund Concentration Norms" in resp_fb_mf.content
         assert "https://www.sebi.gov.in/sebi_data/attachdocs/mar-2026/1774024028162.pdf" in resp_fb_mf.content
-
-
-
-

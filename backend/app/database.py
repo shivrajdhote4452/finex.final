@@ -9,7 +9,7 @@ import sys
 from typing import Any, AsyncGenerator, Dict
 from urllib.parse import urlparse
 
-from backend.app.config import Environment, get_settings
+from backend.app.config import Environment, get_settings, sanitize_asyncpg_url
 from backend.app.ports.storage import AbstractOperationalStorage
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -23,44 +23,46 @@ engine_kwargs: Dict[str, Any] = {
     "future": True,
 }
 
-from backend.app.config import sanitize_asyncpg_url
-
 # Normalize and sanitize DATABASE_URL to asyncpg dialect defensively
 db_url = sanitize_asyncpg_url(settings.DATABASE_URL)
 
 # FAIL-CLOSED SAFEGUARD: Enforce isolated test database allowlist policy
 is_test_env = (
-    "pytest" in sys.modules
-    or settings.ENVIRONMENT == Environment.TESTING
-    or "PYTEST_CURRENT_TEST" in os.environ
+    "pytest" in sys.modules or settings.ENVIRONMENT == Environment.TESTING or "PYTEST_CURRENT_TEST" in os.environ
 )
 
 APPROVED_SQLITE_SCHEMES = frozenset({"sqlite", "sqlite+aiosqlite", "sqlite+pysqlite"})
-APPROVED_POSTGRES_SCHEMES = frozenset({
-    "postgresql",
-    "postgresql+asyncpg",
-    "postgresql+psycopg",
-    "postgresql+psycopg2",
-    "postgres",
-})
+APPROVED_POSTGRES_SCHEMES = frozenset(
+    {
+        "postgresql",
+        "postgresql+asyncpg",
+        "postgresql+psycopg",
+        "postgresql+psycopg2",
+        "postgres",
+    }
+)
 
-DISALLOWED_PROD_USERNAMES = frozenset({
-    "neondb_owner",
-    "cloud_admin",
-    "render",
-    "rds_admin",
-    "prod_admin",
-    "prod_user",
-})
+DISALLOWED_PROD_USERNAMES = frozenset(
+    {
+        "neondb_owner",
+        "cloud_admin",
+        "render",
+        "rds_admin",
+        "prod_admin",
+        "prod_user",
+    }
+)
 
-DISALLOWED_PROD_DBNAMES = frozenset({
-    "neondb",
-    "finex_db",
-    "finex",
-    "production",
-    "prod",
-    "live",
-})
+DISALLOWED_PROD_DBNAMES = frozenset(
+    {
+        "neondb",
+        "finex_db",
+        "finex",
+        "production",
+        "prod",
+        "live",
+    }
+)
 
 REMOTE_CLOUD_MARKERS = (
     "neon.tech",
@@ -82,7 +84,7 @@ REMOTE_CLOUD_MARKERS = (
 
 def validate_test_database_allowlist(url_str: str, allow_maintenance: bool = False) -> None:
     """Validate that the database connection points to an approved isolated test database.
-    
+
     Fail-Closed Policy:
     1. Parse the actual database scheme/driver:
        - Approved SQLite schemes: 'sqlite', 'sqlite+aiosqlite', 'sqlite+pysqlite'
@@ -168,9 +170,7 @@ def validate_test_database_allowlist(url_str: str, allow_maintenance: bool = Fal
         # File-based SQLite: the database filename itself must explicitly contain 'test'
         norm_path = clean_path.replace("\\", "/")
         if norm_path.endswith("/"):
-            raise RuntimeError(
-                "CRITICAL FAIL-CLOSED ERROR: SQLite database file target is invalid or missing."
-            )
+            raise RuntimeError("CRITICAL FAIL-CLOSED ERROR: SQLite database file target is invalid or missing.")
 
         filename = os.path.basename(norm_path).lower()
         if not filename or "test" not in filename:
@@ -215,12 +215,16 @@ def validate_test_database_allowlist(url_str: str, allow_maintenance: bool = Fal
         raw_path = (parsed.path or "").strip()
         clean_path = raw_path.lstrip("/")
         if not clean_path:
-            raise RuntimeError("CRITICAL FAIL-CLOSED ERROR: Automated tests attempted to connect without specifying a database name.")
+            raise RuntimeError(
+                "CRITICAL FAIL-CLOSED ERROR: Automated tests attempted to connect without specifying a database name."
+            )
 
         norm_path = clean_path.replace("\\", "/")
         dbname = os.path.basename(norm_path).lower()
         if not dbname:
-            raise RuntimeError("CRITICAL FAIL-CLOSED ERROR: Automated tests attempted to connect without specifying a database name.")
+            raise RuntimeError(
+                "CRITICAL FAIL-CLOSED ERROR: Automated tests attempted to connect without specifying a database name."
+            )
 
         if allow_maintenance and dbname in ("postgres", "template1"):
             return

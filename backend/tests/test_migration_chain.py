@@ -35,6 +35,7 @@ def get_admin_and_disposable_urls(db_name: str):
 async def create_disposable_database(db_name: str):
     admin_url, disposable_url = get_admin_and_disposable_urls(db_name)
     from backend.app.database import validate_test_database_allowlist
+
     validate_test_database_allowlist(admin_url, allow_maintenance=True)
     validate_test_database_allowlist(disposable_url)
     engine = create_async_engine(admin_url, isolation_level="AUTOCOMMIT")
@@ -47,6 +48,7 @@ async def create_disposable_database(db_name: str):
 async def drop_disposable_database(db_name: str):
     admin_url, _ = get_admin_and_disposable_urls(db_name)
     from backend.app.database import validate_test_database_allowlist
+
     validate_test_database_allowlist(admin_url, allow_maintenance=True)
     engine = create_async_engine(admin_url, isolation_level="AUTOCOMMIT")
     async with engine.connect() as conn:

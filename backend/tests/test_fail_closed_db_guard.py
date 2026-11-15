@@ -167,6 +167,7 @@ def test_allowlist_rejects_malformed_and_unsupported_schemes():
 def test_direct_create_async_engine_call_intercepted_and_blocked():
     """Verify that direct create_async_engine calls cannot bypass the safety check."""
     import sqlalchemy.ext.asyncio
+
     url = "postgresql+asyncpg://admin:pass@ep-gentle-frog-remote.neon.tech/prod"
     with pytest.raises(RuntimeError, match="remote/cloud database host"):
         sqlalchemy.ext.asyncio.create_async_engine(url)
@@ -175,6 +176,7 @@ def test_direct_create_async_engine_call_intercepted_and_blocked():
 def test_direct_create_engine_sync_call_intercepted_and_blocked():
     """Verify that direct create_engine (sync) calls cannot bypass the safety check."""
     import sqlalchemy
+
     url = "postgresql://admin:pass@remote-cloud.com/test_db"
     with pytest.raises(RuntimeError, match="non-local host"):
         sqlalchemy.create_engine(url)
@@ -217,6 +219,7 @@ def test_allowlist_rejects_symlink_to_non_test_target(tmp_path):
     symlink_test = tmp_path / "test_link.db"
     try:
         import os
+
         os.symlink(target_non_test, symlink_test)
     except (OSError, NotImplementedError):
         pytest.skip("Symlink creation not supported in current execution environment")
@@ -291,7 +294,6 @@ def test_active_test_environment_database_isolation():
     """Verify that the currently active test environment DATABASE_URL is verified safe and isolated."""
     import os
     from urllib.parse import urlparse
-    from backend.app.config import get_settings
 
     active_url = os.environ.get("DATABASE_URL", "")
     assert active_url, "DATABASE_URL must be configured in active test environment"
@@ -303,11 +305,14 @@ def test_active_test_environment_database_isolation():
     parsed = urlparse(active_url)
     scheme = parsed.scheme.lower()
     if "postgres" in scheme:
-        assert parsed.hostname in ("127.0.0.1", "localhost"), f"Postgres test host must be loopback, got {parsed.hostname}"
+        assert parsed.hostname in ("127.0.0.1", "localhost"), (
+            f"Postgres test host must be loopback, got {parsed.hostname}"
+        )
     elif "sqlite" in scheme:
-        assert parsed.hostname in ("", None, "127.0.0.1", "localhost"), f"SQLite host must be empty or loopback, got {parsed.hostname}"
+        assert parsed.hostname in ("", None, "127.0.0.1", "localhost"), (
+            f"SQLite host must be empty or loopback, got {parsed.hostname}"
+        )
 
     # Confirm no remote cloud markers in environment
     for marker in ("neon.tech", "ep-gentle-frog", "aws.neon.tech", "render.com"):
         assert marker not in active_url.lower(), f"Detected cloud marker {marker} in active test DATABASE_URL"
-

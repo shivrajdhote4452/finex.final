@@ -30,19 +30,19 @@ def clean_orchestrated_response_text(text: str) -> str:
 
     # Remove duplicate "FinEx Educational Summary: FinEx Educational Summary"
     cleaned = re.sub(
-        r'FinEx Educational Summary(?:\s+based on official SEBI sources)?:\s*FinEx Educational Summary[:\s]*',
-        'FinEx Educational Summary based on official SEBI sources: ',
+        r"FinEx Educational Summary(?:\s+based on official SEBI sources)?:\s*FinEx Educational Summary[:\s]*",
+        "FinEx Educational Summary based on official SEBI sources: ",
         text,
         flags=re.IGNORECASE,
     )
     # Remove any trailing stray list items e.g. "\n2." or "\n  2.  "
-    cleaned = re.sub(r'(?m)^\s*\d+\.\s*$', '', cleaned).strip()
+    cleaned = re.sub(r"(?m)^\s*\d+\.\s*$", "", cleaned).strip()
 
     # Remove trailing empty References / Sources section headers (with or without markdown headers and colons)
-    cleaned = re.sub(r'(?i)(?:#{1,6}\s*)?(?:References|Sources):?\s*\Z', '', cleaned).strip()
+    cleaned = re.sub(r"(?i)(?:#{1,6}\s*)?(?:References|Sources):?\s*\Z", "", cleaned).strip()
 
     # Re-check trailing stray item or dangling list marker at the very end
-    cleaned = re.sub(r'\n+\s*\d+\.\s*$', '', cleaned).strip()
+    cleaned = re.sub(r"\n+\s*\d+\.\s*$", "", cleaned).strip()
 
     return cleaned
 
@@ -323,12 +323,17 @@ class AIOrchestrator:
         ]
 
         # Structure response with accurate source attribution
-        is_official_regulatory = (
-            not (primary.publisher or "").startswith("FinEx")
-            and any(
-                reg in (primary.publisher or "")
-                for reg in ["Securities and Exchange Board of India", "SEBI", "Reserve Bank of India", "RBI", "NSE", "NISM", "AMFI"]
-            )
+        is_official_regulatory = not (primary.publisher or "").startswith("FinEx") and any(
+            reg in (primary.publisher or "")
+            for reg in [
+                "Securities and Exchange Board of India",
+                "SEBI",
+                "Reserve Bank of India",
+                "RBI",
+                "NSE",
+                "NISM",
+                "AMFI",
+            ]
         )
         if is_official_regulatory:
             headline = f"Regulatory Insights: {primary.section or primary.title}"

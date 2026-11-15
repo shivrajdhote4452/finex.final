@@ -14,8 +14,6 @@ import logging
 from decimal import Decimal
 from typing import Optional
 
-logger = logging.getLogger("finex.paper_trading")
-
 from backend.app.core.envelope import create_response_envelope
 from backend.app.database import get_db
 from backend.app.domain.paper_trading_service import (
@@ -27,6 +25,8 @@ from backend.app.routers.auth import get_current_user_id, is_owner
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger("finex.paper_trading")
 
 router = APIRouter(prefix="/paper-trading", tags=["Paper Trading (Simulated)"])
 engine = PaperTradingEngine()
@@ -88,7 +88,16 @@ async def submit_paper_order(
     try:
         result = await engine.execute_order_db(user_id, payload, db=db)
         data = result.model_dump(mode="json")
-        for num_field in ["fill_price", "price", "quantity", "gross_value", "fee", "net_value", "cash_balance_after", "realized_pnl"]:
+        for num_field in [
+            "fill_price",
+            "price",
+            "quantity",
+            "gross_value",
+            "fee",
+            "net_value",
+            "cash_balance_after",
+            "realized_pnl",
+        ]:
             if num_field in data and data[num_field] is not None:
                 try:
                     data[num_field] = float(data[num_field])

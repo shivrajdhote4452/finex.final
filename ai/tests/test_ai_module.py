@@ -30,7 +30,9 @@ def test_corpus_documents_have_verifiable_metadata():
         assert doc["document_id"], "document_id must not be empty"
         assert doc["title"], "title must not be empty"
         assert doc["publisher"], "publisher must be specified"
-        assert doc["source_url"].startswith("http") or doc["source_url"].startswith("local://"), f"source_url must be valid: {doc['source_url']}"
+        assert doc["source_url"].startswith("http") or doc["source_url"].startswith("local://"), (
+            f"source_url must be valid: {doc['source_url']}"
+        )
         assert doc["document_date"], "document_date must be present"
         assert len(doc["sections"]) > 0, "document must have at least one section"
 

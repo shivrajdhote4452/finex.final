@@ -13,13 +13,13 @@ Validates:
 
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
+
 import jwt
 import pytest
-from httpx import ASGITransport, AsyncClient
-
 from backend.app.config import get_settings
 from backend.app.factory import create_app
 from backend.app.routers.auth import create_access_token
+from httpx import ASGITransport, AsyncClient
 
 app = create_app()
 settings = get_settings()

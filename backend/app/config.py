@@ -1,6 +1,12 @@
 import os
 import sys
+from enum import Enum
+from functools import lru_cache
+from typing import List, Optional
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 def sanitize_asyncpg_url(url_str: str) -> str:
@@ -26,21 +32,12 @@ def sanitize_asyncpg_url(url_str: str) -> str:
         if "sslmode" in query_params and "ssl" not in query_params:
             query_params["ssl"] = query_params.pop("sslmode")
         sanitized_params = {
-            k: v[0] if isinstance(v, list) else v
-            for k, v in query_params.items()
-            if k in allowed_params
+            k: v[0] if isinstance(v, list) else v for k, v in query_params.items() if k in allowed_params
         }
         sanitized_query = urlencode(sanitized_params)
         return urlunparse(parsed._replace(query=sanitized_query))
     except Exception:
         return url_str
-
-from enum import Enum
-from functools import lru_cache
-from typing import List, Optional
-
-from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Environment(str, Enum):
@@ -152,20 +149,24 @@ class Settings(BaseSettings):
         env = info.data.get("ENVIRONMENT", Environment.DEVELOPMENT)
 
         if env == Environment.PRODUCTION:
-            if "localhost" in sanitized.lower() or "127.0.0.1" in sanitized.lower() or "postgres:postgres@" in sanitized:
+            if (
+                "localhost" in sanitized.lower()
+                or "127.0.0.1" in sanitized.lower()
+                or "postgres:postgres@" in sanitized
+            ):
                 raise ValueError(
                     "Production requires a valid external DATABASE_URL provided via environment variables."
                 )
 
-        is_test = (
-            env == Environment.TESTING
-            or "pytest" in sys.modules
-            or "PYTEST_CURRENT_TEST" in os.environ
-        )
+        is_test = env == Environment.TESTING or "pytest" in sys.modules or "PYTEST_CURRENT_TEST" in os.environ
         if is_test:
             # Prevent remote database from silently becoming the test database
-            if any(m in sanitized.lower() for m in ["neon.tech", "ep-gentle-frog", "aws.neon.tech", "render.com", "supabase.co"]):
+            if any(
+                m in sanitized.lower()
+                for m in ["neon.tech", "ep-gentle-frog", "aws.neon.tech", "render.com", "supabase.co"]
+            ):
                 from dotenv import dotenv_values
+
                 _backend_env = dotenv_values("backend/.env")
                 _local_url = os.environ.get("TEST_DATABASE_URL") or _backend_env.get(
                     "DATABASE_URL", "postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/finex_test_db"

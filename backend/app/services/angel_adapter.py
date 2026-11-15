@@ -246,7 +246,9 @@ class AngelOneMarketAdapter(AbstractMarketDataProvider):
         """Perform headless 2FA TOTP authentication or token renewal to generate JWT session."""
         if not self.is_configured():
             diag = self.get_configuration_status()
-            logger.info(f"Angel One credentials incomplete. Missing/placeholder: {diag['missing_fields']}. Live Angel API skipped.")
+            logger.info(
+                f"Angel One credentials incomplete. Missing/placeholder: {diag['missing_fields']}. Live Angel API skipped."
+            )
             return False
 
         with self._auth_lock:

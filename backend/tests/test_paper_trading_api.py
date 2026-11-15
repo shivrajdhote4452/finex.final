@@ -76,6 +76,7 @@ def setup_paper_trading_module():
 @pytest.fixture
 def auth_headers():
     from backend.app.routers.auth import create_access_token
+
     token = create_access_token(
         user_id="usr-test-isolated-fixture",
         email="shivrajdhote4452@gmail.com",
@@ -83,7 +84,6 @@ def auth_headers():
         provider="google",
     )
     return {"Authorization": f"Bearer {token}"}
-
 
 
 @pytest.mark.asyncio
@@ -617,4 +617,3 @@ async def test_paper_trading_orders_history_contract_includes_idempotency_key(ap
         matching = [o for o in orders if o.get("order_id") == order_id or o.get("id") == order_id]
         assert len(matching) == 1, f"Expected order {order_id} in orders history"
         assert matching[0]["idempotency_key"] == unique_key
-

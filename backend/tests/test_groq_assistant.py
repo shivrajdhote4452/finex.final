@@ -1,6 +1,7 @@
 """Tests for AskFinEx Groq-only LLM integration, timeout controls, status reporting, and fallback behavior."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import httpx
 import pytest
 from backend.app.config import Settings
@@ -109,9 +110,7 @@ async def test_groq_success_and_live_status():
     mock_response = MagicMock(spec=httpx.Response)
     mock_response.status_code = 200
     mock_response.json.return_value = {
-        "choices": [
-            {"message": {"content": "Groq LPU synthesized technical momentum analysis for NSE equities."}}
-        ]
+        "choices": [{"message": {"content": "Groq LPU synthesized technical momentum analysis for NSE equities."}}]
     }
 
     with patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=mock_response):
@@ -209,9 +208,7 @@ async def test_groq_provider_succeeds_and_later_fails():
     # 2. First call succeeds
     mock_success = MagicMock(spec=httpx.Response)
     mock_success.status_code = 200
-    mock_success.json.return_value = {
-        "choices": [{"message": {"content": "Initial successful analysis."}}]
-    }
+    mock_success.json.return_value = {"choices": [{"message": {"content": "Initial successful analysis."}}]}
     with patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=mock_success):
         reply1 = await assistant.call_groq_api("ping", "pong")
         assert reply1 == "Initial successful analysis."
@@ -284,9 +281,7 @@ async def test_groq_fallback_model_on_model_not_found_error():
         else:
             resp = MagicMock(spec=httpx.Response)
             resp.status_code = 200
-            resp.json.return_value = {
-                "choices": [{"message": {"content": "Fallback model response succeeded."}}]
-            }
+            resp.json.return_value = {"choices": [{"message": {"content": "Fallback model response succeeded."}}]}
             return resp
 
     with patch("httpx.AsyncClient.post", side_effect=mock_post):
@@ -302,10 +297,16 @@ async def test_groq_fallback_model_on_model_not_found_error():
 # ------------------------------------------------------------------------------
 def test_router_status_endpoint_offline_mode(client):
     """Verify /api/v1/ai/assistant/status reports consistent offline simulation mode when unconfigured."""
-    with patch.object(gemini_assistant, "is_llm_ready", return_value=False), \
-         patch.object(gemini_assistant, "is_configured", return_value=False), \
-         patch.object(gemini_assistant, "is_verified_working", return_value=False), \
-         patch.object(gemini_assistant, "get_provider_info", return_value={"provider": "mock-offline", "model": "deterministic-engine"}):
+    with (
+        patch.object(gemini_assistant, "is_llm_ready", return_value=False),
+        patch.object(gemini_assistant, "is_configured", return_value=False),
+        patch.object(gemini_assistant, "is_verified_working", return_value=False),
+        patch.object(
+            gemini_assistant,
+            "get_provider_info",
+            return_value={"provider": "mock-offline", "model": "deterministic-engine"},
+        ),
+    ):
         res = client.get("/api/v1/ai/assistant/status")
         assert res.status_code == 200
         data = res.json()["data"]
@@ -319,10 +320,16 @@ def test_router_status_endpoint_offline_mode(client):
 
 def test_router_status_endpoint_live_mode(client):
     """Verify /api/v1/ai/assistant/status reports live Groq status when verified."""
-    with patch.object(gemini_assistant, "is_llm_ready", return_value=True), \
-         patch.object(gemini_assistant, "is_configured", return_value=True), \
-         patch.object(gemini_assistant, "is_verified_working", return_value=True), \
-         patch.object(gemini_assistant, "get_provider_info", return_value={"provider": "groq-live", "model": "openai/gpt-oss-120b"}):
+    with (
+        patch.object(gemini_assistant, "is_llm_ready", return_value=True),
+        patch.object(gemini_assistant, "is_configured", return_value=True),
+        patch.object(gemini_assistant, "is_verified_working", return_value=True),
+        patch.object(
+            gemini_assistant,
+            "get_provider_info",
+            return_value={"provider": "groq-live", "model": "openai/gpt-oss-120b"},
+        ),
+    ):
         res = client.get("/api/v1/ai/assistant/status")
         assert res.status_code == 200
         data = res.json()["data"]
@@ -336,11 +343,17 @@ def test_router_status_endpoint_live_mode(client):
 
 def test_router_status_endpoint_configured_but_unverified_mode(client):
     """Verify /api/v1/ai/assistant/status reports configured (unverified) status when API verification fails."""
-    with patch.object(gemini_assistant, "is_llm_ready", return_value=True), \
-         patch.object(gemini_assistant, "is_configured", return_value=True), \
-         patch.object(gemini_assistant, "is_verified_working", return_value=False), \
-         patch.object(gemini_assistant, "verify_live_connection", new_callable=AsyncMock, return_value=False), \
-         patch.object(gemini_assistant, "get_provider_info", return_value={"provider": "groq-configured", "model": "openai/gpt-oss-120b"}):
+    with (
+        patch.object(gemini_assistant, "is_llm_ready", return_value=True),
+        patch.object(gemini_assistant, "is_configured", return_value=True),
+        patch.object(gemini_assistant, "is_verified_working", return_value=False),
+        patch.object(gemini_assistant, "verify_live_connection", new_callable=AsyncMock, return_value=False),
+        patch.object(
+            gemini_assistant,
+            "get_provider_info",
+            return_value={"provider": "groq-configured", "model": "openai/gpt-oss-120b"},
+        ),
+    ):
         res = client.get("/api/v1/ai/assistant/status")
         assert res.status_code == 200
         data = res.json()["data"]

@@ -19,7 +19,7 @@ import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import httpx
 from backend.app.adapters.market_data_provider import INSTRUMENT_REGISTRY, RealMarketDataProvider
@@ -333,11 +333,13 @@ class GeminiInvestmentAssistant:
         url = "https://api.groq.com/openai/v1/chat/completions"
         start_time = time.monotonic()
 
-        for idx, model in enumerate(models_to_try):
+        for _idx, model in enumerate(models_to_try):
             elapsed = time.monotonic() - start_time
             remaining = total_timeout - elapsed
             if remaining <= 1.0:
-                print(f"[GroqAssistant] Total timeout budget ({total_timeout}s) exhausted. Falling back to local engine.")
+                print(
+                    f"[GroqAssistant] Total timeout budget ({total_timeout}s) exhausted. Falling back to local engine."
+                )
                 break
 
             current_timeout = min(per_attempt_timeout, remaining)
@@ -380,7 +382,9 @@ class GeminiInvestmentAssistant:
 
                     elif res.status_code in (400, 404, 422, 429, 503):
                         # Model-specific or capacity issue; allow fallback to next candidate if time permits
-                        print(f"[GroqAssistant] Model {model} returned status {res.status_code}. Attempting fallback if available.")
+                        print(
+                            f"[GroqAssistant] Model {model} returned status {res.status_code}. Attempting fallback if available."
+                        )
                         continue
 
                     else:
@@ -388,10 +392,14 @@ class GeminiInvestmentAssistant:
                         break
 
             except (httpx.ConnectError, httpx.ConnectTimeout) as conn_err:
-                print(f"[GroqAssistant] Host connection failed ({type(conn_err).__name__}). Aborting further model attempts.")
+                print(
+                    f"[GroqAssistant] Host connection failed ({type(conn_err).__name__}). Aborting further model attempts."
+                )
                 break
             except httpx.TimeoutException as to_err:
-                print(f"[GroqAssistant] Request timed out on model {model} ({type(to_err).__name__}). Aborting to preserve response latency.")
+                print(
+                    f"[GroqAssistant] Request timed out on model {model} ({type(to_err).__name__}). Aborting to preserve response latency."
+                )
                 break
             except Exception as e:
                 print(f"[GroqAssistant] Unexpected error for model {model}: {type(e).__name__} - {e}")

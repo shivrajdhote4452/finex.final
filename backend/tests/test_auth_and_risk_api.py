@@ -176,7 +176,10 @@ async def test_risk_questionnaire_and_assessment():
         eval_data = eval_resp.json()["data"]
         assert eval_data["risk_band"] == "MODERATE"
         assert 40 <= eval_data["composite_score"] < 70
-        assert "Guide to Financial Planning" in eval_data["citation"] or "FinEx Educational Summary" in eval_data["citation"]
+        assert (
+            "Guide to Financial Planning" in eval_data["citation"]
+            or "FinEx Educational Summary" in eval_data["citation"]
+        )
         assert "SEBI (Investment Advisers) Regulations" in eval_data["disclaimer"]
 
         # 3. Verify assessment persisted in profile
