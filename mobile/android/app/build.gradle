@@ -60,7 +60,14 @@ android {
             if (keystorePropertiesFile.exists()) {
                 keyAlias keystoreProperties['keyAlias']
                 keyPassword keystoreProperties['keyPassword']
-                storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : null
+                def sf = keystoreProperties['storeFile']
+                if (sf) {
+                    def resolved = file(sf)
+                    if (!resolved.exists() && rootProject.file(sf).exists()) {
+                        resolved = rootProject.file(sf)
+                    }
+                    storeFile resolved
+                }
                 storePassword keystoreProperties['storePassword']
             }
         }
@@ -71,8 +78,42 @@ android {
             if (keystorePropertiesFile.exists()) {
                 signingConfig signingConfigs.release
             } else {
-                signingConfig signingConfigs.debug
+                // Do NOT fall back silently to debug signing for release builds.
+                // Insecure debug signing fallback permanently removed.
+                signingConfig null
             }
+        }
+    }
+}
+
+gradle.taskGraph.whenReady { taskGraph ->
+    def isReleaseBuild = taskGraph.allTasks.any { task ->
+        def name = task.name.toLowerCase()
+        return name.contains("assemblerelease") || name.contains("bundlerelease")
+    }
+    if (isReleaseBuild) {
+        if (!keystorePropertiesFile.exists()) {
+            throw new GradleException(
+                "RELEASE BUILD FAILED: Insecure / missing release signing configuration!\n" +
+                "'mobile/android/key.properties' was not found.\n" +
+                "Silent fallback to debug signing has been permanently disabled for release builds.\n" +
+                "Please configure 'mobile/android/key.properties' with valid release credentials.\n" +
+                "See 'mobile/android/key.properties.example' for instructions."
+            )
+        }
+        def requiredKeys = ['storeFile', 'storePassword', 'keyAlias', 'keyPassword']
+        for (key in requiredKeys) {
+            if (!keystoreProperties.getProperty(key)) {
+                throw new GradleException("RELEASE BUILD FAILED: 'key.properties' is missing required property: ${key}")
+            }
+        }
+        def sf = keystoreProperties.getProperty('storeFile')
+        def resolved = file(sf)
+        if (!resolved.exists() && rootProject.file(sf).exists()) {
+            resolved = rootProject.file(sf)
+        }
+        if (!resolved.exists()) {
+            throw new GradleException("RELEASE BUILD FAILED: Keystore file '${sf}' specified in 'key.properties' does not exist.")
         }
     }
 }
