@@ -81,6 +81,9 @@ export interface UserProfileData {
   full_name?: string;
   display_name?: string;
   is_owner?: boolean;
+  has_password?: boolean;
+  has_google?: boolean;
+  email_verified?: boolean;
 }
 
 interface FinancialContextType {
@@ -234,6 +237,9 @@ export const FinancialProvider: React.FC<{ children: ReactNode }> = ({ children 
             full_name: me.full_name,
             display_name: me.display_name,
             is_owner: Boolean(me.is_owner),
+            has_password: Boolean(me.has_password),
+            has_google: Boolean(me.has_google),
+            email_verified: Boolean(me.email_verified),
           });
         }
       } catch {
