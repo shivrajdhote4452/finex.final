@@ -847,9 +847,7 @@ class UserStore:
         owns_session = db is None
         session = db if db is not None else AsyncSessionLocal()
         try:
-            stmt = select(AuthToken).where(
-                (AuthToken.token_hash == hashed) & (AuthToken.token_type == token_type)
-            )
+            stmt = select(AuthToken).where((AuthToken.token_hash == hashed) & (AuthToken.token_type == token_type))
             res = await session.execute(stmt)
             token_rec = res.scalar_one_or_none()
             if not token_rec:
