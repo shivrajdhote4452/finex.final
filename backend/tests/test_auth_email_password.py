@@ -343,7 +343,9 @@ async def test_account_linking_same_verified_email_shares_data():
         pw_token = pw_login.json()["data"]["access_token"]
 
         # 3. Check initial paper account balance via password session
-        acct_pw_resp = await client.get("/api/v1/paper-trading/account", headers={"Authorization": f"Bearer {pw_token}"})
+        acct_pw_resp = await client.get(
+            "/api/v1/paper-trading/account", headers={"Authorization": f"Bearer {pw_token}"}
+        )
         assert acct_pw_resp.status_code == 200
         cash_balance_pw = acct_pw_resp.json()["data"]["current_cash"]
         assert float(cash_balance_pw) == 100000.00
@@ -366,7 +368,9 @@ async def test_account_linking_same_verified_email_shares_data():
             assert google_user_id == original_user_id
 
             # 5. Check paper account balance via Google session -> identical balance & account
-            acct_g_resp = await client.get("/api/v1/paper-trading/account", headers={"Authorization": f"Bearer {google_token}"})
+            acct_g_resp = await client.get(
+                "/api/v1/paper-trading/account", headers={"Authorization": f"Bearer {google_token}"}
+            )
             assert acct_g_resp.status_code == 200
             cash_balance_g = acct_g_resp.json()["data"]["current_cash"]
             assert cash_balance_g == cash_balance_pw
@@ -444,7 +448,9 @@ async def test_google_unverified_email_refuses_auto_link():
             "email_verified": False,
             "name": "Impostor",
         }
-        with patch("backend.app.routers.auth.google_id_token.verify_oauth2_token", return_value=fake_unverified_id_info):
+        with patch(
+            "backend.app.routers.auth.google_id_token.verify_oauth2_token", return_value=fake_unverified_id_info
+        ):
             g_resp = await client.post("/api/v1/auth/google", json={"id_token": "mock-unverified-token"})
             assert g_resp.status_code == 200
             # Must NOT be linked to legit_user_id!

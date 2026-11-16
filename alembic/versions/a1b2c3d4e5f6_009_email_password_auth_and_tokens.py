@@ -116,3 +116,4 @@ def downgrade() -> None:
             op.drop_column("users", "email_verified")
         if "password_hash" in existing_cols:
             op.drop_column("users", "password_hash")
+
