@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from fastapi import HTTPException as FastAPIHTTPException
 from fastapi import Request, status
@@ -136,6 +136,7 @@ def build_error_response(
     message: str,
     correlation_id: str,
     details: Optional[List[ErrorDetail]] = None,
+    headers: Optional[Dict[str, str]] = None,
 ) -> JSONResponse:
     payload = ApiErrorResponse(
         success=False,
@@ -150,7 +151,9 @@ def build_error_response(
             version="v1",
         ),
     )
-    return JSONResponse(status_code=status_code, content=payload.model_dump())
+    content = payload.model_dump()
+    content["detail"] = message  # Standard FastAPI/Starlette client and test compatibility
+    return JSONResponse(status_code=status_code, content=content, headers=headers)
 
 
 async def finex_exception_handler(request: Request, exc: FinExException) -> JSONResponse:
@@ -158,12 +161,16 @@ async def finex_exception_handler(request: Request, exc: FinExException) -> JSON
     logger.warning(
         f"FinExException [{exc.code}] on {request.method} {request.url.path}: {exc.message} (cid: {correlation_id})"
     )
+    headers = getattr(exc, "headers", None)
+    if not headers and hasattr(exc, "retry_after"):
+        headers = {"Retry-After": str(exc.retry_after)}
     return build_error_response(
         status_code=exc.status_code,
         code=exc.code,
         message=exc.message,
         correlation_id=correlation_id,
         details=exc.details,
+        headers=headers,
     )
 
 
@@ -197,6 +204,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
             code="HTTP_EXCEPTION",
             message=str(exc.detail),
             correlation_id=correlation_id,
+            headers=getattr(exc, "headers", None),
         )
 
     logger.error(

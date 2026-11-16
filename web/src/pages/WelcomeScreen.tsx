@@ -540,6 +540,28 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                   </button>
                 </div>
               )}
+              {mode === 'signup' && errorMessage.toLowerCase().includes('already exists') && (
+                <div style={{ marginTop: '6px' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode('signin');
+                      setErrorMessage(null);
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--color-action)',
+                      textDecoration: 'underline',
+                      fontSize: '11.5px',
+                      cursor: 'pointer',
+                      padding: 0,
+                    }}
+                  >
+                    Switch to Sign In →
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
