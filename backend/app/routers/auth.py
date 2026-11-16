@@ -345,22 +345,42 @@ async def signup_with_email(
                 expires_in_minutes=settings.EMAIL_VERIFICATION_EXPIRE_HOURS * 60,
                 db=db,
             )
-            await email_service.send_verification_email(
-                to_email=clean_email,
-                name=recipient_name,
-                raw_token=raw_token,
-            )
+            try:
+                delivery = await email_service.send_verification_email(
+                    to_email=clean_email,
+                    name=recipient_name,
+                    raw_token=raw_token,
+                )
+            except Exception as e:
+                logger.error("Failed to dispatch verification email to existing user %s: %s", clean_email, e)
+                delivery = {"status": "failed", "delivered": False, "error": str(e)}
         else:
-            await email_service.send_existing_account_notification(
-                to_email=clean_email,
-                name=recipient_name,
-            )
+            try:
+                delivery = await email_service.send_existing_account_notification(
+                    to_email=clean_email,
+                    name=recipient_name,
+                )
+            except Exception as e:
+                logger.error("Failed to dispatch account notice to %s: %s", clean_email, e)
+                delivery = {"status": "failed", "delivered": False, "error": str(e)}
+
+        delivery_status = delivery.get("status") if isinstance(delivery, dict) else "unknown"
+        is_delivered = bool(delivery.get("delivered")) or delivery_status == "test_captured"
+
+        if not is_delivered:
+            resp_data = {
+                "sent": False,
+                "email": clean_email,
+                "message": "Verification email could not be delivered due to a mail server issue. Please try again later, use resend verification, or sign in with Google.",
+                "delivery_status": delivery_status or "failed",
+            }
+            return create_response_envelope(resp_data, correlation_id=cid)
 
         resp_data = {
             "sent": True,
             "email": clean_email,
             "message": generic_signup_message,
-            "delivery_status": "delivered" if has_smtp else "test_captured",
+            "delivery_status": delivery_status,
         }
         return create_response_envelope(resp_data, correlation_id=cid)
 
@@ -383,17 +403,33 @@ async def signup_with_email(
     )
 
     # Dispatch verification email
-    delivery = await email_service.send_verification_email(
-        to_email=clean_email,
-        name=clean_name,
-        raw_token=raw_token,
-    )
+    try:
+        delivery = await email_service.send_verification_email(
+            to_email=clean_email,
+            name=clean_name,
+            raw_token=raw_token,
+        )
+    except Exception as e:
+        logger.error("Failed to dispatch verification email to new user %s: %s", clean_email, e)
+        delivery = {"status": "failed", "delivered": False, "error": str(e)}
+
+    delivery_status = delivery.get("status") if isinstance(delivery, dict) else "unknown"
+    is_delivered = bool(delivery.get("delivered")) or delivery_status == "test_captured"
+
+    if not is_delivered:
+        resp_data = {
+            "sent": False,
+            "email": clean_email,
+            "message": "Verification email could not be delivered due to a mail server issue. Please try again later, use resend verification, or sign in with Google.",
+            "delivery_status": delivery_status or "failed",
+        }
+        return create_response_envelope(resp_data, correlation_id=cid)
 
     resp_data = {
         "sent": True,
         "email": clean_email,
         "message": generic_signup_message,
-        "delivery_status": delivery.get("status"),
+        "delivery_status": delivery_status,
     }
     return create_response_envelope(resp_data, correlation_id=cid)
 

@@ -952,3 +952,126 @@ async def test_signup_unconfigured_smtp_truthful_response():
 
 
 
+
+
+@pytest.mark.asyncio
+async def test_signup_delivery_failure_new_and_existing_accounts_truthful_and_non_enumerating():
+    """Verify that when SMTP delivery fails or times out:
+    1. New account receives sent: False with explicit mail server issue message.
+    2. Existing account receives an IDENTICAL sent: False response (no account enumeration).
+    3. User entity was created for the new user, and existing user credentials were NOT overwritten.
+    """
+    from backend.app.config import get_settings
+    from backend.app.domain.user_store import user_store
+
+    settings = get_settings()
+    new_email = f"smtp_fail_new_{uuid.uuid4().hex[:8]}@example.com"
+    existing_email = f"smtp_fail_exist_{uuid.uuid4().hex[:8]}@example.com"
+    orig_password = "OriginalPassword123!"
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # Step 0: Create existing user cleanly first
+        init_res = await client.post(
+            "/api/v1/auth/signup",
+            json={"email": existing_email, "password": orig_password, "name": "Existing User"},
+        )
+        assert init_res.status_code == 200
+        existing_user_rec = await user_store.get_user_by_email_db(existing_email)
+        assert existing_user_rec is not None
+        saved_pw_hash = existing_user_rec.password_hash
+
+        # Mock email_service failure (simulate timeout or SMTP socket error)
+        failed_result = {"status": "failed", "delivered": False, "to": "mock", "error": "SMTPConnectionTimeout"}
+        with patch.object(settings, "SMTP_HOST", "smtp.live.example.com"):
+            with patch.object(email_service, "send_verification_email", return_value=failed_result):
+                with patch.object(email_service, "send_existing_account_notification", return_value=failed_result):
+                    # 1. New account signup under failure
+                    resp_new = await client.post(
+                        "/api/v1/auth/signup",
+                        json={"email": new_email, "password": "NewUserPassword123!", "name": "New User"},
+                    )
+                    assert resp_new.status_code == 200
+                    data_new = resp_new.json()["data"]
+                    assert data_new["sent"] is False
+                    assert data_new["delivery_status"] == "failed"
+                    assert "could not be delivered due to a mail server issue" in data_new["message"].lower()
+
+                    # 2. Existing account signup under failure
+                    resp_exist = await client.post(
+                        "/api/v1/auth/signup",
+                        json={"email": existing_email, "password": "AttackerCandidatePw123!", "name": "Attacker"},
+                    )
+                    assert resp_exist.status_code == 200
+                    data_exist = resp_exist.json()["data"]
+                    assert data_exist["sent"] is False
+                    assert data_exist["delivery_status"] == "failed"
+                    assert data_exist["message"] == data_new["message"]
+
+        # 3. Verify user entity creation & credential immutability
+        created_new_user = await user_store.get_user_by_email_db(new_email)
+        assert created_new_user is not None
+        assert created_new_user.email_verified is False
+
+        # Existing user password was NOT overwritten
+        check_existing = await user_store.get_user_by_email_db(existing_email)
+        assert check_existing.password_hash == saved_pw_hash
+
+
+@pytest.mark.asyncio
+async def test_unverified_user_can_retry_and_verify_after_delivery_failure():
+    """Verify that an unverified user whose initial signup email failed can retry via resend-verification
+    or duplicate signup once SMTP is restored, activate their account, and login with original password.
+    """
+    from backend.app.config import get_settings
+
+    settings = get_settings()
+    user_email = f"retry_flow_{uuid.uuid4().hex[:8]}@example.com"
+    user_password = "RetryFlowPassword123!"
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # 1. Initial signup fails due to SMTP failure
+        failed_result = {"status": "failed", "delivered": False, "to": user_email, "error": "SMTPTimeout"}
+        with patch.object(settings, "SMTP_HOST", "smtp.live.example.com"):
+            with patch.object(email_service, "send_verification_email", return_value=failed_result):
+                initial_signup = await client.post(
+                    "/api/v1/auth/signup",
+                    json={"email": user_email, "password": user_password, "name": "Retry User"},
+                )
+                assert initial_signup.status_code == 200
+                assert initial_signup.json()["data"]["sent"] is False
+
+        # Cannot log in yet because unverified
+        unver_login = await client.post(
+            "/api/v1/auth/login",
+            json={"email": user_email, "password": user_password},
+        )
+        assert unver_login.status_code == 403
+        assert "not verified" in unver_login.json()["detail"].lower()
+
+        # 2. Mail server recovers: user requests resend verification
+        resend_resp = await client.post(
+            "/api/v1/auth/resend-verification",
+            json={"email": user_email},
+        )
+        assert resend_resp.status_code == 200
+        assert resend_resp.json()["data"]["sent"] is True
+
+        sent_mail = email_service.get_last_email_for(user_email)
+        assert sent_mail is not None
+        token = sent_mail["metadata"]["token"]
+
+        # 3. User verifies email
+        verify_resp = await client.post(
+            "/api/v1/auth/verify-email",
+            json={"token": token},
+        )
+        assert verify_resp.status_code == 200
+        assert verify_resp.json()["data"]["verified"] is True
+
+        # 4. User logs in with original password successfully
+        login_resp = await client.post(
+            "/api/v1/auth/login",
+            json={"email": user_email, "password": user_password},
+        )
+        assert login_resp.status_code == 200
+        assert login_resp.json()["data"]["access_token"] is not None

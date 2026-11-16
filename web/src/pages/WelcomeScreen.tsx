@@ -599,7 +599,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                   </button>
                 </div>
               )}
-              {errorMessage.includes('not verified') && (
+              {(errorMessage.includes('not verified') || errorMessage.includes('mail server issue') || errorMessage.includes('resend verification')) && (
                 <div style={{ marginTop: '6px' }}>
                   <button
                     type="button"
