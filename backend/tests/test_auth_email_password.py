@@ -11,12 +11,9 @@ from unittest.mock import patch
 
 import pytest
 from backend.app.factory import create_app
-from backend.app.models.core import User
-from backend.app.routers.auth import create_access_token
 from backend.app.services.email_service import email_service
-from backend.app.services.password_service import auth_rate_limiter, hash_password
+from backend.app.services.password_service import auth_rate_limiter
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import select
 
 app = create_app()
 
@@ -319,7 +316,7 @@ async def test_set_password_for_authenticated_google_user():
                 json={"email": test_email, "password": "AddedPassword123!"},
             )
             assert pw_login_resp.status_code == 200
-            pw_jwt = pw_login_resp.json()["data"]["access_token"]
+            assert pw_login_resp.json()["data"]["access_token"] is not None
             assert pw_login_resp.json()["data"]["user_id"] == user_id
 
 

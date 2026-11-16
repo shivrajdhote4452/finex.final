@@ -25,7 +25,7 @@ from backend.app.services.password_service import (
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 settings = get_settings()
