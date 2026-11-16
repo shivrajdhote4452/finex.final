@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional, Set
 
 from backend.app.database import AsyncSessionLocal
 from backend.app.models.core import AuthToken, RevokedToken, User, UserConsent, UserProfile
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
@@ -201,17 +201,44 @@ class UserStore:
                     or "@finex.local" in user_entity.email
                     or "@finex.internal" in user_entity.email
                 ) and clean_email:
-                    user_entity.email = clean_email
-                    await session.flush()
+                    # Prevent unique collision if another user record already owns clean_email
+                    res_conflict = await session.execute(
+                        select(User).where((User.email == clean_email) & (User.id != user_entity.id))
+                    )
+                    if res_conflict.scalar_one_or_none():
+                        logger.warning(
+                            "Email %s already belongs to another user account. Skipping backfill on user %s",
+                            clean_email,
+                            user_entity.id,
+                        )
+                    else:
+                        user_entity.email = clean_email
+                        await session.flush()
 
                 # Handle Google account linking
                 if provider == "google" and google_email_verified:
-                    if not user_entity.google_subject:
-                        user_entity.google_subject = provider_subject
+                    # Guard against conflicting Google identities: an account cannot be bound to two different Google subjects
+                    if user_entity.google_subject and user_entity.google_subject != provider_subject:
+                        raise ValueError(f"Account for {clean_email} is already linked to a different Google account.")
+
+                    user_entity.google_subject = provider_subject
+
                     # OWASP pre-account takeover mitigation:
                     # If existing account had an unverified email, clear any unverified password
+                    # and immediately invalidate all outstanding verification and reset tokens
                     if not user_entity.email_verified and not user_entity.is_verified:
                         user_entity.password_hash = None
+                        await session.execute(
+                            update(AuthToken)
+                            .where((AuthToken.user_id == user_entity.id) & (AuthToken.used_at.is_(None)))
+                            .values(used_at=datetime.now(timezone.utc))
+                        )
+                        logger.warning(
+                            "OWASP Pre-Account Takeover Defense: Unverified local account for %s was claimed by verified Google owner (%s). Cleared unverified password and invalidated outstanding tokens.",
+                            clean_email,
+                            provider_subject,
+                        )
+
                     user_entity.email_verified = True
                     user_entity.is_verified = True
                     await session.flush()
@@ -340,6 +367,8 @@ class UserStore:
                     await session.rollback()
                 except Exception:
                     pass
+            if isinstance(e, ValueError):
+                raise
             logger.warning(f"Database query failed in get_or_create_user_db: {e}. Falling back to memory store.")
             return self.get_or_create_user(
                 provider=provider,

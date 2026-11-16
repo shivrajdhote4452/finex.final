@@ -22,10 +22,30 @@ class EmailService:
 
     def __init__(self):
         self._sent_emails: List[Dict[str, Any]] = []
+        self._test_mode: Optional[bool] = None
+
+    def enable_test_mode(self) -> None:
+        """Explicitly enable test mode to capture emails in memory for unit/integration tests."""
+        self._test_mode = True
+
+    def disable_test_mode(self) -> None:
+        """Disable test mode and wipe any buffered test emails."""
+        self._test_mode = False
+        self._sent_emails.clear()
+
+    def _is_test_mode(self) -> bool:
+        """Check if test email capture is enabled."""
+        if self._test_mode is not None:
+            return self._test_mode
+        settings = get_settings()
+        env_val = getattr(settings, "ENVIRONMENT", "")
+        return str(env_val).lower() in ("testing", "environment.testing")
 
     @property
     def sent_emails(self) -> List[Dict[str, Any]]:
-        """Inspection buffer for automated tests and development verification."""
+        """Inspection buffer restricted strictly to explicit test execution."""
+        if not self._is_test_mode():
+            return []
         return self._sent_emails
 
     def clear_sent_emails(self) -> None:
@@ -33,7 +53,9 @@ class EmailService:
         self._sent_emails.clear()
 
     def get_last_email_for(self, email: str) -> Optional[Dict[str, Any]]:
-        """Retrieve most recent email dispatched to a specific recipient."""
+        """Retrieve most recent email dispatched to a specific recipient in test mode."""
+        if not self._is_test_mode():
+            return None
         normalized = email.strip().lower()
         for msg in reversed(self._sent_emails):
             if msg.get("to", "").strip().lower() == normalized:
@@ -154,18 +176,23 @@ class EmailService:
         html_content: str,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """Dispatch email via real SMTP if configured; otherwise safely record to inspection buffer and log."""
+        """Dispatch email via real SMTP if configured; otherwise safely handle test capture or fail closed."""
         settings = get_settings()
         clean_to = to_email.strip().lower()
+        is_test = self._is_test_mode()
 
-        record = {
-            "to": clean_to,
-            "subject": subject,
-            "text": text_content,
-            "html": html_content,
-            "metadata": metadata or {},
-        }
-        self._sent_emails.append(record)
+        # In explicitly configured test mode only: capture minimal test metadata for assertion
+        if is_test:
+            self._sent_emails.append(
+                {
+                    "to": clean_to,
+                    "subject": subject,
+                    "token": (metadata or {}).get("token"),
+                    "link": (metadata or {}).get("link"),
+                    "type": (metadata or {}).get("type"),
+                    "metadata": metadata or {},
+                }
+            )
 
         if settings.SMTP_HOST:
             try:
@@ -184,19 +211,37 @@ class EmailService:
                     html_content=html_content,
                 )
                 logger.info("Successfully delivered email to %s via SMTP (%s)", clean_to, settings.SMTP_HOST)
-                return {"status": "sent", "to": clean_to, "provider": "smtp"}
+                return {"status": "delivered", "delivered": True, "to": clean_to, "provider": "smtp", "error": None}
             except Exception as e:
                 logger.error("Failed to send email to %s via SMTP: %s", clean_to, str(e))
-                return {"status": "failed", "to": clean_to, "error": str(e)}
+                return {"status": "failed", "delivered": False, "to": clean_to, "provider": "smtp", "error": str(e)}
 
-        # Development / test mode fallback
-        logger.info(
-            "[EMAIL SERVICE] Dev fallback for %s | Subject: '%s' | Action URL: %s",
+        # SMTP is NOT configured
+        if is_test:
+            logger.debug("Transactional email captured in test buffer for %s", clean_to)
+            return {
+                "status": "test_captured",
+                "delivered": False,
+                "to": clean_to,
+                "provider": "test_buffer",
+                "error": None,
+            }
+
+        # In production / non-test environment without SMTP:
+        # Never log tokens, action links, or email bodies.
+        # Explicitly report delivery as unavailable.
+        logger.warning(
+            "Transactional email delivery unavailable: SMTP is not configured. Email to %s ('%s') was not sent.",
             clean_to,
             subject,
-            (metadata or {}).get("link", "none"),
         )
-        return {"status": "logged_to_console", "to": clean_to, "provider": "mock"}
+        return {
+            "status": "smtp_not_configured",
+            "delivered": False,
+            "to": clean_to,
+            "provider": "none",
+            "error": "SMTP server not configured",
+        }
 
     @staticmethod
     def _send_smtp_sync(

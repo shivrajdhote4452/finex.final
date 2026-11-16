@@ -23,6 +23,7 @@ def clean_rate_limiter_and_emails():
     """Reset rate limiter and email buffer before each test."""
     from backend.app.core.middleware import RateLimiterMiddleware
 
+    email_service.enable_test_mode()
     RateLimiterMiddleware.reset_all()
     auth_rate_limiter.clear()
     email_service.clear_sent_emails()
@@ -30,6 +31,7 @@ def clean_rate_limiter_and_emails():
     RateLimiterMiddleware.reset_all()
     auth_rate_limiter.clear()
     email_service.clear_sent_emails()
+    email_service.enable_test_mode()
 
 
 @pytest.mark.asyncio
@@ -455,3 +457,198 @@ async def test_google_unverified_email_refuses_auto_link():
             assert g_resp.status_code == 200
             # Must NOT be linked to legit_user_id!
             assert g_resp.json()["data"]["user_id"] != legit_user_id
+
+
+@pytest.mark.asyncio
+async def test_email_privacy_and_production_buffer_isolation():
+    """Security: Ensure tokens, action links, and bodies are never stored in inspection buffer when not in test mode."""
+    target_email = f"privacy_{uuid.uuid4().hex[:8]}@example.com"
+
+    # 1. Disable test mode
+    email_service.disable_test_mode()
+    try:
+        assert email_service.sent_emails == []
+        assert email_service.get_last_email_for(target_email) is None
+
+        # Direct service call without SMTP in production mode
+        res = await email_service.send_verification_email(
+            to_email=target_email,
+            name="Privacy Tester",
+            raw_token="sensitive-token-must-not-be-buffered",
+        )
+        assert res["status"] == "smtp_not_configured"
+        assert res["delivered"] is False
+        assert email_service.sent_emails == []
+        assert email_service.get_last_email_for(target_email) is None
+
+        # HTTP signup endpoint without test mode
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                "/api/v1/auth/signup",
+                json={"email": target_email, "password": "SecurePassword123!", "name": "Privacy User"},
+            )
+            assert resp.status_code == 200
+            data = resp.json()["data"]
+            assert data["delivery_status"] == "smtp_not_configured"
+            assert "unavailable" in data["message"].lower()
+            # Buffer remains completely empty
+            assert email_service.sent_emails == []
+    finally:
+        email_service.enable_test_mode()
+
+
+@pytest.mark.asyncio
+async def test_pre_account_takeover_invalidates_all_tokens_and_locks_attacker_out():
+    """Security: When a verified Google owner claims an unverified account:
+    1. The unverified password must be cleared.
+    2. ALL pending verification and password-reset tokens must be immediately invalidated.
+    3. The attacker cannot login, cannot verify with the old token, and cannot reset with the old token.
+    """
+    victim_email = f"victim_full_{uuid.uuid4().hex[:8]}@example.com"
+    attacker_pw = "AttackerPw123!"
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # 1. Attacker signs up with victim's email
+        signup_res = await client.post(
+            "/api/v1/auth/signup",
+            json={"email": victim_email, "password": attacker_pw, "name": "Attacker Name"},
+        )
+        assert signup_res.status_code == 200
+        signup_mail = email_service.get_last_email_for(victim_email)
+        assert signup_mail is not None
+        attacker_verify_token = signup_mail["token"]
+
+        # 2. Attacker also requests a password reset token before owner logs in
+        forgot_res = await client.post("/api/v1/auth/forgot-password", json={"email": victim_email})
+        assert forgot_res.status_code == 200
+        reset_mail = email_service.get_last_email_for(victim_email)
+        assert reset_mail is not None
+        attacker_reset_token = reset_mail["token"]
+
+        # Verify tokens are distinct
+        assert attacker_verify_token != attacker_reset_token
+
+        # 3. Legitimate owner logs in via Google with verified email
+        owner_google_sub = f"sub-owner-{uuid.uuid4().hex[:8]}"
+        fake_id_info = {
+            "iss": "accounts.google.com",
+            "sub": owner_google_sub,
+            "email": victim_email,
+            "email_verified": True,
+            "name": "Legitimate Owner",
+        }
+        with patch("backend.app.routers.auth.google_id_token.verify_oauth2_token", return_value=fake_id_info):
+            g_resp = await client.post("/api/v1/auth/google", json={"id_token": "valid-owner-token"})
+            assert g_resp.status_code == 200
+            owner_jwt = g_resp.json()["data"]["access_token"]
+            owner_user_id = g_resp.json()["data"]["user_id"]
+            assert owner_jwt is not None
+
+        # 4. Attacker attempts:
+        # a) Login with unverified password -> MUST FAIL (401)
+        pw_login = await client.post("/api/v1/auth/login", json={"email": victim_email, "password": attacker_pw})
+        assert pw_login.status_code == 401
+
+        # b) Consume the outstanding verification token -> MUST FAIL (400)
+        verify_attempt = await client.post("/api/v1/auth/verify-email", json={"token": attacker_verify_token})
+        assert verify_attempt.status_code == 400
+
+        # c) Consume the outstanding reset token -> MUST FAIL (400)
+        reset_attempt = await client.post(
+            "/api/v1/auth/reset-password",
+            json={"token": attacker_reset_token, "new_password": "NewAttackerPw123!"},
+        )
+        assert reset_attempt.status_code == 400
+
+        # 5. Legitimate owner logs in again with Google -> SUCCEEDS with identical user_id
+        with patch("backend.app.routers.auth.google_id_token.verify_oauth2_token", return_value=fake_id_info):
+            g_resp_2 = await client.post("/api/v1/auth/google", json={"id_token": "valid-owner-token-2"})
+            assert g_resp_2.status_code == 200
+            assert g_resp_2.json()["data"]["user_id"] == owner_user_id
+
+
+@pytest.mark.asyncio
+async def test_conflicting_google_identity_rejected():
+    """Security: An account bound to one Google subject cannot be hijacked by another Google subject with the same email."""
+    account_email = f"conflict_{uuid.uuid4().hex[:8]}@example.com"
+    original_sub = f"sub-orig-{uuid.uuid4().hex[:8]}"
+    impostor_sub = f"sub-impostor-{uuid.uuid4().hex[:8]}"
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # 1. User signs in with original Google account
+        orig_id_info = {
+            "iss": "accounts.google.com",
+            "sub": original_sub,
+            "email": account_email,
+            "email_verified": True,
+            "name": "Original User",
+        }
+        with patch("backend.app.routers.auth.google_id_token.verify_oauth2_token", return_value=orig_id_info):
+            res_orig = await client.post("/api/v1/auth/google", json={"id_token": "token-original"})
+            assert res_orig.status_code == 200
+            user_id = res_orig.json()["data"]["user_id"]
+
+        # 2. Different Google subject signs in with the same email
+        impostor_id_info = {
+            "iss": "accounts.google.com",
+            "sub": impostor_sub,
+            "email": account_email,
+            "email_verified": True,
+            "name": "Impostor Account",
+        }
+        with patch("backend.app.routers.auth.google_id_token.verify_oauth2_token", return_value=impostor_id_info):
+            res_impostor = await client.post("/api/v1/auth/google", json={"id_token": "token-impostor"})
+            assert res_impostor.status_code == 409
+            assert "already linked to a different Google account" in res_impostor.json()["detail"]
+
+        # 3. Original Google user still logs in without issue
+        with patch("backend.app.routers.auth.google_id_token.verify_oauth2_token", return_value=orig_id_info):
+            res_orig_retry = await client.post("/api/v1/auth/google", json={"id_token": "token-original-retry"})
+            assert res_orig_retry.status_code == 200
+            assert res_orig_retry.json()["data"]["user_id"] == user_id
+
+
+@pytest.mark.asyncio
+async def test_google_login_email_backfill_does_not_collide_with_existing_account():
+    """Security: Backfilling a placeholder Google user's email does not collide with an existing account."""
+    existing_email = f"coll_target_{uuid.uuid4().hex[:8]}@example.com"
+    google_sub = f"sub-backfill-{uuid.uuid4().hex[:8]}"
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # 1. Existing local verified user owns existing_email
+        s_res = await client.post(
+            "/api/v1/auth/signup",
+            json={"email": existing_email, "password": "TargetPassword123!", "name": "Target Owner"},
+        )
+        assert s_res.status_code == 200
+        sent = email_service.get_last_email_for(existing_email)
+        v_res = await client.post("/api/v1/auth/verify-email", json={"token": sent["token"]})
+        assert v_res.status_code == 200
+
+        # 2. Google user registers with placeholder email first
+        placeholder_info = {
+            "iss": "accounts.google.com",
+            "sub": google_sub,
+            "email": f"{google_sub}@google.user",
+            "email_verified": True,
+            "name": "Placeholder User",
+        }
+        with patch("backend.app.routers.auth.google_id_token.verify_oauth2_token", return_value=placeholder_info):
+            g_res = await client.post("/api/v1/auth/google", json={"id_token": "token-placeholder"})
+            assert g_res.status_code == 200
+            google_user_id = g_res.json()["data"]["user_id"]
+
+        # 3. Later, Google user tries to authenticate with existing_email
+        # FinEx should gracefully handle this without crashing or overwriting the existing user
+        updated_google_info = {
+            "iss": "accounts.google.com",
+            "sub": google_sub,
+            "email": existing_email,
+            "email_verified": True,
+            "name": "Placeholder User Updated",
+        }
+        with patch("backend.app.routers.auth.google_id_token.verify_oauth2_token", return_value=updated_google_info):
+            g_res_update = await client.post("/api/v1/auth/google", json={"id_token": "token-updated"})
+            assert g_res_update.status_code == 200
+            # User ID must remain the Google user's own ID
+            assert g_res_update.json()["data"]["user_id"] == google_user_id
