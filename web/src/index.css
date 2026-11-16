@@ -528,16 +528,19 @@ input:focus, select:focus, textarea:focus {
 }
 
 .welcome-right-col {
-  padding: 56px 44px;
+  padding: 40px 44px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
   background-color: #000000;
   position: sticky;
   top: 0;
+  height: 100vh;
   max-height: 100vh;
   overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
 }
 
 .welcome-right-col::-webkit-scrollbar {
@@ -609,6 +612,8 @@ input:focus, select:focus, textarea:focus {
   max-width: 420px;
   width: 100%;
   box-sizing: border-box;
+  margin-top: auto;
+  margin-bottom: auto;
 }
 
 .auth-header-title {
@@ -1338,6 +1343,7 @@ input:focus, select:focus, textarea:focus {
     width: 100% !important;
     justify-content: flex-start !important;
     max-height: none !important;
+    height: auto !important;
     overflow-y: visible !important;
     position: static !important;
   }
@@ -1370,10 +1376,14 @@ input:focus, select:focus, textarea:focus {
 @media (max-width: 768px) {
   .welcome-right-col {
     padding: 28px 16px 40px !important;
+    height: auto !important;
+    max-height: none !important;
   }
 
   .auth-card {
     max-width: 100% !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
   }
 
   .auth-pillars-grid {
