@@ -989,7 +989,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
 
           {/* Subtext */}
           <div className="auth-subtext">
-            FinEx is an educational platform. Paper trading uses virtual funds with zero financial risk.
+            FinEx is an educational platform. Paper trading uses virtual funds.
           </div>
 
           <div className="auth-footer-links">
