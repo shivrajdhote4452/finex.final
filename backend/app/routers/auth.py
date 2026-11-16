@@ -348,13 +348,14 @@ async def signup_with_email(
             try:
                 delivery = await email_service.send_verification_email(
                     to_email=clean_email,
-                    name=recipient_name,
+                    name=payload.name.strip() if payload.name else recipient_name,
                     raw_token=raw_token,
                 )
             except Exception as e:
                 logger.error("Failed to dispatch verification email to existing user %s: %s", clean_email, e)
                 delivery = {"status": "failed", "delivered": False, "error": str(e)}
         else:
+            # Account is already verified: NEVER modify password, profile, or credentials!
             try:
                 delivery = await email_service.send_existing_account_notification(
                     to_email=clean_email,
@@ -375,6 +376,29 @@ async def signup_with_email(
                 "delivery_status": delivery_status or "failed",
             }
             return create_response_envelope(resp_data, correlation_id=cid)
+
+        # OWASP Pre-Account Takeover Defense:
+        # Once verification email has been successfully dispatched to the inbox,
+        # update the unverified account's password_hash to this attempt's password,
+        # and invalidate older unconsumed verification tokens so only the newly dispatched token is active.
+        if not (existing_user.email_verified or existing_user.is_verified):
+            from backend.app.services.password_service import hash_token
+
+            new_pw_hash = hash_password(payload.password)
+            clean_name = payload.name.strip() if payload.name else recipient_name
+
+            await user_store.update_unverified_user_signup_db(
+                user_id=existing_user.id,
+                password_hash=new_pw_hash,
+                name=clean_name,
+                db=db,
+            )
+            await user_store.invalidate_user_tokens_db(
+                user_id=existing_user.id,
+                token_type="email_verification",
+                exclude_token_hash=hash_token(raw_token),
+                db=db,
+            )
 
         resp_data = {
             "sent": True,
@@ -588,6 +612,12 @@ async def forgot_password(
         profile = await user_store.get_profile_db(user.id, db=db)
         display_name = profile.full_name if profile and profile.full_name else clean_email.split("@")[0]
 
+        # Invalidate any previous unconsumed password_reset tokens before issuing a new one
+        await user_store.invalidate_user_tokens_db(
+            user_id=user.id,
+            token_type="password_reset",
+            db=db,
+        )
         raw_token = await user_store.create_auth_token_db(
             user_id=user.id,
             token_type="password_reset",
@@ -685,6 +715,12 @@ async def resend_verification_email(
         profile = await user_store.get_profile_db(user.id, db=db)
         display_name = profile.full_name if profile and profile.full_name else "Investor"
 
+        # Invalidate any previous unconsumed verification tokens before issuing a new one
+        await user_store.invalidate_user_tokens_db(
+            user_id=user.id,
+            token_type="email_verification",
+            db=db,
+        )
         raw_token = await user_store.create_auth_token_db(
             user_id=user.id,
             token_type="email_verification",

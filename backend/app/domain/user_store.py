@@ -816,6 +816,19 @@ class UserStore:
             user.email_verified = True
             user.is_verified = True
             await session.flush()
+
+            # Invalidate all remaining password_reset tokens for this user
+            await session.execute(
+                update(AuthToken)
+                .where(
+                    (AuthToken.user_id == user_id)
+                    & (AuthToken.token_type == "password_reset")
+                    & (AuthToken.used_at.is_(None))
+                )
+                .values(used_at=datetime.now(timezone.utc))
+            )
+            await session.flush()
+
             if owns_session:
                 await session.commit()
 
@@ -838,7 +851,7 @@ class UserStore:
         user_id: str,
         db: Optional[AsyncSession] = None,
     ) -> bool:
-        """Mark user's email as verified."""
+        """Mark user's email as verified and invalidate all pending verification tokens."""
         owns_session = db is None
         session = db if db is not None else AsyncSessionLocal()
         try:
@@ -849,6 +862,19 @@ class UserStore:
             user.email_verified = True
             user.is_verified = True
             await session.flush()
+
+            # Invalidate all remaining verification tokens for this user
+            await session.execute(
+                update(AuthToken)
+                .where(
+                    (AuthToken.user_id == user_id)
+                    & (AuthToken.token_type == "email_verification")
+                    & (AuthToken.used_at.is_(None))
+                )
+                .values(used_at=datetime.now(timezone.utc))
+            )
+            await session.flush()
+
             if owns_session:
                 await session.commit()
 
@@ -857,6 +883,110 @@ class UserStore:
                 self._users[user_id].is_verified = True
 
             return True
+        except Exception:
+            if owns_session:
+                await session.rollback()
+            raise
+        finally:
+            if owns_session:
+                await session.close()
+
+    async def update_unverified_user_signup_db(
+        self,
+        user_id: str,
+        password_hash: str,
+        name: Optional[str] = None,
+        db: Optional[AsyncSession] = None,
+    ) -> bool:
+        """Update password hash and profile name for an UNVERIFIED user account.
+
+        OWASP Pre-Account Takeover Defense:
+        Allows the legitimate registrant to establish their own password on subsequent
+        signup attempts for an unverified account without activating an untrusted
+        password chosen by an earlier unverified registrant or attacker.
+        Never modifies verified accounts.
+        """
+        owns_session = db is None
+        session = db if db is not None else AsyncSessionLocal()
+        try:
+            res = await session.execute(select(User).where(User.id == user_id))
+            user = res.scalar_one_or_none()
+            if not user:
+                return False
+            # Safety assertion: never overwrite credentials of an already verified account
+            if user.email_verified or user.is_verified:
+                logger.warning(
+                    "Refusing to update signup credentials for verified user %s (%s)",
+                    user_id,
+                    user.email,
+                )
+                return False
+
+            user.password_hash = password_hash
+            await session.flush()
+
+            clean_name = name.strip() if name else ""
+            if clean_name:
+                res_prof = await session.execute(select(UserProfile).where(UserProfile.user_id == user_id))
+                profile = res_prof.scalar_one_or_none()
+                if profile:
+                    profile.full_name = clean_name
+                    profile.display_name = clean_name.split(" ")[0]
+                    await session.flush()
+                else:
+                    new_prof = UserProfile(
+                        id=str(uuid.uuid4()),
+                        user_id=user_id,
+                        full_name=clean_name,
+                        display_name=clean_name.split(" ")[0],
+                        country="IND",
+                        experience_level="BEGINNER",
+                        onboarding_completed=False,
+                    )
+                    session.add(new_prof)
+                    await session.flush()
+
+            if owns_session:
+                await session.commit()
+
+            if user_id in self._users:
+                self._users[user_id].password_hash = password_hash
+            if clean_name and user_id in self._profiles:
+                self._profiles[user_id].full_name = clean_name
+                self._profiles[user_id].display_name = clean_name.split(" ")[0]
+
+            return True
+        except Exception:
+            if owns_session:
+                await session.rollback()
+            raise
+        finally:
+            if owns_session:
+                await session.close()
+
+    async def invalidate_user_tokens_db(
+        self,
+        user_id: str,
+        token_type: Optional[str] = None,
+        exclude_token_hash: Optional[str] = None,
+        db: Optional[AsyncSession] = None,
+    ) -> int:
+        """Invalidate all unconsumed tokens for a user, optionally excluding a specific token hash."""
+        owns_session = db is None
+        session = db if db is not None else AsyncSessionLocal()
+        try:
+            now = datetime.now(timezone.utc)
+            where_clause = (AuthToken.user_id == user_id) & (AuthToken.used_at.is_(None))
+            if token_type:
+                where_clause = where_clause & (AuthToken.token_type == token_type)
+            if exclude_token_hash:
+                where_clause = where_clause & (AuthToken.token_hash != exclude_token_hash)
+            stmt = update(AuthToken).where(where_clause).values(used_at=now)
+            res = await session.execute(stmt)
+            await session.flush()
+            if owns_session:
+                await session.commit()
+            return res.rowcount
         except Exception:
             if owns_session:
                 await session.rollback()

@@ -1075,3 +1075,175 @@ async def test_unverified_user_can_retry_and_verify_after_delivery_failure():
         )
         assert login_resp.status_code == 200
         assert login_resp.json()["data"]["access_token"] is not None
+
+
+@pytest.mark.asyncio
+async def test_pre_account_takeover_prevention_on_unverified_signup():
+    """OWASP Pre-Account Takeover Defense Regression Test.
+
+    Scenario:
+    1. Attacker initiates signup with victim's email and attacker-chosen password. Account remains unverified.
+    2. Later, legitimate owner attempts signup with the same email and a different password.
+       - Token 1 (attacker's attempt) must be invalidated and fail if clicked.
+    3. Owner receives and clicks the verification link (Token 2) produced by the second attempt.
+    4. Attacker's original password MUST NOT be able to log in (401 Unauthorized).
+    5. Legitimate owner's password MUST be able to log in successfully (200 OK).
+    6. Token 2 replay must be rejected (400 Bad Request).
+    7. Subsequent duplicate signups on the verified account must not overwrite credentials.
+    """
+    email_service.enable_test_mode()
+    email_service.clear_sent_emails()
+
+    victim_email = f"takeover_victim_{uuid.uuid4().hex[:8]}@example.com"
+    attacker_pw = "AttackerMalicious123!"
+    owner_pw = "OwnerLegitimate456!"
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # Step 1: Attacker starts signup using victim's email
+        r1 = await client.post(
+            "/api/v1/auth/signup",
+            json={"email": victim_email, "password": attacker_pw, "name": "Attacker Impostor"},
+        )
+        assert r1.status_code == 200
+        mail1 = email_service.get_last_email_for(victim_email)
+        assert mail1 is not None
+        token1 = mail1["metadata"]["token"]
+
+        # Attacker cannot log in because unverified
+        r1_login = await client.post("/api/v1/auth/login", json={"email": victim_email, "password": attacker_pw})
+        assert r1_login.status_code == 403
+
+        # Step 2: Later, legitimate owner attempts signup with same email and different password
+        r2 = await client.post(
+            "/api/v1/auth/signup",
+            json={"email": victim_email, "password": owner_pw, "name": "Legitimate Owner"},
+        )
+        assert r2.status_code == 200
+        mail2 = email_service.get_last_email_for(victim_email)
+        assert mail2 is not None
+        token2 = mail2["metadata"]["token"]
+        assert token1 != token2
+
+        # Stale Token 1 (from attacker attempt) must be invalidated immediately
+        r1_stale = await client.post("/api/v1/auth/verify-email", json={"token": token1})
+        assert r1_stale.status_code == 400
+        assert "Invalid, expired, or previously used" in r1_stale.json()["detail"]
+
+        # Step 3: Owner receives and clicks verification link (Token 2)
+        r3_verify = await client.post("/api/v1/auth/verify-email", json={"token": token2})
+        assert r3_verify.status_code == 200
+        assert r3_verify.json()["data"]["verified"] is True
+
+        # Step 4: Attacker tries to sign in with original attacker_pw -> MUST BE REJECTED
+        r4_attacker_login = await client.post(
+            "/api/v1/auth/login",
+            json={"email": victim_email, "password": attacker_pw},
+        )
+        assert r4_attacker_login.status_code == 401
+        assert "Invalid email or password" in r4_attacker_login.json()["detail"]
+
+        # Legitimate owner logs in with owner_pw -> MUST SUCCEED
+        r4_owner_login = await client.post(
+            "/api/v1/auth/login",
+            json={"email": victim_email, "password": owner_pw},
+        )
+        assert r4_owner_login.status_code == 200
+        assert r4_owner_login.json()["data"]["access_token"] is not None
+        assert r4_owner_login.json()["data"]["email"] == victim_email
+
+        # Token 2 replay check
+        r2_replay = await client.post("/api/v1/auth/verify-email", json={"token": token2})
+        assert r2_replay.status_code == 400
+
+        # Step 5: Attacker attempts duplicate signup on already verified account
+        r5 = await client.post(
+            "/api/v1/auth/signup",
+            json={"email": victim_email, "password": "AttackerSubsequent999!", "name": "Attacker Impostor 2"},
+        )
+        assert r5.status_code == 200
+        # Attacker's subsequent password must not be active
+        r5_attacker_login = await client.post(
+            "/api/v1/auth/login",
+            json={"email": victim_email, "password": "AttackerSubsequent999!"},
+        )
+        assert r5_attacker_login.status_code == 401
+        # Owner's password is still valid and untouched
+        r5_owner_login = await client.post(
+            "/api/v1/auth/login",
+            json={"email": victim_email, "password": owner_pw},
+        )
+        assert r5_owner_login.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_recipient_specific_smtp_failure_symmetry_and_behavior():
+    """Verify that recipient-specific SMTP failures (e.g. 550 Mailbox not found / rejected)
+    yield symmetric safe responses across new, unverified, and verified accounts.
+    """
+    from backend.app.config import get_settings
+
+    settings = get_settings()
+
+    new_email = f"smtp_fail_new_{uuid.uuid4().hex[:8]}@example.com"
+    existing_unverified = f"smtp_fail_unver_{uuid.uuid4().hex[:8]}@example.com"
+    existing_verified = f"smtp_fail_ver_{uuid.uuid4().hex[:8]}@example.com"
+    pw = "SmtpFailTestPassword123!"
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # Pre-seed existing unverified account
+        await client.post("/api/v1/auth/signup", json={"email": existing_unverified, "password": pw})
+
+        # Pre-seed existing verified account
+        await client.post("/api/v1/auth/signup", json={"email": existing_verified, "password": pw})
+        v_mail = email_service.get_last_email_for(existing_verified)
+        assert v_mail is not None
+        v_token = v_mail["metadata"]["token"]
+        await client.post("/api/v1/auth/verify-email", json={"token": v_token})
+
+        recipient_550_failure = {
+            "status": "failed",
+            "delivered": False,
+            "error": "550 5.1.1 <recipient>: Recipient address rejected: User unknown in virtual mailbox table",
+        }
+
+        with patch.object(settings, "SMTP_HOST", "smtp.live.example.com"):
+            with patch.object(email_service, "send_verification_email", return_value=recipient_550_failure):
+                with patch.object(email_service, "send_existing_account_notification", return_value=recipient_550_failure):
+                    # 1. New account registration with recipient-specific SMTP failure
+                    resp_new = await client.post(
+                        "/api/v1/auth/signup",
+                        json={"email": new_email, "password": pw, "name": "New User"},
+                    )
+                    assert resp_new.status_code == 200
+                    data_new = resp_new.json()["data"]
+                    assert data_new["sent"] is False
+                    assert data_new["delivery_status"] == "failed"
+                    assert "could not be delivered" in data_new["message"]
+
+                    # 2. Existing unverified account signup with recipient-specific SMTP failure
+                    resp_unver = await client.post(
+                        "/api/v1/auth/signup",
+                        json={"email": existing_unverified, "password": pw, "name": "Unver User"},
+                    )
+                    assert resp_unver.status_code == 200
+                    data_unver = resp_unver.json()["data"]
+                    assert data_unver["sent"] is False
+                    assert data_unver["delivery_status"] == "failed"
+                    assert "could not be delivered" in data_unver["message"]
+
+                    # 3. Existing verified account signup with recipient-specific SMTP failure
+                    resp_ver = await client.post(
+                        "/api/v1/auth/signup",
+                        json={"email": existing_verified, "password": pw, "name": "Ver User"},
+                    )
+                    assert resp_ver.status_code == 200
+                    data_ver = resp_ver.json()["data"]
+                    assert data_ver["sent"] is False
+                    assert data_ver["delivery_status"] == "failed"
+                    assert "could not be delivered" in data_ver["message"]
+
+                    # Response envelopes must be symmetric
+                    assert data_new["message"] == data_unver["message"] == data_ver["message"]
+                    assert data_new["sent"] == data_unver["sent"] == data_ver["sent"]
+                    assert data_new["delivery_status"] == data_unver["delivery_status"] == data_ver["delivery_status"]
+
