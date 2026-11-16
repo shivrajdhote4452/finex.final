@@ -181,12 +181,28 @@ All optimized binaries are validated and published on GitHub Releases.
 | **Universal Uncompressed (Baseline)** | [Download `app-release.apk`](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/app-release.apk) | **52.2 MB** | Legacy uncompressed multi-architecture installer |
 | **Android App Bundle (`.aab`)** | [Download `finex-release.aab`](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/finex-release.aab) | **50.9 MB** | Google Play Store publication bundle with stripped symbols |
 
-### Release Verification Metadata
+### Release Verification Metadata (`v1.0.0-android`)
 - **Backend Gateway:** `https://finex-final.onrender.com/api/v1` (Healthy & Verified)
 - **Live Data Gateway:** Angel One SmartAPI (Live Quotes & Historical Session Bars)
 - **Google OAuth Client:** `com.finex.mobile` (Package verified with SHA-1 fingerprint)
 - **Signature Scheme:** APK Signature Scheme v2 (Compatible in-place upgrade)
 - **Compilation Toolchain:** Flutter 3.47.0 • Dart 3.13.0 • Kotlin 2.2.20 • Gradle 9.3.1
+
+### Latest Generated Build Artifacts (`v1.0.1-android` / PR #38 Merge)
+
+Built on **16 November 2026** from source commit `f0cefe7e895628ca810f6be6b4e264d3bcbfa2ad`.
+
+| Package | Architecture | Size | SHA-256 Checksum | Target / Recommendation |
+| :--- | :--- | :--- | :--- | :--- |
+| **`app-arm64-v8a-release.apk`** | `arm64-v8a` (64-bit ARM) | **8.52 MB** (8,938,665 B) | `8D1B4717DEF824685D3135B15BFB81353E2417B65BAD0DA6E3705B076CD338BE` | **95%+ Modern Android Phones** (Samsung, OnePlus, Pixel, etc.) |
+| **`app-armeabi-v7a-release.apk`** | `armeabi-v7a` (32-bit ARM) | **8.07 MB** (8,460,147 B) | `2CF2CD11E9FA94C254465C172D3076E057D3AD97E8CDC5C29F3AA4A71E704D75` | Older / Budget 32-bit Android phones |
+| **`app-x86_64-release.apk`** | `x86_64` | **8.71 MB** (9,135,032 B) | `78ED75A6E0535120F5A000236DB9ABE3CC34C8AD819CBE2ED75E9950245A7B2F` | PC Android Emulators & Chromebooks |
+| **`finex-universal-compressed-release.apk`** | Multi-ABI Universal | **23.61 MB** (24,756,384 B) | `BCE91AD4226CEDDC65FA2421A17B54042993233479E77CE90022A4CD9D7E18EE` | **Universal Sideloading** (bundles all ABIs) |
+| **`app-release.apk`** | Multi-ABI Universal | **23.61 MB** (24,756,384 B) | `BCE91AD4226CEDDC65FA2421A17B54042993233479E77CE90022A4CD9D7E18EE` | Standard Flutter output name |
+| **`finex-release.aab`** | Google Play Bundle (`.aab`) | **51.05 MB** (53,530,717 B) | `1361A5E169BB98AFF4FB244CB218B44B85E0B4C43E7752F624189CF401C6FD59` | Google Play Store publication bundle |
+
+*Note: GitHub Release download links for v1.0.1 will be activated upon publication approval.*
+
 
 ---
 

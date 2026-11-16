@@ -104,3 +104,37 @@ FinEx is strictly an educational research platform and virtual practice environm
 - [x] Bottom navigation transitions cleanly across: Overview, Markets, Ask FinEx, More.
 - [x] More menu navigates to Paper Practice, Alerts, Goals, and Spending screens.
 - [x] Zero network or assertion crashes in release profile.
+
+---
+
+## 6. Release History & Verification Matrix
+
+### Release v1.0.1-android (16 November 2026) — PR #38 Parity Build
+- **Version:** `1.0.1+2` (versionCode: `2`, versionName: `1.0.1`)
+- **Source Commit:** `f0cefe7e895628ca810f6be6b4e264d3bcbfa2ad` (PR #38 merge into `main`)
+- **Key Parity Fixes:**
+  - Authoritative paper order handling with no fake fills on backend rejection.
+  - Idempotent order reconciliation on network timeouts (`mob-ord-...`).
+  - Elimination of hardcoded fallback market prices (neutral `—` for unavailable quotes).
+  - Authentic account state (elimination of hardcoded ₹1,00,000 cash fallbacks; honest error views).
+  - Safety confirmation dialog for account resets (cash restored to ₹1,00,000, positions cleared, order history preserved, pending orders not canceled).
+  - Owner-gated deposit controls matching web and backend contracts.
+- **Verification:**
+  - `flutter analyze`: 0 issues found.
+  - `flutter test`: 28 / 28 passed.
+  - APK Signature: Scheme v2 verified.
+  - Device Testing: Not tested on a live physical device or emulator (none attached).
+
+| Package | Architecture | Size | SHA-256 Checksum |
+| :--- | :--- | :--- | :--- |
+| `app-arm64-v8a-release.apk` | ARM 64-bit (`arm64-v8a`) | 8.52 MB (8,938,665 B) | `8D1B4717DEF824685D3135B15BFB81353E2417B65BAD0DA6E3705B076CD338BE` |
+| `app-armeabi-v7a-release.apk` | ARM 32-bit (`armeabi-v7a`) | 8.07 MB (8,460,147 B) | `2CF2CD11E9FA94C254465C172D3076E057D3AD97E8CDC5C29F3AA4A71E704D75` |
+| `app-x86_64-release.apk` | x86_64 | 8.71 MB (9,135,032 B) | `78ED75A6E0535120F5A000236DB9ABE3CC34C8AD819CBE2ED75E9950245A7B2F` |
+| `finex-universal-compressed-release.apk` | Universal (`arm64`, `armeabi`, `x86_64`) | 23.61 MB (24,756,384 B) | `BCE91AD4226CEDDC65FA2421A17B54042993233479E77CE90022A4CD9D7E18EE` |
+| `finex-release.aab` | Play Store Bundle (`.aab`) | 51.05 MB (53,530,717 B) | `1361A5E169BB98AFF4FB244CB218B44B85E0B4C43E7752F624189CF401C6FD59` |
+
+### Release v1.0.0-android (29 October 2026) — Initial Mobile Release
+- **Version:** `1.0.0+1` (versionCode: `1`, versionName: `1.0.0`)
+- **GitHub Release:** [`v1.0.0-android`](https://github.com/shivrajdhote4452/finex.final/releases/tag/v1.0.0-android)
+- **Status:** Preserved permanently with original APK and AAB assets intact.
+
