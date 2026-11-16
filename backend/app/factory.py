@@ -33,9 +33,11 @@ from backend.app.routers.sample import router as sample_router
 from backend.app.routers.spending import router as spending_router
 from backend.app.routers.watchlists import router as watchlists_router
 from fastapi import FastAPI
+from fastapi.exceptions import HTTPException as FastAPIHTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 
 def create_app(settings: Optional[Settings] = None) -> FastAPI:
@@ -151,6 +153,8 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     # 3. Exception Handlers
     app.add_exception_handler(FinExException, finex_exception_handler)
     app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    app.add_exception_handler(StarletteHTTPException, unhandled_exception_handler)
+    app.add_exception_handler(FastAPIHTTPException, unhandled_exception_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)
 
     # 4. Mount API v1 Routers

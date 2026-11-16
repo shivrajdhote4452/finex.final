@@ -285,9 +285,23 @@ class ApiClient {
     }
 
     if (!response.ok || (payload && payload.success === false)) {
-      const errMsg = payload?.error?.message || `Request failed with status ${response.status}`;
-      const errCode = payload?.error?.code || `HTTP_${response.status}`;
-      throw new ApiError(errMsg, response.status, errCode, payload?.error?.details);
+      let detailMsg: string | null = null;
+      if (typeof payload?.detail === 'string') {
+        detailMsg = payload.detail;
+      } else if (Array.isArray(payload?.detail)) {
+        detailMsg = payload.detail
+          .map((d: any) => (typeof d === 'string' ? d : d?.msg || d?.message || JSON.stringify(d)))
+          .join('; ');
+      }
+
+      const errMsg =
+        payload?.error?.message ||
+        detailMsg ||
+        (typeof payload?.error === 'string' ? payload.error : null) ||
+        payload?.message ||
+        `Request failed with status ${response.status}`;
+      const errCode = payload?.error?.code || payload?.code || `HTTP_${response.status}`;
+      throw new ApiError(errMsg, response.status, errCode, payload?.error?.details || payload?.details);
     }
 
     return (payload && 'data' in payload ? payload.data : payload) as T;

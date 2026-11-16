@@ -652,3 +652,84 @@ async def test_google_login_email_backfill_does_not_collide_with_existing_accoun
             assert g_res_update.status_code == 200
             # User ID must remain the Google user's own ID
             assert g_res_update.json()["data"]["user_id"] == google_user_id
+
+
+@pytest.mark.asyncio
+async def test_seed_user_placeholder_google_subject_upgraded_on_real_login():
+    """Bug fix verification: Platform owner or seed user with placeholder 'google-sub-*'
+    can log in with a real Google account without receiving 409 Conflict.
+    Preserves existing user ID, profile, and data.
+    """
+    real_google_sub = "104829184719284918274"
+    owner_email = "shivrajdhote4452@gmail.com"
+
+    from backend.app.database import AsyncSessionLocal
+    from backend.app.domain.user_store import user_store
+    from backend.app.models.core import User
+    from sqlalchemy import select
+
+    # Ensure seed users exist in DB with placeholder google_subject
+    await user_store.ensure_seed_users_db()
+    async with AsyncSessionLocal() as session:
+        res = await session.execute(select(User).where(User.id == "usr-shivraj-001"))
+        u = res.scalars().first()
+        assert u is not None
+        u.email = owner_email
+        u.google_subject = "google-sub-shivraj-primary"
+        await session.commit()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # Mock Google OAuth token verification returning real Google sub for the owner email
+        real_id_info = {
+            "iss": "accounts.google.com",
+            "sub": real_google_sub,
+            "email": owner_email,
+            "email_verified": True,
+            "name": "Shivraj Dhote",
+        }
+        with patch("backend.app.routers.auth.google_id_token.verify_oauth2_token", return_value=real_id_info):
+            resp = await client.post("/api/v1/auth/google", json={"id_token": "token-real-google"})
+            assert resp.status_code == 200, f"Expected 200 but got {resp.status_code}: {resp.text}"
+            data = resp.json()["data"]
+            assert data["user_id"] == "usr-shivraj-001"
+            assert data["email"] == owner_email
+
+        # Second login with the same real Google sub succeeds directly
+        with patch("backend.app.routers.auth.google_id_token.verify_oauth2_token", return_value=real_id_info):
+            resp_again = await client.post("/api/v1/auth/google", json={"id_token": "token-real-google-2"})
+            assert resp_again.status_code == 200
+            assert resp_again.json()["data"]["user_id"] == "usr-shivraj-001"
+
+        # An impostor with a different real Google sub trying to claim the same email is rejected with 409
+        impostor_info = {
+            "iss": "accounts.google.com",
+            "sub": "209482710492817294819",
+            "email": owner_email,
+            "email_verified": True,
+            "name": "Impostor",
+        }
+        with patch("backend.app.routers.auth.google_id_token.verify_oauth2_token", return_value=impostor_info):
+            resp_impostor = await client.post("/api/v1/auth/google", json={"id_token": "token-impostor"})
+            assert resp_impostor.status_code == 409
+            # Verify both detail and error.message exist and explain conflict clearly
+            resp_json = resp_impostor.json()
+            assert "detail" in resp_json
+            assert "already linked to a different Google account" in resp_json["detail"]
+            assert resp_json.get("error", {}).get("message") is not None
+
+
+@pytest.mark.asyncio
+async def test_error_envelope_contains_detail_and_structured_error():
+    """Verify that HTTPExceptions return both standard detail and structured error envelope."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # Trigger 400 Bad Request
+        resp = await client.post(
+            "/api/v1/auth/signup",
+            json={"email": "invalid-email", "password": "Password123!"},
+        )
+        assert resp.status_code == 400
+        data = resp.json()
+        assert "detail" in data
+        assert "valid email address is required" in data["detail"].lower()
+        assert data.get("success") is False
+        assert data.get("error", {}).get("message") is not None

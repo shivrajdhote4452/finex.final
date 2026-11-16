@@ -51,6 +51,20 @@ class UserConsentRecord:
     accepted_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
+def is_placeholder_google_subject(subject: Optional[str]) -> bool:
+    """Return True if subject is an artificial seed/mock/placeholder subject."""
+    if not subject:
+        return True
+    s = str(subject).strip()
+    if not s:
+        return True
+    if s in ("google-sub-shivraj-primary", "google-sub-other-tenant"):
+        return True
+    if any(s.startswith(prefix) for prefix in ("google-sub-", "seed-", "dev-seed-", "mock-seed-", "placeholder-")):
+        return True
+    return False
+
+
 class UserStore:
     """Thread-safe and process-durable repository with PostgreSQL database persistence."""
 
@@ -107,15 +121,25 @@ class UserStore:
         owns_session = db is None
         session = db if db is not None else AsyncSessionLocal()
         try:
-            for uid, urec in self._users.items():
+            seed_uids = ("usr-shivraj-001", "usr-other-002")
+            for uid in seed_uids:
+                urec = self._users.get(uid)
+                if not urec:
+                    continue
                 res = await session.execute(select(User).where(User.id == uid))
-                existing_user = res.scalar_one_or_none()
+                existing_user = res.scalars().first()
+                if not existing_user and urec.email:
+                    res_email = await session.execute(select(User).where(User.email == urec.email))
+                    existing_user = res_email.scalars().first()
+
                 if not existing_user:
                     new_u = User(
                         id=urec.id,
                         email=urec.email,
                         provider=urec.provider,
                         provider_subject=urec.provider_subject,
+                        google_subject=urec.provider_subject if urec.provider == "google" else None,
+                        email_verified=urec.is_verified,
                         is_active=urec.is_active,
                         is_verified=urec.is_verified,
                     )
@@ -123,7 +147,7 @@ class UserStore:
                     await session.flush()
 
                 res_prof = await session.execute(select(UserProfile).where(UserProfile.user_id == uid))
-                existing_prof = res_prof.scalar_one_or_none()
+                existing_prof = res_prof.scalars().first()
                 if not existing_prof:
                     prec = self._profiles.get(uid)
                     new_prof = UserProfile(
@@ -219,9 +243,25 @@ class UserStore:
                 if provider == "google" and google_email_verified:
                     # Guard against conflicting Google identities: an account cannot be bound to two different Google subjects
                     if user_entity.google_subject and user_entity.google_subject != provider_subject:
-                        raise ValueError(f"Account for {clean_email} is already linked to a different Google account.")
+                        if not is_placeholder_google_subject(user_entity.google_subject):
+                            raise ValueError(
+                                f"Account for {clean_email} is already linked to a different Google account."
+                            )
+                        logger.info(
+                            "Upgrading placeholder google_subject '%s' to verified Google subject '%s' for user %s (%s)",
+                            user_entity.google_subject,
+                            provider_subject,
+                            user_entity.id,
+                            clean_email,
+                        )
 
                     user_entity.google_subject = provider_subject
+                    if user_entity.provider == "google" and is_placeholder_google_subject(user_entity.provider_subject):
+                        user_entity.provider_subject = provider_subject
+
+                    if user_entity.id in self._users:
+                        self._users[user_entity.id].provider_subject = provider_subject
+                    self._provider_index[f"google:{provider_subject}"] = user_entity.id
 
                     # OWASP pre-account takeover mitigation:
                     # If existing account had an unverified email, clear any unverified password
