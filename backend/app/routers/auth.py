@@ -6,6 +6,7 @@ real Google OAuth cryptographic verification (aud, iss, exp, sub),
 and durable user profile and consent management.
 """
 
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -27,6 +28,8 @@ from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 router = APIRouter(prefix="/auth", tags=["Authentication & Identity"])
@@ -254,14 +257,22 @@ async def google_auth_callback(
         ) from None
 
     # Persist user in PostgreSQL using verified unique provider and subject
-    user = await user_store.get_or_create_user_db(
-        provider="google",
-        provider_subject=google_sub,
-        email=email,
-        name=name,
-        google_email_verified=google_email_verified,
-        db=db,
-    )
+    try:
+        user = await user_store.get_or_create_user_db(
+            provider="google",
+            provider_subject=google_sub,
+            email=email,
+            name=name,
+            google_email_verified=google_email_verified,
+            db=db,
+        )
+    except ValueError as e:
+        if "already linked to a different Google account" in str(e):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(e),
+            )
+        raise
 
     token = create_access_token(user_id=user.id, email=user.email, name=user.name, provider="google")
 
@@ -340,11 +351,18 @@ async def signup_with_email(
         raw_token=raw_token,
     )
 
+    if delivery.get("delivered"):
+        delivery_msg = "Account created successfully. Please check your email to verify your address."
+    elif delivery.get("status") == "test_captured":
+        delivery_msg = "Account created. Verification token captured in test buffer."
+    else:
+        delivery_msg = "Account created. Email delivery is currently unavailable; please contact an administrator."
+
     resp_data = {
         "created": True,
         "user_id": new_user.id,
         "email": clean_email,
-        "message": "Account created successfully. Please check your email to verify your address.",
+        "message": delivery_msg,
         "delivery_status": delivery.get("status"),
     }
     return create_response_envelope(resp_data, correlation_id=cid)
@@ -499,11 +517,17 @@ async def forgot_password(
             expires_in_minutes=settings.PASSWORD_RESET_EXPIRE_MINUTES,
             db=db,
         )
-        await email_service.send_password_reset_email(
+        delivery = await email_service.send_password_reset_email(
             to_email=user.email,
             name=display_name,
             raw_token=raw_token,
         )
+        if not delivery.get("delivered") and delivery.get("status") != "test_captured":
+            logger.warning(
+                "Password reset email for %s could not be delivered: status=%s",
+                clean_email,
+                delivery.get("status"),
+            )
 
     # Safe generic response regardless of whether account was found
     resp_data = {
@@ -572,11 +596,17 @@ async def resend_verification_email(
             expires_in_minutes=settings.EMAIL_VERIFICATION_EXPIRE_HOURS * 60,
             db=db,
         )
-        await email_service.send_verification_email(
+        delivery = await email_service.send_verification_email(
             to_email=user.email,
             name=display_name,
             raw_token=raw_token,
         )
+        if not delivery.get("delivered") and delivery.get("status") != "test_captured":
+            logger.warning(
+                "Verification resend email for %s could not be delivered: status=%s",
+                clean_email,
+                delivery.get("status"),
+            )
 
     resp_data = {
         "sent": True,
