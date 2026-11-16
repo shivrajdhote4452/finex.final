@@ -124,7 +124,9 @@ async def test_signup_duplicate_email_safe_non_enumerating_response():
         assert data2["message"] == data1["message"]
 
         # Credentials must NOT be modified
-        bad_login = await client.post("/api/v1/auth/login", json={"email": test_email, "password": "AttackerPassword999!"})
+        bad_login = await client.post(
+            "/api/v1/auth/login", json={"email": test_email, "password": "AttackerPassword999!"}
+        )
         assert bad_login.status_code == 401
         assert bad_login.json()["detail"] == "Invalid email or password."
 
@@ -951,9 +953,6 @@ async def test_signup_unconfigured_smtp_truthful_response():
         email_service.enable_test_mode()
 
 
-
-
-
 @pytest.mark.asyncio
 async def test_signup_delivery_failure_new_and_existing_accounts_truthful_and_non_enumerating():
     """Verify that when SMTP delivery fails or times out:
@@ -1208,7 +1207,9 @@ async def test_recipient_specific_smtp_failure_symmetry_and_behavior():
 
         with patch.object(settings, "SMTP_HOST", "smtp.live.example.com"):
             with patch.object(email_service, "send_verification_email", return_value=recipient_550_failure):
-                with patch.object(email_service, "send_existing_account_notification", return_value=recipient_550_failure):
+                with patch.object(
+                    email_service, "send_existing_account_notification", return_value=recipient_550_failure
+                ):
                     # 1. New account registration with recipient-specific SMTP failure
                     resp_new = await client.post(
                         "/api/v1/auth/signup",
@@ -1388,5 +1389,3 @@ async def test_overlapping_concurrent_duplicate_signups():
         )
         assert login_own.status_code == 200
         assert login_own.json()["data"]["access_token"] is not None
-
-
