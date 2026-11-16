@@ -181,12 +181,30 @@ All optimized binaries are validated and published on GitHub Releases.
 | **Universal Uncompressed (Baseline)** | [Download `app-release.apk`](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/app-release.apk) | **52.2 MB** | Legacy uncompressed multi-architecture installer |
 | **Android App Bundle (`.aab`)** | [Download `finex-release.aab`](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/finex-release.aab) | **50.9 MB** | Google Play Store publication bundle with stripped symbols |
 
-### Release Verification Metadata
+### Release Verification Metadata (`v1.0.0-android`)
 - **Backend Gateway:** `https://finex-final.onrender.com/api/v1` (Healthy & Verified)
 - **Live Data Gateway:** Angel One SmartAPI (Live Quotes & Historical Session Bars)
 - **Google OAuth Client:** `com.finex.mobile` (Package verified with SHA-1 fingerprint)
 - **Signature Scheme:** APK Signature Scheme v2 (Compatible in-place upgrade)
 - **Compilation Toolchain:** Flutter 3.47.0 • Dart 3.13.0 • Kotlin 2.2.20 • Gradle 9.3.1
+
+### Latest Generated Build Artifacts (`v1.0.1-android` / PR #38 Merge)
+
+Built on **16 November 2026** from source base `f0cefe7` (PR #38 merge) with version bump to `1.0.1+2` (PR #39). Signed with dedicated production release keystore (`CN=FinEx Platform, OU=Engineering, O=FinEx Technologies, L=Mumbai, ST=Maharashtra, C=IN`).
+
+*Note for existing users:* Installing v1.0.1 requires uninstalling any previous debug-signed builds (`v1.0.0-android`) due to Android's certificate continuity security enforcement (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`).
+
+| Package | Architecture | Size | SHA-256 Checksum | Target / Recommendation |
+| :--- | :--- | :--- | :--- | :--- |
+| **`app-arm64-v8a-release.apk`** | `arm64-v8a` (64-bit ARM) | **8.52 MB** (8,938,665 B) | `9D83C110202587AC60ADE8DA61CEE1202AB779B1C1E878AB347F1FD787F93307` | **95%+ Modern Android Phones** (Samsung, OnePlus, Pixel, etc.) |
+| **`app-armeabi-v7a-release.apk`** | `armeabi-v7a` (32-bit ARM) | **8.07 MB** (8,460,147 B) | `282F127C23CF9E6D683597C41AB2A4FFEA459C0DAA72F697DC8AD02219A72602` | Older / Budget 32-bit Android phones |
+| **`app-x86_64-release.apk`** | `x86_64` | **8.71 MB** (9,135,032 B) | `9DC4B68ADF485485DBF8BA2A2BB331D2DDD40DEC889A629AE1450E5A6EFBD9AF` | PC Android Emulators & Chromebooks |
+| **`finex-universal-compressed-release.apk`** | Multi-ABI Universal | **23.61 MB** (24,756,384 B) | `714E08F35229012394C3DCF943D60CD719E0E1033FB77F85328B593BF7424118` | **Universal Sideloading** (bundles all ABIs) |
+| **`app-release.apk`** | Multi-ABI Universal | **23.61 MB** (24,756,384 B) | `714E08F35229012394C3DCF943D60CD719E0E1033FB77F85328B593BF7424118` | Standard Flutter output name |
+| **`finex-release.aab`** | Google Play Bundle (`.aab`) | **51.05 MB** (53,530,817 B) | `C3B3EAB941E90E7E909D69933100AF882C862C55FAD290424192E74940884A75` | Google Play Store publication bundle |
+
+*Note: GitHub Release download links for v1.0.1 will be activated upon publication approval.*
+
 
 ---
 

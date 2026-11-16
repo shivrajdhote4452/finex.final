@@ -82,6 +82,18 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: Optional[str] = "placeholder-google-client-secret"
     GOOGLE_REDIRECT_URI: str = "http://localhost:3000/auth/callback"
 
+    # Email & SMTP Settings
+    SMTP_HOST: Optional[str] = Field(default=None, description="SMTP server hostname for email delivery")
+    SMTP_PORT: int = Field(default=587, description="SMTP server port (e.g. 587 for STARTTLS, 465 for SSL)")
+    SMTP_USER: Optional[str] = Field(default=None, description="SMTP server username")
+    SMTP_PASSWORD: Optional[str] = Field(default=None, description="SMTP server password")
+    SMTP_USE_TLS: bool = Field(default=True, description="Enable STARTTLS encryption for SMTP")
+    EMAILS_FROM_EMAIL: str = Field(default="noreply@finexai.tech", description="Sender email address")
+    EMAILS_FROM_NAME: str = Field(default="FinEx Financial Excellence", description="Sender display name")
+    FRONTEND_URL: str = Field(default="http://localhost:3000", description="Frontend base URL for auth links")
+    EMAIL_VERIFICATION_EXPIRE_HOURS: int = Field(default=24, description="Email verification link lifetime in hours")
+    PASSWORD_RESET_EXPIRE_MINUTES: int = Field(default=30, description="Password reset link lifetime in minutes")
+
     # CORS
     ALLOWED_ORIGINS: List[str] = Field(
         default=[

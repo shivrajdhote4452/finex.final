@@ -39,6 +39,9 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
     provider: Mapped[str] = mapped_column(String(50), nullable=False, default="google")
     provider_subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    email_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    google_subject: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, unique=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     is_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
@@ -57,6 +60,7 @@ class User(Base):
         "Portfolio", back_populates="user", cascade="all, delete-orphan"
     )
     events: Mapped[List["ApplicationEvent"]] = relationship("ApplicationEvent", back_populates="user")
+    tokens: Mapped[List["AuthToken"]] = relationship("AuthToken", back_populates="user", cascade="all, delete-orphan")
 
     __table_args__ = (UniqueConstraint("provider", "provider_subject", name="uq_users_provider_subject"),)
 
@@ -191,3 +195,21 @@ class RevokedToken(Base):
         String(64), ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
     )
     revoked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+
+
+class AuthToken(Base):
+    """Single-use time-limited cryptographic tokens for email verification and password reset."""
+
+    __tablename__ = "auth_tokens"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    token_type: Mapped[str] = mapped_column(String(32), nullable=False)  # "email_verification" | "password_reset"
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+
+    user: Mapped["User"] = relationship("User", back_populates="tokens")

@@ -36,6 +36,9 @@ Download the latest verified release builds directly to your Android device:
 👉 **[View Full Release Details on GitHub](https://github.com/shivrajdhote4452/finex.final/releases/tag/v1.0.0-android)**
 
 > **Installation Tip:** For almost all modern Android phones, download the **ARM 64-bit (`18.3 MB`)** version. Tap the downloaded APK to install (enable "Install from unknown sources" if prompted) and sign in with your verified Google account.
+> 
+> ℹ️ **Latest Build Update (v1.0.1):** Version 1.0.1 incorporates PR #38 parity fixes (authoritative paper order execution, idempotent timeout reconciliation, honest quotes without fallback prices, and account reset confirmation dialog). See [`docs/releases/v1.0.1-android.md`](docs/releases/v1.0.1-android.md) for build verification, checksums, and artifact metrics.
+
 
 ---
 
@@ -139,6 +142,9 @@ npm run build
 - **API Endpoints Reference (52 Endpoints):** [`docs/api-endpoints-reference.md`](docs/api-endpoints-reference.md)
 - **API Standard & Envelope Contract:** [`docs/api-standard-v1.md`](docs/api-standard-v1.md)
 - **OpenAPI 3.1 Specification:** [`docs/openapi.json`](docs/openapi.json)
+- **Mobile Release Runbook:** [`docs/runbooks/mobile_release_runbook.md`](docs/runbooks/mobile_release_runbook.md)
+- **Mobile APK Size Optimization Guide:** [`docs/mobile-apk-size-optimization-guide.md`](docs/mobile-apk-size-optimization-guide.md)
+- **Mobile v1.0.1 Release Notes & Checksums:** [`docs/releases/v1.0.1-android.md`](docs/releases/v1.0.1-android.md)
 
 ---
 

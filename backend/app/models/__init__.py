@@ -18,6 +18,7 @@ from backend.app.models.charts import (
 )
 from backend.app.models.core import (
     ApplicationEvent,
+    AuthToken,
     Base,
     Portfolio,
     PortfolioHolding,
@@ -66,6 +67,7 @@ __all__ = [
     "User",
     "UserProfile",
     "UserConsent",
+    "AuthToken",
     "Portfolio",
     "PortfolioHolding",
     "RevokedToken",
