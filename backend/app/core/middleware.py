@@ -2,7 +2,7 @@ import collections
 import contextvars
 import time
 import uuid
-from typing import Callable, Dict
+from typing import Callable, Dict, List
 
 from backend.app.core.errors import build_error_response
 from fastapi import Request, Response
@@ -94,6 +94,8 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
     Enforces distinct limits for auth / heavy endpoints vs standard routes.
     """
 
+    _instances: List["RateLimiterMiddleware"] = []
+
     def __init__(
         self,
         app,
@@ -107,6 +109,13 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
         self.window_seconds = window_seconds
         # Mapping: client_key -> deque of timestamps
         self.records: Dict[str, collections.deque] = collections.defaultdict(collections.deque)
+        RateLimiterMiddleware._instances.append(self)
+
+    @classmethod
+    def reset_all(cls) -> None:
+        """Clear rate limit buckets (useful for test isolation)."""
+        for inst in cls._instances:
+            inst.records.clear()
 
     def _get_client_key(self, request: Request) -> str:
         auth = request.headers.get("Authorization")

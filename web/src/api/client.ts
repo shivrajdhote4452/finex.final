@@ -311,6 +311,88 @@ class ApiClient {
       return res;
     },
 
+    signup: async (email: string, password: string, name?: string) => {
+      return this.request<{
+        created: boolean;
+        user_id: string;
+        email: string;
+        message: string;
+        delivery_status?: string;
+      }>('/auth/signup', {
+        method: 'POST',
+        body: JSON.stringify({ email, password, name: name || 'Investor' }),
+      });
+    },
+
+    verifyEmail: async (token: string) => {
+      return this.request<{
+        verified: boolean;
+        email: string;
+        message: string;
+      }>('/auth/verify-email', {
+        method: 'POST',
+        body: JSON.stringify({ token }),
+      });
+    },
+
+    login: async (email: string, password: string) => {
+      const res = await this.request<{
+        access_token: string;
+        token_type: string;
+        expires_in: number;
+        user_id: string;
+        email: string;
+        name: string;
+      }>('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password }),
+      });
+      this.setToken(res.access_token);
+      return res;
+    },
+
+    forgotPassword: async (email: string) => {
+      return this.request<{
+        sent: boolean;
+        message: string;
+      }>('/auth/forgot-password', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      });
+    },
+
+    resetPassword: async (token: string, newPassword: string) => {
+      return this.request<{
+        reset: boolean;
+        message: string;
+      }>('/auth/reset-password', {
+        method: 'POST',
+        body: JSON.stringify({ token, new_password: newPassword }),
+      });
+    },
+
+    resendVerification: async (email: string) => {
+      return this.request<{
+        sent: boolean;
+        message: string;
+      }>('/auth/resend-verification', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      });
+    },
+
+    setPassword: async (newPassword: string, currentPassword?: string) => {
+      return this.request<{
+        success: boolean;
+        message: string;
+      }>('/auth/set-password', {
+        method: 'POST',
+        body: JSON.stringify({
+          new_password: newPassword,
+          current_password: currentPassword || undefined,
+        }),
+      });
+    },
 
     getMe: async () => {
       return this.request<{
@@ -325,6 +407,9 @@ class ApiClient {
         composite_score: number;
         verified_identity: boolean;
         is_owner?: boolean;
+        has_password?: boolean;
+        has_google?: boolean;
+        email_verified?: boolean;
       }>('/users/me');
     },
 

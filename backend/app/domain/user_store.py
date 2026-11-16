@@ -1,11 +1,11 @@
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Set
 
 from backend.app.database import AsyncSessionLocal
-from backend.app.models.core import RevokedToken, User, UserConsent, UserProfile
+from backend.app.models.core import AuthToken, RevokedToken, User, UserConsent, UserProfile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +19,9 @@ class UserRecord:
     name: str
     provider: str
     provider_subject: str
+    password_hash: Optional[str] = None
+    email_verified: bool = False
+    google_subject: Optional[str] = None
     is_active: bool = True
     is_verified: bool = True
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
@@ -153,38 +156,64 @@ class UserStore:
         email: str,
         name: str,
         user_id: Optional[str] = None,
+        google_email_verified: bool = True,
         db: Optional[AsyncSession] = None,
     ) -> UserRecord:
         """Find or create persistent user record in PostgreSQL."""
         owns_session = db is None
         session = db if db is not None else AsyncSessionLocal()
+        clean_email = email.strip().lower() if email else ""
         try:
-            # Query by provider + subject or by email
-            stmt = select(User).where((User.provider == provider) & (User.provider_subject == provider_subject))
-            res = await session.execute(stmt)
-            user_entity = res.scalar_one_or_none()
+            user_entity = None
+            if provider == "google":
+                # Check by google_subject or legacy provider_subject
+                stmt = select(User).where(
+                    (User.google_subject == provider_subject)
+                    | ((User.provider == "google") & (User.provider_subject == provider_subject))
+                )
+                res = await session.execute(stmt)
+                user_entity = res.scalar_one_or_none()
+            else:
+                stmt = select(User).where((User.provider == provider) & (User.provider_subject == provider_subject))
+                res = await session.execute(stmt)
+                user_entity = res.scalar_one_or_none()
 
-            if not user_entity:
-                # Also check by email to prevent duplicate accounts
-                res_email = await session.execute(select(User).where(User.email == email))
-                user_entity = res_email.scalar_one_or_none()
+            if not user_entity and clean_email:
+                if provider == "google" and not google_email_verified:
+                    # Security: Never link accounts based only on matching unverified email
+                    user_entity = None
+                else:
+                    # Check by email for account linking
+                    res_email = await session.execute(select(User).where(User.email == clean_email))
+                    user_entity = res_email.scalar_one_or_none()
 
             if not user_entity and user_id:
-                # Also check by explicit user_id
+                # Check by explicit user_id
                 res_id = await session.execute(select(User).where(User.id == user_id))
                 user_entity = res_id.scalar_one_or_none()
 
             if user_entity:
                 user_id = user_entity.id
                 # Backfill missing/placeholder email on existing user without overwriting valid email with blank
-                incoming_email = email.strip() if email else ""
                 if (
                     not user_entity.email
                     or "@google.user" in user_entity.email
                     or "@finex.local" in user_entity.email
                     or "@finex.internal" in user_entity.email
-                ) and incoming_email:
-                    user_entity.email = incoming_email
+                ) and clean_email:
+                    user_entity.email = clean_email
+                    await session.flush()
+
+                # Handle Google account linking
+                if provider == "google" and google_email_verified:
+                    if not user_entity.google_subject:
+                        user_entity.google_subject = provider_subject
+                    # OWASP pre-account takeover mitigation:
+                    # If existing account had an unverified email, clear any unverified password
+                    if not user_entity.email_verified and not user_entity.is_verified:
+                        user_entity.password_hash = None
+                    user_entity.email_verified = True
+                    user_entity.is_verified = True
                     await session.flush()
 
                 # Check and backfill UserProfile
@@ -230,6 +259,9 @@ class UserStore:
                     name=final_name,
                     provider=user_entity.provider,
                     provider_subject=user_entity.provider_subject,
+                    password_hash=user_entity.password_hash,
+                    email_verified=user_entity.email_verified,
+                    google_subject=user_entity.google_subject,
                     is_active=user_entity.is_active,
                     is_verified=user_entity.is_verified,
                 )
@@ -248,15 +280,18 @@ class UserStore:
 
             # Create new user: persist verified name and email
             uid = user_id or f"usr-{uuid.uuid4().hex[:12]}"
-            clean_email = email.strip() if email else f"{uid}@finex.local"
+            clean_email = clean_email if clean_email else f"{uid}@finex.local"
             clean_name = name.strip() if name else "Investor"
+            is_ver = True if provider == "google" and google_email_verified else False
             new_user = User(
                 id=uid,
                 email=clean_email,
                 provider=provider,
                 provider_subject=provider_subject,
+                google_subject=provider_subject if provider == "google" else None,
                 is_active=True,
-                is_verified=True,
+                is_verified=is_ver,
+                email_verified=is_ver,
             )
             session.add(new_user)
             await session.flush()
@@ -282,8 +317,11 @@ class UserStore:
                 name=clean_name,
                 provider=provider,
                 provider_subject=provider_subject,
+                password_hash=None,
+                email_verified=is_ver,
+                google_subject=provider_subject if provider == "google" else None,
                 is_active=True,
-                is_verified=True,
+                is_verified=is_ver,
             )
             self._users[uid] = user_rec
             self._provider_index[f"{provider}:{provider_subject}"] = uid
@@ -336,6 +374,9 @@ class UserStore:
                     name=resolved_name,
                     provider=u.provider,
                     provider_subject=u.provider_subject,
+                    password_hash=u.password_hash,
+                    email_verified=u.email_verified,
+                    google_subject=u.google_subject,
                     is_active=u.is_active,
                     is_verified=u.is_verified,
                 )
@@ -595,6 +636,246 @@ class UserStore:
                     await session.close()
                 except Exception:
                     pass
+
+    async def get_user_by_email_db(
+        self,
+        email: str,
+        db: Optional[AsyncSession] = None,
+    ) -> Optional[User]:
+        """Lookup active user by normalized email address."""
+        owns_session = db is None
+        session = db if db is not None else AsyncSessionLocal()
+        try:
+            norm_email = email.strip().lower()
+            stmt = select(User).where(User.email == norm_email)
+            res = await session.execute(stmt)
+            return res.scalar_one_or_none()
+        finally:
+            if owns_session:
+                await session.close()
+
+    async def create_email_user_db(
+        self,
+        email: str,
+        password_hash: str,
+        name: str,
+        db: Optional[AsyncSession] = None,
+    ) -> User:
+        """Register a new user with email and hashed password (unverified initially)."""
+        owns_session = db is None
+        session = db if db is not None else AsyncSessionLocal()
+        try:
+            uid = f"usr-{uuid.uuid4().hex[:12]}"
+            clean_email = email.strip().lower()
+            clean_name = name.strip() if name else "Investor"
+
+            new_user = User(
+                id=uid,
+                email=clean_email,
+                provider="local",
+                provider_subject=clean_email,
+                password_hash=password_hash,
+                is_active=True,
+                is_verified=False,
+                email_verified=False,
+            )
+            session.add(new_user)
+            await session.flush()
+
+            # Create UserProfile
+            display_name = clean_name.split(" ")[0] if clean_name else "Investor"
+            new_profile = UserProfile(
+                id=str(uuid.uuid4()),
+                user_id=uid,
+                full_name=clean_name,
+                display_name=display_name,
+                country="IND",
+                experience_level="BEGINNER",
+                onboarding_completed=False,
+            )
+            session.add(new_profile)
+
+            if owns_session:
+                await session.commit()
+
+            rec = UserRecord(
+                id=uid,
+                email=clean_email,
+                name=clean_name,
+                provider="local",
+                provider_subject=clean_email,
+                password_hash=password_hash,
+                email_verified=False,
+                google_subject=None,
+                is_active=True,
+                is_verified=False,
+            )
+            self._users[uid] = rec
+            self._profiles[uid] = UserProfileRecord(
+                user_id=uid,
+                full_name=clean_name,
+                display_name=display_name,
+                country="IND",
+                experience_level="BEGINNER",
+                onboarding_completed=False,
+            )
+
+            return new_user
+        except Exception:
+            if owns_session:
+                await session.rollback()
+            raise
+        finally:
+            if owns_session:
+                await session.close()
+
+    async def set_user_password_db(
+        self,
+        user_id: str,
+        password_hash: str,
+        db: Optional[AsyncSession] = None,
+    ) -> bool:
+        """Set or update user's hashed password and mark email verified."""
+        owns_session = db is None
+        session = db if db is not None else AsyncSessionLocal()
+        try:
+            res = await session.execute(select(User).where(User.id == user_id))
+            user = res.scalar_one_or_none()
+            if not user:
+                return False
+            user.password_hash = password_hash
+            user.email_verified = True
+            user.is_verified = True
+            await session.flush()
+            if owns_session:
+                await session.commit()
+
+            if user_id in self._users:
+                self._users[user_id].password_hash = password_hash
+                self._users[user_id].email_verified = True
+                self._users[user_id].is_verified = True
+
+            return True
+        except Exception:
+            if owns_session:
+                await session.rollback()
+            raise
+        finally:
+            if owns_session:
+                await session.close()
+
+    async def mark_email_verified_db(
+        self,
+        user_id: str,
+        db: Optional[AsyncSession] = None,
+    ) -> bool:
+        """Mark user's email as verified."""
+        owns_session = db is None
+        session = db if db is not None else AsyncSessionLocal()
+        try:
+            res = await session.execute(select(User).where(User.id == user_id))
+            user = res.scalar_one_or_none()
+            if not user:
+                return False
+            user.email_verified = True
+            user.is_verified = True
+            await session.flush()
+            if owns_session:
+                await session.commit()
+
+            if user_id in self._users:
+                self._users[user_id].email_verified = True
+                self._users[user_id].is_verified = True
+
+            return True
+        except Exception:
+            if owns_session:
+                await session.rollback()
+            raise
+        finally:
+            if owns_session:
+                await session.close()
+
+    async def create_auth_token_db(
+        self,
+        user_id: str,
+        token_type: str,
+        expires_in_minutes: int,
+        db: Optional[AsyncSession] = None,
+    ) -> str:
+        """Generate high-entropy token, store its SHA-256 hash in database, and return raw token."""
+        from backend.app.services.password_service import generate_raw_token, hash_token
+
+        raw_token = generate_raw_token()
+        hashed = hash_token(raw_token)
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=expires_in_minutes)
+
+        owns_session = db is None
+        session = db if db is not None else AsyncSessionLocal()
+        try:
+            token_rec = AuthToken(
+                id=str(uuid.uuid4()),
+                user_id=user_id,
+                token_hash=hashed,
+                token_type=token_type,
+                expires_at=expires_at,
+            )
+            session.add(token_rec)
+            await session.flush()
+            if owns_session:
+                await session.commit()
+            return raw_token
+        except Exception:
+            if owns_session:
+                await session.rollback()
+            raise
+        finally:
+            if owns_session:
+                await session.close()
+
+    async def verify_and_consume_auth_token_db(
+        self,
+        raw_token: str,
+        token_type: str,
+        db: Optional[AsyncSession] = None,
+    ) -> Optional[str]:
+        """Validate token hash, verify expiration and single-use, mark used, and return user_id."""
+        from backend.app.services.password_service import hash_token
+
+        hashed = hash_token(raw_token)
+
+        owns_session = db is None
+        session = db if db is not None else AsyncSessionLocal()
+        try:
+            stmt = select(AuthToken).where(
+                (AuthToken.token_hash == hashed) & (AuthToken.token_type == token_type)
+            )
+            res = await session.execute(stmt)
+            token_rec = res.scalar_one_or_none()
+            if not token_rec:
+                return None
+            if token_rec.used_at is not None:
+                return None  # Single-use already consumed
+            now = datetime.now(timezone.utc)
+            exp = token_rec.expires_at
+            if exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+            if exp < now:
+                return None  # Expired
+
+            # Mark consumed
+            token_rec.used_at = now
+            await session.flush()
+            if owns_session:
+                await session.commit()
+            return token_rec.user_id
+        except Exception:
+            if owns_session:
+                await session.rollback()
+            raise
+        finally:
+            if owns_session:
+                await session.close()
 
     # Synchronous adapter methods for backward compatibility
     def get_or_create_user(

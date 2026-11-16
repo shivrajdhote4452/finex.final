@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useFinancial } from '../context/FinancialContext';
 import { ThemeToggle } from '../components/common/ThemeToggle';
+import { apiClient } from '../api/client';
 
 interface SettingsScreenProps {
   onSignOut: () => void;
@@ -10,12 +11,49 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
   const { virtualCash, resetAccount, isOwner, userProfile } = useFinancial();
   const [resetSuccess, setResetSuccess] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [activeSubTab, setActiveSubTab] = useState<'profile' | 'appearance' | 'sandbox' | 'compliance'>('profile');
+  const [activeSubTab, setActiveSubTab] = useState<'profile' | 'security' | 'appearance' | 'sandbox' | 'compliance'>('profile');
+
+  // Security & Password state
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [pwLoading, setPwLoading] = useState(false);
+  const [pwSuccess, setPwSuccess] = useState<string | null>(null);
+  const [pwError, setPwError] = useState<string | null>(null);
 
   const handleReset = () => {
     resetAccount();
     setResetSuccess(true);
     setTimeout(() => setResetSuccess(false), 2500);
+  };
+
+  const handleSavePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPassword || newPassword.length < 8) {
+      setPwError('New password must be at least 8 characters long.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPwError('Passwords do not match. Please re-enter.');
+      return;
+    }
+    setPwLoading(true);
+    setPwError(null);
+    setPwSuccess(null);
+    try {
+      const res = await apiClient.auth.setPassword(newPassword, currentPassword || undefined);
+      setPwSuccess(res.message || 'Password saved successfully.');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      if (userProfile) {
+        userProfile.has_password = true;
+      }
+    } catch (err: any) {
+      setPwError(err?.message || 'Failed to update password.');
+    } finally {
+      setPwLoading(false);
+    }
   };
 
   const fullName = userProfile?.full_name || userProfile?.display_name || (isOwner ? 'Platform Owner' : 'FinEx Investor');
@@ -27,8 +65,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
     .map((s) => s[0].toUpperCase())
     .join('') || (isOwner ? 'PO' : 'FI');
 
-  const tabs: { id: 'profile' | 'appearance' | 'sandbox' | 'compliance'; label: string }[] = [
+  const tabs: { id: 'profile' | 'security' | 'appearance' | 'sandbox' | 'compliance'; label: string }[] = [
     { id: 'profile', label: 'Investor Profile' },
+    { id: 'security', label: 'Security & Sign-In' },
     { id: 'appearance', label: 'Theme & Appearance' },
     ...(isOwner ? [{ id: 'sandbox' as const, label: 'Sandbox & Trading Rules' }] : []),
     { id: 'compliance', label: 'Consent & Regulatory' },
@@ -177,6 +216,136 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
                     <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Computer theme sync, daylight light mode, or graphite dark mode</div>
                   </div>
                   <ThemeToggle variant="segmented" />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeSubTab === 'security' && (
+            <div>
+              <h3 style={{ fontSize: '18px', fontWeight: 600, color: '#FFFFFF', marginBottom: '8px' }}>
+                Account Security &amp; Sign-In Methods
+              </h3>
+              <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '24px' }}>
+                Manage your credentials and access the same FinEx account using Google OAuth or email and password.
+              </p>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                {/* Linked Methods Status Card */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                  <div style={{ padding: '16px', borderRadius: 'var(--radius-sm)', backgroundColor: '#0A0A0C', border: '1px solid #1F1F23' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <strong style={{ fontSize: '13px', color: '#FFFFFF' }}>Google Sign-In</strong>
+                      <span className="badge badge-profit">Connected</span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                      Verified via {userProfile?.email || 'Google Account'}
+                    </div>
+                  </div>
+
+                  <div style={{ padding: '16px', borderRadius: 'var(--radius-sm)', backgroundColor: '#0A0A0C', border: '1px solid #1F1F23' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <strong style={{ fontSize: '13px', color: '#FFFFFF' }}>Email &amp; Password</strong>
+                      <span className={userProfile?.has_password ? 'badge badge-profit' : 'badge badge-neutral'}>
+                        {userProfile?.has_password ? 'Password Active' : 'Not Set'}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                      {userProfile?.has_password
+                        ? 'Sign in directly with your email and password'
+                        : 'Set a password below to enable email login'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Password Form Card */}
+                <div style={{ padding: '24px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(255, 255, 255, 0.02)', border: '1px solid #1F1F23' }}>
+                  <h4 style={{ fontSize: '15px', fontWeight: 600, color: '#FFFFFF', marginBottom: '6px' }}>
+                    {userProfile?.has_password ? 'Change Account Password' : 'Set Account Password'}
+                  </h4>
+                  <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', marginBottom: '18px' }}>
+                    {userProfile?.has_password
+                      ? 'Update your account password. Must be at least 8 characters with letters and numbers.'
+                      : 'Create a password for your account. You will then be able to log in with either Google or your email address and password.'}
+                  </p>
+
+                  {pwError && (
+                    <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#FCA5A5', padding: '10px 14px', borderRadius: 'var(--radius-xs)', fontSize: '12px', marginBottom: '16px' }}>
+                      {pwError}
+                    </div>
+                  )}
+
+                  {pwSuccess && (
+                    <div style={{ backgroundColor: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)', color: '#86EFAC', padding: '10px 14px', borderRadius: 'var(--radius-xs)', fontSize: '12px', marginBottom: '16px' }}>
+                      {pwSuccess}
+                    </div>
+                  )}
+
+                  <form onSubmit={handleSavePassword} style={{ maxWidth: '420px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    {userProfile?.has_password && (
+                      <div>
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#A1A1AA', marginBottom: '4px', textTransform: 'uppercase' }}>
+                          Current Password
+                        </label>
+                        <input
+                          type="password"
+                          value={currentPassword}
+                          onChange={(e) => setCurrentPassword(e.target.value)}
+                          required
+                          placeholder="••••••••"
+                          style={{ width: '100%', padding: '9px 12px', backgroundColor: '#0A0A0C', border: '1px solid #27272A', borderRadius: 'var(--radius-xs)', color: '#FFFFFF', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }}
+                        />
+                      </div>
+                    )}
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#A1A1AA', marginBottom: '4px', textTransform: 'uppercase' }}>
+                        New Password (min 8 characters)
+                      </label>
+                      <input
+                        type="password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        required
+                        placeholder="••••••••"
+                        style={{ width: '100%', padding: '9px 12px', backgroundColor: '#0A0A0C', border: '1px solid #27272A', borderRadius: 'var(--radius-xs)', color: '#FFFFFF', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#A1A1AA', marginBottom: '4px', textTransform: 'uppercase' }}>
+                        Confirm New Password
+                      </label>
+                      <input
+                        type="password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        required
+                        placeholder="••••••••"
+                        style={{ width: '100%', padding: '9px 12px', backgroundColor: '#0A0A0C', border: '1px solid #27272A', borderRadius: 'var(--radius-xs)', color: '#FFFFFF', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }}
+                      />
+                    </div>
+
+                    <div>
+                      <button
+                        type="submit"
+                        disabled={pwLoading}
+                        style={{
+                          padding: '10px 20px',
+                          fontSize: '13px',
+                          fontWeight: 600,
+                          backgroundColor: 'var(--color-action)',
+                          color: '#000000',
+                          border: 'none',
+                          borderRadius: 'var(--radius-xs)',
+                          cursor: pwLoading ? 'not-allowed' : 'pointer',
+                          opacity: pwLoading ? 0.6 : 1,
+                        }}
+                      >
+                        {pwLoading ? 'Saving Password...' : (userProfile?.has_password ? 'Update Password' : 'Save & Link Password')}
+                      </button>
+                    </div>
+                  </form>
                 </div>
               </div>
             </div>
