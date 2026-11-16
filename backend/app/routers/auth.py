@@ -71,6 +71,7 @@ class SetPasswordRequest(BaseModel):
 
 class ResendVerificationRequest(BaseModel):
     email: str = Field(..., description="User email address")
+    password: Optional[str] = Field(None, description="Account password (optional if re-verifying known credentials)")
 
 
 class TokenResponse(BaseModel):
@@ -717,32 +718,56 @@ async def resend_verification_email(
         profile = await user_store.get_profile_db(user.id, db=db)
         display_name = profile.full_name if profile and profile.full_name else "Investor"
 
-        # Invalidate any previous unconsumed verification tokens before issuing a new one
-        await user_store.invalidate_user_tokens_db(
-            user_id=user.id,
-            token_type="email_verification",
-            db=db,
-        )
-        from backend.app.services.password_service import create_verification_token
+        if payload.password:
+            # User supplied credentials during resend: validate and bind them cryptographically
+            is_valid, pw_err = validate_password_strength(payload.password)
+            if not is_valid:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=pw_err or "Password does not meet complexity requirements.",
+                )
+            new_pw_hash = hash_password(payload.password)
+            from backend.app.services.password_service import create_verification_token
 
-        raw_token = create_verification_token(
-            user_id=user.id,
-            pending_password_hash=user.password_hash,
-        )
-        await user_store.create_auth_token_db(
-            user_id=user.id,
-            token_type="email_verification",
-            expires_in_minutes=settings.EMAIL_VERIFICATION_EXPIRE_HOURS * 60,
-            raw_token=raw_token,
-            db=db,
-        )
-        if db:
-            await db.commit()  # Release DB transaction before external SMTP network call
-        delivery = await email_service.send_verification_email(
-            to_email=user.email,
-            name=display_name,
-            raw_token=raw_token,
-        )
+            raw_token = create_verification_token(
+                user_id=user.id,
+                pending_password_hash=new_pw_hash,
+            )
+            await user_store.create_auth_token_db(
+                user_id=user.id,
+                token_type="email_verification",
+                expires_in_minutes=settings.EMAIL_VERIFICATION_EXPIRE_HOURS * 60,
+                raw_token=raw_token,
+                db=db,
+            )
+            if db:
+                await db.commit()  # Release DB transaction before external SMTP network call
+            delivery = await email_service.send_verification_email(
+                to_email=user.email,
+                name=display_name,
+                raw_token=raw_token,
+            )
+        else:
+            # OWASP Pre-Account Takeover Defense:
+            # When resend is requested WITHOUT supplying a password, DO NOT bind or reuse
+            # user.password_hash from the unverified database row. That password may have been
+            # chosen by an attacker during unverified initial registration.
+            # Instead, issue a secure single-use password setup / reset link so the inbox owner
+            # explicitly establishes their own password upon clicking.
+            raw_token = await user_store.create_auth_token_db(
+                user_id=user.id,
+                token_type="password_reset",
+                expires_in_minutes=settings.PASSWORD_RESET_EXPIRE_MINUTES,
+                db=db,
+            )
+            if db:
+                await db.commit()  # Release DB transaction before external SMTP network call
+            delivery = await email_service.send_password_reset_email(
+                to_email=user.email,
+                name=display_name,
+                raw_token=raw_token,
+            )
+
         if not delivery.get("delivered") and delivery.get("status") != "test_captured":
             logger.warning(
                 "Verification resend email for %s could not be delivered: status=%s",

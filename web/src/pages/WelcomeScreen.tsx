@@ -326,7 +326,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
     setLoading(true);
     setErrorMessage(null);
     try {
-      const res = await apiClient.auth.resendVerification(cleanEmail);
+      const res = await apiClient.auth.resendVerification(cleanEmail, password.trim() || undefined);
       if (res && (res as any).sent === false) {
         setErrorMessage((res as any).message || 'Could not resend verification link.');
       } else {

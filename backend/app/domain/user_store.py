@@ -1092,8 +1092,21 @@ class UserStore:
             # 3. Check verification status & activate bound password
             if not (user.email_verified or user.is_verified):
                 pending_pw = token_info.get("pwh")
-                if pending_pw:
-                    user.password_hash = pending_pw
+                if not pending_pw:
+                    # FAIL CLOSED:
+                    # If this token cannot be decrypted (e.g. JWT_SECRET_KEY rotated)
+                    # or lacks an authenticated bound password (legacy un-bound format),
+                    # we MUST NOT mark the unverified account verified. Doing so would activate
+                    # an untrusted password chosen during unverified registration.
+                    logger.warning(
+                        "Rejecting verification token for unverified user %s (%s): "
+                        "token cannot be safely decrypted or lacks bound password hash",
+                        user.id,
+                        user.email,
+                    )
+                    return None
+
+                user.password_hash = pending_pw
                 user.email_verified = True
                 user.is_verified = True
                 logger.info("Verified email and activated bound credentials for user %s (%s)", user.id, user.email)

@@ -1047,10 +1047,10 @@ async def test_unverified_user_can_retry_and_verify_after_delivery_failure():
         assert unver_login.status_code == 403
         assert "not verified" in unver_login.json()["detail"].lower()
 
-        # 2. Mail server recovers: user requests resend verification
+        # 2. Mail server recovers: user requests resend verification with their password
         resend_resp = await client.post(
             "/api/v1/auth/resend-verification",
-            json={"email": user_email},
+            json={"email": user_email, "password": user_password},
         )
         assert resend_resp.status_code == 200
         assert resend_resp.json()["data"]["sent"] is True
@@ -1389,3 +1389,217 @@ async def test_overlapping_concurrent_duplicate_signups():
         )
         assert login_own.status_code == 200
         assert login_own.json()["data"]["access_token"] is not None
+
+
+@pytest.mark.asyncio
+async def test_secret_rotation_fails_closed_preventing_unverified_pre_account_takeover():
+    """Verify that when JWT_SECRET_KEY is rotated, any verification link issued prior to rotation
+    cannot be safely decrypted and FAILS CLOSED (HTTP 400), preventing an unverified account
+    initially created with an attacker-chosen password from being activated into an attacker takeover.
+    Also verifies the recovery path: owner can re-signup or reset password under the new key.
+    """
+    from backend.app.config import get_settings
+    from backend.app.domain.user_store import user_store
+
+    settings = get_settings()
+    email_service.enable_test_mode()
+    email_service.clear_sent_emails()
+
+    victim_email = f"rot_takeover_{uuid.uuid4().hex[:8]}@example.com"
+    attacker_pw = "AttackerRotSecret123!"
+    owner_pw = "OwnerRotSecret456!"
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # Step 1: Attacker initiates signup with victim's email under key K1
+        r1 = await client.post(
+            "/api/v1/auth/signup",
+            json={"email": victim_email, "password": attacker_pw, "name": "Attacker Impostor"},
+        )
+        assert r1.status_code == 200
+        mail1 = email_service.get_last_email_for(victim_email)
+        assert mail1 is not None
+        token_under_k1 = mail1["metadata"]["token"]
+
+        # Attacker cannot log in initially (account is unverified)
+        l1 = await client.post("/api/v1/auth/login", json={"email": victim_email, "password": attacker_pw})
+        assert l1.status_code == 403
+
+        # Step 2: Application signing secret is rotated to key K2
+        orig_secret = settings.JWT_SECRET_KEY
+        settings.JWT_SECRET_KEY = "new-rotated-secret-key-32chars-min-length-security"
+        try:
+            # Step 3: Verification click arrives for token_under_k1
+            # MUST FAIL CLOSED with HTTP 400 Bad Request
+            v_res = await client.post("/api/v1/auth/verify-email", json={"token": token_under_k1})
+            assert v_res.status_code == 400
+            assert "Invalid, expired, or previously used" in v_res.json()["detail"]
+
+            # User must remain unverified in PostgreSQL
+            u_rec = await user_store.get_user_by_email_db(victim_email)
+            assert u_rec is not None
+            assert u_rec.email_verified is False
+            assert u_rec.is_verified is False
+
+            # Attacker MUST NOT be able to log in
+            l2 = await client.post("/api/v1/auth/login", json={"email": victim_email, "password": attacker_pw})
+            assert l2.status_code in (401, 403)
+
+            # Step 4: Recovery path under new key K2:
+            # Legitimate owner submits signup with owner_pw
+            r_recov = await client.post(
+                "/api/v1/auth/signup",
+                json={"email": victim_email, "password": owner_pw, "name": "Legitimate Owner"},
+            )
+            assert r_recov.status_code == 200
+            mail_recov = email_service.get_last_email_for(victim_email)
+            token_under_k2 = mail_recov["metadata"]["token"]
+
+            # Owner verifies with fresh token issued under current key
+            v_recov = await client.post("/api/v1/auth/verify-email", json={"token": token_under_k2})
+            assert v_recov.status_code == 200
+            assert v_recov.json()["data"]["verified"] is True
+
+            # Attacker password fails
+            l_att = await client.post("/api/v1/auth/login", json={"email": victim_email, "password": attacker_pw})
+            assert l_att.status_code == 401
+
+            # Owner logs in with their password
+            l_own = await client.post("/api/v1/auth/login", json={"email": victim_email, "password": owner_pw})
+            assert l_own.status_code == 200
+            assert l_own.json()["data"]["access_token"] is not None
+        finally:
+            settings.JWT_SECRET_KEY = orig_secret
+
+
+@pytest.mark.asyncio
+async def test_resend_verification_without_password_prevents_unverified_pre_account_takeover():
+    """Verify that when an unverified account's resend-verification is requested WITHOUT a password:
+    1. The server dispatches a secure password setup / reset link rather than reusing the untrusted
+       password_hash initially stored by an unauthenticated signup attempt.
+    2. Attempting to consume this token via /verify-email is rejected (HTTP 400).
+    3. The verified email owner establishes their own password via /reset-password.
+    4. Attacker's original password CANNOT log in (401), while owner's password succeeds (200).
+    """
+    from backend.app.domain.user_store import user_store
+
+    email_service.enable_test_mode()
+    email_service.clear_sent_emails()
+
+    victim_email = f"resend_takeover_{uuid.uuid4().hex[:8]}@example.com"
+    attacker_pw = "AttackerResendPw123!"
+    owner_pw = "OwnerEstablishedPw456!"
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # Step 1: Attacker initiates signup with victim's email and attacker_pw
+        r1 = await client.post(
+            "/api/v1/auth/signup",
+            json={"email": victim_email, "password": attacker_pw, "name": "Attacker Impostor"},
+        )
+        assert r1.status_code == 200
+
+        # Account is unverified
+        l1 = await client.post("/api/v1/auth/login", json={"email": victim_email, "password": attacker_pw})
+        assert l1.status_code == 403
+
+        # Step 2: Email owner requests resend verification WITHOUT entering a password
+        r_resend = await client.post(
+            "/api/v1/auth/resend-verification",
+            json={"email": victim_email},
+        )
+        assert r_resend.status_code == 200
+        assert r_resend.json()["data"]["sent"] is True
+
+        mail_resend = email_service.get_last_email_for(victim_email)
+        assert mail_resend is not None
+        # Dispatched email is a password reset / setup link (#reset-password?token=...)
+        assert "reset-password" in mail_resend["link"]
+        resend_token = mail_resend["metadata"]["token"]
+
+        # Step 3: Attempting to verify this token via /verify-email MUST FAIL (400)
+        # because it is a password setup token, not a bound email verification token
+        v_res = await client.post("/api/v1/auth/verify-email", json={"token": resend_token})
+        assert v_res.status_code == 400
+
+        # Step 4: Legitimate owner clicks the link and establishes their password via /reset-password
+        r_reset = await client.post(
+            "/api/v1/auth/reset-password",
+            json={"token": resend_token, "new_password": owner_pw},
+        )
+        assert r_reset.status_code == 200
+        assert r_reset.json()["data"]["reset"] is True
+
+        # User is now verified in PostgreSQL
+        u_rec = await user_store.get_user_by_email_db(victim_email)
+        assert u_rec is not None
+        assert u_rec.email_verified is True
+        assert u_rec.is_verified is True
+
+        # Step 5: Attacker CANNOT log in with attacker_pw
+        l_att = await client.post("/api/v1/auth/login", json={"email": victim_email, "password": attacker_pw})
+        assert l_att.status_code == 401
+        assert "Invalid email or password" in l_att.json()["detail"]
+
+        # Step 6: Owner logs in successfully with owner_pw
+        l_own = await client.post("/api/v1/auth/login", json={"email": victim_email, "password": owner_pw})
+        assert l_own.status_code == 200
+        assert l_own.json()["data"]["access_token"] is not None
+
+
+@pytest.mark.asyncio
+async def test_concurrent_resend_and_verification_under_key_rotation():
+    """Verify that under concurrent requests and key rotation, PostgreSQL row locking
+    guarantees consistency and prevents credential corruption or activation of invalid tokens.
+    """
+    import asyncio
+
+    from backend.app.config import get_settings
+
+    settings = get_settings()
+    email_service.enable_test_mode()
+    email_service.clear_sent_emails()
+
+    target_email = f"concur_rot_{uuid.uuid4().hex[:8]}@example.com"
+    attacker_pw = "AttackerConcurPw123!"
+    owner_pw = "OwnerConcurPw456!"
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # Step 1: Initial signup under key K1
+        r0 = await client.post(
+            "/api/v1/auth/signup",
+            json={"email": target_email, "password": attacker_pw},
+        )
+        assert r0.status_code == 200
+        mail0 = email_service.get_last_email_for(target_email)
+        token_k1 = mail0["metadata"]["token"]
+
+        # Step 2: Key is rotated while concurrent requests arrive
+        orig_key = settings.JWT_SECRET_KEY
+        settings.JWT_SECRET_KEY = "concurrent-rotated-key-32chars-min-prod"
+        try:
+            # Overlapping requests: resend with owner password + attempt to verify old token_k1
+            task_resend = asyncio.create_task(
+                client.post(
+                    "/api/v1/auth/resend-verification",
+                    json={"email": target_email, "password": owner_pw},
+                )
+            )
+            task_verify_old = asyncio.create_task(client.post("/api/v1/auth/verify-email", json={"token": token_k1}))
+
+            res_resend, res_verify_old = await asyncio.gather(task_resend, task_verify_old)
+            assert res_resend.status_code == 200
+            assert res_verify_old.status_code == 400  # Old token fails closed
+
+            # Now verify fresh token issued under current key
+            mail_new = email_service.get_last_email_for(target_email)
+            token_new = mail_new["metadata"]["token"]
+            res_v_new = await client.post("/api/v1/auth/verify-email", json={"token": token_new})
+            assert res_v_new.status_code == 200
+
+            # Attacker fails, owner succeeds
+            l_att = await client.post("/api/v1/auth/login", json={"email": target_email, "password": attacker_pw})
+            assert l_att.status_code == 401
+
+            l_own = await client.post("/api/v1/auth/login", json={"email": target_email, "password": owner_pw})
+            assert l_own.status_code == 200
+        finally:
+            settings.JWT_SECRET_KEY = orig_key

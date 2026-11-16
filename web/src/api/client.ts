@@ -385,13 +385,13 @@ class ApiClient {
       });
     },
 
-    resendVerification: async (email: string) => {
+    resendVerification: async (email: string, password?: string) => {
       return this.request<{
         sent: boolean;
         message: string;
       }>('/auth/resend-verification', {
         method: 'POST',
-        body: JSON.stringify({ email }),
+        body: JSON.stringify(password ? { email, password } : { email }),
       });
     },
 
