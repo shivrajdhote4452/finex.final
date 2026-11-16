@@ -427,7 +427,13 @@ class ApiClient {
     }
   }
 
+  @visibleForTesting
+  Future<Map<String, dynamic>> Function(double amount)? mockDepositFundsHandler;
+
   Future<Map<String, dynamic>> depositFunds(double amount) async {
+    if (mockDepositFundsHandler != null) {
+      return mockDepositFundsHandler!(amount);
+    }
     final url = Uri.parse('$baseUrl/paper-trading/deposit');
     final response = await http.post(
       url,
@@ -502,7 +508,13 @@ class ApiClient {
     return {'symbol': symbol, 'bars': []};
   }
 
+  @visibleForTesting
+  Future<Map<String, dynamic>> Function({bool confirmReset})? mockResetAccountHandler;
+
   Future<Map<String, dynamic>> resetAccount({bool confirmReset = true}) async {
+    if (mockResetAccountHandler != null) {
+      return mockResetAccountHandler!(confirmReset: confirmReset);
+    }
     final url = Uri.parse('$baseUrl/paper-trading/reset');
     final response = await http.post(
       url,

@@ -138,6 +138,110 @@ void main() {
       await apiClient.setProfile(null);
     });
 
+    testWidgets('SettingsScreen reset dialog explains impacts, Cancel aborts without calling API, and Confirm Reset executes', (tester) async {
+      await apiClient.setToken('owner-test-token');
+      await apiClient.setProfile({'name': 'Owner Admin', 'email': 'owner@finex.test', 'is_owner': true});
+
+      int resetCallCount = 0;
+      apiClient.mockResetAccountHandler = ({bool confirmReset = true}) async {
+        resetCallCount++;
+        return {
+          'reset': true,
+          'cash_balance': 100000.0,
+          'current_cash': 100000.0,
+          'reset_count': 1,
+        };
+      };
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: TerminalTheme.darkTheme,
+          home: const MobileSettingsScreen(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Navigate to Sandbox tab
+      await tester.tap(find.text('Sandbox'));
+      await tester.pumpAndSettle();
+
+      // Tap Reset button
+      final resetBtnFinder = find.widgetWithText(ElevatedButton, 'Reset ₹1L');
+      expect(resetBtnFinder, findsOneWidget);
+      await tester.tap(resetBtnFinder);
+      await tester.pumpAndSettle();
+
+      // 1. Verify confirmation dialog and verified backend explanations
+      expect(find.text('Confirm Account Reset'), findsOneWidget);
+      expect(find.textContaining('Restored to exactly ₹1,00,000.00'), findsOneWidget);
+      expect(find.textContaining('All active stock and option holdings are cleared'), findsOneWidget);
+      expect(find.textContaining('Preserved for audit trail. Pending orders are not canceled'), findsOneWidget);
+
+      // 2. Tap Cancel -> Dialog closes, API is NOT called
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(find.text('Confirm Account Reset'), findsNothing);
+      expect(resetCallCount, equals(0));
+
+      // 3. Re-open dialog and tap Confirm Reset -> API is called
+      await tester.tap(resetBtnFinder);
+      await tester.pumpAndSettle();
+      expect(find.text('Confirm Account Reset'), findsOneWidget);
+
+      await tester.tap(find.text('Confirm Reset'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Confirm Account Reset'), findsNothing);
+      expect(resetCallCount, equals(1));
+      expect(find.text('Simulated sandbox account successfully reset to ₹1,00,000.'), findsOneWidget);
+      expect(find.text('Reset ✓'), findsOneWidget);
+
+      // Drain the 3-second success indicator reset timer
+      await tester.pump(const Duration(seconds: 4));
+
+      // Cleanup
+      apiClient.mockResetAccountHandler = null;
+      await tester.pumpWidget(Container());
+      await apiClient.setToken(null);
+      await apiClient.setProfile(null);
+    });
+
+    testWidgets('SettingsScreen reset dialog shows actual error result when backend reset fails', (tester) async {
+      await apiClient.setToken('owner-test-token');
+      await apiClient.setProfile({'name': 'Owner Admin', 'email': 'owner@finex.test', 'is_owner': true});
+
+      apiClient.mockResetAccountHandler = ({bool confirmReset = true}) async {
+        throw Exception('Simulated database lock failure');
+      };
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: TerminalTheme.darkTheme,
+          home: const MobileSettingsScreen(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Navigate to Sandbox tab
+      await tester.tap(find.text('Sandbox'));
+      await tester.pumpAndSettle();
+
+      // Tap Reset and confirm
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Reset ₹1L'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Confirm Reset'));
+      await tester.pumpAndSettle();
+
+      // Verify error snackbar is displayed with actual error
+      expect(find.textContaining('Account reset failed: Simulated database lock failure'), findsOneWidget);
+
+      // Cleanup
+      apiClient.mockResetAccountHandler = null;
+      await tester.pumpWidget(Container());
+      await apiClient.setToken(null);
+      await apiClient.setProfile(null);
+    });
+
     testWidgets('SpendingScreen prominently displays demo data banner when displaying sample cashflow', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
