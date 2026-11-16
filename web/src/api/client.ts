@@ -266,12 +266,12 @@ class ApiClient {
       clearTimeout(timeoutId);
     }
 
-    // Handle 401 Unauthorized globally (except for public auth check)
+    // Handle 401 Unauthorized globally for protected routes (exclude public auth endpoints)
     if (response.status === 401) {
-      if (!endpoint.includes('/auth/google') && !endpoint.includes('/auth/login')) {
+      if (!endpoint.includes('/auth/')) {
         this.setToken(null);
+        throw new ApiError('Authentication required or session expired', 401, 'UNAUTHORIZED');
       }
-      throw new ApiError('Authentication required or session expired', 401, 'UNAUTHORIZED');
     }
 
     let payload: any;

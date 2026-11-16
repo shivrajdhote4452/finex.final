@@ -506,6 +506,17 @@ async def forgot_password(
             headers={"Retry-After": str(retry_after)},
         )
 
+    has_smtp = bool(settings.SMTP_HOST)
+    is_test = email_service._is_test_mode()
+
+    if not has_smtp and not is_test:
+        resp_data = {
+            "sent": False,
+            "message": "Password reset via email is currently unavailable because transactional email is not configured. Please sign in with Google or contact support.",
+            "delivery_status": "smtp_not_configured",
+        }
+        return create_response_envelope(resp_data, correlation_id=cid)
+
     user = await user_store.get_user_by_email_db(clean_email, db=db)
     if user and user.is_active:
         profile = await user_store.get_profile_db(user.id, db=db)
@@ -528,11 +539,18 @@ async def forgot_password(
                 clean_email,
                 delivery.get("status"),
             )
+            resp_data = {
+                "sent": False,
+                "message": "Password reset email could not be delivered due to a mail server issue. Please try again later or contact support.",
+                "delivery_status": delivery.get("status"),
+            }
+            return create_response_envelope(resp_data, correlation_id=cid)
 
     # Safe generic response regardless of whether account was found
     resp_data = {
         "sent": True,
         "message": "If an account exists for this email address, password reset instructions have been sent.",
+        "delivery_status": "delivered" if (has_smtp or is_test) else "queued",
     }
     return create_response_envelope(resp_data, correlation_id=cid)
 
@@ -585,6 +603,17 @@ async def resend_verification_email(
     cid = getattr(request.state, "correlation_id", "none")
     clean_email = payload.email.strip().lower()
 
+    has_smtp = bool(settings.SMTP_HOST)
+    is_test = email_service._is_test_mode()
+
+    if not has_smtp and not is_test:
+        resp_data = {
+            "sent": False,
+            "message": "Email verification resend is currently unavailable because transactional email is not configured. Please sign in with Google or contact support.",
+            "delivery_status": "smtp_not_configured",
+        }
+        return create_response_envelope(resp_data, correlation_id=cid)
+
     user = await user_store.get_user_by_email_db(clean_email, db=db)
     if user and not (user.email_verified or user.is_verified):
         profile = await user_store.get_profile_db(user.id, db=db)
@@ -607,10 +636,17 @@ async def resend_verification_email(
                 clean_email,
                 delivery.get("status"),
             )
+            resp_data = {
+                "sent": False,
+                "message": "Verification email could not be delivered due to a mail server issue. Please try again later or contact support.",
+                "delivery_status": delivery.get("status"),
+            }
+            return create_response_envelope(resp_data, correlation_id=cid)
 
     resp_data = {
         "sent": True,
         "message": "If this account is registered and unverified, a new verification link has been sent.",
+        "delivery_status": "delivered" if (has_smtp or is_test) else "queued",
     }
     return create_response_envelope(resp_data, correlation_id=cid)
 

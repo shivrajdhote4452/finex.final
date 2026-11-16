@@ -155,8 +155,14 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
       setErrorMessage('You must accept the Terms and Privacy Policy to proceed.');
       return;
     }
-    if (!email.trim() || !password) {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !password) {
       setErrorMessage('Please enter both your email address and password.');
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      setErrorMessage('Please enter a valid email address.');
       return;
     }
 
@@ -165,7 +171,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
     setSuccessMessage(null);
 
     try {
-      const res = await apiClient.auth.login(email.trim(), password);
+      const res = await apiClient.auth.login(cleanEmail, password);
       if (!res?.access_token) {
         throw new Error('Authentication succeeded but server returned no access token.');
       }
@@ -197,8 +203,14 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
       setErrorMessage('You must accept the Terms and Privacy Policy to proceed.');
       return;
     }
-    if (!email.trim() || !password) {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !password) {
       setErrorMessage('Please enter an email address and password.');
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      setErrorMessage('Please enter a valid email address.');
       return;
     }
     if (password.length < 8) {
@@ -211,7 +223,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
     setSuccessMessage(null);
 
     try {
-      const res = await apiClient.auth.signup(email.trim(), password, name.trim() || 'Investor');
+      const res = await apiClient.auth.signup(cleanEmail, password, name.trim() || 'Investor');
       setSuccessMessage(
         res.message || 'Account created! Please check your email to verify your address and activate your account.'
       );
@@ -227,8 +239,14 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
 
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim()) {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) {
       setErrorMessage('Please enter your email address to receive password reset instructions.');
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      setErrorMessage('Please enter a valid email address.');
       return;
     }
 
@@ -237,10 +255,14 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
     setSuccessMessage(null);
 
     try {
-      const res = await apiClient.auth.forgotPassword(email.trim());
-      setSuccessMessage(
-        res.message || 'If an account exists for this email, password reset instructions have been sent.'
-      );
+      const res = await apiClient.auth.forgotPassword(cleanEmail);
+      if (res && (res as any).sent === false) {
+        setErrorMessage((res as any).message || 'Password reset via email is currently unavailable.');
+      } else {
+        setSuccessMessage(
+          res.message || 'If an account exists for this email, password reset instructions have been sent.'
+        );
+      }
     } catch (err: any) {
       console.error('Forgot password error:', err);
       setErrorMessage(err?.message || 'Could not process password reset request.');
@@ -286,15 +308,26 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   };
 
   const handleResendVerification = async () => {
-    if (!email.trim()) {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) {
       setErrorMessage('Please enter your email address above to receive a new verification link.');
       return;
     }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      setErrorMessage('Please enter a valid email address.');
+      return;
+    }
+
     setLoading(true);
     setErrorMessage(null);
     try {
-      const res = await apiClient.auth.resendVerification(email.trim());
-      setSuccessMessage(res.message || 'Verification link sent. Please check your inbox.');
+      const res = await apiClient.auth.resendVerification(cleanEmail);
+      if (res && (res as any).sent === false) {
+        setErrorMessage((res as any).message || 'Could not resend verification link.');
+      } else {
+        setSuccessMessage(res.message || 'Verification link sent. Please check your inbox.');
+      }
     } catch (err: any) {
       setErrorMessage(err?.message || 'Could not resend verification link.');
     } finally {
@@ -521,6 +554,47 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
               }}
             >
               {errorMessage}
+              {mode === 'signin' && errorMessage.toLowerCase().includes('invalid email or password') && (
+                <div style={{ marginTop: '8px', display: 'flex', gap: '14px', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode('signup');
+                      setErrorMessage(null);
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--color-action)',
+                      textDecoration: 'underline',
+                      fontSize: '11.5px',
+                      cursor: 'pointer',
+                      padding: 0,
+                      fontWeight: 600,
+                    }}
+                  >
+                    New user? Create an account →
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode('forgot');
+                      setErrorMessage(null);
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#D4D4D8',
+                      textDecoration: 'underline',
+                      fontSize: '11.5px',
+                      cursor: 'pointer',
+                      padding: 0,
+                    }}
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+              )}
               {errorMessage.includes('not verified') && (
                 <div style={{ marginTop: '6px' }}>
                   <button
@@ -816,6 +890,30 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
               >
                 {loading ? 'Signing In...' : 'Sign In to Workspace →'}
               </button>
+
+              <div style={{ marginTop: '16px', textAlign: 'center', fontSize: '12px', color: '#71717A' }}>
+                Don&apos;t have an account?{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('signup');
+                    setErrorMessage(null);
+                    setSuccessMessage(null);
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--color-action)',
+                    textDecoration: 'underline',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    padding: 0,
+                  }}
+                >
+                  Create Account
+                </button>
+              </div>
             </form>
           )}
 
@@ -992,6 +1090,30 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
               >
                 {loading ? 'Creating Account...' : 'Create Account & Verify Email →'}
               </button>
+
+              <div style={{ marginTop: '16px', textAlign: 'center', fontSize: '12px', color: '#71717A' }}>
+                Already have an account?{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('signin');
+                    setErrorMessage(null);
+                    setSuccessMessage(null);
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--color-action)',
+                    textDecoration: 'underline',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    padding: 0,
+                  }}
+                >
+                  Sign In
+                </button>
+              </div>
             </form>
           )}
 

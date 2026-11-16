@@ -733,3 +733,90 @@ async def test_error_envelope_contains_detail_and_structured_error():
         assert "valid email address is required" in data["detail"].lower()
         assert data.get("success") is False
         assert data.get("error", {}).get("message") is not None
+
+
+@pytest.mark.asyncio
+async def test_unregistered_email_signin_returns_safe_generic_401():
+    """Verify that sign-in with an unregistered email returns safe generic 401 without enumeration."""
+    unregistered_email = f"unregistered_{uuid.uuid4().hex[:8]}@example.com"
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.post(
+            "/api/v1/auth/login",
+            json={"email": unregistered_email, "password": "AnyPassword123!"},
+        )
+        assert resp.status_code == 401
+        data = resp.json()
+        assert data.get("detail") == "Invalid email or password."
+        assert data.get("success") is False
+
+
+@pytest.mark.asyncio
+async def test_google_only_user_signin_without_password_returns_safe_generic_401():
+    """Verify that a user who registered via Google only (no password_hash) receives generic 401 on password login."""
+    google_email = f"googleonly_{uuid.uuid4().hex[:8]}@example.com"
+    id_info = {
+        "iss": "accounts.google.com",
+        "sub": f"google-sub-{uuid.uuid4().hex[:12]}",
+        "email": google_email,
+        "email_verified": True,
+        "name": "Google User",
+    }
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        with patch("backend.app.routers.auth.google_id_token.verify_oauth2_token", return_value=id_info):
+            g_resp = await client.post("/api/v1/auth/google", json={"id_token": "valid-token"})
+            assert g_resp.status_code == 200
+
+        # Attempt password sign-in without a set password
+        p_resp = await client.post(
+            "/api/v1/auth/login",
+            json={"email": google_email, "password": "RandomPassword123!"},
+        )
+        assert p_resp.status_code == 401
+        assert p_resp.json().get("detail") == "Invalid email or password."
+
+
+@pytest.mark.asyncio
+async def test_forgot_password_unconfigured_smtp_truthful_response():
+    """Verify that when SMTP is not configured in non-test mode, forgot-password truthfully returns sent: False."""
+    from backend.app.config import get_settings
+
+    settings = get_settings()
+    email_service.disable_test_mode()
+    try:
+        with patch.object(settings, "SMTP_HOST", ""):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                resp = await client.post(
+                    "/api/v1/auth/forgot-password",
+                    json={"email": "anyone@example.com"},
+                )
+                assert resp.status_code == 200
+                data = resp.json().get("data", {})
+                assert data.get("sent") is False
+                assert "transactional email is not configured" in data.get("message", "").lower()
+                assert data.get("delivery_status") == "smtp_not_configured"
+    finally:
+        email_service.enable_test_mode()
+
+
+@pytest.mark.asyncio
+async def test_resend_verification_unconfigured_smtp_truthful_response():
+    """Verify that when SMTP is not configured in non-test mode, resend-verification truthfully returns sent: False."""
+    from backend.app.config import get_settings
+
+    settings = get_settings()
+    email_service.disable_test_mode()
+    try:
+        with patch.object(settings, "SMTP_HOST", ""):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                resp = await client.post(
+                    "/api/v1/auth/resend-verification",
+                    json={"email": "anyone@example.com"},
+                )
+                assert resp.status_code == 200
+                data = resp.json().get("data", {})
+                assert data.get("sent") is False
+                assert "transactional email is not configured" in data.get("message", "").lower()
+                assert data.get("delivery_status") == "smtp_not_configured"
+    finally:
+        email_service.enable_test_mode()
+
