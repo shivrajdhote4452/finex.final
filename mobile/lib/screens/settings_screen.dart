@@ -15,7 +15,7 @@ class MobileSettingsScreen extends StatefulWidget {
 
 class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
   String _activeTab = 'profile'; // 'profile' | 'sandbox' | 'compliance'
-  double _virtualCash = 50000.0;
+  double _virtualCash = 100000.0;
   bool _isLoading = false;
   bool _resetSuccess = false;
   bool _notificationsEnabled = true;
@@ -46,7 +46,7 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
       final acct = await apiClient.getAccount();
       if (mounted) {
         setState(() {
-          _virtualCash = (acct['cash_balance'] ?? acct['current_cash'] as num?)?.toDouble() ?? 50000.0;
+          _virtualCash = (acct['cash_balance'] ?? acct['current_cash'] as num?)?.toDouble() ?? 100000.0;
         });
       }
     } catch (_) {
@@ -54,19 +54,143 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
     }
   }
 
+  void _showResetConfirmationDialog() {
+    if (_isLoading) return;
+
+    showDialog<bool>(
+      context: context,
+      barrierDismissible: !_isLoading,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: TerminalColors.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: const BorderSide(color: TerminalColors.borderSubtle),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: TerminalColors.action, size: 20),
+              SizedBox(width: 8),
+              Text(
+                "Confirm Account Reset",
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: TerminalColors.textMain,
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "This action resets your sandbox account state back to factory defaults:",
+                style: TextStyle(fontSize: 12, color: TerminalColors.textMuted, height: 1.4),
+              ),
+              const SizedBox(height: 12),
+              _buildResetImpactItem(
+                icon: Icons.account_balance_wallet_outlined,
+                title: "Virtual Cash Balance",
+                description: "Restored to exactly ₹1,00,000.00.",
+                color: TerminalColors.positive,
+              ),
+              const SizedBox(height: 8),
+              _buildResetImpactItem(
+                icon: Icons.pie_chart_outline,
+                title: "Open Positions",
+                description: "All active stock and option holdings are cleared.",
+                color: TerminalColors.negative,
+              ),
+              const SizedBox(height: 8),
+              _buildResetImpactItem(
+                icon: Icons.history,
+                title: "Order History",
+                description: "Preserved for audit trail. Pending orders are not canceled.",
+                color: TerminalColors.textMuted,
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                "Are you sure you want to proceed with this reset?",
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: TerminalColors.textMain),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text(
+                "Cancel",
+                style: TextStyle(color: TerminalColors.textMuted, fontWeight: FontWeight.w600),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: TerminalColors.action,
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+              ),
+              onPressed: () {
+                Navigator.of(ctx).pop(true);
+                _handleReset();
+              },
+              child: const Text(
+                "Confirm Reset",
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildResetImpactItem({
+    required IconData icon,
+    required String title,
+    required String description,
+    required Color color,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: TerminalColors.textMain),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                description,
+                style: const TextStyle(fontSize: 11, color: TerminalColors.textMuted, height: 1.3),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Future<void> _handleReset() async {
+    if (_isLoading) return;
     setState(() => _isLoading = true);
     try {
       final res = await apiClient.resetAccount(confirmReset: true);
       if (mounted) {
         setState(() {
-          _virtualCash = (res['cash_balance'] ?? res['current_cash'] as num?)?.toDouble() ?? 50000.0;
+          _virtualCash = (res['cash_balance'] ?? res['current_cash'] as num?)?.toDouble() ?? 100000.0;
           _resetSuccess = true;
           _isLoading = false;
         });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text("Simulated sandbox account successfully reset to ₹50,000."),
+            content: Text("Simulated sandbox account successfully reset to ₹1,00,000."),
             backgroundColor: TerminalColors.positive,
             behavior: SnackBarBehavior.floating,
           ),
@@ -80,7 +204,7 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Account reset failed: $e"),
+            content: Text("Account reset failed: ${e.toString().replaceFirst("Exception: ", "")}"),
             backgroundColor: TerminalColors.negative,
             behavior: SnackBarBehavior.floating,
           ),
@@ -433,7 +557,7 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
                     children: [
                       Text("Reset Sandbox Account", style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: TerminalColors.textMain)),
                       SizedBox(height: 2),
-                      Text("Restores virtual cash to ₹50,000 and clears positions", style: TextStyle(fontSize: 11, color: TerminalColors.textMuted)),
+                      Text("Restores virtual cash to ₹1,00,000 and clears positions", style: TextStyle(fontSize: 11, color: TerminalColors.textMuted)),
                     ],
                   ),
                 ),
@@ -446,11 +570,17 @@ class _MobileSettingsScreenState extends State<MobileSettingsScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                   ),
-                  onPressed: _isLoading ? null : _handleReset,
-                  child: Text(
-                    _resetSuccess ? "Reset ✓" : "Reset ₹50k",
-                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-                  ),
+                  onPressed: _isLoading ? null : _showResetConfirmationDialog,
+                  child: _isLoading
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: TerminalColors.action),
+                        )
+                      : Text(
+                          _resetSuccess ? "Reset ✓" : "Reset ₹1L",
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                        ),
                 ),
               ],
             ),

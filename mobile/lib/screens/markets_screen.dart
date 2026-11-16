@@ -22,6 +22,7 @@ class _MobileMarketsScreenState extends State<MobileMarketsScreen> {
   String _selectedIndexCategory = 'ALL'; // 'ALL' | 'HEADLINE' | 'SECTORAL'
 
   bool _indicesLoading = false;
+  bool _indicesOffline = false;
   List<Map<String, dynamic>> _indicesList = [];
 
   // User-owned pinned watchlist set
@@ -1215,6 +1216,36 @@ class _MobileMarketsScreenState extends State<MobileMarketsScreen> {
     super.initState();
     _indicesList = List.from(_fallbackIndices);
     _loadIndices();
+    _loadEquitiesQuotes();
+  }
+
+  Future<void> _loadEquitiesQuotes() async {
+    for (int i = 0; i < _instruments.length; i++) {
+      final sym = _instruments[i]['symbol'] as String?;
+      if (sym == null) continue;
+      if (_pinnedWatchlist.contains(sym) || i < 8) {
+        try {
+          final q = await apiClient.getQuote(sym);
+          if (q != null && mounted) {
+            final ltp = (q['last_price'] ?? q['price'] as num?)?.toDouble();
+            final chg = (q['change'] as num?)?.toDouble();
+            final chgPct = (q['change_percent'] ?? q['change_pct'] as num?)?.toDouble();
+            if (ltp != null) {
+              setState(() {
+                _instruments[i]['price'] = ltp;
+                if (chg != null) _instruments[i]['changeVal'] = chg;
+                if (chgPct != null) {
+                  _instruments[i]['changePct'] = chgPct;
+                  _instruments[i]['positive'] = chgPct >= 0;
+                }
+                _instruments[i]['status'] = (q['freshness'] ?? 'LIVE').toString().toUpperCase();
+                _instruments[i]['is_live'] = true;
+              });
+            }
+          }
+        } catch (_) {}
+      }
+    }
   }
 
   Future<void> _loadIndices() async {
@@ -1247,13 +1278,24 @@ class _MobileMarketsScreenState extends State<MobileMarketsScreen> {
         }).toList();
         setState(() {
           _indicesList = updated;
+          _indicesOffline = false;
           _indicesLoading = false;
         });
       } else {
-        if (mounted) setState(() => _indicesLoading = false);
+        if (mounted) {
+          setState(() {
+            _indicesOffline = true;
+            _indicesLoading = false;
+          });
+        }
       }
     } catch (_) {
-      if (mounted) setState(() => _indicesLoading = false);
+      if (mounted) {
+        setState(() {
+          _indicesOffline = true;
+          _indicesLoading = false;
+        });
+      }
     }
   }
 
@@ -1508,7 +1550,7 @@ class _MobileMarketsScreenState extends State<MobileMarketsScreen> {
                             label: const Text("Instant Trade", style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
                             onPressed: () {
                               Navigator.pop(ctx);
-                              QuickTradeModal.show(context, initialSymbol: sym);
+                              QuickTradeModal.show(context, initialSymbol: sym, initialPrice: price > 0 ? price : null);
                             },
                           ),
                         ),
@@ -1851,7 +1893,7 @@ class _MobileMarketsScreenState extends State<MobileMarketsScreen> {
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: GestureDetector(
-                                      onTap: () => QuickTradeModal.show(context, initialSymbol: sym),
+                                      onTap: () => QuickTradeModal.show(context, initialSymbol: sym, initialPrice: (item['price'] as num?)?.toDouble()),
                                       child: Container(
                                         padding: const EdgeInsets.symmetric(vertical: 5),
                                         decoration: BoxDecoration(
@@ -2008,6 +2050,24 @@ class _MobileMarketsScreenState extends State<MobileMarketsScreen> {
               ],
             ),
           ),
+
+          if (_indicesOffline)
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: TerminalColors.action.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: TerminalColors.action.withValues(alpha: 0.3)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.cloud_off, size: 12, color: TerminalColors.action),
+                  SizedBox(width: 8),
+                  Text("Indices live feed offline · Showing cached reference data", style: TextStyle(fontSize: 10, color: TerminalColors.textMain)),
+                ],
+              ),
+            ),
 
           // Indices List
           Expanded(

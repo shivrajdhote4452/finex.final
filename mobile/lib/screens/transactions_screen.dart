@@ -99,15 +99,42 @@ class _MobileTransactionsScreenState extends State<MobileTransactionsScreen> {
                         foregroundColor: Colors.black,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                       ),
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            backgroundColor: TerminalColors.surface,
-                            content: Text('Deposited ₹${amount.toStringAsFixed(0)} virtual funds into ledger.'),
-                          ),
-                        );
-                        _loadTransactions();
+                      onPressed: () async {
+                        if (!apiClient.isOwner) {
+                          if (ctx.mounted) Navigator.pop(ctx);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                backgroundColor: TerminalColors.negative,
+                                content: Text('Deposit authorization: Sandbox controls are restricted to the platform owner.'),
+                              ),
+                            );
+                          }
+                          return;
+                        }
+                        try {
+                          await apiClient.depositFunds(amount);
+                          if (ctx.mounted) Navigator.pop(ctx);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                backgroundColor: TerminalColors.surface,
+                                content: Text('Deposited ₹${amount.toStringAsFixed(0)} virtual funds into ledger.'),
+                              ),
+                            );
+                          }
+                          _loadTransactions();
+                        } catch (e) {
+                          if (ctx.mounted) Navigator.pop(ctx);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                backgroundColor: TerminalColors.negative,
+                                content: Text('Deposit authorization: ${e.toString().replaceFirst("Exception: ", "")}'),
+                              ),
+                            );
+                          }
+                        }
                       },
                       child: Text('DEPOSIT ₹${amount.toStringAsFixed(0)} VIRTUAL CASH', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
                     ),
@@ -125,7 +152,7 @@ class _MobileTransactionsScreenState extends State<MobileTransactionsScreen> {
     final sym = order['symbol'] ?? 'RELIANCE';
     final side = order['side'] ?? 'BUY';
     final qty = (order['quantity'] as num?)?.toInt() ?? 1;
-    final price = (order['price'] ?? order['fill_price'] as num?)?.toDouble() ?? 2500.0;
+    final price = (order['fill_price'] ?? order['price'] as num?)?.toDouble() ?? 0.0;
     final gross = qty * price;
     final stt = gross * 0.001; // 0.1% STT
     final exchFees = gross * 0.0000345;
@@ -248,11 +275,12 @@ class _MobileTransactionsScreenState extends State<MobileTransactionsScreen> {
       appBar: AppBar(
         title: const Text('TRANSACTION LEDGER & AUDIT DESK'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.add_card, size: 20, color: TerminalColors.action),
-            tooltip: 'Add Paper Cash',
-            onPressed: _showDepositModal,
-          ),
+          if (apiClient.isOwner)
+            IconButton(
+              icon: const Icon(Icons.add_card, size: 20, color: TerminalColors.action),
+              tooltip: 'Add Paper Cash',
+              onPressed: _showDepositModal,
+            ),
           IconButton(
             icon: const Icon(Icons.refresh, size: 20, color: TerminalColors.textMain),
             onPressed: _loadTransactions,
@@ -307,20 +335,22 @@ class _MobileTransactionsScreenState extends State<MobileTransactionsScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 10),
-                SizedBox(
-                  height: 40,
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: TerminalColors.action,
-                      side: const BorderSide(color: TerminalColors.action),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                if (apiClient.isOwner) ...[
+                  const SizedBox(width: 10),
+                  SizedBox(
+                    height: 40,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: TerminalColors.action,
+                        side: const BorderSide(color: TerminalColors.action),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                      ),
+                      icon: const Icon(Icons.attach_money, size: 16),
+                      label: const Text('DEPOSIT CASH', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
+                      onPressed: _showDepositModal,
                     ),
-                    icon: const Icon(Icons.attach_money, size: 16),
-                    label: const Text('DEPOSIT CASH', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
-                    onPressed: _showDepositModal,
                   ),
-                ),
+                ],
               ],
             ),
             const SizedBox(height: 16),
@@ -406,7 +436,7 @@ class _MobileTransactionsScreenState extends State<MobileTransactionsScreen> {
                 final sym = o['symbol'] ?? 'RELIANCE';
                 final side = (o['side'] ?? 'BUY').toString().toUpperCase();
                 final qty = (o['quantity'] as num?)?.toInt() ?? 1;
-                final price = (o['price'] ?? o['fill_price'] as num?)?.toDouble() ?? 2500.0;
+                final price = (o['fill_price'] ?? o['price'] as num?)?.toDouble() ?? 0.0;
                 final total = qty * price;
                 final isBuy = side == 'BUY';
                 final status = (o['status'] ?? 'FILLED').toString().toUpperCase();

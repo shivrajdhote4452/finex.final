@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
@@ -7,6 +8,7 @@ class ApiClient {
   static final ApiClient _instance = ApiClient._internal();
   factory ApiClient() => _instance;
   ApiClient._internal();
+  ApiClient.mock();
 
   static const FlutterSecureStorage _storage = FlutterSecureStorage();
   static const String _tokenStorageKey = 'finex_auth_token';
@@ -355,17 +357,19 @@ class ApiClient {
     double? limitPrice,
     String? idempotencyKey,
   }) async {
-    final key = idempotencyKey ?? 'mob-ord-${DateTime.now().millisecondsSinceEpoch}';
+    final key = idempotencyKey ??
+        'mob-ord-${DateTime.now().millisecondsSinceEpoch}-${math.Random().nextInt(900000) + 100000}';
+    final cleanOrderType = orderType.toUpperCase();
     final url = Uri.parse('$baseUrl/paper-trading/orders');
     final response = await http.post(
       url,
       headers: _headers({'X-Idempotency-Key': key}),
       body: jsonEncode({
         'symbol': symbol,
-        'side': side,
-        'order_type': orderType,
+        'side': side.toUpperCase(),
+        'order_type': cleanOrderType,
         'quantity': quantity,
-        if (limitPrice != null) 'limit_price': limitPrice,
+        if (cleanOrderType == 'LIMIT' && limitPrice != null) 'limit_price': limitPrice,
         'idempotency_key': key,
       }),
     );
@@ -378,20 +382,21 @@ class ApiClient {
         if (v is String) return double.tryParse(v);
         return null;
       }
-      final execPrice = toNum(orderRes['fill_price']) ??
-          toNum(orderRes['price']) ??
-          limitPrice ??
-          0.0;
+      final status = (orderRes['status'] ?? 'FILLED').toString().toUpperCase();
+      final execPrice = status == 'FILLED'
+          ? (toNum(orderRes['fill_price']) ?? toNum(orderRes['price']) ?? 0.0)
+          : 0.0;
       final newEntry = <String, dynamic>{
         'id': orderRes['order_id'] ?? orderRes['id'] ?? 'ord-${DateTime.now().millisecondsSinceEpoch}',
         'order_id': orderRes['order_id'] ?? orderRes['id'] ?? 'ord-${DateTime.now().millisecondsSinceEpoch}',
         'symbol': symbol,
         'side': side.toUpperCase(),
-        'order_type': orderType,
+        'order_type': cleanOrderType,
         'quantity': quantity,
         'price': execPrice,
         'fill_price': execPrice,
-        'status': orderRes['status'] ?? 'FILLED',
+        'status': status,
+        'rejection_reason': orderRes['rejection_reason'],
         'realized_pnl': toNum(orderRes['realized_pnl']),
         'created_at': DateTime.now().toIso8601String(),
         'is_replay': orderRes['is_replay'] == true,
@@ -403,6 +408,46 @@ class ApiClient {
         (data['detail'] is String ? data['detail'] : null) ??
         data['message'] ??
         'Order submission failed (Status: ${response.statusCode})';
+    throw Exception(errMsg);
+  }
+
+  Future<Map<String, dynamic>?> reconcileOrder(String idempotencyKey, [int limit = 10]) async {
+    try {
+      final orders = await getOrders(limit);
+      for (final o in orders) {
+        if (o['idempotency_key'] == idempotencyKey ||
+            o['id'] == idempotencyKey ||
+            o['order_id'] == idempotencyKey) {
+          return o;
+        }
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @visibleForTesting
+  Future<Map<String, dynamic>> Function(double amount)? mockDepositFundsHandler;
+
+  Future<Map<String, dynamic>> depositFunds(double amount) async {
+    if (mockDepositFundsHandler != null) {
+      return mockDepositFundsHandler!(amount);
+    }
+    final url = Uri.parse('$baseUrl/paper-trading/deposit');
+    final response = await http.post(
+      url,
+      headers: _headers(),
+      body: jsonEncode({'amount': amount}),
+    );
+    final data = jsonDecode(response.body);
+    if (response.statusCode == 200 && data['data'] != null) {
+      return Map<String, dynamic>.from(data['data']);
+    }
+    final errMsg = data['error']?['message'] ??
+        (data['detail'] is String ? data['detail'] : null) ??
+        data['message'] ??
+        'Virtual deposit failed (Status: ${response.statusCode})';
     throw Exception(errMsg);
   }
 
@@ -463,7 +508,13 @@ class ApiClient {
     return {'symbol': symbol, 'bars': []};
   }
 
+  @visibleForTesting
+  Future<Map<String, dynamic>> Function({bool confirmReset})? mockResetAccountHandler;
+
   Future<Map<String, dynamic>> resetAccount({bool confirmReset = true}) async {
+    if (mockResetAccountHandler != null) {
+      return mockResetAccountHandler!(confirmReset: confirmReset);
+    }
     final url = Uri.parse('$baseUrl/paper-trading/reset');
     final response = await http.post(
       url,

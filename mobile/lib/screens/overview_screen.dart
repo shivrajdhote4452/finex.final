@@ -23,18 +23,21 @@ class _MobileOverviewScreenState extends State<MobileOverviewScreen> {
   double _totalPortfolioValue = 100000.0;
   double _unrealizedPnl = 0.0;
   List<Map<String, dynamic>> _positions = [];
-  bool _isLoading = false;
+  bool _isLoading = true;
+  bool _accountLoaded = false;
+  String? _accountError;
+  bool _isStale = false;
   String _chartView = 'area'; // 'area' | 'candles'
   bool _quotesLoaded = false;
   bool _isMarketOpen = false;
   String _quotesFreshness = 'CONNECTING';
 
-  // Top watched market instruments with default fallback quotes
+  // Top watched market instruments without fabricated hardcoded prices
   final List<Map<String, dynamic>> _quickWatchlist = [
-    {'symbol': 'RELIANCE', 'name': 'Reliance Industries', 'price': 2984.50, 'change': 1.25, 'isPos': true},
-    {'symbol': 'TCS', 'name': 'Tata Consultancy', 'price': 4125.00, 'change': 0.85, 'isPos': true},
-    {'symbol': 'INFY', 'name': 'Infosys Limited', 'price': 1892.40, 'change': -0.42, 'isPos': false},
-    {'symbol': 'HDFCBANK', 'name': 'HDFC Bank Ltd', 'price': 1642.10, 'change': 0.35, 'isPos': true},
+    {'symbol': 'RELIANCE', 'name': 'Reliance Industries', 'price': null, 'change': null, 'isPos': null},
+    {'symbol': 'TCS', 'name': 'Tata Consultancy', 'price': null, 'change': null, 'isPos': null},
+    {'symbol': 'INFY', 'name': 'Infosys Limited', 'price': null, 'change': null, 'isPos': null},
+    {'symbol': 'HDFCBANK', 'name': 'HDFC Bank Ltd', 'price': null, 'change': null, 'isPos': null},
   ];
 
   final _currencyFmt = NumberFormat.currency(symbol: '₹', locale: 'en_IN', decimalDigits: 2);
@@ -47,11 +50,14 @@ class _MobileOverviewScreenState extends State<MobileOverviewScreen> {
   }
 
   Future<void> _loadAccountSummary() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _accountError = null;
+    });
     try {
       final acct = await apiClient.getAccount();
       if (mounted) {
-        final cash = (acct['cash_balance'] ?? acct['current_cash'] as num?)?.toDouble() ?? 100000.0;
+        final cash = (acct['cash_balance'] ?? acct['current_cash'] as num?)?.toDouble() ?? 0.0;
         final mktVal = (acct['positions_market_value'] as num?)?.toDouble() ?? 0.0;
         final totalVal = (acct['total_portfolio_value'] ?? acct['total_equity'] as num?)?.toDouble() ?? (cash + mktVal);
         final pnl = (acct['unrealized_pnl'] as num?)?.toDouble() ?? 0.0;
@@ -63,11 +69,22 @@ class _MobileOverviewScreenState extends State<MobileOverviewScreen> {
           _totalPortfolioValue = totalVal;
           _unrealizedPnl = pnl;
           _positions = posList;
+          _accountLoaded = true;
+          _isStale = false;
           _isLoading = false;
         });
       }
-    } catch (_) {
-      if (mounted) setState(() => _isLoading = false);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          if (_accountLoaded) {
+            _isStale = true;
+          } else {
+            _accountError = e.toString().replaceFirst('Exception: ', '');
+          }
+        });
+      }
     }
   }
 
@@ -100,7 +117,7 @@ class _MobileOverviewScreenState extends State<MobileOverviewScreen> {
   void _openInstantTrade([String symbol = 'RELIANCE']) {
     final item = _quickWatchlist.firstWhere(
       (w) => w['symbol'] == symbol,
-      orElse: () => <String, dynamic>{'price': 2500.0},
+      orElse: () => <String, dynamic>{},
     );
     final cardPrice = (item['price'] as num?)?.toDouble();
     QuickTradeModal.show(
@@ -122,7 +139,48 @@ class _MobileOverviewScreenState extends State<MobileOverviewScreen> {
         ? ((_unrealizedPnl / (_totalPortfolioValue - _unrealizedPnl)) * 100).toStringAsFixed(2)
         : '0.00';
 
-    if (_isLoading && _positions.isEmpty) {
+    if (_accountError != null && !_accountLoaded) {
+      return Scaffold(
+        backgroundColor: TerminalColors.canvas,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.cloud_off_outlined, size: 48, color: TerminalColors.negative),
+                const SizedBox(height: 16),
+                const Text(
+                  "Unable to Load Account Data",
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: TerminalColors.textMain),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _accountError!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 12, color: TerminalColors.textMuted),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: TerminalColors.action,
+                    foregroundColor: Colors.black,
+                  ),
+                  onPressed: () {
+                    _loadAccountSummary();
+                    _fetchLiveQuotes();
+                  },
+                  icon: const Icon(Icons.refresh, size: 16),
+                  label: const Text("Retry Connection", style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (_isLoading && !_accountLoaded) {
       return const OverviewSkeleton();
     }
 
@@ -136,6 +194,28 @@ class _MobileOverviewScreenState extends State<MobileOverviewScreen> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (_isStale)
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0x26F59E0B),
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: const Color(0x66F59E0B)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.history, size: 14, color: Color(0xFFFBBF24)),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      "Displaying last cached account session. Pull down to refresh.",
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFFFBBF24)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           // Header & Quick Action Row
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -507,9 +587,8 @@ class _MobileOverviewScreenState extends State<MobileOverviewScreen> {
             itemBuilder: (context, idx) {
               final item = _quickWatchlist[idx];
               final sym = item['symbol'] as String;
-              final price = (item['price'] as num).toDouble();
-              final chg = (item['change'] as num).toDouble();
-              final isPos = item['isPos'] == true;
+              final price = (item['price'] as num?)?.toDouble();
+              final chg = (item['change'] as num?)?.toDouble();
 
               return Container(
                 padding: const EdgeInsets.all(12),
@@ -540,21 +619,42 @@ class _MobileOverviewScreenState extends State<MobileOverviewScreen> {
                             ],
                           ),
                         ),
-                        Text(
-                          "${isPos ? '+' : ''}${chg.toStringAsFixed(2)}%",
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontFamily: 'monospace',
-                            fontWeight: FontWeight.w700,
-                            color: isPos ? TerminalColors.positive : TerminalColors.negative,
+                        if (chg != null)
+                          Text(
+                            chg == 0.0
+                                ? "0.00%"
+                                : "${chg > 0 ? '+' : ''}${chg.toStringAsFixed(2)}%",
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontFamily: 'monospace',
+                              fontWeight: FontWeight.w700,
+                              color: chg == 0.0
+                                  ? TerminalColors.textMuted
+                                  : (chg > 0 ? TerminalColors.positive : TerminalColors.negative),
+                            ),
+                          )
+                        else
+                          const Text(
+                            "—",
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontFamily: 'monospace',
+                              fontWeight: FontWeight.w700,
+                              color: TerminalColors.textMuted,
+                            ),
                           ),
-                        ),
                       ],
                     ),
-                    Text(
-                      _currencyFmt.format(price),
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, fontFamily: 'monospace', color: TerminalColors.textMain),
-                    ),
+                    if (price != null)
+                      Text(
+                        _currencyFmt.format(price),
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, fontFamily: 'monospace', color: TerminalColors.textMain),
+                      )
+                    else
+                      const Text(
+                        "—",
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, fontFamily: 'monospace', color: TerminalColors.textMuted),
+                      ),
                     Row(
                       children: [
                         Expanded(

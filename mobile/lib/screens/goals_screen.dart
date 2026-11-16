@@ -67,15 +67,15 @@ class _MobileGoalsScreenState extends State<MobileGoalsScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text("Record Deposit: ${_goals[index]['title']}", style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: TerminalColors.textMain)),
+              Text("Record Simulated Contribution: ${_goals[index]['title']}", style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: TerminalColors.textMain)),
               const SizedBox(height: 6),
-              const Text("Appends an audit ledger entry and updates your accumulated progress.", style: TextStyle(fontSize: 11, color: TerminalColors.textMuted)),
+              const Text("Adjusts local simulation progress for timeline projections. Does not move real funds.", style: TextStyle(fontSize: 11, color: TerminalColors.textMuted)),
               const SizedBox(height: 16),
               TextFormField(
                 initialValue: "10000",
                 keyboardType: TextInputType.number,
                 decoration: const InputDecoration(
-                  labelText: "Deposit Amount (₹)",
+                  labelText: "Simulated Amount (₹)",
                   labelStyle: TextStyle(color: TerminalColors.textMuted, fontSize: 11),
                   border: OutlineInputBorder(borderSide: BorderSide(color: TerminalColors.borderSubtle)),
                 ),
@@ -99,7 +99,7 @@ class _MobileGoalsScreenState extends State<MobileGoalsScreen> {
                     });
                     Navigator.pop(ctx);
                   },
-                  child: const Text("Confirm Deposit", style: TextStyle(fontWeight: FontWeight.w700)),
+                  child: const Text("Record Contribution", style: TextStyle(fontWeight: FontWeight.w700)),
                 ),
               ),
             ],
@@ -121,6 +121,29 @@ class _MobileGoalsScreenState extends State<MobileGoalsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // Simulation Banner
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: TerminalColors.action.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: TerminalColors.action.withValues(alpha: 0.3)),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.calculate_outlined, size: 14, color: TerminalColors.action),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    "PLANNING SIMULATION: In-memory mathematical calculator for goal runways. Contributions are simulated.",
+                    style: TextStyle(fontSize: 10, color: TerminalColors.textMain),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
           // S7 Projection Engine Banner
           Container(
             padding: const EdgeInsets.all(16),
@@ -210,7 +233,7 @@ class _MobileGoalsScreenState extends State<MobileGoalsScreen> {
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         ),
                         icon: const Icon(Icons.add, size: 14),
-                        label: const Text("Deposit", style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                        label: const Text("Simulate", style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
                         onPressed: () => _showAddContributionDialog(idx),
                       ),
                     ],

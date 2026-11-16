@@ -12,6 +12,8 @@ class MobileSpendingScreen extends StatefulWidget {
 class _MobileSpendingScreenState extends State<MobileSpendingScreen> {
   double _totalDebit = 21649.00;
   double _totalCredit = 50000.00;
+  bool _isDemoData = true;
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -20,42 +22,50 @@ class _MobileSpendingScreenState extends State<MobileSpendingScreen> {
   }
 
   Future<void> _loadTransactions() async {
+    setState(() => _isLoading = true);
     try {
       final res = await apiClient.getTransactions();
       if (res['transactions'] != null && mounted) {
         final List txs = res['transactions'];
-        if (txs.isNotEmpty) {
-          double debits = 0.0;
-          double credits = 0.0;
-          final loaded = txs.map<Map<String, dynamic>>((t) {
-            final amt = (t['amount'] as num?)?.toDouble() ?? 0.0;
-            final typ = (t['transaction_type'] ?? 'DEBIT').toString().toUpperCase();
-            if (typ == 'DEBIT') {
-              debits += amt;
-            } else {
-              credits += amt;
-            }
-            return {
-              "id": t['id'] ?? '',
-              "date": t['transaction_date'] ?? '',
-              "amount": amt,
-              "type": typ,
-              "desc": t['masked_description'] ?? t['raw_description'] ?? '',
-              "category": t['category_id'] ?? 'OTHER',
-              "is_reviewed": true,
-            };
-          }).toList();
+        double debits = 0.0;
+        double credits = 0.0;
+        final loaded = txs.map<Map<String, dynamic>>((t) {
+          final amt = (t['amount'] as num?)?.toDouble() ?? 0.0;
+          final typ = (t['transaction_type'] ?? 'DEBIT').toString().toUpperCase();
+          if (typ == 'DEBIT') {
+            debits += amt;
+          } else {
+            credits += amt;
+          }
+          return {
+            "id": t['id'] ?? '',
+            "date": t['transaction_date'] ?? '',
+            "amount": amt,
+            "type": typ,
+            "desc": t['masked_description'] ?? t['raw_description'] ?? '',
+            "category": t['category_id'] ?? 'OTHER',
+            "is_reviewed": true,
+          };
+        }).toList();
 
-          setState(() {
-            _transactions.clear();
-            _transactions.addAll(loaded);
-            _totalDebit = debits;
-            _totalCredit = credits;
-          });
-        }
+        setState(() {
+          _isDemoData = false;
+          _isLoading = false;
+          _transactions.clear();
+          _transactions.addAll(loaded);
+          _totalDebit = debits;
+          _totalCredit = credits;
+        });
+      } else if (mounted) {
+        setState(() => _isLoading = false);
       }
     } catch (_) {
-      // Keep baseline sample if unauthenticated/offline
+      if (mounted) {
+        setState(() {
+          _isDemoData = true;
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -406,6 +416,29 @@ class _MobileSpendingScreenState extends State<MobileSpendingScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (_isDemoData)
+            Container(
+              margin: const EdgeInsets.only(bottom: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: TerminalColors.action.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: TerminalColors.action.withValues(alpha: 0.4)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.info_outline, size: 16, color: TerminalColors.action),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      "DEMO MODE: Showing sample cashflow data. Import your statement CSV using the top-right button to track actual expenses.",
+                      style: TextStyle(fontSize: 11, color: TerminalColors.textMain, height: 1.3),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
           // Monthly Summary Card
           Container(
             padding: const EdgeInsets.all(16),
@@ -417,11 +450,19 @@ class _MobileSpendingScreenState extends State<MobileSpendingScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Row(
+                Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text("OCTOBER 2026 CASHFLOW", style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: TerminalColors.textMuted)),
-                    Text("PRIVACY MASKED", style: TextStyle(fontSize: 9, fontFamily: 'monospace', color: TerminalColors.positive, fontWeight: FontWeight.w700)),
+                    const Text("MONTHLY CASHFLOW", style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: TerminalColors.textMuted)),
+                    Text(
+                      _isDemoData ? "[DEMO SAMPLE]" : "PRIVACY MASKED",
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontFamily: 'monospace',
+                        color: _isDemoData ? TerminalColors.action : TerminalColors.positive,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 10),
@@ -464,8 +505,36 @@ class _MobileSpendingScreenState extends State<MobileSpendingScreen> {
           ),
           const SizedBox(height: 18),
 
-          const Text("MASKED TRANSACTIONS", style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: TerminalColors.textMuted)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(_isDemoData ? "SAMPLE TRANSACTIONS" : "MASKED TRANSACTIONS", style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: TerminalColors.textMuted)),
+              if (_isLoading)
+                const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: TerminalColors.action)),
+            ],
+          ),
           const SizedBox(height: 10),
+
+          if (!_isDemoData && _transactions.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(28),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: TerminalColors.panel,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: TerminalColors.borderSubtle),
+              ),
+              child: const Column(
+                children: [
+                  Icon(Icons.receipt_long_outlined, size: 32, color: TerminalColors.textMuted),
+                  SizedBox(height: 8),
+                  Text("No imported transactions", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: TerminalColors.textMain)),
+                  SizedBox(height: 4),
+                  Text("Import a CSV statement to analyze your real spending.", style: TextStyle(fontSize: 11, color: TerminalColors.textMuted), textAlign: TextAlign.center),
+                ],
+              ),
+            )
+          else
 
           ..._transactions.asMap().entries.map((entry) {
             final idx = entry.key;
