@@ -100,6 +100,18 @@ class _MobileTransactionsScreenState extends State<MobileTransactionsScreen> {
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                       ),
                       onPressed: () async {
+                        if (!apiClient.isOwner) {
+                          if (ctx.mounted) Navigator.pop(ctx);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                backgroundColor: TerminalColors.negative,
+                                content: Text('Deposit authorization: Sandbox controls are restricted to the platform owner.'),
+                              ),
+                            );
+                          }
+                          return;
+                        }
                         try {
                           await apiClient.depositFunds(amount);
                           if (ctx.mounted) Navigator.pop(ctx);
@@ -263,11 +275,12 @@ class _MobileTransactionsScreenState extends State<MobileTransactionsScreen> {
       appBar: AppBar(
         title: const Text('TRANSACTION LEDGER & AUDIT DESK'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.add_card, size: 20, color: TerminalColors.action),
-            tooltip: 'Add Paper Cash',
-            onPressed: _showDepositModal,
-          ),
+          if (apiClient.isOwner)
+            IconButton(
+              icon: const Icon(Icons.add_card, size: 20, color: TerminalColors.action),
+              tooltip: 'Add Paper Cash',
+              onPressed: _showDepositModal,
+            ),
           IconButton(
             icon: const Icon(Icons.refresh, size: 20, color: TerminalColors.textMain),
             onPressed: _loadTransactions,
@@ -322,20 +335,22 @@ class _MobileTransactionsScreenState extends State<MobileTransactionsScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 10),
-                SizedBox(
-                  height: 40,
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: TerminalColors.action,
-                      side: const BorderSide(color: TerminalColors.action),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                if (apiClient.isOwner) ...[
+                  const SizedBox(width: 10),
+                  SizedBox(
+                    height: 40,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: TerminalColors.action,
+                        side: const BorderSide(color: TerminalColors.action),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                      ),
+                      icon: const Icon(Icons.attach_money, size: 16),
+                      label: const Text('DEPOSIT CASH', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
+                      onPressed: _showDepositModal,
                     ),
-                    icon: const Icon(Icons.attach_money, size: 16),
-                    label: const Text('DEPOSIT CASH', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
-                    onPressed: _showDepositModal,
                   ),
-                ),
+                ],
               ],
             ),
             const SizedBox(height: 16),

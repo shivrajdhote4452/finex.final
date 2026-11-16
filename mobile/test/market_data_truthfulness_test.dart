@@ -6,6 +6,7 @@ import 'package:finex_mobile/screens/overview_screen.dart';
 import 'package:finex_mobile/screens/portfolio_screen.dart';
 import 'package:finex_mobile/screens/settings_screen.dart';
 import 'package:finex_mobile/screens/spending_screen.dart';
+import 'package:finex_mobile/screens/transactions_screen.dart';
 import 'package:finex_mobile/services/api_client.dart';
 import 'package:finex_mobile/theme/terminal_theme.dart';
 import 'package:finex_mobile/widgets/recent_transactions_feed.dart';
@@ -165,6 +166,48 @@ void main() {
       expect(find.text('Simulate'), findsWidgets);
 
       await tester.pumpWidget(Container());
+    });
+
+    testWidgets('TransactionsScreen hides deposit controls for non-owner users', (tester) async {
+      await apiClient.setToken('test-regular-token');
+      await apiClient.setProfile({'name': 'Regular Investor', 'email': 'user@example.com', 'is_owner': false});
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: TerminalTheme.darkTheme,
+          home: const MobileTransactionsScreen(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('DEPOSIT CASH'), findsNothing);
+      expect(find.byIcon(Icons.add_card), findsNothing);
+      expect(find.text('PLACE NEW TRADE'), findsOneWidget);
+
+      await tester.pumpWidget(Container());
+      await apiClient.setToken(null);
+      await apiClient.setProfile(null);
+    });
+
+    testWidgets('TransactionsScreen displays deposit controls only for platform owner', (tester) async {
+      await apiClient.setToken('test-owner-token');
+      await apiClient.setProfile({'name': 'Platform Owner', 'email': 'owner@finex.test', 'is_owner': true});
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: TerminalTheme.darkTheme,
+          home: const MobileTransactionsScreen(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('DEPOSIT CASH'), findsOneWidget);
+      expect(find.byIcon(Icons.add_card), findsOneWidget);
+      expect(find.text('PLACE NEW TRADE'), findsOneWidget);
+
+      await tester.pumpWidget(Container());
+      await apiClient.setToken(null);
+      await apiClient.setProfile(null);
     });
   });
 }
