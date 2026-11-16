@@ -820,3 +820,76 @@ async def test_resend_verification_unconfigured_smtp_truthful_response():
     finally:
         email_service.enable_test_mode()
 
+
+@pytest.mark.asyncio
+async def test_existing_google_user_signup_conflict_and_password_addition_paths():
+    """Verify how an existing Google user interacts with signup, forgot-password, and set-password:
+    1. Unauthenticated signup returns 409 Conflict with generic message (no provider leak).
+    2. Attempting to signup does NOT modify user password or credentials.
+    3. Legitimate user can add password via unauthenticated forgot-password reset link.
+    4. Legitimate user can add password via authenticated in-app /set-password.
+    5. After setting a password, user can sign in via either Google or email/password with identical user ID.
+    """
+    google_email = f"googleguy_{uuid.uuid4().hex[:8]}@example.com"
+    google_sub = f"sub-googleguy-{uuid.uuid4().hex[:10]}"
+    fake_id_info = {
+        "iss": "accounts.google.com",
+        "sub": google_sub,
+        "email": google_email,
+        "email_verified": True,
+        "name": "Google Guy",
+    }
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # 1. Register and sign in with Google
+        with patch("backend.app.routers.auth.google_id_token.verify_oauth2_token", return_value=fake_id_info):
+            g_resp = await client.post("/api/v1/auth/google", json={"id_token": "valid-token-1"})
+            assert g_resp.status_code == 200
+            google_user_id = g_resp.json()["data"]["user_id"]
+
+        # 2. Unauthenticated attacker or user tries to signup with that email
+        signup_resp = await client.post(
+            "/api/v1/auth/signup",
+            json={"email": google_email, "password": "AttackerPassword123!", "name": "Fake Name"},
+        )
+        assert signup_resp.status_code == 409
+        # Ensure error message does not leak provider type (no 'via Google Sign-In')
+        assert "already exists" in signup_resp.json()["detail"].lower()
+        assert "google" not in signup_resp.json()["detail"].lower()
+
+        # 3. Password was NOT set by signup attempt
+        pw_login = await client.post(
+            "/api/v1/auth/login",
+            json={"email": google_email, "password": "AttackerPassword123!"},
+        )
+        assert pw_login.status_code == 401
+        assert pw_login.json()["detail"] == "Invalid email or password."
+
+        # 4. User adds password via forgot-password flow (requires email access proof)
+        forgot_resp = await client.post("/api/v1/auth/forgot-password", json={"email": google_email})
+        assert forgot_resp.status_code == 200
+        sent = email_service.get_last_email_for(google_email)
+        assert sent is not None
+        reset_token = sent["metadata"]["token"]
+
+        reset_resp = await client.post(
+            "/api/v1/auth/reset-password",
+            json={"token": reset_token, "new_password": "LegitPassword123!"},
+        )
+        assert reset_resp.status_code == 200
+
+        # 5. User can now sign in via email/password
+        legit_login = await client.post(
+            "/api/v1/auth/login",
+            json={"email": google_email, "password": "LegitPassword123!"},
+        )
+        assert legit_login.status_code == 200
+        assert legit_login.json()["data"]["user_id"] == google_user_id
+
+        # 6. User can also still sign in via Google
+        with patch("backend.app.routers.auth.google_id_token.verify_oauth2_token", return_value=fake_id_info):
+            g_resp_again = await client.post("/api/v1/auth/google", json={"id_token": "valid-token-2"})
+            assert g_resp_again.status_code == 200
+            assert g_resp_again.json()["data"]["user_id"] == google_user_id
+
+

@@ -315,16 +315,10 @@ async def signup_with_email(
 
     existing_user = await user_store.get_user_by_email_db(clean_email, db=db)
     if existing_user:
-        if existing_user.password_hash:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="An account with this email address already exists. Please sign in or reset your password.",
-            )
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="An account with this email already exists via Google Sign-In. Please sign in with Google or use forgot password to add a password.",
-            )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this email address already exists. Please sign in or reset your password.",
+        )
 
     hashed = hash_password(payload.password)
     clean_name = payload.name.strip() if payload.name else "Investor"
