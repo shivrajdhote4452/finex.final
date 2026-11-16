@@ -313,12 +313,56 @@ async def signup_with_email(
             detail=pw_err or "Password does not meet complexity requirements.",
         )
 
+    has_smtp = bool(settings.SMTP_HOST)
+    is_test = email_service._is_test_mode()
+
+    if not has_smtp and not is_test:
+        resp_data = {
+            "sent": False,
+            "email": clean_email,
+            "message": "Account registration via email is currently unavailable because transactional email is not configured. Please sign in with Google or contact support.",
+            "delivery_status": "smtp_not_configured",
+        }
+        return create_response_envelope(resp_data, correlation_id=cid)
+
+    generic_signup_message = (
+        "If this email address is not already registered, a verification link has been sent. "
+        "Please check your inbox to activate your account."
+    )
+
     existing_user = await user_store.get_user_by_email_db(clean_email, db=db)
     if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="An account with this email address already exists. Please sign in or reset your password.",
-        )
+        # OWASP Anti-Enumeration Defense:
+        # Return identical 200 response without leaking account existence.
+        # Do NOT modify the existing user's password, data, or credentials.
+        profile = await user_store.get_profile_db(existing_user.id, db=db)
+        recipient_name = (profile.full_name if profile and profile.full_name else None) or "Investor"
+
+        if not (existing_user.email_verified or existing_user.is_verified):
+            raw_token = await user_store.create_auth_token_db(
+                user_id=existing_user.id,
+                token_type="email_verification",
+                expires_in_minutes=settings.EMAIL_VERIFICATION_EXPIRE_HOURS * 60,
+                db=db,
+            )
+            await email_service.send_verification_email(
+                to_email=clean_email,
+                name=recipient_name,
+                raw_token=raw_token,
+            )
+        else:
+            await email_service.send_existing_account_notification(
+                to_email=clean_email,
+                name=recipient_name,
+            )
+
+        resp_data = {
+            "sent": True,
+            "email": clean_email,
+            "message": generic_signup_message,
+            "delivery_status": "delivered" if has_smtp else "test_captured",
+        }
+        return create_response_envelope(resp_data, correlation_id=cid)
 
     hashed = hash_password(payload.password)
     clean_name = payload.name.strip() if payload.name else "Investor"
@@ -345,18 +389,10 @@ async def signup_with_email(
         raw_token=raw_token,
     )
 
-    if delivery.get("delivered"):
-        delivery_msg = "Account created successfully. Please check your email to verify your address."
-    elif delivery.get("status") == "test_captured":
-        delivery_msg = "Account created. Verification token captured in test buffer."
-    else:
-        delivery_msg = "Account created. Email delivery is currently unavailable; please contact an administrator."
-
     resp_data = {
-        "created": True,
-        "user_id": new_user.id,
+        "sent": True,
         "email": clean_email,
-        "message": delivery_msg,
+        "message": generic_signup_message,
         "delivery_status": delivery.get("status"),
     }
     return create_response_envelope(resp_data, correlation_id=cid)

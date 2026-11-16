@@ -224,11 +224,15 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
 
     try {
       const res = await apiClient.auth.signup(cleanEmail, password, name.trim() || 'Investor');
-      setSuccessMessage(
-        res.message || 'Account created! Please check your email to verify your address and activate your account.'
-      );
-      setMode('signin');
-      setPassword('');
+      if (res && (res as any).sent === false) {
+        setErrorMessage((res as any).message || 'Account registration via email is currently unavailable.');
+      } else {
+        setSuccessMessage(
+          res.message || 'If this email address is not already registered, a verification link has been sent. Please check your inbox.'
+        );
+        setMode('signin');
+        setPassword('');
+      }
     } catch (err: any) {
       console.error('Signup failed:', err);
       setErrorMessage(err?.message || 'Account registration failed. Please try again.');

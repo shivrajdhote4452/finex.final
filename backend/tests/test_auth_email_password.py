@@ -48,8 +48,9 @@ async def test_signup_success_and_email_dispatched():
         resp = await client.post("/api/v1/auth/signup", json=signup_payload)
         assert resp.status_code == 200
         body = resp.json()
-        assert body["data"]["created"] is True
+        assert body["data"]["sent"] is True
         assert body["data"]["email"] == test_email.lower()
+        assert "verification link has been sent" in body["data"]["message"].lower()
 
         # Verify email was dispatched
         sent = email_service.get_last_email_for(test_email)
@@ -81,8 +82,8 @@ async def test_signup_weak_password_fails():
 
 
 @pytest.mark.asyncio
-async def test_signup_duplicate_email_fails():
-    """Test that duplicate signup returns HTTP 409 Conflict."""
+async def test_signup_duplicate_email_safe_non_enumerating_response():
+    """Test that duplicate signup returns safe 200 response identical to initial signup to prevent enumeration."""
     test_email = f"duplicate_{uuid.uuid4().hex[:8]}@example.com"
     payload = {
         "email": test_email,
@@ -91,12 +92,46 @@ async def test_signup_duplicate_email_fails():
     }
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # First signup (unregistered email)
         resp1 = await client.post("/api/v1/auth/signup", json=payload)
         assert resp1.status_code == 200
+        data1 = resp1.json()["data"]
+        assert data1["sent"] is True
 
-        resp2 = await client.post("/api/v1/auth/signup", json=payload)
-        assert resp2.status_code == 409
-        assert "already exists" in resp2.json()["detail"]
+        # Verify initial user with their password
+        email_sent_1 = email_service.get_last_email_for(test_email)
+        assert email_sent_1 is not None
+        verify_token = email_sent_1["metadata"]["token"]
+        v_res = await client.post("/api/v1/auth/verify-email", json={"token": verify_token})
+        assert v_res.status_code == 200
+
+        # Login works with original password
+        login1 = await client.post("/api/v1/auth/login", json={"email": test_email, "password": "Password123!"})
+        assert login1.status_code == 200
+        user_id = login1.json()["data"]["user_id"]
+
+        # Second signup attempt with SAME email, different password (attacker or returning user)
+        attacker_payload = {
+            "email": test_email,
+            "password": "AttackerPassword999!",
+            "name": "Impostor",
+        }
+        resp2 = await client.post("/api/v1/auth/signup", json=attacker_payload)
+        # MUST return identical 200 OK without leaking account existence
+        assert resp2.status_code == 200
+        data2 = resp2.json()["data"]
+        assert data2["sent"] is True
+        assert data2["message"] == data1["message"]
+
+        # Credentials must NOT be modified
+        bad_login = await client.post("/api/v1/auth/login", json={"email": test_email, "password": "AttackerPassword999!"})
+        assert bad_login.status_code == 401
+        assert bad_login.json()["detail"] == "Invalid email or password."
+
+        # Original password still works
+        good_login = await client.post("/api/v1/auth/login", json={"email": test_email, "password": "Password123!"})
+        assert good_login.status_code == 200
+        assert good_login.json()["data"]["user_id"] == user_id
 
 
 @pytest.mark.asyncio
@@ -852,10 +887,10 @@ async def test_existing_google_user_signup_conflict_and_password_addition_paths(
             "/api/v1/auth/signup",
             json={"email": google_email, "password": "AttackerPassword123!", "name": "Fake Name"},
         )
-        assert signup_resp.status_code == 409
-        # Ensure error message does not leak provider type (no 'via Google Sign-In')
-        assert "already exists" in signup_resp.json()["detail"].lower()
-        assert "google" not in signup_resp.json()["detail"].lower()
+        assert signup_resp.status_code == 200
+        data_s = signup_resp.json()["data"]
+        assert data_s["sent"] is True
+        assert "verification link has been sent" in data_s["message"].lower()
 
         # 3. Password was NOT set by signup attempt
         pw_login = await client.post(
@@ -891,5 +926,29 @@ async def test_existing_google_user_signup_conflict_and_password_addition_paths(
             g_resp_again = await client.post("/api/v1/auth/google", json={"id_token": "valid-token-2"})
             assert g_resp_again.status_code == 200
             assert g_resp_again.json()["data"]["user_id"] == google_user_id
+
+
+@pytest.mark.asyncio
+async def test_signup_unconfigured_smtp_truthful_response():
+    """Verify that when SMTP is not configured in non-test mode, signup truthfully returns sent: False without enumeration."""
+    from backend.app.config import get_settings
+
+    settings = get_settings()
+    email_service.disable_test_mode()
+    try:
+        with patch.object(settings, "SMTP_HOST", ""):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                resp = await client.post(
+                    "/api/v1/auth/signup",
+                    json={"email": "anyone_signup@example.com", "password": "Password123!", "name": "User"},
+                )
+                assert resp.status_code == 200
+                data = resp.json().get("data", {})
+                assert data.get("sent") is False
+                assert "transactional email is not configured" in data.get("message", "").lower()
+                assert data.get("delivery_status") == "smtp_not_configured"
+    finally:
+        email_service.enable_test_mode()
+
 
 

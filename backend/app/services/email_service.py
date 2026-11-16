@@ -168,6 +168,58 @@ class EmailService:
             metadata={"token": raw_token, "link": reset_link, "type": "reset"},
         )
 
+    async def send_existing_account_notification(self, to_email: str, name: str) -> Dict[str, Any]:
+        """Dispatch notification to an existing registered user that a duplicate registration attempt occurred."""
+        settings = get_settings()
+        base_url = settings.FRONTEND_URL.rstrip("/")
+        signin_link = f"{base_url}/#signin"
+        reset_link = f"{base_url}/#forgot"
+
+        subject = "FinEx Account Notice: Registration Attempt"
+        text_body = (
+            f"Hello {name},\n\n"
+            f"We received a request to create a new FinEx account using your email address ({to_email}).\n\n"
+            f"Because you already have a FinEx account, no new account was created and your credentials were not changed.\n\n"
+            f"If you made this request, you can sign in directly here:\n{signin_link}\n\n"
+            f"If you forgot your password, you can reset it here:\n{reset_link}\n\n"
+            f"If you did not make this request, you can safely ignore this email; your account and credentials remain secure.\n\n"
+            f"— The FinEx Team"
+        )
+        html_body = f"""<!DOCTYPE html>
+<html>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #050505; color: #FFFFFF; padding: 32px 16px;">
+  <div style="max-width: 560px; margin: 0 auto; background: #0E0E10; border: 1px solid #1F1F23; border-radius: 8px; padding: 32px;">
+    <div style="margin-bottom: 24px;">
+      <span style="font-size: 24px; font-weight: 800; color: #FFFFFF;">Fin<span style="color: #F29A60;">Ex</span></span>
+      <span style="font-size: 11px; color: #71717A; margin-left: 8px; font-family: monospace;">NOTICE</span>
+    </div>
+    <h2 style="font-size: 20px; font-weight: 600; margin-bottom: 12px; color: #FFFFFF;">FinEx Account Notice</h2>
+    <p style="color: #A1A1AA; font-size: 14px; line-height: 1.6; margin-bottom: 24px;">
+      Hello {name}, we received a request to register a new account using your email address. Because you already have a registered account, no new account was created and your credentials were not changed.
+    </p>
+    <div style="margin: 28px 0; display: flex; gap: 12px;">
+      <a href="{signin_link}" style="background-color: #F29A60; color: #000000; font-weight: 700; font-size: 14px; text-decoration: none; padding: 12px 28px; border-radius: 4px; display: inline-block;">
+        Sign In to Your Account →
+      </a>
+    </div>
+    <p style="color: #71717A; font-size: 12px; line-height: 1.5; margin-top: 24px;">
+      If you forgot your password, you can request a reset link at: <a href="{reset_link}" style="color: #F29A60;">{reset_link}</a>
+    </p>
+    <div style="border-top: 1px solid #1F1F23; margin-top: 28px; padding-top: 16px; font-size: 11px; color: #52525B;">
+      If you did not make this request, you can safely ignore this email. Your existing FinEx account remains secure.
+    </div>
+  </div>
+</body>
+</html>"""
+
+        return await self._dispatch(
+            to_email=to_email,
+            subject=subject,
+            text_content=text_body,
+            html_content=html_body,
+            metadata={"type": "existing_account_notice"},
+        )
+
     async def _dispatch(
         self,
         to_email: str,
