@@ -5,14 +5,18 @@ Ensures passwords are never stored in plaintext and uses bcrypt with standard co
 Provides rate-limiting to defend against credential stuffing and brute-force attacks.
 """
 
+import base64
 import hashlib
+import json
 import re
 import secrets
 import threading
 import time
-from typing import Dict, List, Optional, Tuple
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Tuple
 
 import bcrypt
+from cryptography.fernet import Fernet
 
 
 def hash_password(password: str) -> str:
@@ -56,6 +60,57 @@ def validate_password_strength(password: str) -> Tuple[bool, Optional[str]]:
 def generate_raw_token() -> str:
     """Generate a high-entropy URL-safe cryptographic token (256 bits)."""
     return secrets.token_urlsafe(32)
+
+
+def get_token_cipher() -> Fernet:
+    """Derive a deterministic Fernet cipher from settings.JWT_SECRET_KEY."""
+    from backend.app.config import get_settings
+
+    settings = get_settings()
+    secret = settings.JWT_SECRET_KEY or "finex-default-dev-secret-key-must-be-changed-in-prod-32chars"
+    key = base64.urlsafe_b64encode(hashlib.sha256(secret.encode("utf-8")).digest())
+    return Fernet(key)
+
+
+def create_verification_token(user_id: str, pending_password_hash: Optional[str] = None) -> str:
+    """Generate an authenticated, tamper-proof verification token binding user_id and pending password hash.
+
+    OWASP Pre-Account Takeover Defense:
+    Cryptographically binds the intended password update to the verification token so that
+    verifying an email activates ONLY the password submitted in the request that generated
+    this token, preventing cross-request race conditions and TOCTOU vulnerabilities.
+    """
+    cipher = get_token_cipher()
+    payload = {
+        "uid": user_id,
+        "pwh": pending_password_hash or "",
+        "rnd": secrets.token_hex(16),
+        "ts": datetime.now(timezone.utc).timestamp(),
+    }
+    raw_json = json.dumps(payload).encode("utf-8")
+    return cipher.encrypt(raw_json).decode("utf-8")
+
+
+def decrypt_verification_token(raw_token: str) -> Dict[str, Any]:
+    """Decrypt and validate an authenticated verification token.
+
+    Returns dict with keys: uid, pwh, rnd, ts, is_legacy.
+    If decryption fails, returns {'is_legacy': True, 'uid': None, 'pwh': None}.
+    """
+    try:
+        cipher = get_token_cipher()
+        data = cipher.decrypt(raw_token.strip().encode("utf-8"))
+        payload = json.loads(data.decode("utf-8"))
+        return {
+            "uid": payload.get("uid"),
+            "pwh": payload.get("pwh") or None,
+            "rnd": payload.get("rnd"),
+            "ts": payload.get("ts"),
+            "is_legacy": False,
+        }
+    except Exception:
+        # Fallback for plain legacy tokens
+        return {"is_legacy": True, "uid": None, "pwh": None}
 
 
 def hash_token(raw_token: str) -> str:

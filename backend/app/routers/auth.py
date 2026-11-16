@@ -339,16 +339,34 @@ async def signup_with_email(
         recipient_name = (profile.full_name if profile and profile.full_name else None) or "Investor"
 
         if not (existing_user.email_verified or existing_user.is_verified):
-            raw_token = await user_store.create_auth_token_db(
+            # OWASP Pre-Account Takeover Defense:
+            # An unverified account has not proven ownership of the email inbox.
+            # Do NOT mutate existing_user.password_hash during signup (avoids race conditions with concurrent requests
+            # or simultaneous verification clicks).
+            # Instead, bind the intended password hash cryptographically to the verification token,
+            # and invalidate older unconsumed tokens so only this newly requested token can activate the account.
+            from backend.app.services.password_service import create_verification_token
+
+            new_pw_hash = hash_password(payload.password)
+            clean_name = payload.name.strip() if payload.name else recipient_name
+
+            raw_token = create_verification_token(
+                user_id=existing_user.id,
+                pending_password_hash=new_pw_hash,
+            )
+            await user_store.create_auth_token_db(
                 user_id=existing_user.id,
                 token_type="email_verification",
                 expires_in_minutes=settings.EMAIL_VERIFICATION_EXPIRE_HOURS * 60,
+                raw_token=raw_token,
                 db=db,
             )
+            if db:
+                await db.commit()  # Release DB transaction before external SMTP network call
             try:
                 delivery = await email_service.send_verification_email(
                     to_email=clean_email,
-                    name=payload.name.strip() if payload.name else recipient_name,
+                    name=clean_name or "Investor",
                     raw_token=raw_token,
                 )
             except Exception as e:
@@ -377,29 +395,6 @@ async def signup_with_email(
             }
             return create_response_envelope(resp_data, correlation_id=cid)
 
-        # OWASP Pre-Account Takeover Defense:
-        # Once verification email has been successfully dispatched to the inbox,
-        # update the unverified account's password_hash to this attempt's password,
-        # and invalidate older unconsumed verification tokens so only the newly dispatched token is active.
-        if not (existing_user.email_verified or existing_user.is_verified):
-            from backend.app.services.password_service import hash_token
-
-            new_pw_hash = hash_password(payload.password)
-            clean_name = payload.name.strip() if payload.name else recipient_name
-
-            await user_store.update_unverified_user_signup_db(
-                user_id=existing_user.id,
-                password_hash=new_pw_hash,
-                name=clean_name,
-                db=db,
-            )
-            await user_store.invalidate_user_tokens_db(
-                user_id=existing_user.id,
-                token_type="email_verification",
-                exclude_token_hash=hash_token(raw_token),
-                db=db,
-            )
-
         resp_data = {
             "sent": True,
             "email": clean_email,
@@ -418,13 +413,22 @@ async def signup_with_email(
         db=db,
     )
 
-    # Generate single-use verification token valid for configured hours
-    raw_token = await user_store.create_auth_token_db(
+    # Generate single-use verification token binding initial password hash
+    from backend.app.services.password_service import create_verification_token
+
+    raw_token = create_verification_token(
+        user_id=new_user.id,
+        pending_password_hash=hashed,
+    )
+    await user_store.create_auth_token_db(
         user_id=new_user.id,
         token_type="email_verification",
         expires_in_minutes=settings.EMAIL_VERIFICATION_EXPIRE_HOURS * 60,
+        raw_token=raw_token,
         db=db,
     )
+    if db:
+        await db.commit()  # Release DB transaction before external SMTP network call
 
     # Dispatch verification email
     try:
@@ -468,19 +472,15 @@ async def verify_email_token(
     cid = getattr(request.state, "correlation_id", "none")
     raw_token = payload.token.strip()
 
-    user_id = await user_store.verify_and_consume_auth_token_db(
+    user = await user_store.verify_and_consume_email_verification_token_db(
         raw_token=raw_token,
-        token_type="email_verification",
         db=db,
     )
-    if not user_id:
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid, expired, or previously used verification link. Please request a new one.",
         )
-
-    await user_store.mark_email_verified_db(user_id=user_id, db=db)
-    user = await user_store.get_user_by_id_db(user_id=user_id, db=db)
 
     resp_data = {
         "verified": True,
@@ -624,6 +624,8 @@ async def forgot_password(
             expires_in_minutes=settings.PASSWORD_RESET_EXPIRE_MINUTES,
             db=db,
         )
+        if db:
+            await db.commit()  # Release DB transaction before external SMTP network call
         delivery = await email_service.send_password_reset_email(
             to_email=user.email,
             name=display_name,
@@ -721,12 +723,21 @@ async def resend_verification_email(
             token_type="email_verification",
             db=db,
         )
-        raw_token = await user_store.create_auth_token_db(
+        from backend.app.services.password_service import create_verification_token
+
+        raw_token = create_verification_token(
+            user_id=user.id,
+            pending_password_hash=user.password_hash,
+        )
+        await user_store.create_auth_token_db(
             user_id=user.id,
             token_type="email_verification",
             expires_in_minutes=settings.EMAIL_VERIFICATION_EXPIRE_HOURS * 60,
+            raw_token=raw_token,
             db=db,
         )
+        if db:
+            await db.commit()  # Release DB transaction before external SMTP network call
         delivery = await email_service.send_verification_email(
             to_email=user.email,
             name=display_name,

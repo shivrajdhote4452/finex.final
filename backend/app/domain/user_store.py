@@ -1000,12 +1000,14 @@ class UserStore:
         user_id: str,
         token_type: str,
         expires_in_minutes: int,
+        raw_token: Optional[str] = None,
         db: Optional[AsyncSession] = None,
     ) -> str:
-        """Generate high-entropy token, store its SHA-256 hash in database, and return raw token."""
+        """Store SHA-256 hash of raw_token (or generate fresh) in database, and return raw token."""
         from backend.app.services.password_service import generate_raw_token, hash_token
 
-        raw_token = generate_raw_token()
+        if raw_token is None:
+            raw_token = generate_raw_token()
         hashed = hash_token(raw_token)
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=expires_in_minutes)
 
@@ -1024,6 +1026,112 @@ class UserStore:
             if owns_session:
                 await session.commit()
             return raw_token
+        except Exception:
+            if owns_session:
+                await session.rollback()
+            raise
+        finally:
+            if owns_session:
+                await session.close()
+
+    async def verify_and_consume_email_verification_token_db(
+        self,
+        raw_token: str,
+        db: Optional[AsyncSession] = None,
+    ) -> Optional[User]:
+        """Validate email verification token with strict row locking, verify user,
+        and atomically activate the bound password hash without race conditions.
+
+        Guarantees:
+        - Strict row-level lock on AuthToken and User prevents concurrent race activation.
+        - If user is unverified, activates ONLY the password bound to this token.
+        - If user is already verified, NEVER alters credentials.
+        - Atomically invalidates all other pending verification tokens for this user.
+        """
+        from backend.app.services.password_service import decrypt_verification_token, hash_token
+
+        hashed = hash_token(raw_token)
+        token_info = decrypt_verification_token(raw_token)
+
+        owns_session = db is None
+        session = db if db is not None else AsyncSessionLocal()
+        try:
+            # 1. Row-lock AuthToken
+            stmt = (
+                select(AuthToken)
+                .where((AuthToken.token_hash == hashed) & (AuthToken.token_type == "email_verification"))
+                .with_for_update()
+            )
+            res = await session.execute(stmt)
+            token_rec = res.scalar_one_or_none()
+            if not token_rec:
+                return None
+            if token_rec.used_at is not None:
+                return None  # Single-use already consumed
+
+            now = datetime.now(timezone.utc)
+            exp = token_rec.expires_at
+            if exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+            if exp < now:
+                return None  # Expired
+
+            # If token is encrypted, verify user_id matches
+            if not token_info.get("is_legacy") and token_info.get("uid"):
+                if token_info["uid"] != token_rec.user_id:
+                    logger.warning("Token user_id mismatch: %s vs %s", token_info["uid"], token_rec.user_id)
+                    return None
+
+            # 2. Row-lock User
+            user_stmt = select(User).where(User.id == token_rec.user_id).with_for_update()
+            res_user = await session.execute(user_stmt)
+            user = res_user.scalar_one_or_none()
+            if not user:
+                return None
+
+            # 3. Check verification status & activate bound password
+            if not (user.email_verified or user.is_verified):
+                pending_pw = token_info.get("pwh")
+                if pending_pw:
+                    user.password_hash = pending_pw
+                user.email_verified = True
+                user.is_verified = True
+                logger.info("Verified email and activated bound credentials for user %s (%s)", user.id, user.email)
+            else:
+                logger.info(
+                    "User %s (%s) is already verified; consuming token without altering credentials.",
+                    user.id,
+                    user.email,
+                )
+
+            # 4. Mark token consumed
+            token_rec.used_at = now
+            await session.flush()
+
+            # 5. Invalidate all other pending email verification tokens for this user
+            await session.execute(
+                update(AuthToken)
+                .where(
+                    (AuthToken.user_id == user.id)
+                    & (AuthToken.token_type == "email_verification")
+                    & (AuthToken.id != token_rec.id)
+                    & (AuthToken.used_at.is_(None))
+                )
+                .values(used_at=now)
+            )
+            await session.flush()
+
+            if owns_session:
+                await session.commit()
+
+            # Sync in-memory cache
+            if user.id in self._users:
+                self._users[user.id].email_verified = True
+                self._users[user.id].is_verified = True
+                if user.password_hash:
+                    self._users[user.id].password_hash = user.password_hash
+
+            return user
         except Exception:
             if owns_session:
                 await session.rollback()

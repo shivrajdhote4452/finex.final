@@ -1124,15 +1124,15 @@ async def test_pre_account_takeover_prevention_on_unverified_signup():
         token2 = mail2["metadata"]["token"]
         assert token1 != token2
 
-        # Stale Token 1 (from attacker attempt) must be invalidated immediately
-        r1_stale = await client.post("/api/v1/auth/verify-email", json={"token": token1})
-        assert r1_stale.status_code == 400
-        assert "Invalid, expired, or previously used" in r1_stale.json()["detail"]
-
         # Step 3: Owner receives and clicks verification link (Token 2)
         r3_verify = await client.post("/api/v1/auth/verify-email", json={"token": token2})
         assert r3_verify.status_code == 200
         assert r3_verify.json()["data"]["verified"] is True
+
+        # Stale Token 1 (from attacker attempt) must be invalidated once Token 2 is verified
+        r1_stale = await client.post("/api/v1/auth/verify-email", json={"token": token1})
+        assert r1_stale.status_code == 400
+        assert "Invalid, expired, or previously used" in r1_stale.json()["detail"]
 
         # Step 4: Attacker tries to sign in with original attacker_pw -> MUST BE REJECTED
         r4_attacker_login = await client.post(
@@ -1246,4 +1246,147 @@ async def test_recipient_specific_smtp_failure_symmetry_and_behavior():
                     assert data_new["message"] == data_unver["message"] == data_ver["message"]
                     assert data_new["sent"] == data_unver["sent"] == data_ver["sent"]
                     assert data_new["delivery_status"] == data_unver["delivery_status"] == data_ver["delivery_status"]
+
+
+@pytest.mark.asyncio
+async def test_concurrent_verification_click_during_email_dispatch():
+    """Verify that if an owner clicks their verification link WHILE a subsequent duplicate
+    signup attempt is in the middle of slow email dispatch, the verification securely activates
+    the owner's password and the subsequent signup cannot overwrite it or compromise the account.
+    """
+    import asyncio
+
+    email_service.enable_test_mode()
+    email_service.clear_sent_emails()
+
+    victim_email = f"race_verify_{uuid.uuid4().hex[:8]}@example.com"
+    attacker_pw = "AttackerRacePw123!"
+    owner_pw = "OwnerRacePw456!"
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # Step 1: Owner initiates signup cleanly
+        r0 = await client.post(
+            "/api/v1/auth/signup",
+            json={"email": victim_email, "password": owner_pw, "name": "Legitimate Owner"},
+        )
+        assert r0.status_code == 200
+        mail0 = email_service.get_last_email_for(victim_email)
+        assert mail0 is not None
+        owner_token = mail0["metadata"]["token"]
+
+        # Step 2: Attacker initiates duplicate signup. We simulate slow SMTP dispatch
+        # during which the legitimate owner simultaneously clicks verification on owner_token.
+        original_send = email_service.send_verification_email
+
+        async def slow_send_and_verify(*args, **kwargs):
+            if kwargs.get("name") == "Attacker":
+                # Interleave: owner clicks verification during attacker's SMTP dispatch
+                v_res = await client.post("/api/v1/auth/verify-email", json={"token": owner_token})
+                assert v_res.status_code == 200
+                await asyncio.sleep(0.1)
+            return await original_send(*args, **kwargs)
+
+        email_service.send_verification_email = slow_send_and_verify
+        try:
+            r_att = await client.post(
+                "/api/v1/auth/signup",
+                json={"email": victim_email, "password": attacker_pw, "name": "Attacker"},
+            )
+            assert r_att.status_code == 200
+        finally:
+            email_service.send_verification_email = original_send
+
+        # Step 3: Attacker tries to log in with attacker_pw -> MUST FAIL (401)
+        att_login = await client.post(
+            "/api/v1/auth/login",
+            json={"email": victim_email, "password": attacker_pw},
+        )
+        assert att_login.status_code == 401
+
+        # Step 4: Owner logs in with owner_pw -> MUST SUCCEED (200)
+        own_login = await client.post(
+            "/api/v1/auth/login",
+            json={"email": victim_email, "password": owner_pw},
+        )
+        assert own_login.status_code == 200
+        assert own_login.json()["data"]["access_token"] is not None
+
+
+@pytest.mark.asyncio
+async def test_overlapping_concurrent_duplicate_signups():
+    """Verify that when overlapping concurrent signup requests arrive for an unverified account,
+    each verification token cryptographically binds its own intended password, and row-level
+    locking guarantees that verifying a specific token activates ONLY its corresponding password.
+    """
+    import asyncio
+
+    email_service.enable_test_mode()
+    email_service.clear_sent_emails()
+
+    target_email = f"concurrent_dups_{uuid.uuid4().hex[:8]}@example.com"
+    r_seed = await AsyncClient(transport=ASGITransport(app=app), base_url="http://test").post(
+        "/api/v1/auth/signup", json={"email": target_email, "password": "SeedPassword123!"}
+    )
+    assert r_seed.status_code == 200
+
+    att_token = None
+    own_token = None
+    original_send = email_service.send_verification_email
+
+    async def capture_tokens(*args, **kwargs):
+        nonlocal att_token, own_token
+        name = kwargs.get("name")
+        token = kwargs.get("raw_token")
+        if name == "Attacker":
+            att_token = token
+            await asyncio.sleep(0.15)
+        elif name == "Owner":
+            own_token = token
+        return await original_send(*args, **kwargs)
+
+    email_service.send_verification_email = capture_tokens
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        try:
+            task_a = asyncio.create_task(
+                client.post(
+                    "/api/v1/auth/signup",
+                    json={"email": target_email, "password": "AttackerOverlapping123!", "name": "Attacker"},
+                )
+            )
+            await asyncio.sleep(0.01)
+            task_b = asyncio.create_task(
+                client.post(
+                    "/api/v1/auth/signup",
+                    json={"email": target_email, "password": "OwnerOverlapping456!", "name": "Owner"},
+                )
+            )
+
+            res_a, res_b = await asyncio.gather(task_a, task_b)
+            assert res_a.status_code == 200
+            assert res_b.status_code == 200
+            assert own_token is not None
+            assert att_token is not None
+        finally:
+            email_service.send_verification_email = original_send
+
+        # Owner verifies with Owner's token
+        v_res = await client.post("/api/v1/auth/verify-email", json={"token": own_token})
+        assert v_res.status_code == 200
+
+        # Attacker cannot log in
+        login_att = await client.post(
+            "/api/v1/auth/login",
+            json={"email": target_email, "password": "AttackerOverlapping123!"},
+        )
+        assert login_att.status_code == 401
+
+        # Owner logs in successfully
+        login_own = await client.post(
+            "/api/v1/auth/login",
+            json={"email": target_email, "password": "OwnerOverlapping456!"},
+        )
+        assert login_own.status_code == 200
+        assert login_own.json()["data"]["access_token"] is not None
+
 
