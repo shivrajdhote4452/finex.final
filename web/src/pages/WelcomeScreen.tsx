@@ -39,7 +39,15 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
     (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID ||
     '71626572471-2333p55kgim64b3738oabca9l9ss9th0.apps.googleusercontent.com';
 
-  // 1. Deep-link token detection from URL hash (e.g. #verify-email?token=... or #reset-password?token=...)
+  // 1. Scroll right-hand auth container to top whenever authentication mode changes
+  useEffect(() => {
+    const rightCol = document.getElementById('signin-card');
+    if (rightCol) {
+      rightCol.scrollTo({ top: 0, behavior: 'instant' });
+    }
+  }, [mode]);
+
+  // 2. Deep-link token detection from URL hash (e.g. #verify-email?token=... or #reset-password?token=...)
   useEffect(() => {
     const handleHash = async () => {
       const hash = window.location.hash || '';
