@@ -71,6 +71,7 @@ class SetPasswordRequest(BaseModel):
 
 class ResendVerificationRequest(BaseModel):
     email: str = Field(..., description="User email address")
+    password: Optional[str] = Field(None, description="Account password (optional if re-verifying known credentials)")
 
 
 class TokenResponse(BaseModel):
@@ -313,18 +314,95 @@ async def signup_with_email(
             detail=pw_err or "Password does not meet complexity requirements.",
         )
 
+    has_smtp = bool(settings.SMTP_HOST)
+    is_test = email_service._is_test_mode()
+
+    if not has_smtp and not is_test:
+        resp_data = {
+            "sent": False,
+            "email": clean_email,
+            "message": "Account registration via email is currently unavailable because transactional email is not configured. Please sign in with Google or contact support.",
+            "delivery_status": "smtp_not_configured",
+        }
+        return create_response_envelope(resp_data, correlation_id=cid)
+
+    generic_signup_message = (
+        "If this email address is not already registered, a verification link has been sent. "
+        "Please check your inbox to activate your account."
+    )
+
     existing_user = await user_store.get_user_by_email_db(clean_email, db=db)
     if existing_user:
-        if existing_user.password_hash:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="An account with this email address already exists. Please sign in or reset your password.",
+        # OWASP Anti-Enumeration Defense:
+        # Return identical 200 response without leaking account existence.
+        # Do NOT modify the existing user's password, data, or credentials.
+        profile = await user_store.get_profile_db(existing_user.id, db=db)
+        recipient_name = (profile.full_name if profile and profile.full_name else None) or "Investor"
+
+        if not (existing_user.email_verified or existing_user.is_verified):
+            # OWASP Pre-Account Takeover Defense:
+            # An unverified account has not proven ownership of the email inbox.
+            # Do NOT mutate existing_user.password_hash during signup (avoids race conditions with concurrent requests
+            # or simultaneous verification clicks).
+            # Instead, bind the intended password hash cryptographically to the verification token,
+            # and invalidate older unconsumed tokens so only this newly requested token can activate the account.
+            from backend.app.services.password_service import create_verification_token
+
+            new_pw_hash = hash_password(payload.password)
+            clean_name = payload.name.strip() if payload.name else recipient_name
+
+            raw_token = create_verification_token(
+                user_id=existing_user.id,
+                pending_password_hash=new_pw_hash,
             )
+            await user_store.create_auth_token_db(
+                user_id=existing_user.id,
+                token_type="email_verification",
+                expires_in_minutes=settings.EMAIL_VERIFICATION_EXPIRE_HOURS * 60,
+                raw_token=raw_token,
+                db=db,
+            )
+            if db:
+                await db.commit()  # Release DB transaction before external SMTP network call
+            try:
+                delivery = await email_service.send_verification_email(
+                    to_email=clean_email,
+                    name=clean_name or "Investor",
+                    raw_token=raw_token,
+                )
+            except Exception as e:
+                logger.error("Failed to dispatch verification email to existing user %s: %s", clean_email, e)
+                delivery = {"status": "failed", "delivered": False, "error": str(e)}
         else:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="An account with this email already exists via Google Sign-In. Please sign in with Google or use forgot password to add a password.",
-            )
+            # Account is already verified: NEVER modify password, profile, or credentials!
+            try:
+                delivery = await email_service.send_existing_account_notification(
+                    to_email=clean_email,
+                    name=recipient_name,
+                )
+            except Exception as e:
+                logger.error("Failed to dispatch account notice to %s: %s", clean_email, e)
+                delivery = {"status": "failed", "delivered": False, "error": str(e)}
+
+        delivery_status = delivery.get("status") if isinstance(delivery, dict) else "unknown"
+        is_delivered = bool(delivery.get("delivered")) or delivery_status == "test_captured"
+
+        if not is_delivered:
+            resp_data = {
+                "sent": False,
+                "email": clean_email,
+                "message": "Verification email could not be delivered due to a mail server issue. Please try again later, use resend verification, or sign in with Google.",
+                "delivery_status": delivery_status or "failed",
+            }
+            return create_response_envelope(resp_data, correlation_id=cid)
+
+        resp_data = {
+            "sent": True,
+            "email": clean_email,
+            "message": generic_signup_message,
+            "delivery_status": delivery_status,
+        }
+        return create_response_envelope(resp_data, correlation_id=cid)
 
     hashed = hash_password(payload.password)
     clean_name = payload.name.strip() if payload.name else "Investor"
@@ -336,34 +414,51 @@ async def signup_with_email(
         db=db,
     )
 
-    # Generate single-use verification token valid for configured hours
-    raw_token = await user_store.create_auth_token_db(
+    # Generate single-use verification token binding initial password hash
+    from backend.app.services.password_service import create_verification_token
+
+    raw_token = create_verification_token(
+        user_id=new_user.id,
+        pending_password_hash=hashed,
+    )
+    await user_store.create_auth_token_db(
         user_id=new_user.id,
         token_type="email_verification",
         expires_in_minutes=settings.EMAIL_VERIFICATION_EXPIRE_HOURS * 60,
+        raw_token=raw_token,
         db=db,
     )
+    if db:
+        await db.commit()  # Release DB transaction before external SMTP network call
 
     # Dispatch verification email
-    delivery = await email_service.send_verification_email(
-        to_email=clean_email,
-        name=clean_name,
-        raw_token=raw_token,
-    )
+    try:
+        delivery = await email_service.send_verification_email(
+            to_email=clean_email,
+            name=clean_name,
+            raw_token=raw_token,
+        )
+    except Exception as e:
+        logger.error("Failed to dispatch verification email to new user %s: %s", clean_email, e)
+        delivery = {"status": "failed", "delivered": False, "error": str(e)}
 
-    if delivery.get("delivered"):
-        delivery_msg = "Account created successfully. Please check your email to verify your address."
-    elif delivery.get("status") == "test_captured":
-        delivery_msg = "Account created. Verification token captured in test buffer."
-    else:
-        delivery_msg = "Account created. Email delivery is currently unavailable; please contact an administrator."
+    delivery_status = delivery.get("status") if isinstance(delivery, dict) else "unknown"
+    is_delivered = bool(delivery.get("delivered")) or delivery_status == "test_captured"
+
+    if not is_delivered:
+        resp_data = {
+            "sent": False,
+            "email": clean_email,
+            "message": "Verification email could not be delivered due to a mail server issue. Please try again later, use resend verification, or sign in with Google.",
+            "delivery_status": delivery_status or "failed",
+        }
+        return create_response_envelope(resp_data, correlation_id=cid)
 
     resp_data = {
-        "created": True,
-        "user_id": new_user.id,
+        "sent": True,
         "email": clean_email,
-        "message": delivery_msg,
-        "delivery_status": delivery.get("status"),
+        "message": generic_signup_message,
+        "delivery_status": delivery_status,
     }
     return create_response_envelope(resp_data, correlation_id=cid)
 
@@ -378,19 +473,15 @@ async def verify_email_token(
     cid = getattr(request.state, "correlation_id", "none")
     raw_token = payload.token.strip()
 
-    user_id = await user_store.verify_and_consume_auth_token_db(
+    user = await user_store.verify_and_consume_email_verification_token_db(
         raw_token=raw_token,
-        token_type="email_verification",
         db=db,
     )
-    if not user_id:
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid, expired, or previously used verification link. Please request a new one.",
         )
-
-    await user_store.mark_email_verified_db(user_id=user_id, db=db)
-    user = await user_store.get_user_by_id_db(user_id=user_id, db=db)
 
     resp_data = {
         "verified": True,
@@ -506,17 +597,36 @@ async def forgot_password(
             headers={"Retry-After": str(retry_after)},
         )
 
+    has_smtp = bool(settings.SMTP_HOST)
+    is_test = email_service._is_test_mode()
+
+    if not has_smtp and not is_test:
+        resp_data = {
+            "sent": False,
+            "message": "Password reset via email is currently unavailable because transactional email is not configured. Please sign in with Google or contact support.",
+            "delivery_status": "smtp_not_configured",
+        }
+        return create_response_envelope(resp_data, correlation_id=cid)
+
     user = await user_store.get_user_by_email_db(clean_email, db=db)
     if user and user.is_active:
         profile = await user_store.get_profile_db(user.id, db=db)
         display_name = profile.full_name if profile and profile.full_name else clean_email.split("@")[0]
 
+        # Invalidate any previous unconsumed password_reset tokens before issuing a new one
+        await user_store.invalidate_user_tokens_db(
+            user_id=user.id,
+            token_type="password_reset",
+            db=db,
+        )
         raw_token = await user_store.create_auth_token_db(
             user_id=user.id,
             token_type="password_reset",
             expires_in_minutes=settings.PASSWORD_RESET_EXPIRE_MINUTES,
             db=db,
         )
+        if db:
+            await db.commit()  # Release DB transaction before external SMTP network call
         delivery = await email_service.send_password_reset_email(
             to_email=user.email,
             name=display_name,
@@ -528,11 +638,18 @@ async def forgot_password(
                 clean_email,
                 delivery.get("status"),
             )
+            resp_data = {
+                "sent": False,
+                "message": "Password reset email could not be delivered due to a mail server issue. Please try again later or contact support.",
+                "delivery_status": delivery.get("status"),
+            }
+            return create_response_envelope(resp_data, correlation_id=cid)
 
     # Safe generic response regardless of whether account was found
     resp_data = {
         "sent": True,
         "message": "If an account exists for this email address, password reset instructions have been sent.",
+        "delivery_status": "delivered" if (has_smtp or is_test) else "queued",
     }
     return create_response_envelope(resp_data, correlation_id=cid)
 
@@ -585,32 +702,89 @@ async def resend_verification_email(
     cid = getattr(request.state, "correlation_id", "none")
     clean_email = payload.email.strip().lower()
 
+    has_smtp = bool(settings.SMTP_HOST)
+    is_test = email_service._is_test_mode()
+
+    if not has_smtp and not is_test:
+        resp_data = {
+            "sent": False,
+            "message": "Email verification resend is currently unavailable because transactional email is not configured. Please sign in with Google or contact support.",
+            "delivery_status": "smtp_not_configured",
+        }
+        return create_response_envelope(resp_data, correlation_id=cid)
+
     user = await user_store.get_user_by_email_db(clean_email, db=db)
     if user and not (user.email_verified or user.is_verified):
         profile = await user_store.get_profile_db(user.id, db=db)
         display_name = profile.full_name if profile and profile.full_name else "Investor"
 
-        raw_token = await user_store.create_auth_token_db(
-            user_id=user.id,
-            token_type="email_verification",
-            expires_in_minutes=settings.EMAIL_VERIFICATION_EXPIRE_HOURS * 60,
-            db=db,
-        )
-        delivery = await email_service.send_verification_email(
-            to_email=user.email,
-            name=display_name,
-            raw_token=raw_token,
-        )
+        if payload.password:
+            # User supplied credentials during resend: validate and bind them cryptographically
+            is_valid, pw_err = validate_password_strength(payload.password)
+            if not is_valid:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=pw_err or "Password does not meet complexity requirements.",
+                )
+            new_pw_hash = hash_password(payload.password)
+            from backend.app.services.password_service import create_verification_token
+
+            raw_token = create_verification_token(
+                user_id=user.id,
+                pending_password_hash=new_pw_hash,
+            )
+            await user_store.create_auth_token_db(
+                user_id=user.id,
+                token_type="email_verification",
+                expires_in_minutes=settings.EMAIL_VERIFICATION_EXPIRE_HOURS * 60,
+                raw_token=raw_token,
+                db=db,
+            )
+            if db:
+                await db.commit()  # Release DB transaction before external SMTP network call
+            delivery = await email_service.send_verification_email(
+                to_email=user.email,
+                name=display_name,
+                raw_token=raw_token,
+            )
+        else:
+            # OWASP Pre-Account Takeover Defense:
+            # When resend is requested WITHOUT supplying a password, DO NOT bind or reuse
+            # user.password_hash from the unverified database row. That password may have been
+            # chosen by an attacker during unverified initial registration.
+            # Instead, issue a secure single-use password setup / reset link so the inbox owner
+            # explicitly establishes their own password upon clicking.
+            raw_token = await user_store.create_auth_token_db(
+                user_id=user.id,
+                token_type="password_reset",
+                expires_in_minutes=settings.PASSWORD_RESET_EXPIRE_MINUTES,
+                db=db,
+            )
+            if db:
+                await db.commit()  # Release DB transaction before external SMTP network call
+            delivery = await email_service.send_password_reset_email(
+                to_email=user.email,
+                name=display_name,
+                raw_token=raw_token,
+            )
+
         if not delivery.get("delivered") and delivery.get("status") != "test_captured":
             logger.warning(
                 "Verification resend email for %s could not be delivered: status=%s",
                 clean_email,
                 delivery.get("status"),
             )
+            resp_data = {
+                "sent": False,
+                "message": "Verification email could not be delivered due to a mail server issue. Please try again later or contact support.",
+                "delivery_status": delivery.get("status"),
+            }
+            return create_response_envelope(resp_data, correlation_id=cid)
 
     resp_data = {
         "sent": True,
         "message": "If this account is registered and unverified, a new verification link has been sent.",
+        "delivery_status": "delivered" if (has_smtp or is_test) else "queued",
     }
     return create_response_envelope(resp_data, correlation_id=cid)
 

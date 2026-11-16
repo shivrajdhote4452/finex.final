@@ -816,6 +816,19 @@ class UserStore:
             user.email_verified = True
             user.is_verified = True
             await session.flush()
+
+            # Invalidate all remaining password_reset tokens for this user
+            await session.execute(
+                update(AuthToken)
+                .where(
+                    (AuthToken.user_id == user_id)
+                    & (AuthToken.token_type == "password_reset")
+                    & (AuthToken.used_at.is_(None))
+                )
+                .values(used_at=datetime.now(timezone.utc))
+            )
+            await session.flush()
+
             if owns_session:
                 await session.commit()
 
@@ -838,7 +851,7 @@ class UserStore:
         user_id: str,
         db: Optional[AsyncSession] = None,
     ) -> bool:
-        """Mark user's email as verified."""
+        """Mark user's email as verified and invalidate all pending verification tokens."""
         owns_session = db is None
         session = db if db is not None else AsyncSessionLocal()
         try:
@@ -849,6 +862,19 @@ class UserStore:
             user.email_verified = True
             user.is_verified = True
             await session.flush()
+
+            # Invalidate all remaining verification tokens for this user
+            await session.execute(
+                update(AuthToken)
+                .where(
+                    (AuthToken.user_id == user_id)
+                    & (AuthToken.token_type == "email_verification")
+                    & (AuthToken.used_at.is_(None))
+                )
+                .values(used_at=datetime.now(timezone.utc))
+            )
+            await session.flush()
+
             if owns_session:
                 await session.commit()
 
@@ -865,17 +891,123 @@ class UserStore:
             if owns_session:
                 await session.close()
 
+    async def update_unverified_user_signup_db(
+        self,
+        user_id: str,
+        password_hash: str,
+        name: Optional[str] = None,
+        db: Optional[AsyncSession] = None,
+    ) -> bool:
+        """Update password hash and profile name for an UNVERIFIED user account.
+
+        OWASP Pre-Account Takeover Defense:
+        Allows the legitimate registrant to establish their own password on subsequent
+        signup attempts for an unverified account without activating an untrusted
+        password chosen by an earlier unverified registrant or attacker.
+        Never modifies verified accounts.
+        """
+        owns_session = db is None
+        session = db if db is not None else AsyncSessionLocal()
+        try:
+            res = await session.execute(select(User).where(User.id == user_id))
+            user = res.scalar_one_or_none()
+            if not user:
+                return False
+            # Safety assertion: never overwrite credentials of an already verified account
+            if user.email_verified or user.is_verified:
+                logger.warning(
+                    "Refusing to update signup credentials for verified user %s (%s)",
+                    user_id,
+                    user.email,
+                )
+                return False
+
+            user.password_hash = password_hash
+            await session.flush()
+
+            clean_name = name.strip() if name else ""
+            if clean_name:
+                res_prof = await session.execute(select(UserProfile).where(UserProfile.user_id == user_id))
+                profile = res_prof.scalar_one_or_none()
+                if profile:
+                    profile.full_name = clean_name
+                    profile.display_name = clean_name.split(" ")[0]
+                    await session.flush()
+                else:
+                    new_prof = UserProfile(
+                        id=str(uuid.uuid4()),
+                        user_id=user_id,
+                        full_name=clean_name,
+                        display_name=clean_name.split(" ")[0],
+                        country="IND",
+                        experience_level="BEGINNER",
+                        onboarding_completed=False,
+                    )
+                    session.add(new_prof)
+                    await session.flush()
+
+            if owns_session:
+                await session.commit()
+
+            if user_id in self._users:
+                self._users[user_id].password_hash = password_hash
+            if clean_name and user_id in self._profiles:
+                self._profiles[user_id].full_name = clean_name
+                self._profiles[user_id].display_name = clean_name.split(" ")[0]
+
+            return True
+        except Exception:
+            if owns_session:
+                await session.rollback()
+            raise
+        finally:
+            if owns_session:
+                await session.close()
+
+    async def invalidate_user_tokens_db(
+        self,
+        user_id: str,
+        token_type: Optional[str] = None,
+        exclude_token_hash: Optional[str] = None,
+        db: Optional[AsyncSession] = None,
+    ) -> int:
+        """Invalidate all unconsumed tokens for a user, optionally excluding a specific token hash."""
+        owns_session = db is None
+        session = db if db is not None else AsyncSessionLocal()
+        try:
+            now = datetime.now(timezone.utc)
+            where_clause = (AuthToken.user_id == user_id) & (AuthToken.used_at.is_(None))
+            if token_type:
+                where_clause = where_clause & (AuthToken.token_type == token_type)
+            if exclude_token_hash:
+                where_clause = where_clause & (AuthToken.token_hash != exclude_token_hash)
+            stmt = update(AuthToken).where(where_clause).values(used_at=now)
+            res = await session.execute(stmt)
+            await session.flush()
+            if owns_session:
+                await session.commit()
+            return res.rowcount
+        except Exception:
+            if owns_session:
+                await session.rollback()
+            raise
+        finally:
+            if owns_session:
+                await session.close()
+
     async def create_auth_token_db(
         self,
         user_id: str,
         token_type: str,
         expires_in_minutes: int,
+        raw_token: Optional[str] = None,
         db: Optional[AsyncSession] = None,
     ) -> str:
-        """Generate high-entropy token, store its SHA-256 hash in database, and return raw token."""
+        """Store SHA-256 hash of raw_token (or generate fresh) in database, and return raw token."""
         from backend.app.services.password_service import generate_raw_token, hash_token
 
-        raw_token = generate_raw_token()
+        if raw_token is None:
+            raw_token = generate_raw_token()
         hashed = hash_token(raw_token)
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=expires_in_minutes)
 
@@ -894,6 +1026,125 @@ class UserStore:
             if owns_session:
                 await session.commit()
             return raw_token
+        except Exception:
+            if owns_session:
+                await session.rollback()
+            raise
+        finally:
+            if owns_session:
+                await session.close()
+
+    async def verify_and_consume_email_verification_token_db(
+        self,
+        raw_token: str,
+        db: Optional[AsyncSession] = None,
+    ) -> Optional[User]:
+        """Validate email verification token with strict row locking, verify user,
+        and atomically activate the bound password hash without race conditions.
+
+        Guarantees:
+        - Strict row-level lock on AuthToken and User prevents concurrent race activation.
+        - If user is unverified, activates ONLY the password bound to this token.
+        - If user is already verified, NEVER alters credentials.
+        - Atomically invalidates all other pending verification tokens for this user.
+        """
+        from backend.app.services.password_service import decrypt_verification_token, hash_token
+
+        hashed = hash_token(raw_token)
+        token_info = decrypt_verification_token(raw_token)
+
+        owns_session = db is None
+        session = db if db is not None else AsyncSessionLocal()
+        try:
+            # 1. Row-lock AuthToken
+            stmt = (
+                select(AuthToken)
+                .where((AuthToken.token_hash == hashed) & (AuthToken.token_type == "email_verification"))
+                .with_for_update()
+            )
+            res = await session.execute(stmt)
+            token_rec = res.scalar_one_or_none()
+            if not token_rec:
+                return None
+            if token_rec.used_at is not None:
+                return None  # Single-use already consumed
+
+            now = datetime.now(timezone.utc)
+            exp = token_rec.expires_at
+            if exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+            if exp < now:
+                return None  # Expired
+
+            # If token is encrypted, verify user_id matches
+            if not token_info.get("is_legacy") and token_info.get("uid"):
+                if token_info["uid"] != token_rec.user_id:
+                    logger.warning("Token user_id mismatch: %s vs %s", token_info["uid"], token_rec.user_id)
+                    return None
+
+            # 2. Row-lock User
+            user_stmt = select(User).where(User.id == token_rec.user_id).with_for_update()
+            res_user = await session.execute(user_stmt)
+            user = res_user.scalar_one_or_none()
+            if not user:
+                return None
+
+            # 3. Check verification status & activate bound password
+            if not (user.email_verified or user.is_verified):
+                pending_pw = token_info.get("pwh")
+                if not pending_pw:
+                    # FAIL CLOSED:
+                    # If this token cannot be decrypted (e.g. JWT_SECRET_KEY rotated)
+                    # or lacks an authenticated bound password (legacy un-bound format),
+                    # we MUST NOT mark the unverified account verified. Doing so would activate
+                    # an untrusted password chosen during unverified registration.
+                    logger.warning(
+                        "Rejecting verification token for unverified user %s (%s): "
+                        "token cannot be safely decrypted or lacks bound password hash",
+                        user.id,
+                        user.email,
+                    )
+                    return None
+
+                user.password_hash = pending_pw
+                user.email_verified = True
+                user.is_verified = True
+                logger.info("Verified email and activated bound credentials for user %s (%s)", user.id, user.email)
+            else:
+                logger.info(
+                    "User %s (%s) is already verified; consuming token without altering credentials.",
+                    user.id,
+                    user.email,
+                )
+
+            # 4. Mark token consumed
+            token_rec.used_at = now
+            await session.flush()
+
+            # 5. Invalidate all other pending email verification tokens for this user
+            await session.execute(
+                update(AuthToken)
+                .where(
+                    (AuthToken.user_id == user.id)
+                    & (AuthToken.token_type == "email_verification")
+                    & (AuthToken.id != token_rec.id)
+                    & (AuthToken.used_at.is_(None))
+                )
+                .values(used_at=now)
+            )
+            await session.flush()
+
+            if owns_session:
+                await session.commit()
+
+            # Sync in-memory cache
+            if user.id in self._users:
+                self._users[user.id].email_verified = True
+                self._users[user.id].is_verified = True
+                if user.password_hash:
+                    self._users[user.id].password_hash = user.password_hash
+
+            return user
         except Exception:
             if owns_session:
                 await session.rollback()
