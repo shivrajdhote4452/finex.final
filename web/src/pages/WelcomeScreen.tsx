@@ -468,74 +468,48 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
 
       {/* Right Column: Authentication Card */}
       <div className="welcome-right-col" id="signin-card">
-        <div style={{ maxWidth: '420px', width: '100%' }}>
+        <div className="auth-card">
           {/* Header */}
-          <div style={{ fontSize: '24px', fontWeight: 700, color: '#FFFFFF', marginBottom: '4px' }}>
+          <h2 className="auth-header-title">
             {mode === 'signup' && 'Create Your FinEx Account'}
             {mode === 'signin' && 'Sign In to FinEx'}
             {mode === 'forgot' && 'Reset Your Password'}
             {mode === 'reset' && 'Set New Password'}
             {mode === 'verify' && 'Verifying Email'}
-          </div>
-          <div style={{ fontSize: '13px', color: 'var(--color-action)', fontWeight: 500, marginBottom: '20px' }}>
+          </h2>
+          <p className="auth-header-subtitle">
             {mode === 'signup' && 'Start with ₹1,00,000 in virtual funds today.'}
             {mode === 'signin' && 'Your personal market workspace awaits.'}
-            {mode === 'forgot' && 'We’ll send single-use recovery instructions.'}
-            {mode === 'reset' && 'Choose a strong, unique password.'}
+            {mode === 'forgot' && 'Enter your email to receive single-use recovery instructions.'}
+            {mode === 'reset' && 'Choose a strong, unique password (min. 8 characters).'}
             {mode === 'verify' && 'Confirming identity credentials...'}
-          </div>
+          </p>
 
           {/* Tab Switcher: Sign In vs Create Account */}
           {(mode === 'signin' || mode === 'signup') && (
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                backgroundColor: '#0A0A0C',
-                border: '1px solid #1F1F23',
-                borderRadius: 'var(--radius-xs)',
-                padding: '3px',
-                marginBottom: '20px',
-              }}
-            >
+            <div className="auth-tabs" role="tablist" aria-label="Authentication Options">
               <button
                 type="button"
+                role="tab"
+                aria-selected={mode === 'signin'}
+                className={`auth-tab-btn ${mode === 'signin' ? 'active' : ''}`}
                 onClick={() => {
                   setMode('signin');
                   setErrorMessage(null);
                   setSuccessMessage(null);
-                }}
-                style={{
-                  padding: '8px',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  borderRadius: 'var(--radius-xs)',
-                  border: 'none',
-                  cursor: 'pointer',
-                  backgroundColor: mode === 'signin' ? '#18181B' : 'transparent',
-                  color: mode === 'signin' ? '#FFFFFF' : '#71717A',
-                  transition: 'all 0.15s ease',
                 }}
               >
                 Sign In
               </button>
               <button
                 type="button"
+                role="tab"
+                aria-selected={mode === 'signup'}
+                className={`auth-tab-btn ${mode === 'signup' ? 'active' : ''}`}
                 onClick={() => {
                   setMode('signup');
                   setErrorMessage(null);
                   setSuccessMessage(null);
-                }}
-                style={{
-                  padding: '8px',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  borderRadius: 'var(--radius-xs)',
-                  border: 'none',
-                  cursor: 'pointer',
-                  backgroundColor: mode === 'signup' ? '#18181B' : 'transparent',
-                  color: mode === 'signup' ? '#FFFFFF' : '#71717A',
-                  transition: 'all 0.15s ease',
                 }}
               >
                 Create Account
@@ -545,54 +519,26 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
 
           {/* Status Messages */}
           {errorMessage && (
-            <div
-              style={{
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-                color: '#FCA5A5',
-                padding: '10px 14px',
-                borderRadius: 'var(--radius-xs)',
-                fontSize: '12px',
-                lineHeight: 1.5,
-                marginBottom: '18px',
-              }}
-            >
-              {errorMessage}
+            <div className="auth-status-error" role="alert">
+              <div>{errorMessage}</div>
               {mode === 'signin' && errorMessage.toLowerCase().includes('invalid email or password') && (
                 <div style={{ marginTop: '8px', display: 'flex', gap: '14px', flexWrap: 'wrap', alignItems: 'center' }}>
                   <button
                     type="button"
+                    className="auth-inline-action-btn"
                     onClick={() => {
                       setMode('signup');
                       setErrorMessage(null);
-                    }}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: 'var(--color-action)',
-                      textDecoration: 'underline',
-                      fontSize: '11.5px',
-                      cursor: 'pointer',
-                      padding: 0,
-                      fontWeight: 600,
                     }}
                   >
                     New user? Create an account →
                   </button>
                   <button
                     type="button"
+                    className="auth-inline-secondary-btn"
                     onClick={() => {
                       setMode('forgot');
                       setErrorMessage(null);
-                    }}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: '#D4D4D8',
-                      textDecoration: 'underline',
-                      fontSize: '11.5px',
-                      cursor: 'pointer',
-                      padding: 0,
                     }}
                   >
                     Forgot password?
@@ -603,16 +549,8 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                 <div style={{ marginTop: '6px' }}>
                   <button
                     type="button"
+                    className="auth-inline-action-btn"
                     onClick={handleResendVerification}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: 'var(--color-action)',
-                      textDecoration: 'underline',
-                      fontSize: '11.5px',
-                      cursor: 'pointer',
-                      padding: 0,
-                    }}
                   >
                     Resend verification link →
                   </button>
@@ -622,18 +560,10 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                 <div style={{ marginTop: '6px' }}>
                   <button
                     type="button"
+                    className="auth-inline-action-btn"
                     onClick={() => {
                       setMode('signin');
                       setErrorMessage(null);
-                    }}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: 'var(--color-action)',
-                      textDecoration: 'underline',
-                      fontSize: '11.5px',
-                      cursor: 'pointer',
-                      padding: 0,
                     }}
                   >
                     Switch to Sign In →
@@ -644,18 +574,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           )}
 
           {successMessage && (
-            <div
-              style={{
-                backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                border: '1px solid rgba(34, 197, 94, 0.3)',
-                color: '#86EFAC',
-                padding: '10px 14px',
-                borderRadius: 'var(--radius-xs)',
-                fontSize: '12px',
-                lineHeight: 1.5,
-                marginBottom: '18px',
-              }}
-            >
+            <div className="auth-status-success" role="status">
               {successMessage}
             </div>
           )}
@@ -665,62 +584,36 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
             <>
               <button
                 type="button"
+                className="auth-google-btn"
                 onClick={handleGoogleSignIn}
-                disabled={loading}
-                style={{
-                  width: '100%',
-                  padding: '11px',
-                  fontSize: '13px',
-                  backgroundColor: '#121214',
-                  color: '#FFFFFF',
-                  border: '1px solid #27272A',
-                  borderRadius: 'var(--radius-xs)',
-                  gap: '10px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: consentChecked ? 'pointer' : 'not-allowed',
-                  opacity: consentChecked ? 1 : 0.5,
-                  transition: 'background-color 0.15s ease',
-                  marginBottom: '18px',
-                }}
+                disabled={loading || !consentChecked}
+                title={!consentChecked ? 'Please accept Terms and Privacy Policy first' : undefined}
               >
-                <svg width="18" height="18" viewBox="0 0 24 24">
+                <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
                   <path
-                    fill="#FFFFFF"
+                    fill="#4285F4"
                     d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
                   />
                   <path
-                    fill="#FFFFFF"
+                    fill="#34A853"
                     d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
                   />
                   <path
-                    fill="#FFFFFF"
+                    fill="#FBBC05"
                     d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
                   />
                   <path
-                    fill="#FFFFFF"
+                    fill="#EA4335"
                     d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                   />
                 </svg>
                 <span>{loading ? 'Initializing...' : 'Continue with Google'}</span>
               </button>
 
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  margin: '18px 0',
-                  gap: '12px',
-                  color: '#52525B',
-                  fontSize: '11px',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.06em',
-                }}
-              >
-                <div style={{ flex: 1, height: '1px', backgroundColor: '#1F1F23' }} />
+              <div className="auth-divider">
+                <div className="auth-divider-line" />
                 <span>or with email &amp; password</span>
-                <div style={{ flex: 1, height: '1px', backgroundColor: '#1F1F23' }} />
+                <div className="auth-divider-line" />
               </div>
             </>
           )}
@@ -728,91 +621,55 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           {/* Email & Password Forms */}
           {mode === 'signin' && (
             <form onSubmit={handleEmailSignIn}>
-              <div style={{ marginBottom: '14px' }}>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#A1A1AA', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              <div className="auth-form-group">
+                <label className="auth-label" htmlFor="signin-email">
                   Email Address
                 </label>
                 <input
+                  id="signin-email"
                   type="email"
+                  className="auth-input"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="name@example.com"
                   required
                   autoComplete="email"
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    backgroundColor: '#0A0A0C',
-                    border: '1px solid #27272A',
-                    borderRadius: 'var(--radius-xs)',
-                    color: '#FFFFFF',
-                    fontSize: '13px',
-                    outline: 'none',
-                    boxSizing: 'border-box',
-                    fontFamily: 'inherit',
-                  }}
                 />
               </div>
 
-              <div style={{ marginBottom: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: 600, color: '#A1A1AA', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              <div className="auth-form-group">
+                <div className="auth-label-row">
+                  <label className="auth-label" htmlFor="signin-password">
                     Password
                   </label>
                   <button
                     type="button"
+                    className="auth-forgot-link"
                     onClick={() => {
                       setMode('forgot');
                       setErrorMessage(null);
                       setSuccessMessage(null);
                     }}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: 'var(--color-action)',
-                      fontSize: '11.5px',
-                      cursor: 'pointer',
-                      padding: 0,
-                    }}
                   >
                     Forgot password?
                   </button>
                 </div>
-                <div style={{ position: 'relative' }}>
+                <div className="auth-password-wrapper">
                   <input
+                    id="signin-password"
                     type={showPassword ? 'text' : 'password'}
+                    className="auth-input auth-password-input"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
                     required
                     autoComplete="current-password"
-                    style={{
-                      width: '100%',
-                      padding: '10px 40px 10px 12px',
-                      backgroundColor: '#0A0A0C',
-                      border: '1px solid #27272A',
-                      borderRadius: 'var(--radius-xs)',
-                      color: '#FFFFFF',
-                      fontSize: '13px',
-                      outline: 'none',
-                      boxSizing: 'border-box',
-                      fontFamily: 'inherit',
-                    }}
                   />
                   <button
                     type="button"
+                    className="auth-password-toggle"
                     onClick={() => setShowPassword(!showPassword)}
-                    style={{
-                      position: 'absolute',
-                      right: '10px',
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      background: 'none',
-                      border: 'none',
-                      color: '#71717A',
-                      cursor: 'pointer',
-                      fontSize: '11px',
-                    }}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
                   >
                     {showPassword ? 'Hide' : 'Show'}
                   </button>
@@ -820,32 +677,18 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
               </div>
 
               {/* Consent Checkbox */}
-              <label
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '10px',
-                  fontSize: '11.5px',
-                  lineHeight: 1.5,
-                  color: '#A1A1AA',
-                  cursor: 'pointer',
-                  marginBottom: '18px',
-                  backgroundColor: '#0A0A0C',
-                  border: '1px solid #1F1F23',
-                  borderRadius: 'var(--radius-xs)',
-                  padding: '10px 12px',
-                }}
-              >
+              <label className="auth-consent-card">
                 <input
                   type="checkbox"
+                  className="auth-checkbox"
                   checked={consentChecked}
                   onChange={(e) => setConsentChecked(e.target.checked)}
-                  style={{ marginTop: '2px', accentColor: 'var(--color-action)', cursor: 'pointer' }}
                 />
                 <span>
                   I accept the{' '}
                   <a
                     href="/terms"
+                    className="auth-consent-link"
                     onClick={(e) => {
                       e.stopPropagation();
                       if (onOpenTerms) {
@@ -853,13 +696,13 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                         onOpenTerms();
                       }
                     }}
-                    style={{ color: '#FFFFFF', textDecoration: 'underline' }}
                   >
                     Terms of Service
                   </a>{' '}
                   and{' '}
                   <a
                     href="/privacy"
+                    className="auth-consent-link"
                     onClick={(e) => {
                       e.stopPropagation();
                       if (onOpenPrivacy) {
@@ -867,7 +710,6 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                         onOpenPrivacy();
                       }
                     }}
-                    style={{ color: '#FFFFFF', textDecoration: 'underline' }}
                   >
                     Privacy Policy
                   </a>
@@ -877,42 +719,21 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
 
               <button
                 type="submit"
+                className="auth-primary-btn"
                 disabled={loading || !consentChecked}
-                style={{
-                  width: '100%',
-                  padding: '11px',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  backgroundColor: 'var(--color-action)',
-                  color: '#000000',
-                  border: 'none',
-                  borderRadius: 'var(--radius-xs)',
-                  cursor: consentChecked && !loading ? 'pointer' : 'not-allowed',
-                  opacity: consentChecked && !loading ? 1 : 0.6,
-                  transition: 'opacity 0.15s ease',
-                }}
               >
                 {loading ? 'Signing In...' : 'Sign In to Workspace →'}
               </button>
 
-              <div style={{ marginTop: '16px', textAlign: 'center', fontSize: '12px', color: '#71717A' }}>
+              <div className="auth-switch-row">
                 Don&apos;t have an account?{' '}
                 <button
                   type="button"
+                  className="auth-switch-btn"
                   onClick={() => {
                     setMode('signup');
                     setErrorMessage(null);
                     setSuccessMessage(null);
-                  }}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--color-action)',
-                    textDecoration: 'underline',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    padding: 0,
                   }}
                 >
                   Create Account
@@ -923,96 +744,57 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
 
           {mode === 'signup' && (
             <form onSubmit={handleEmailSignUp}>
-              <div style={{ marginBottom: '14px' }}>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#A1A1AA', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              <div className="auth-form-group">
+                <label className="auth-label" htmlFor="signup-name">
                   Your Full Name
                 </label>
                 <input
+                  id="signup-name"
                   type="text"
+                  className="auth-input"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="e.g. Aditi Sharma"
                   autoComplete="name"
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    backgroundColor: '#0A0A0C',
-                    border: '1px solid #27272A',
-                    borderRadius: 'var(--radius-xs)',
-                    color: '#FFFFFF',
-                    fontSize: '13px',
-                    outline: 'none',
-                    boxSizing: 'border-box',
-                    fontFamily: 'inherit',
-                  }}
                 />
               </div>
 
-              <div style={{ marginBottom: '14px' }}>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#A1A1AA', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              <div className="auth-form-group">
+                <label className="auth-label" htmlFor="signup-email">
                   Email Address
                 </label>
                 <input
+                  id="signup-email"
                   type="email"
+                  className="auth-input"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="name@example.com"
                   required
                   autoComplete="email"
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    backgroundColor: '#0A0A0C',
-                    border: '1px solid #27272A',
-                    borderRadius: 'var(--radius-xs)',
-                    color: '#FFFFFF',
-                    fontSize: '13px',
-                    outline: 'none',
-                    boxSizing: 'border-box',
-                    fontFamily: 'inherit',
-                  }}
                 />
               </div>
 
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#A1A1AA', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              <div className="auth-form-group">
+                <label className="auth-label" htmlFor="signup-password">
                   Password (min. 8 characters)
                 </label>
-                <div style={{ position: 'relative' }}>
+                <div className="auth-password-wrapper">
                   <input
+                    id="signup-password"
                     type={showPassword ? 'text' : 'password'}
+                    className="auth-input auth-password-input"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="At least 8 characters with letters & numbers"
                     required
                     autoComplete="new-password"
-                    style={{
-                      width: '100%',
-                      padding: '10px 40px 10px 12px',
-                      backgroundColor: '#0A0A0C',
-                      border: '1px solid #27272A',
-                      borderRadius: 'var(--radius-xs)',
-                      color: '#FFFFFF',
-                      fontSize: '13px',
-                      outline: 'none',
-                      boxSizing: 'border-box',
-                      fontFamily: 'inherit',
-                    }}
                   />
                   <button
                     type="button"
+                    className="auth-password-toggle"
                     onClick={() => setShowPassword(!showPassword)}
-                    style={{
-                      position: 'absolute',
-                      right: '10px',
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      background: 'none',
-                      border: 'none',
-                      color: '#71717A',
-                      cursor: 'pointer',
-                      fontSize: '11px',
-                    }}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
                   >
                     {showPassword ? 'Hide' : 'Show'}
                   </button>
@@ -1020,32 +802,18 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
               </div>
 
               {/* Consent Checkbox */}
-              <label
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '10px',
-                  fontSize: '11.5px',
-                  lineHeight: 1.5,
-                  color: '#A1A1AA',
-                  cursor: 'pointer',
-                  marginBottom: '18px',
-                  backgroundColor: '#0A0A0C',
-                  border: '1px solid #1F1F23',
-                  borderRadius: 'var(--radius-xs)',
-                  padding: '10px 12px',
-                }}
-              >
+              <label className="auth-consent-card">
                 <input
                   type="checkbox"
+                  className="auth-checkbox"
                   checked={consentChecked}
                   onChange={(e) => setConsentChecked(e.target.checked)}
-                  style={{ marginTop: '2px', accentColor: 'var(--color-action)', cursor: 'pointer' }}
                 />
                 <span>
                   I accept the{' '}
                   <a
                     href="/terms"
+                    className="auth-consent-link"
                     onClick={(e) => {
                       e.stopPropagation();
                       if (onOpenTerms) {
@@ -1053,13 +821,13 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                         onOpenTerms();
                       }
                     }}
-                    style={{ color: '#FFFFFF', textDecoration: 'underline' }}
                   >
                     Terms of Service
                   </a>{' '}
                   and{' '}
                   <a
                     href="/privacy"
+                    className="auth-consent-link"
                     onClick={(e) => {
                       e.stopPropagation();
                       if (onOpenPrivacy) {
@@ -1067,7 +835,6 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                         onOpenPrivacy();
                       }
                     }}
-                    style={{ color: '#FFFFFF', textDecoration: 'underline' }}
                   >
                     Privacy Policy
                   </a>
@@ -1077,42 +844,21 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
 
               <button
                 type="submit"
+                className="auth-primary-btn"
                 disabled={loading || !consentChecked}
-                style={{
-                  width: '100%',
-                  padding: '11px',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  backgroundColor: 'var(--color-action)',
-                  color: '#000000',
-                  border: 'none',
-                  borderRadius: 'var(--radius-xs)',
-                  cursor: consentChecked && !loading ? 'pointer' : 'not-allowed',
-                  opacity: consentChecked && !loading ? 1 : 0.6,
-                  transition: 'opacity 0.15s ease',
-                }}
               >
                 {loading ? 'Creating Account...' : 'Create Account & Verify Email →'}
               </button>
 
-              <div style={{ marginTop: '16px', textAlign: 'center', fontSize: '12px', color: '#71717A' }}>
+              <div className="auth-switch-row">
                 Already have an account?{' '}
                 <button
                   type="button"
+                  className="auth-switch-btn"
                   onClick={() => {
                     setMode('signin');
                     setErrorMessage(null);
                     setSuccessMessage(null);
-                  }}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--color-action)',
-                    textDecoration: 'underline',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    padding: 0,
                   }}
                 >
                   Sign In
@@ -1127,68 +873,38 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                 Enter the email address registered with your FinEx account. We will send you a single-use link to reset your password.
               </p>
 
-              <div style={{ marginBottom: '18px' }}>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#A1A1AA', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              <div className="auth-form-group">
+                <label className="auth-label" htmlFor="forgot-email">
                   Account Email
                 </label>
                 <input
+                  id="forgot-email"
                   type="email"
+                  className="auth-input"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="name@example.com"
                   required
                   autoComplete="email"
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    backgroundColor: '#0A0A0C',
-                    border: '1px solid #27272A',
-                    borderRadius: 'var(--radius-xs)',
-                    color: '#FFFFFF',
-                    fontSize: '13px',
-                    outline: 'none',
-                    boxSizing: 'border-box',
-                    fontFamily: 'inherit',
-                  }}
                 />
               </div>
 
               <button
                 type="submit"
+                className="auth-primary-btn"
                 disabled={loading}
-                style={{
-                  width: '100%',
-                  padding: '11px',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  backgroundColor: 'var(--color-action)',
-                  color: '#000000',
-                  border: 'none',
-                  borderRadius: 'var(--radius-xs)',
-                  cursor: loading ? 'not-allowed' : 'pointer',
-                  opacity: loading ? 0.6 : 1,
-                  marginBottom: '12px',
-                }}
+                style={{ marginBottom: '12px' }}
               >
                 {loading ? 'Sending Instructions...' : 'Send Password Reset Link →'}
               </button>
 
               <button
                 type="button"
+                className="auth-secondary-btn"
                 onClick={() => {
                   setMode('signin');
                   setErrorMessage(null);
                   setSuccessMessage(null);
-                }}
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  background: 'none',
-                  border: '1px solid #27272A',
-                  color: '#A1A1AA',
-                  fontSize: '12px',
-                  borderRadius: 'var(--radius-xs)',
-                  cursor: 'pointer',
                 }}
               >
                 ← Back to Sign In
@@ -1198,90 +914,52 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
 
           {mode === 'reset' && (
             <form onSubmit={handleResetPassword}>
-              <div style={{ marginBottom: '14px' }}>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#A1A1AA', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              <div className="auth-form-group">
+                <label className="auth-label" htmlFor="reset-new-password">
                   New Password (min 8 characters)
                 </label>
                 <input
+                  id="reset-new-password"
                   type="password"
+                  className="auth-input"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   placeholder="••••••••"
                   required
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    backgroundColor: '#0A0A0C',
-                    border: '1px solid #27272A',
-                    borderRadius: 'var(--radius-xs)',
-                    color: '#FFFFFF',
-                    fontSize: '13px',
-                    outline: 'none',
-                    boxSizing: 'border-box',
-                  }}
                 />
               </div>
 
-              <div style={{ marginBottom: '18px' }}>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#A1A1AA', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              <div className="auth-form-group">
+                <label className="auth-label" htmlFor="reset-confirm-password">
                   Confirm New Password
                 </label>
                 <input
+                  id="reset-confirm-password"
                   type="password"
+                  className="auth-input"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="••••••••"
                   required
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    backgroundColor: '#0A0A0C',
-                    border: '1px solid #27272A',
-                    borderRadius: 'var(--radius-xs)',
-                    color: '#FFFFFF',
-                    fontSize: '13px',
-                    outline: 'none',
-                    boxSizing: 'border-box',
-                  }}
                 />
               </div>
 
               <button
                 type="submit"
+                className="auth-primary-btn"
                 disabled={loading}
-                style={{
-                  width: '100%',
-                  padding: '11px',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  backgroundColor: 'var(--color-action)',
-                  color: '#000000',
-                  border: 'none',
-                  borderRadius: 'var(--radius-xs)',
-                  cursor: loading ? 'not-allowed' : 'pointer',
-                  opacity: loading ? 0.6 : 1,
-                  marginBottom: '12px',
-                }}
+                style={{ marginBottom: '12px' }}
               >
                 {loading ? 'Updating Password...' : 'Save New Password & Sign In →'}
               </button>
 
               <button
                 type="button"
+                className="auth-secondary-btn"
                 onClick={() => {
                   setMode('signin');
                   setResetToken(null);
                   window.location.hash = '';
-                }}
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  background: 'none',
-                  border: '1px solid #27272A',
-                  color: '#A1A1AA',
-                  fontSize: '12px',
-                  borderRadius: 'var(--radius-xs)',
-                  cursor: 'pointer',
                 }}
               >
                 ← Back to Sign In
@@ -1290,70 +968,60 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           )}
 
           {/* Quick Platform Pillars Recap */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(2, 1fr)',
-              gap: '16px',
-              marginTop: '28px',
-              paddingTop: '20px',
-              borderTop: '1px solid #1F1F1F',
-              textAlign: 'center',
-            }}
-          >
-            <div style={{ padding: '8px 12px' }}>
-              <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-positive)', fontFamily: 'var(--font-mono)' }}>
+          <div className="auth-pillars-grid">
+            <div className="auth-pillar-card">
+              <div className="auth-pillar-value" style={{ color: 'var(--color-positive)' }}>
                 ₹1,00,000
               </div>
-              <div style={{ fontSize: '10.5px', color: '#71717A', marginTop: '2px' }}>
+              <div className="auth-pillar-label">
                 Virtual Funds
               </div>
             </div>
-            <div style={{ padding: '8px 12px' }}>
-              <div style={{ fontSize: '13px', fontWeight: 700, color: '#A5B4FC', fontFamily: 'var(--font-mono)' }}>
-                SEBI Grounded
+            <div className="auth-pillar-card">
+              <div className="auth-pillar-value" style={{ color: '#A5B4FC' }}>
+                AI Guided
               </div>
-              <div style={{ fontSize: '10.5px', color: '#71717A', marginTop: '2px' }}>
-                AI Learning
+              <div className="auth-pillar-label">
+                Educational Insights
               </div>
             </div>
           </div>
 
           {/* Subtext */}
-          <div style={{ fontSize: '11px', color: '#71717A', lineHeight: 1.5, marginTop: '16px', textAlign: 'center' }}>
-            Your consent is recorded with its policy version. Real PostgreSQL records &amp; paper balances load securely.
+          <div className="auth-subtext">
+            FinEx is an educational platform. Paper trading uses virtual funds with zero financial risk.
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', marginTop: '20px', fontSize: '11px', color: '#A1A1AA' }}>
+          <div className="auth-footer-links">
             <a
               href="/privacy"
+              className="auth-footer-link"
               onClick={(e) => {
                 if (onOpenPrivacy) {
                   e.preventDefault();
                   onOpenPrivacy();
                 }
               }}
-              style={{ color: '#A1A1AA', textDecoration: 'underline', cursor: 'pointer' }}
             >
               Privacy Policy
             </a>
-            <span>·</span>
+            <span style={{ color: '#3F3F46' }}>•</span>
             <a
               href="/terms"
+              className="auth-footer-link"
               onClick={(e) => {
                 if (onOpenTerms) {
                   e.preventDefault();
                   onOpenTerms();
                 }
               }}
-              style={{ color: '#A1A1AA', textDecoration: 'underline', cursor: 'pointer' }}
             >
               Terms of Service
             </a>
-            <span>·</span>
+            <span style={{ color: '#3F3F46' }}>•</span>
             <a
               href="mailto:shivrajdhote4452@gmail.com"
-              style={{ color: '#A1A1AA', textDecoration: 'underline', cursor: 'pointer' }}
+              className="auth-footer-link"
             >
               Need help?
             </a>
