@@ -1293,15 +1293,15 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(3, 1fr)',
-              gap: '8px',
+              gridTemplateColumns: 'repeat(2, 1fr)',
+              gap: '16px',
               marginTop: '28px',
               paddingTop: '20px',
               borderTop: '1px solid #1F1F1F',
               textAlign: 'center',
             }}
           >
-            <div style={{ padding: '8px 4px' }}>
+            <div style={{ padding: '8px 12px' }}>
               <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-positive)', fontFamily: 'var(--font-mono)' }}>
                 ₹1,00,000
               </div>
@@ -1309,15 +1309,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                 Virtual Funds
               </div>
             </div>
-            <div style={{ padding: '8px 4px' }}>
-              <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-action)', fontFamily: 'var(--font-mono)' }}>
-                Dual Login
-              </div>
-              <div style={{ fontSize: '10.5px', color: '#71717A', marginTop: '2px' }}>
-                Google + Email
-              </div>
-            </div>
-            <div style={{ padding: '8px 4px' }}>
+            <div style={{ padding: '8px 12px' }}>
               <div style={{ fontSize: '13px', fontWeight: 700, color: '#A5B4FC', fontFamily: 'var(--font-mono)' }}>
                 SEBI Grounded
               </div>
