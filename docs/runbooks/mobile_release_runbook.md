@@ -111,7 +111,9 @@ FinEx is strictly an educational research platform and virtual practice environm
 
 ### Release v1.0.1-android (16 November 2026) — PR #38 Parity Build
 - **Version:** `1.0.1+2` (versionCode: `2`, versionName: `1.0.1`)
-- **Source Commit:** `f0cefe7e895628ca810f6be6b4e264d3bcbfa2ad` (PR #38 merge into `main`)
+- **Source Base:** `f0cefe7e895628ca810f6be6b4e264d3bcbfa2ad` (PR #38 merge into `main`)
+- **Version & Documentation Commit:** `60bee148566da8181f9a0397579f1db1ee4ea1e8` (PR #39 on `dev`)
+- **Release Tag Target:** Merge commit of PR #39 on `main` (tag: `v1.0.1-android`)
 - **Key Parity Fixes:**
   - Authoritative paper order handling with no fake fills on backend rejection.
   - Idempotent order reconciliation on network timeouts (`mob-ord-...`).

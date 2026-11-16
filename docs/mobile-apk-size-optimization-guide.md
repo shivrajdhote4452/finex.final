@@ -190,7 +190,7 @@ All optimized binaries are validated and published on GitHub Releases.
 
 ### Latest Generated Build Artifacts (`v1.0.1-android` / PR #38 Merge)
 
-Built on **16 November 2026** from source commit `f0cefe7e895628ca810f6be6b4e264d3bcbfa2ad`.
+Built on **16 November 2026** from source base `f0cefe7` (PR #38 merge) with version bump to `1.0.1+2` (PR #39). Tag target: merge commit on `main`.
 
 | Package | Architecture | Size | SHA-256 Checksum | Target / Recommendation |
 | :--- | :--- | :--- | :--- | :--- |
