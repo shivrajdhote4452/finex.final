@@ -4,6 +4,17 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
+class ApiException implements Exception {
+  final String message;
+  final int statusCode;
+  final dynamic details;
+
+  ApiException(this.message, {this.statusCode = 400, this.details});
+
+  @override
+  String toString() => message;
+}
+
 class ApiClient {
   static final ApiClient _instance = ApiClient._internal();
   factory ApiClient() => _instance;
@@ -209,11 +220,41 @@ class ApiClient {
   }
 
 
+  String _extractErrorMessage(http.Response response, [String fallback = 'Request failed']) {
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic>) {
+        if (decoded['detail'] != null) {
+          if (decoded['detail'] is String) return decoded['detail'] as String;
+          if (decoded['detail'] is List) {
+            return (decoded['detail'] as List)
+                .map((e) => e is Map ? (e['msg'] ?? e.toString()) : e.toString())
+                .join(', ');
+          }
+        }
+        if (decoded['error'] is Map && decoded['error']['message'] != null) {
+          return decoded['error']['message'].toString();
+        }
+        if (decoded['message'] != null && decoded['message'] is String) {
+          return decoded['message'] as String;
+        }
+      }
+    } catch (_) {}
+    return '$fallback (${response.statusCode})';
+  }
+
+  @visibleForTesting
+  Future<Map<String, dynamic>> Function(String idToken, {String? email, String? name})?
+      mockLoginWithGoogleHandler;
+
   Future<Map<String, dynamic>> loginWithGoogle(
     String idToken, {
     String? email,
     String? name,
   }) async {
+    if (mockLoginWithGoogleHandler != null) {
+      return await mockLoginWithGoogleHandler!(idToken, email: email, name: name);
+    }
     final url = Uri.parse('$baseUrl/auth/google');
     final response = await http.post(
       url,
@@ -243,7 +284,160 @@ class ApiClient {
       } catch (_) {}
       return data['data'];
     }
-    throw Exception(data['error']?['message'] ?? 'Google authentication failed');
+    final errMsg = _extractErrorMessage(response, 'Google authentication failed');
+    throw ApiException(errMsg, statusCode: response.statusCode);
+  }
+
+  @visibleForTesting
+  Future<Map<String, dynamic>> Function(String email, String password)?
+      mockLoginWithEmailHandler;
+
+  Future<Map<String, dynamic>> loginWithEmail(
+    String email,
+    String password,
+  ) async {
+    if (mockLoginWithEmailHandler != null) {
+      return await mockLoginWithEmailHandler!(email, password);
+    }
+    final cleanEmail = email.trim().toLowerCase();
+    final url = Uri.parse('$baseUrl/auth/login');
+    final response = await http.post(
+      url,
+      headers: _headers(),
+      body: jsonEncode({
+        'email': cleanEmail,
+        'password': password,
+      }),
+    );
+    final data = jsonDecode(response.body);
+    if (response.statusCode == 200 && data['data'] != null) {
+      final token = data['data']['access_token'] as String?;
+      await setToken(token);
+      final initialProfile = <String, dynamic>{
+        'id': data['data']['user_id'],
+        'email': data['data']['email'] ?? cleanEmail,
+        'full_name': data['data']['name'],
+        'display_name': (data['data']['name'] as String?)?.split(' ').first,
+      };
+      await setProfile(initialProfile);
+      try {
+        await getProfile();
+      } catch (_) {}
+      return data['data'];
+    }
+    final errMsg = _extractErrorMessage(response, 'Invalid email or password');
+    throw ApiException(errMsg, statusCode: response.statusCode);
+  }
+
+  @visibleForTesting
+  Future<Map<String, dynamic>> Function(String email, String password, {String? name})?
+      mockSignupWithEmailHandler;
+
+  Future<Map<String, dynamic>> signupWithEmail(
+    String email,
+    String password, {
+    String? name,
+  }) async {
+    if (mockSignupWithEmailHandler != null) {
+      return await mockSignupWithEmailHandler!(email, password, name: name);
+    }
+    final cleanEmail = email.trim().toLowerCase();
+    final url = Uri.parse('$baseUrl/auth/signup');
+    final response = await http.post(
+      url,
+      headers: _headers(),
+      body: jsonEncode({
+        'email': cleanEmail,
+        'password': password,
+        'name': (name != null && name.trim().isNotEmpty) ? name.trim() : 'Investor',
+      }),
+    );
+    final data = jsonDecode(response.body);
+    if (response.statusCode == 200 && data['data'] != null) {
+      return Map<String, dynamic>.from(data['data']);
+    }
+    final errMsg = _extractErrorMessage(response, 'Account registration failed');
+    throw ApiException(errMsg, statusCode: response.statusCode);
+  }
+
+  @visibleForTesting
+  Future<Map<String, dynamic>> Function(String email)?
+      mockForgotPasswordHandler;
+
+  Future<Map<String, dynamic>> forgotPassword(String email) async {
+    if (mockForgotPasswordHandler != null) {
+      return await mockForgotPasswordHandler!(email);
+    }
+    final cleanEmail = email.trim().toLowerCase();
+    final url = Uri.parse('$baseUrl/auth/forgot-password');
+    final response = await http.post(
+      url,
+      headers: _headers(),
+      body: jsonEncode({'email': cleanEmail}),
+    );
+    final data = jsonDecode(response.body);
+    if (response.statusCode == 200 && data['data'] != null) {
+      return Map<String, dynamic>.from(data['data']);
+    }
+    final errMsg = _extractErrorMessage(response, 'Password reset request failed');
+    throw ApiException(errMsg, statusCode: response.statusCode);
+  }
+
+  @visibleForTesting
+  Future<Map<String, dynamic>> Function(String email, {String? password})?
+      mockResendVerificationHandler;
+
+  Future<Map<String, dynamic>> resendVerification(String email, {String? password}) async {
+    if (mockResendVerificationHandler != null) {
+      return await mockResendVerificationHandler!(email, password: password);
+    }
+    final cleanEmail = email.trim().toLowerCase();
+    final url = Uri.parse('$baseUrl/auth/resend-verification');
+    final Map<String, dynamic> body = {'email': cleanEmail};
+    if (password != null && password.isNotEmpty) {
+      body['password'] = password;
+    }
+    final response = await http.post(
+      url,
+      headers: _headers(),
+      body: jsonEncode(body),
+    );
+    final data = jsonDecode(response.body);
+    if (response.statusCode == 200 && data['data'] != null) {
+      return Map<String, dynamic>.from(data['data']);
+    }
+    final errMsg = _extractErrorMessage(response, 'Could not resend verification email');
+    throw ApiException(errMsg, statusCode: response.statusCode);
+  }
+
+  Future<Map<String, dynamic>> verifyEmail(String token) async {
+    final url = Uri.parse('$baseUrl/auth/verify-email');
+    final response = await http.post(
+      url,
+      headers: _headers(),
+      body: jsonEncode({'token': token.trim()}),
+    );
+    final data = jsonDecode(response.body);
+    if (response.statusCode == 200 && data['data'] != null) {
+      return Map<String, dynamic>.from(data['data']);
+    }
+    final errMsg = _extractErrorMessage(response, 'Email verification failed');
+    throw ApiException(errMsg, statusCode: response.statusCode);
+  }
+
+  Future<Map<String, dynamic>> resetPassword(String token, String newPassword) async {
+    final url = Uri.parse('$baseUrl/auth/reset-password');
+    final response = await http.post(
+      url,
+      headers: _headers(),
+      body: jsonEncode({'token': token.trim(), 'new_password': newPassword}),
+    );
+    final data = jsonDecode(response.body);
+    if (response.statusCode == 200 && data['data'] != null) {
+      return Map<String, dynamic>.from(data['data']);
+    }
+    final errMsg = _extractErrorMessage(response, 'Password reset failed');
+    throw ApiException(errMsg, statusCode: response.statusCode);
   }
 
   Future<Map<String, dynamic>> getProfile() async {
