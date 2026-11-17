@@ -13,7 +13,7 @@ FinEx is an educational financial intelligence platform engineered with strict d
 - **Web Terminal (Primary Production Interface):** React 18, TypeScript, Vite (`localhost:3000`), Lightweight Charts candlestick engine, Trade Time Machine, and custom Graphite design tokens.
 - **Backend Core:** FastAPI (`127.0.0.1:8000`), Pydantic v2, SQLAlchemy 2.0 (AsyncIO), PyJWT, and official `google-auth`.
 - **Data & Analytics:** PostgreSQL operational transactional database with Alembic migrations; deterministic local Python runners for compliance and retention. (Remote Databricks compute deferred to post-demo per ADR-007).
-- **Mobile Architecture:** Flutter 3 client codebase (`mobile/`). (Native store packaging deferred to post-demo per ADR-006).
+- **Mobile Architecture:** Flutter 3 client codebase (`mobile/`). Supports dual authentication (Google OAuth & Email/Password with account linking) and fail-closed release signing. (Native store packaging deferred to post-demo per ADR-006).
 - **AI & RAG:** Grounded deterministic evaluation engine with traceable citations (SEBI, RBI, NSE regulatory publications).
 
 ---
@@ -35,9 +35,16 @@ Download the latest verified release builds directly to your Android device:
 
 👉 **[View Full Release Details on GitHub](https://github.com/shivrajdhote4452/finex.final/releases/tag/v1.0.0-android)**
 
-> **Installation Tip:** For almost all modern Android phones, download the **ARM 64-bit (`18.3 MB`)** version. Tap the downloaded APK to install (enable "Install from unknown sources" if prompted) and sign in with your verified Google account.
+> **Installation Tip:** For almost all modern Android phones, download the **ARM 64-bit (`18.3 MB`)** version. Tap the downloaded APK to install (enable "Install from unknown sources" if prompted) and sign in with your verified Google account or email & password.
 > 
-> ℹ️ **Latest Build Update (v1.0.1):** Version 1.0.1 incorporates PR #38 parity fixes (authoritative paper order execution, idempotent timeout reconciliation, honest quotes without fallback prices, and account reset confirmation dialog). See [`docs/releases/v1.0.1-android.md`](docs/releases/v1.0.1-android.md) for build verification, checksums, and artifact metrics.
+> ℹ️ **Published Release Builds (v1.0.1):** Version 1.0.1 published binaries incorporate PR #38 parity fixes (authoritative paper order execution, idempotent timeout reconciliation, honest quotes without fallback prices, and account reset confirmation dialog). See [`docs/releases/v1.0.1-android.md`](docs/releases/v1.0.1-android.md) for build verification, checksums, and artifact metrics.
+> 
+> 🚀 **Mobile Codebase Parity (PR #46 / Next Release v1.1.0):** The Flutter codebase (`mobile/`) now features full authentication parity with the FinEx web terminal:
+> - **Dual Authentication Modes:** Native "Continue with Google" (OIDC ID token) alongside email & password "Sign In" and "Create Account".
+> - **Single-Identity Account Linking:** Accounts with matching verified email addresses resolve to the same underlying user and shared state (virtual cash, portfolio holdings, orders, risk profile) regardless of whether accessed via Google or Email/Password.
+> - **Account Recovery & Unverified Account Handling:** Direct mobile requests for "Forgot Password" and 1-tap "Resend verification link" CTAs on 403 unverified sign-in attempts.
+> - **Browser Verification Requirement:** Verification and password reset links dispatched via email route through the web application. Because mobile custom URL schemes/universal links are not registered in `AndroidManifest.xml`, verification and password resets must be completed in the user's web browser before returning to mobile to sign in.
+> - **Release Status:** Current published release binaries remain at `v1.0.1+2`. Version `1.1.0+3` is recommended for the next official mobile build and artifact release. No new binary APK has been built or published in this PR.
 
 
 ---
