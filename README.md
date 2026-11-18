@@ -37,14 +37,12 @@ Download the latest verified release builds directly to your Android device:
 
 > **Installation Tip:** For almost all modern Android phones, download the **ARM 64-bit (`18.3 MB`)** version. Tap the downloaded APK to install (enable "Install from unknown sources" if prompted) and sign in with your verified Google account or email & password.
 > 
-> ℹ️ **Published Release Builds (v1.0.1):** Version 1.0.1 published binaries incorporate PR #38 parity fixes (authoritative paper order execution, idempotent timeout reconciliation, honest quotes without fallback prices, and account reset confirmation dialog). See [`docs/releases/v1.0.1-android.md`](docs/releases/v1.0.1-android.md) for build verification, checksums, and artifact metrics.
+> ℹ️ **Published Release Builds (v1.0.0):** Version 1.0.0 published binaries remain live on GitHub Releases under tag `v1.0.0-android`.
 > 
-> 🚀 **Mobile Codebase Parity (PR #46 / Next Release v1.1.0):** The Flutter codebase (`mobile/`) now features full authentication parity with the FinEx web terminal:
-> - **Dual Authentication Modes:** Native "Continue with Google" (OIDC ID token) alongside email & password "Sign In" and "Create Account".
-> - **Single-Identity Account Linking:** Accounts with matching verified email addresses resolve to the same underlying user and shared state (virtual cash, portfolio holdings, orders, risk profile) regardless of whether accessed via Google or Email/Password.
-> - **Account Recovery & Unverified Account Handling:** Direct mobile requests for "Forgot Password" and 1-tap "Resend verification link" CTAs on 403 unverified sign-in attempts.
-> - **Browser Verification Requirement:** Verification and password reset links dispatched via email route through the web application. Because mobile custom URL schemes/universal links are not registered in `AndroidManifest.xml`, verification and password resets must be completed in the user's web browser before returning to mobile to sign in.
-> - **Release Status:** Current published release binaries remain at `v1.0.1+2`. Version `1.1.0+3` is recommended for the next official mobile build and artifact release. No new binary APK has been built or published in this PR.
+> 🚀 **Mobile Release v1.1.0 (Prepared locally for review & testing):** Version 1.1.0 (`1.1.0+10003`) incorporates full authentication parity (Google OAuth, Email/Password Sign In & Create Account, Forgot Password, and unverified resend) with fail-closed production signing:
+> - **Downgrade-Safe Version Codes:** Base code `10003` (Universal), `11003` (armeabi-v7a), `12003` (arm64-v8a), `14003` (x86_64) guarantee seamless in-place updates over all previous builds.
+> - **Clean Reinstall Notice:** Testers running legacy `v1.0.0-android` (debug-signed) MUST uninstall before installing v1.1.0 due to Android certificate mismatch. Users running production-signed builds (`v1.0.1`) upgrade seamlessly in-place.
+> - **Detailed Release Notes & Checksums:** See [`docs/releases/v1.1.0-android.md`](docs/releases/v1.1.0-android.md) for full metrics, checksums, and update paths. (Previous notes preserved at [`docs/releases/v1.0.1-android.md`](docs/releases/v1.0.1-android.md)).
 
 
 ---
@@ -152,6 +150,7 @@ npm run build
 - **Mobile Release Runbook:** [`docs/runbooks/mobile_release_runbook.md`](docs/runbooks/mobile_release_runbook.md)
 - **Mobile APK Size Optimization Guide:** [`docs/mobile-apk-size-optimization-guide.md`](docs/mobile-apk-size-optimization-guide.md)
 - **Mobile v1.0.1 Release Notes & Checksums:** [`docs/releases/v1.0.1-android.md`](docs/releases/v1.0.1-android.md)
+- **Mobile v1.1.0 Release Notes & Checksums:** [`docs/releases/v1.1.0-android.md`](docs/releases/v1.1.0-android.md)
 
 ---
 
