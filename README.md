@@ -33,12 +33,17 @@ Download the verified v1.1.0 release builds directly to your Android device:
 | **ARM 32-bit (Single ABI)** | `app-armeabi-v7a-release.apk` | **8.10 MiB** (8.49 MB) | Older 32-bit Android phones | 📲 [**Download armeabi (8.10 MiB)**](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.1.0-android/app-armeabi-v7a-release.apk) |
 | **x86_64 (Single ABI)** | `app-x86_64-release.apk` | **8.74 MiB** (9.16 MB) | PC Android Emulators & Chromebooks | 📲 [**Download x86_64 (8.74 MiB)**](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.1.0-android/app-x86_64-release.apk) |
 
-👉 **[View Full v1.1.0 Release Notes & Checksums](docs/releases/v1.1.0-android.md)**
+👉 **[View Full v1.1.0 Release Notes & Checksums](docs/releases/v1.1.0-android.md)** | **[View Release on GitHub (Active Upon Publication)](https://github.com/shivrajdhote4452/finex.final/releases/tag/v1.1.0-android)**
 
-> ℹ️ **Release Status & Download Link Availability:** The v1.1.0 release has been prepared and staged as a **draft release** on GitHub. Direct release asset download links target tag `v1.1.0-android` and will activate upon release publication. Authorized maintainers can review and download the staged draft assets from the [GitHub Releases Draft Page](https://github.com/shivrajdhote4452/finex.final/releases) or access the verified binaries locally in `mobile/build/app/outputs/flutter-apk/`.
+> ℹ️ **Download Link Availability & Staging Status:**  
+> The download buttons above point to `https://github.com/shivrajdhote4452/finex.final/releases/download/v1.1.0-android/...`.  
+> In GitHub, **draft releases are unpublished and private to repository maintainers**; their release tag URLs and asset download links return **HTTP 404** to public visitors and mobile browsers until the release is officially published by the repository owner.  
+> Once the repository owner publishes the staged `v1.1.0-android` release from draft state, GitHub will automatically create the `v1.1.0-android` tag on `main` and activate these exact download links publicly.  
+> Authorized repository maintainers can review and download the staged draft assets from the [GitHub Releases Draft Page](https://github.com/shivrajdhote4452/finex.final/releases) or access the verified binaries locally in `mobile/build/app/outputs/flutter-apk/`.
 > 
-> ⚠️ **Signing Compatibility / Clean Reinstall Notice:**
-> - **Legacy `v1.0.0-android` Users:** The older `v1.0.0` build was signed with the auto-generated Android debug certificate (`CN=Android Debug`). Android OS blocks installing production-signed APKs over debug APKs (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`). Users with `v1.0.0` installed MUST uninstall it before installing v1.1.0. All cloud data (virtual cash, holdings, orders) remains safely preserved in PostgreSQL.
+> ⚠️ **Signing Compatibility & Clean Reinstall Notice:**
+> - **Legacy `v1.0.0-android` Users:** The older `v1.0.0` build was signed with the auto-generated Android debug certificate (`CN=Android Debug`). Android OS blocks installing production-signed APKs over debug APKs (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`). Users with `v1.0.0` installed MUST uninstall it before installing v1.1.0.
+>   - **Locally Stored Data Impact:** Uninstalling the app removes local cached tokens, local application storage, and local offline files from the device. However, **all user account data, portfolio holdings, virtual cash balances, and trade orders remain securely preserved in the cloud PostgreSQL database** and are immediately restored once the user signs back in.
 > - **Production-Signed Users (`v1.0.1`+):** Users with production-signed builds upgrade seamlessly in-place ($10003 > 4002 > 2002 > 1002 > 2$).
 
 ---
