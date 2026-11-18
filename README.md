@@ -20,29 +20,43 @@ FinEx is an educational financial intelligence platform engineered with strict d
 
 ## 📱 Mobile App Downloads (Android APK)
 
-The FinEx mobile app is built with Flutter and natively connected to the live Render backend (`https://finex-final.onrender.com/api/v1`) with live Angel One SmartAPI quotes and Google OAuth.
+The FinEx mobile app is built with Flutter and natively connected to the live Render backend (`https://finex-final.onrender.com/api/v1`) with live Angel One SmartAPI quotes, Google OAuth, and email/password authentication.
 
-Download the latest verified release builds directly to your Android device:
+### Latest Release: FinEx Mobile v1.1.0
+
+Download the verified v1.1.0 release builds directly to your Android device:
 
 | Architecture | APK File | Size | Recommended For | Direct Download Link |
 | :--- | :--- | :--- | :--- | :--- |
-| **Universal Compressed (⭐ Recommended)** | `finex-universal-compressed-release.apk` | **23.6 MB** | **All Android Devices** (arm64, armeabi-v7a, x86_64 bundled with compressed native libraries) | 📲 [**Download Universal Compressed (23.6 MB)**](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/finex-universal-compressed-release.apk) |
-| **ARM 64-bit (Single ABI)** | `app-arm64-v8a-release.apk` | **18.3 MB** | **Modern Android Phones** (Samsung, OnePlus, Xiaomi, Realme, Pixel, etc.) | 📲 [**Download arm64 (18.3 MB)**](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/app-arm64-v8a-release.apk) |
-| **ARM 32-bit (Single ABI)** | `app-armeabi-v7a-release.apk` | **15.9 MB** | Older 32-bit Android phones | 📲 [**Download armeabi (15.9 MB)**](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/app-armeabi-v7a-release.apk) |
-| **x86_64 (Single ABI)** | `app-x86_64-release.apk` | **19.7 MB** | PC Android Emulators & Chromebooks | 📲 [**Download x86_64 (19.7 MB)**](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/app-x86_64-release.apk) |
-| **Universal Uncompressed (Original)** | `app-release.apk` | **52.2 MB** | Legacy uncompressed multi-architecture installer | 📲 [**Download Universal Original (52.2 MB)**](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/app-release.apk) |
-| **Google Play App Bundle (`.aab`)** | `finex-release.aab` | **50.9 MB** | Official Google Play Store Publishing Bundle (generates per-device ~12–15 MB slices) | 📦 [**Download AAB (50.9 MB)**](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/finex-release.aab) |
+| **Universal Compressed (⭐ Recommended)** | `finex-universal-compressed-release.apk` | **23.70 MiB** (24.85 MB) | **All Android Devices** (arm64, armeabi-v7a, x86_64 bundled with compressed native libraries) | 📲 [**Download Universal Compressed (23.70 MiB)**](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.1.0-android/finex-universal-compressed-release.apk) |
+| **ARM 64-bit (Single ABI)** | `app-arm64-v8a-release.apk` | **8.56 MiB** (8.97 MB) | **Modern Android Phones** (Samsung, OnePlus, Xiaomi, Realme, Pixel, etc. — saves >15 MB) | 📲 [**Download arm64 (8.56 MiB)**](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.1.0-android/app-arm64-v8a-release.apk) |
+| **ARM 32-bit (Single ABI)** | `app-armeabi-v7a-release.apk` | **8.10 MiB** (8.49 MB) | Older 32-bit Android phones | 📲 [**Download armeabi (8.10 MiB)**](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.1.0-android/app-armeabi-v7a-release.apk) |
+| **x86_64 (Single ABI)** | `app-x86_64-release.apk` | **8.74 MiB** (9.16 MB) | PC Android Emulators & Chromebooks | 📲 [**Download x86_64 (8.74 MiB)**](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.1.0-android/app-x86_64-release.apk) |
 
-👉 **[View Full Release Details on GitHub](https://github.com/shivrajdhote4452/finex.final/releases/tag/v1.0.0-android)**
+👉 **[View Full v1.1.0 Release Notes & Checksums](docs/releases/v1.1.0-android.md)**
 
-> **Installation Tip:** For almost all modern Android phones, download the **ARM 64-bit (`18.3 MB`)** version. Tap the downloaded APK to install (enable "Install from unknown sources" if prompted) and sign in with your verified Google account or email & password.
+> ℹ️ **Release Status & Download Link Availability:** The v1.1.0 release has been prepared and staged as a **draft release** on GitHub. Direct release asset download links target tag `v1.1.0-android` and will activate upon release publication. Authorized maintainers can review and download the staged draft assets from the [GitHub Releases Draft Page](https://github.com/shivrajdhote4452/finex.final/releases) or access the verified binaries locally in `mobile/build/app/outputs/flutter-apk/`.
 > 
-> ℹ️ **Published Release Builds (v1.0.0):** Version 1.0.0 published binaries remain live on GitHub Releases under tag `v1.0.0-android`.
-> 
-> 🚀 **Mobile Release v1.1.0 (Prepared locally for review & testing):** Version 1.1.0 (`1.1.0+10003`) incorporates full authentication parity (Google OAuth, Email/Password Sign In & Create Account, Forgot Password, and unverified resend) with fail-closed production signing:
-> - **Downgrade-Safe Version Codes:** Base code `10003` (Universal), `11003` (armeabi-v7a), `12003` (arm64-v8a), `14003` (x86_64) guarantee seamless in-place updates over all previous builds.
-> - **Clean Reinstall Notice:** Testers running legacy `v1.0.0-android` (debug-signed) MUST uninstall before installing v1.1.0 due to Android certificate mismatch. Users running production-signed builds (`v1.0.1`) upgrade seamlessly in-place.
-> - **Detailed Release Notes & Checksums:** See [`docs/releases/v1.1.0-android.md`](docs/releases/v1.1.0-android.md) for full metrics, checksums, and update paths. (Previous notes preserved at [`docs/releases/v1.0.1-android.md`](docs/releases/v1.0.1-android.md)).
+> ⚠️ **Signing Compatibility / Clean Reinstall Notice:**
+> - **Legacy `v1.0.0-android` Users:** The older `v1.0.0` build was signed with the auto-generated Android debug certificate (`CN=Android Debug`). Android OS blocks installing production-signed APKs over debug APKs (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`). Users with `v1.0.0` installed MUST uninstall it before installing v1.1.0. All cloud data (virtual cash, holdings, orders) remains safely preserved in PostgreSQL.
+> - **Production-Signed Users (`v1.0.1`+):** Users with production-signed builds upgrade seamlessly in-place ($10003 > 4002 > 2002 > 1002 > 2$).
+
+---
+
+### 📦 Historical Release: FinEx Mobile v1.0.0 (Archived)
+
+The initial release builds remain accessible for testing and archival continuity:
+
+| Architecture | APK File | Size | Direct Download Link |
+| :--- | :--- | :--- | :--- |
+| **Universal Compressed** | `finex-universal-compressed-release.apk` | 23.6 MB | 📲 [Download v1.0.0 Universal](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/finex-universal-compressed-release.apk) |
+| **ARM 64-bit** | `app-arm64-v8a-release.apk` | 18.3 MB | 📲 [Download v1.0.0 arm64](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/app-arm64-v8a-release.apk) |
+| **ARM 32-bit** | `app-armeabi-v7a-release.apk` | 15.9 MB | 📲 [Download v1.0.0 armeabi](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/app-armeabi-v7a-release.apk) |
+| **x86_64** | `app-x86_64-release.apk` | 19.7 MB | 📲 [Download v1.0.0 x86_64](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/app-x86_64-release.apk) |
+| **Universal Original** | `app-release.apk` | 52.2 MB | 📲 [Download v1.0.0 Original](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/app-release.apk) |
+| **Play App Bundle** | `finex-release.aab` | 50.9 MB | 📦 [Download v1.0.0 AAB](https://github.com/shivrajdhote4452/finex.final/releases/download/v1.0.0-android/finex-release.aab) |
+
+👉 **[View Full v1.0.0 Release Details on GitHub](https://github.com/shivrajdhote4452/finex.final/releases/tag/v1.0.0-android)**
 
 
 ---
