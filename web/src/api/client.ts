@@ -470,19 +470,43 @@ class ApiClient {
     },
 
     submitAssessment: async (submission: {
-      investor_horizon: string;
-      risk_tolerance: string;
-      liquidity_need: string;
+      questionnaire_version?: string;
+      horizon_category: string;
+      answers: Array<{
+        question_id: string;
+        option_id: string;
+        score?: number;
+      }>;
+      investor_horizon?: string;
+      risk_tolerance?: string;
+      liquidity_need?: string;
       financial_literacy?: string;
     }) => {
       return this.request<{
-        score: number;
+        composite_score: number;
         risk_band: string;
-        summary: string;
-        suggested_allocation: Record<string, number>;
+        willingness_score?: number;
+        capacity_score?: number;
+        horizon_factor?: number;
+        factors?: Array<{
+          name: string;
+          value?: string;
+          score?: number;
+          band?: string;
+          impact?: string;
+        }>;
+        explanation?: string;
+        citation?: string;
+        disclaimer?: string;
+        score?: number;
+        summary?: string;
+        suggested_allocation?: Record<string, number>;
       }>('/risk/assessments', {
         method: 'POST',
-        body: JSON.stringify(submission),
+        body: JSON.stringify({
+          questionnaire_version: submission.questionnaire_version || 'v1.0',
+          ...submission,
+        }),
       });
     },
 
