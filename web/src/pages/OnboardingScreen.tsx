@@ -99,12 +99,12 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
         <div style={{ fontSize: '11px', color: 'var(--color-action)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
           RISK RESULT & EXPLANATION
         </div>
-        <h1 style={{ fontSize: '32px', fontWeight: 700, color: '#FFFFFF', margin: '6px 0 4px 0' }}>
+        <h1 style={{ fontSize: '32px', fontWeight: 700, color: 'var(--text-main)', margin: '6px 0 4px 0' }}>
           Your risk profile
         </h1>
         <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '24px', lineHeight: 1.5 }}>
           Deterministic score via FinEx Risk Engine:{' '}
-          <span style={{ color: '#FFFFFF', fontWeight: 600, whiteSpace: 'nowrap' }}>
+          <span style={{ color: 'var(--text-main)', fontWeight: 600, whiteSpace: 'nowrap' }}>
             {evaluatedProfile.score}/100.
           </span>
         </p>
@@ -113,14 +113,14 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
 
         <div className="onboarding-result-grid">
           {/* Profile Summary Panel */}
-          <div className="glass-card" style={{ padding: '28px', border: '1px solid var(--border-medium)', backgroundColor: '#111111' }}>
+          <div className="glass-card" style={{ padding: '28px', border: '1px solid var(--border-medium)', backgroundColor: 'var(--bg-card)' }}>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
               Profile summary
             </div>
             <div style={{ fontSize: '11px', color: 'var(--color-action)', fontWeight: 600, marginTop: '2px' }}>
               Verified deterministic result
             </div>
-            <div style={{ fontSize: '36px', fontWeight: 800, color: '#FFFFFF', margin: '14px 0 8px 0' }}>
+            <div style={{ fontSize: '36px', fontWeight: 800, color: 'var(--text-main)', margin: '14px 0 8px 0' }}>
               {evaluatedProfile.risk_band}
             </div>
             <p style={{ fontSize: '13px', lineHeight: 1.5, color: 'var(--text-muted)', marginBottom: '20px' }}>
@@ -172,8 +172,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
           </div>
 
           {/* Influencing Answers */}
-          <div className="glass-card" style={{ padding: '28px', backgroundColor: '#111111' }}>
-            <h3 style={{ fontSize: '15px', fontWeight: 600, color: '#FFFFFF', marginBottom: '20px' }}>
+          <div className="glass-card" style={{ padding: '28px', backgroundColor: 'var(--bg-card)' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '20px' }}>
               What influenced the result
             </h3>
 
@@ -181,7 +181,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
               <div style={{ borderBottom: '1px solid var(--border-subtle)', paddingBottom: '14px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
                   <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--color-action)', fontWeight: 700 }}>01</span>
-                  <strong style={{ color: '#FFFFFF', fontSize: '13px' }}>Time horizon</strong>
+                  <strong style={{ color: 'var(--text-main)', fontSize: '13px' }}>Time horizon</strong>
                 </div>
                 <p style={{ fontSize: '12px', color: 'var(--text-muted)', paddingLeft: '24px' }}>
                   Selected answer: {horizonOptions.find((o) => o.id === selectedHorizon)?.title || '3-5 years'}.
@@ -191,7 +191,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
               <div style={{ borderBottom: '1px solid var(--border-subtle)', paddingBottom: '14px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
                   <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--color-action)', fontWeight: 700 }}>02</span>
-                  <strong style={{ color: '#FFFFFF', fontSize: '13px' }}>Willingness to take risk</strong>
+                  <strong style={{ color: 'var(--text-main)', fontSize: '13px' }}>Willingness to take risk</strong>
                 </div>
                 <p style={{ fontSize: '12px', color: 'var(--text-muted)', paddingLeft: '24px' }}>
                   Evaluated moderate risk tolerance with disciplined drawdown buffers.
@@ -201,7 +201,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
                   <span style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', color: 'var(--color-action)', fontWeight: 700 }}>03</span>
-                  <strong style={{ color: '#FFFFFF', fontSize: '13px' }}>Capacity to absorb loss</strong>
+                  <strong style={{ color: 'var(--text-main)', fontSize: '13px' }}>Capacity to absorb loss</strong>
                 </div>
                 <p style={{ fontSize: '12px', color: 'var(--text-muted)', paddingLeft: '24px' }}>
                   Financial reserves preserved for capital stability.
@@ -229,7 +229,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
       <div style={{ fontSize: '11px', color: 'var(--color-action)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
         RISK ONBOARDING
       </div>
-      <h1 style={{ fontSize: '32px', fontWeight: 700, color: '#FFFFFF', margin: '6px 0 4px 0' }}>
+      <h1 style={{ fontSize: '32px', fontWeight: 700, color: 'var(--text-main)', margin: '6px 0 4px 0' }}>
         Understand your investment horizon
       </h1>
       <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '24px' }}>
@@ -241,7 +241,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
       <div className="onboarding-risk-grid">
         {/* Question Options */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <div style={{ fontSize: '15px', fontWeight: 600, color: '#FFFFFF', marginBottom: '4px' }}>
+          <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>
             When might you need this money?
           </div>
 
@@ -255,7 +255,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
                 style={{
                   padding: '16px 20px',
                   border: isSelected ? '1px solid var(--color-action)' : '1px solid var(--border-subtle)',
-                  backgroundColor: isSelected ? '#181818' : '#111111',
+                  backgroundColor: isSelected ? 'var(--color-action-bg)' : 'var(--bg-card)',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '14px',
@@ -267,11 +267,11 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
                     height: '16px',
                     borderRadius: '50%',
                     border: isSelected ? '5px solid var(--color-action)' : '2px solid var(--border-medium)',
-                    backgroundColor: '#000000',
+                    backgroundColor: 'var(--bg-card)',
                   }}
                 />
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: '14px', color: '#FFFFFF' }}>{opt.title}</div>
+                  <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-main)' }}>{opt.title}</div>
                   <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{opt.desc}</div>
                 </div>
               </div>
@@ -289,11 +289,11 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
         </div>
 
         {/* Right Explanatory Box: Why We Ask */}
-        <div className="glass-card" style={{ padding: '24px', backgroundColor: '#111111' }}>
+        <div className="glass-card" style={{ padding: '24px', backgroundColor: 'var(--bg-card)' }}>
           <div style={{ fontSize: '11px', color: 'var(--color-action)', fontWeight: 700, textTransform: 'uppercase', marginBottom: '8px' }}>
             Why we ask
           </div>
-          <p style={{ fontSize: '13px', lineHeight: 1.6, color: '#D4D4D8', marginBottom: '16px' }}>
+          <p style={{ fontSize: '13px', lineHeight: 1.6, color: 'var(--text-main)', marginBottom: '16px' }}>
             Your time horizon helps explain how investment risk relates to your plans. It is only one part of your profile.
           </p>
           <p style={{ fontSize: '12px', lineHeight: 1.5, color: 'var(--text-muted)' }}>

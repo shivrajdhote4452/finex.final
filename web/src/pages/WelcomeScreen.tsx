@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiClient } from '../api/client';
+import { ThemeToggle } from '../components/common/ThemeToggle';
 
 interface WelcomeScreenProps {
   onLoginSuccess: () => void;
@@ -355,32 +356,36 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           {/* Logo Mark & Platform Pill */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-              <span style={{ fontSize: '28px', fontWeight: 900, color: '#FFFFFF', letterSpacing: '-0.03em' }}>Fin</span>
+              <span style={{ fontSize: '28px', fontWeight: 900, color: 'var(--text-main)', letterSpacing: '-0.03em' }}>Fin</span>
               <span style={{ fontSize: '28px', fontWeight: 900, color: 'var(--color-action)', letterSpacing: '-0.03em' }}>Ex</span>
-              <span style={{ fontSize: '11px', color: '#71717A', marginLeft: '10px', fontFamily: 'var(--font-mono)', letterSpacing: '0.04em' }}>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '10px', fontFamily: 'var(--font-mono)', letterSpacing: '0.04em' }}>
                 TERMINAL
               </span>
             </div>
 
-            {/* Mobile Jump Link */}
-            <a
-              href="#signin-card"
-              className="mobile-only"
-              style={{
-                fontSize: '11px',
-                fontWeight: 600,
-                color: 'var(--color-action)',
-                backgroundColor: 'var(--color-action-bg)',
-                border: '1px solid var(--color-action-border)',
-                padding: '5px 12px',
-                borderRadius: 'var(--radius-full)',
-                textDecoration: 'none',
-                alignItems: 'center',
-                gap: '4px',
-              }}
-            >
-              Sign In to Workspace ↓
-            </a>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <ThemeToggle variant="segmented" />
+
+              {/* Mobile Jump Link */}
+              <a
+                href="#signin-card"
+                className="mobile-only"
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  color: 'var(--color-action)',
+                  backgroundColor: 'var(--color-action-bg)',
+                  border: '1px solid var(--color-action-border)',
+                  padding: '5px 12px',
+                  borderRadius: 'var(--radius-full)',
+                  textDecoration: 'none',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                Sign In to Workspace ↓
+              </a>
+            </div>
           </div>
 
           {/* Hero Mission */}
@@ -416,22 +421,22 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
               How Simulated Paper Trading Works
             </h2>
             <p className="welcome-section-text" style={{ marginBottom: '14px' }}>
-              Every user begins with <strong style={{ color: '#FFFFFF' }}>₹1,00,000 in virtual funds</strong>. You can research stocks and indices, practice placing simulated buy and sell market orders, inspect position allocations, and observe how market volatility affects portfolio profit and loss.
+              Every user begins with <strong style={{ color: 'var(--text-main)' }}>₹1,00,000 in virtual funds</strong>. You can research stocks and indices, practice placing simulated buy and sell market orders, inspect position allocations, and observe how market volatility affects portfolio profit and loss.
             </p>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
-              <div style={{ padding: '10px 12px', backgroundColor: '#050505', border: '1px solid #1F1F1F', borderRadius: '4px' }}>
+              <div style={{ padding: '10px 12px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '4px' }}>
                 <div style={{ fontSize: '11px', color: 'var(--color-positive)', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
                   ₹1,00,000 CAPITAL
                 </div>
-                <div style={{ fontSize: '12px', color: '#D4D4D8', marginTop: '2px' }}>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
                   Risk-free virtual cash to practice order sizing and asset allocation.
                 </div>
               </div>
-              <div style={{ padding: '10px 12px', backgroundColor: '#050505', border: '1px solid #1F1F1F', borderRadius: '4px' }}>
-                <div style={{ fontSize: '11px', color: '#E0E0E0', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+              <div style={{ padding: '10px 12px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '4px' }}>
+                <div style={{ fontSize: '11px', color: 'var(--text-main)', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
                   NO BROKERAGE LINK
                 </div>
-                <div style={{ fontSize: '12px', color: '#D4D4D8', marginTop: '2px' }}>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
                   Zero real money, no demat account connection, and zero financial liability.
                 </div>
               </div>
@@ -455,20 +460,20 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           <div
             style={{
               padding: '14px 16px',
-              backgroundColor: 'rgba(255, 255, 255, 0.02)',
-              border: '1px solid #1F1F1F',
+              backgroundColor: 'var(--bg-card)',
+              border: '1px solid var(--border-subtle)',
               borderRadius: 'var(--radius-xs)',
               fontSize: '11.5px',
               lineHeight: 1.6,
-              color: '#71717A',
+              color: 'var(--text-muted)',
               marginBottom: '32px',
             }}
           >
-            <strong style={{ color: '#A1A1AA' }}>Educational Notice:</strong> FinEx is an educational simulation platform developed for learning financial concepts and practicing paper trading. It does not execute real-money orders, connect to brokerages, or provide SEBI-registered investment advisory services.
+            <strong style={{ color: 'var(--text-main)' }}>Educational Notice:</strong> FinEx is an educational simulation platform developed for learning financial concepts and practicing paper trading. It does not execute real-money orders, connect to brokerages, or provide SEBI-registered investment advisory services.
           </div>
 
           {/* Footer Meta */}
-          <div style={{ fontSize: '11px', color: '#52525B', fontFamily: 'var(--font-mono)', paddingBottom: '24px' }}>
+          <div style={{ fontSize: '11px', color: 'var(--text-faint)', fontFamily: 'var(--font-mono)', paddingBottom: '24px' }}>
             FinEx Terminal v1.0 · Financial Education &amp; Paper Trading Platform
           </div>
         </div>
@@ -1013,7 +1018,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
             >
               Privacy Policy
             </a>
-            <span style={{ color: '#3F3F46' }}>•</span>
+            <span style={{ color: 'var(--border-medium)' }}>•</span>
             <a
               href="/terms"
               className="auth-footer-link"
@@ -1026,7 +1031,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
             >
               Terms of Service
             </a>
-            <span style={{ color: '#3F3F46' }}>•</span>
+            <span style={{ color: 'var(--border-medium)' }}>•</span>
             <a
               href="mailto:shivrajdhote4452@gmail.com"
               className="auth-footer-link"

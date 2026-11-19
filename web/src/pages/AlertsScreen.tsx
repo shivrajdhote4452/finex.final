@@ -23,7 +23,7 @@ export const AlertsScreen: React.FC = () => {
           <span style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>
             Automated Monitoring
           </span>
-          <h1 style={{ fontSize: '36px', fontWeight: 700, color: '#FFFFFF', marginTop: '4px', letterSpacing: '-0.02em' }}>
+          <h1 style={{ fontSize: '36px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px', letterSpacing: '-0.02em' }}>
             Smart Alerts & Trigger Rules
           </h1>
           <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginTop: '4px' }}>
@@ -40,7 +40,7 @@ export const AlertsScreen: React.FC = () => {
         {/* Left Column: Notification Feed */}
         <div className="glass-card" style={{ padding: '28px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#FFFFFF' }}>Recent In-App Notifications</h3>
+            <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-main)' }}>Recent In-App Notifications</h3>
             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{notifications.length} Total Alerts</span>
           </div>
 
@@ -51,7 +51,7 @@ export const AlertsScreen: React.FC = () => {
                 style={{
                   padding: '16px',
                   borderRadius: 'var(--radius-sm)',
-                  backgroundColor: n.read ? 'rgba(255, 255, 255, 0.02)' : 'rgba(59, 130, 246, 0.08)',
+                  backgroundColor: n.read ? 'var(--bg-subtle)' : 'rgba(59, 130, 246, 0.08)',
                   border: n.read ? '1px solid var(--border-subtle)' : '1px solid rgba(59, 130, 246, 0.3)',
                   display: 'flex',
                   justifyContent: 'space-between',
@@ -61,7 +61,7 @@ export const AlertsScreen: React.FC = () => {
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                     {!n.read && <div className="pulse-dot" />}
-                    <strong style={{ fontSize: '14px', color: '#FFFFFF' }}>{n.title}</strong>
+                    <strong style={{ fontSize: '14px', color: 'var(--text-main)' }}>{n.title}</strong>
                     <span className="badge badge-neutral" style={{ fontSize: '10px' }}>{n.type}</span>
                   </div>
                   <p style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
@@ -78,7 +78,7 @@ export const AlertsScreen: React.FC = () => {
 
         {/* Right Column: Rule Creator */}
         <div className="glass-card" style={{ padding: '28px' }}>
-          <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#FFFFFF', marginBottom: '6px' }}>
+          <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '6px' }}>
             Create Price Alert Rule
           </h3>
           <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '20px' }}>
@@ -99,7 +99,7 @@ export const AlertsScreen: React.FC = () => {
                   borderRadius: 'var(--radius-sm)',
                   border: '1px solid var(--border-medium)',
                   backgroundColor: 'var(--bg-input)',
-                  color: '#FFFFFF',
+                  color: 'var(--text-main)',
                   fontFamily: 'var(--font-sans)',
                   fontSize: '13px',
                 }}
@@ -126,7 +126,7 @@ export const AlertsScreen: React.FC = () => {
                   borderRadius: 'var(--radius-sm)',
                   border: '1px solid var(--border-medium)',
                   backgroundColor: 'var(--bg-input)',
-                  color: '#FFFFFF',
+                  color: 'var(--text-main)',
                   fontFamily: 'var(--font-mono)',
                   fontSize: '13px',
                 }}
@@ -161,21 +161,21 @@ export const AlertsScreen: React.FC = () => {
               </span>
               <span className="badge badge-neutral" style={{ fontSize: '10px' }}>Hypothetical</span>
             </div>
-            <h4 style={{ fontSize: '14px', fontWeight: 600, color: '#FFFFFF', marginBottom: '6px' }}>
+            <h4 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '6px' }}>
               15% Sector Drawdown Stress Test
             </h4>
             <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '14px' }}>
               Instantaneous deterministic impact test on verified portfolio equity.
             </p>
 
-            <div style={{ padding: '14px', backgroundColor: 'rgba(255, 255, 255, 0.02)', borderRadius: '4px', border: '1px solid var(--border-subtle)', marginBottom: '14px' }}>
+            <div style={{ padding: '14px', backgroundColor: 'var(--bg-subtle)', borderRadius: '4px', border: '1px solid var(--border-subtle)', marginBottom: '14px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Target Sector:</span>
-                <strong style={{ fontSize: '12px', color: '#FFFFFF' }}>Information Technology</strong>
+                <strong style={{ fontSize: '12px', color: 'var(--text-main)' }}>Information Technology</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Baseline Value:</span>
-                <span style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: '#FFFFFF' }}>₹1,00,000.00</span>
+                <span style={{ fontSize: '12px', fontFamily: 'var(--font-mono)', color: 'var(--text-main)' }}>₹1,00,000.00</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Estimated Drawdown (-15%):</span>

@@ -86,7 +86,7 @@ export const TransactionsScreen: React.FC = () => {
           <span style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>
             Audit & Execution Desk
           </span>
-          <h1 style={{ fontSize: 'clamp(22px, 5.5vw, 36px)', fontWeight: 700, color: '#FFFFFF', marginTop: '4px', letterSpacing: '-0.02em', wordBreak: 'break-word', lineHeight: 1.2 }}>
+          <h1 style={{ fontSize: 'clamp(22px, 5.5vw, 36px)', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px', letterSpacing: '-0.02em', wordBreak: 'break-word', lineHeight: 1.2 }}>
             Transaction Ledger & Trade History
           </h1>
           <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '4px', wordBreak: 'break-word', lineHeight: 1.5 }}>
@@ -115,7 +115,7 @@ export const TransactionsScreen: React.FC = () => {
           <span style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600 }}>
             Traded Volume
           </span>
-          <div className="tabular-nums" style={{ fontSize: '28px', fontWeight: 700, color: '#FFFFFF', marginTop: '6px' }}>
+          <div className="tabular-nums" style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text-main)', marginTop: '6px' }}>
             ₹{totalTradedVolume.toLocaleString('en-IN')}
           </div>
           <span style={{ fontSize: '12px', color: 'var(--text-faint)' }}>Gross cumulative turnover</span>
@@ -137,7 +137,7 @@ export const TransactionsScreen: React.FC = () => {
           <span style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600 }}>
             Total Executed
           </span>
-          <div className="tabular-nums" style={{ fontSize: '28px', fontWeight: 700, color: '#FFFFFF', marginTop: '6px' }}>
+          <div className="tabular-nums" style={{ fontSize: '28px', fontWeight: 700, color: 'var(--text-main)', marginTop: '6px' }}>
             {totalTradesCount} Orders
           </div>
           <span style={{ fontSize: '12px', color: 'var(--text-faint)' }}>{buyCount} Buys • {sellOrders.length} Sells</span>
@@ -183,7 +183,7 @@ export const TransactionsScreen: React.FC = () => {
                   background: isActive ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
                   border: isActive ? '1px solid var(--color-primary)' : '1px solid transparent',
                   borderRadius: 'var(--radius-sm)',
-                  color: isActive ? '#FFFFFF' : 'var(--text-muted)',
+                  color: isActive ? 'var(--color-primary)' : 'var(--text-muted)',
                   fontSize: '13px',
                   fontWeight: isActive ? 600 : 500,
                   padding: '8px 16px',
@@ -210,7 +210,7 @@ export const TransactionsScreen: React.FC = () => {
               borderRadius: 'var(--radius-sm)',
               border: '1px solid var(--border-medium)',
               backgroundColor: 'var(--bg-input)',
-              color: '#FFFFFF',
+              color: 'var(--text-main)',
               fontSize: '13px',
             }}
           />
@@ -259,7 +259,7 @@ export const TransactionsScreen: React.FC = () => {
                     >
                       {/* ID & Timestamp */}
                       <td style={{ padding: '14px' }}>
-                        <strong style={{ color: '#FFFFFF', fontFamily: 'var(--font-mono)' }}>{entry.id}</strong>
+                        <strong style={{ color: 'var(--text-main)', fontFamily: 'var(--font-mono)' }}>{entry.id}</strong>
                         <div style={{ fontSize: '11px', color: 'var(--text-faint)' }}>{entry.timestamp}</div>
                       </td>
 
@@ -283,7 +283,7 @@ export const TransactionsScreen: React.FC = () => {
 
                       {/* Instrument */}
                       <td style={{ padding: '14px' }}>
-                        <strong style={{ color: '#FFFFFF' }}>{entry.symbol}</strong>
+                        <strong style={{ color: 'var(--text-main)' }}>{entry.symbol}</strong>
                         {entry.name && <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{entry.name}</div>}
                       </td>
 
@@ -352,7 +352,7 @@ export const TransactionsScreen: React.FC = () => {
                 <span className="badge badge-cyan" style={{ marginBottom: '8px' }}>
                   Electronic Contract Note
                 </span>
-                <h2 style={{ fontSize: '22px', fontWeight: 700, color: '#FFFFFF', margin: 0 }}>
+                <h2 style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>
                   Order Fill Confirmation
                 </h2>
                 <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
@@ -377,15 +377,15 @@ export const TransactionsScreen: React.FC = () => {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px', fontSize: '13px' }}>
               <div>
                 <span style={{ color: 'var(--text-faint)', fontSize: '11px', textTransform: 'uppercase' }}>Client Identifier</span>
-                <div style={{ color: '#FFFFFF', fontWeight: 600 }}>{clientIdentifier}</div>
+                <div style={{ color: 'var(--text-main)', fontWeight: 600 }}>{clientIdentifier}</div>
               </div>
               <div>
                 <span style={{ color: 'var(--text-faint)', fontSize: '11px', textTransform: 'uppercase' }}>Execution Timestamp</span>
-                <div style={{ color: '#FFFFFF' }}>{selectedNote.timestamp}</div>
+                <div style={{ color: 'var(--text-main)' }}>{selectedNote.timestamp}</div>
               </div>
               <div>
                 <span style={{ color: 'var(--text-faint)', fontSize: '11px', textTransform: 'uppercase' }}>Order Mechanism</span>
-                <div style={{ color: '#FFFFFF' }}>{selectedNote.orderType} • Cash Delivery (Paper)</div>
+                <div style={{ color: 'var(--text-main)' }}>{selectedNote.orderType} • Cash Delivery (Paper)</div>
               </div>
               <div>
                 <span style={{ color: 'var(--text-faint)', fontSize: '11px', textTransform: 'uppercase' }}>Execution Status</span>
@@ -394,22 +394,22 @@ export const TransactionsScreen: React.FC = () => {
             </div>
 
             {/* Financial Consideration Breakdown Table */}
-            <div style={{ backgroundColor: 'rgba(0, 0, 0, 0.4)', borderRadius: 'var(--radius-sm)', padding: '16px', marginBottom: '20px', fontSize: '13px' }}>
+            <div style={{ backgroundColor: 'var(--bg-subtle)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '16px', marginBottom: '20px', fontSize: '13px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Security / Symbol:</span>
-                <strong style={{ color: '#FFFFFF' }}>{selectedNote.symbol} — {selectedNote.name || selectedNote.symbol}</strong>
+                <strong style={{ color: 'var(--text-main)' }}>{selectedNote.symbol} — {selectedNote.name || selectedNote.symbol}</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Quantity Executed:</span>
-                <span className="tabular-nums" style={{ color: '#FFFFFF' }}>{selectedNote.shares} shares</span>
+                <span className="tabular-nums" style={{ color: 'var(--text-main)' }}>{selectedNote.shares} shares</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Unit Execution Price:</span>
-                <span className="tabular-nums" style={{ color: '#FFFFFF' }}>₹{selectedNote.fillPrice.toLocaleString('en-IN')}</span>
+                <span className="tabular-nums" style={{ color: 'var(--text-main)' }}>₹{selectedNote.fillPrice.toLocaleString('en-IN')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Gross Consideration:</span>
-                <span className="tabular-nums" style={{ color: '#FFFFFF', fontWeight: 700 }}>₹{selectedNote.total.toLocaleString('en-IN')}</span>
+                <span className="tabular-nums" style={{ color: 'var(--text-main)', fontWeight: 700 }}>₹{selectedNote.total.toLocaleString('en-IN')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Brokerage ({isOwner ? 'Educational Sandbox' : 'Simulated Paper'}):</span>
@@ -420,7 +420,7 @@ export const TransactionsScreen: React.FC = () => {
                 <span style={{ color: 'var(--color-profit)' }}>₹0.00 (Simulated)</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border-subtle)', paddingTop: '8px', marginTop: '8px' }}>
-                <span style={{ color: '#FFFFFF', fontWeight: 600 }}>Net Virtual Cash Impact:</span>
+                <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>Net Virtual Cash Impact:</span>
                 <span className="tabular-nums" style={{ color: 'var(--color-virtual)', fontWeight: 700, fontSize: '15px' }}>
                   {selectedNote.type === 'BUY' ? '-' : '+'}₹{selectedNote.total.toLocaleString('en-IN')}
                 </span>
@@ -448,7 +448,7 @@ export const TransactionsScreen: React.FC = () => {
             style={{ maxWidth: '440px', padding: '32px' }}
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 style={{ fontSize: '20px', fontWeight: 700, color: '#FFFFFF', marginBottom: '8px' }}>
+            <h3 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '8px' }}>
               Inject Virtual Paper Capital
             </h3>
             <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '20px' }}>
@@ -468,7 +468,7 @@ export const TransactionsScreen: React.FC = () => {
                       padding: '12px 6px',
                       borderRadius: 'var(--radius-sm)',
                       border: depositAmount === amt ? '1px solid var(--color-virtual)' : '1px solid var(--border-subtle)',
-                      background: depositAmount === amt ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255, 255, 255, 0.03)',
+                      background: depositAmount === amt ? 'rgba(245, 158, 11, 0.15)' : 'var(--bg-subtle)',
                       color: depositAmount === amt ? 'var(--color-virtual)' : 'var(--text-muted)',
                       fontWeight: 700,
                       cursor: 'pointer',
@@ -489,7 +489,7 @@ export const TransactionsScreen: React.FC = () => {
                   borderRadius: 'var(--radius-sm)',
                   border: '1px solid var(--border-medium)',
                   backgroundColor: 'var(--bg-input)',
-                  color: '#FFFFFF',
+                  color: 'var(--text-main)',
                   fontWeight: 700,
                   fontSize: '18px',
                 }}

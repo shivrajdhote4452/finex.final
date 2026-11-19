@@ -90,7 +90,7 @@ export const SpendingScreen: React.FC = () => {
             <span style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>
               Privacy-Preserving Ingestion
             </span>
-            <h1 style={{ fontSize: '32px', fontWeight: 700, color: '#FFFFFF', marginTop: '4px' }}>
+            <h1 style={{ fontSize: '32px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
               CSV Audit & Staging Preview: {csvPreview?.file_name || 'Bank Statement'}
             </h1>
             <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginTop: '4px' }}>
@@ -121,7 +121,7 @@ export const SpendingScreen: React.FC = () => {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px' }}>
           <div className="glass-card" style={{ padding: '20px' }}>
             <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Rows Parsed</span>
-            <div className="tabular-nums" style={{ fontSize: '32px', fontWeight: 700, color: '#FFFFFF', marginTop: '6px' }}>
+            <div className="tabular-nums" style={{ fontSize: '32px', fontWeight: 700, color: 'var(--text-main)', marginTop: '6px' }}>
               {csvPreview?.total_rows ?? 128}
             </div>
           </div>
@@ -196,7 +196,7 @@ export const SpendingScreen: React.FC = () => {
           <span style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>
             Cashflow & Ledger Tracking
           </span>
-          <h1 style={{ fontSize: '36px', fontWeight: 700, color: '#FFFFFF', marginTop: '4px', letterSpacing: '-0.02em' }}>
+          <h1 style={{ fontSize: '36px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px', letterSpacing: '-0.02em' }}>
             Spending & Expense Analytics
           </h1>
           <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginTop: '4px' }}>
@@ -221,7 +221,7 @@ export const SpendingScreen: React.FC = () => {
           <span style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600 }}>
             October Total Outflow
           </span>
-          <div className="tabular-nums" style={{ fontSize: '32px', fontWeight: 700, color: '#FFFFFF', marginTop: '8px' }}>
+          <div className="tabular-nums" style={{ fontSize: '32px', fontWeight: 700, color: 'var(--text-main)', marginTop: '8px' }}>
             ₹{totalSpent.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
           </div>
           <span style={{ fontSize: '12px', color: 'var(--text-faint)' }}>{spendingItems.length} Logged Transactions</span>
@@ -251,7 +251,7 @@ export const SpendingScreen: React.FC = () => {
           <span style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600 }}>
             Monthly Budget Cap
           </span>
-          <div className="tabular-nums" style={{ fontSize: '32px', fontWeight: 700, color: '#FFFFFF', marginTop: '8px' }}>
+          <div className="tabular-nums" style={{ fontSize: '32px', fontWeight: 700, color: 'var(--text-main)', marginTop: '8px' }}>
             ₹25,000.00
           </div>
           <span style={{ fontSize: '12px', color: 'var(--color-profit)' }}>
@@ -271,8 +271,8 @@ export const SpendingScreen: React.FC = () => {
                 padding: '7px 14px',
                 borderRadius: 'var(--radius-sm)',
                 border: activeCategory === c ? '1px solid var(--color-primary)' : '1px solid transparent',
-                background: activeCategory === c ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
-                color: activeCategory === c ? '#FFFFFF' : 'var(--text-muted)',
+                background: activeCategory === c ? 'var(--color-primary-bg)' : 'transparent',
+                color: activeCategory === c ? 'var(--color-primary)' : 'var(--text-muted)',
                 fontSize: '12px',
                 fontWeight: activeCategory === c ? 600 : 500,
                 cursor: 'pointer',
@@ -293,7 +293,7 @@ export const SpendingScreen: React.FC = () => {
             borderRadius: 'var(--radius-sm)',
             border: '1px solid var(--border-medium)',
             backgroundColor: 'var(--bg-input)',
-            color: '#FFFFFF',
+            color: 'var(--text-main)',
             fontSize: '12px',
             width: '240px',
             outline: 'none',
@@ -319,7 +319,7 @@ export const SpendingScreen: React.FC = () => {
                 <tr key={tx.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
                   <td style={{ padding: '14px', color: 'var(--text-faint)' }} className="tabular-nums">{tx.id}</td>
                   <td style={{ padding: '14px', color: 'var(--text-muted)' }}>{tx.date}</td>
-                  <td style={{ padding: '14px', color: '#FFFFFF', fontWeight: 500 }}>
+                  <td style={{ padding: '14px', color: 'var(--text-main)', fontWeight: 500 }}>
                     <span className="badge badge-neutral" style={{ marginRight: '8px', fontSize: '10px' }}>Masked</span>
                     {tx.merchant}
                   </td>
@@ -340,7 +340,7 @@ export const SpendingScreen: React.FC = () => {
       {showAddModal && (
         <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
           <div className="modal-content" style={{ maxWidth: '440px', padding: '32px' }} onClick={(e) => e.stopPropagation()}>
-            <h3 style={{ fontSize: '20px', fontWeight: 700, color: '#FFFFFF', marginBottom: '8px' }}>
+            <h3 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-main)', marginBottom: '8px' }}>
               Log New Transaction
             </h3>
             <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '20px' }}>
@@ -364,7 +364,7 @@ export const SpendingScreen: React.FC = () => {
                     borderRadius: 'var(--radius-sm)',
                     border: '1px solid var(--border-medium)',
                     backgroundColor: 'var(--bg-input)',
-                    color: '#FFFFFF',
+                    color: 'var(--text-main)',
                     fontSize: '13px',
                   }}
                 />
@@ -383,12 +383,12 @@ export const SpendingScreen: React.FC = () => {
                     borderRadius: 'var(--radius-sm)',
                     border: '1px solid var(--border-medium)',
                     backgroundColor: 'var(--bg-input)',
-                    color: '#FFFFFF',
+                    color: 'var(--text-main)',
                     fontSize: '13px',
                   }}
                 >
                   {categories.filter((c) => c !== 'All').map((c) => (
-                    <option key={c} value={c} style={{ backgroundColor: '#111111', color: '#FFFFFF' }}>
+                    <option key={c} value={c} style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}>
                       {c}
                     </option>
                   ))}
@@ -411,7 +411,7 @@ export const SpendingScreen: React.FC = () => {
                     borderRadius: 'var(--radius-sm)',
                     border: '1px solid var(--border-medium)',
                     backgroundColor: 'var(--bg-input)',
-                    color: '#FFFFFF',
+                    color: 'var(--text-main)',
                     fontWeight: 700,
                     fontSize: '16px',
                   }}

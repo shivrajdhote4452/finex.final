@@ -35,7 +35,7 @@ export const GoalsScreen: React.FC = () => {
         <span style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>
           Deterministic Wealth Planning
         </span>
-        <h1 style={{ fontSize: '36px', fontWeight: 700, color: '#FFFFFF', marginTop: '4px', letterSpacing: '-0.02em' }}>
+        <h1 style={{ fontSize: '36px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px', letterSpacing: '-0.02em' }}>
           Financial Goals & Compounding Scenarios
         </h1>
         <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginTop: '4px' }}>
@@ -63,7 +63,7 @@ export const GoalsScreen: React.FC = () => {
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                  <strong style={{ fontSize: '16px', color: '#FFFFFF' }}>{g.name}</strong>
+                  <strong style={{ fontSize: '16px', color: 'var(--text-main)' }}>{g.name}</strong>
                   <span className="badge badge-virtual">{pct}% Funded</span>
                 </div>
 
@@ -73,7 +73,7 @@ export const GoalsScreen: React.FC = () => {
                 </div>
 
                 {/* Progress bar */}
-                <div style={{ width: '100%', height: '6px', borderRadius: '3px', backgroundColor: '#1A1A1A', overflow: 'hidden' }}>
+                <div style={{ width: '100%', height: '6px', borderRadius: '3px', backgroundColor: 'var(--bg-subtle)', overflow: 'hidden' }}>
                   <div style={{ width: `${pct}%`, height: '100%', background: 'var(--color-action)' }} />
                 </div>
               </div>
@@ -88,7 +88,7 @@ export const GoalsScreen: React.FC = () => {
               <span style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>
                 Interactive Projection
               </span>
-              <h2 style={{ fontSize: '24px', fontWeight: 700, color: '#FFFFFF', marginTop: '2px' }}>
+              <h2 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-main)', marginTop: '2px' }}>
                 {active.name}
               </h2>
             </div>
@@ -97,14 +97,14 @@ export const GoalsScreen: React.FC = () => {
 
           {/* Target & Gap */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '28px' }}>
-            <div style={{ padding: '16px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(0, 0, 0, 0.25)', border: '1px solid var(--border-subtle)' }}>
+            <div style={{ padding: '16px', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--bg-subtle)', border: '1px solid var(--border-subtle)' }}>
               <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Funding Gap</span>
-              <div className="tabular-nums" style={{ fontSize: '26px', fontWeight: 700, color: '#FFFFFF', marginTop: '4px' }}>
+              <div className="tabular-nums" style={{ fontSize: '26px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
                 ₹{remaining.toLocaleString('en-IN')}
               </div>
             </div>
 
-            <div style={{ padding: '16px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(0, 0, 0, 0.25)', border: '1px solid var(--border-subtle)' }}>
+            <div style={{ padding: '16px', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--bg-subtle)', border: '1px solid var(--border-subtle)' }}>
               <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Est. Completion</span>
               <div className="tabular-nums" style={{ fontSize: '26px', fontWeight: 700, color: 'var(--color-profit)', marginTop: '4px' }}>
                 {monthsToTarget} Months
@@ -117,7 +117,7 @@ export const GoalsScreen: React.FC = () => {
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <label style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Monthly Contribution (INR)</label>
-                <strong className="tabular-nums" style={{ color: '#FFFFFF' }}>₹{monthlyContribution.toLocaleString('en-IN')}</strong>
+                <strong className="tabular-nums" style={{ color: 'var(--text-main)' }}>₹{monthlyContribution.toLocaleString('en-IN')}</strong>
               </div>
               <input
                 type="range"
@@ -133,7 +133,7 @@ export const GoalsScreen: React.FC = () => {
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <label style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Expected Annual Return (%)</label>
-                <strong className="tabular-nums" style={{ color: '#FFFFFF' }}>{expectedAnnualRate}%</strong>
+                <strong className="tabular-nums" style={{ color: 'var(--text-main)' }}>{expectedAnnualRate}%</strong>
               </div>
               <input
                 type="range"
@@ -162,7 +162,7 @@ export const GoalsScreen: React.FC = () => {
                 <span style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--color-accent-cyan)', fontWeight: 600 }}>
                   Projected Value in {n} Months
                 </span>
-                <div className="tabular-nums" style={{ fontSize: '32px', fontWeight: 800, color: '#FFFFFF', marginTop: '2px' }}>
+                <div className="tabular-nums" style={{ fontSize: '32px', fontWeight: 800, color: 'var(--text-main)', marginTop: '2px' }}>
                   ₹{futureValue.toLocaleString('en-IN')}
                 </div>
               </div>

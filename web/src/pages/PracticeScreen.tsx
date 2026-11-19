@@ -130,13 +130,13 @@ export const PracticeScreen: React.FC = () => {
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <span className="badge-virtual">PRO TRADE DESK</span>
-          <span style={{ fontSize: '13px', color: '#F3F4F6' }}>
+          <span style={{ fontSize: '13px', color: 'var(--text-main)' }}>
             Simulated institutional terminal matching with real-time NSE observation feeds and atomic virtual ledger.
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Liquid Capital:</span>
-          <span className="tabular-nums" style={{ fontSize: '17px', fontWeight: 700, color: '#FFFFFF' }}>
+          <span className="tabular-nums" style={{ fontSize: '17px', fontWeight: 700, color: 'var(--text-main)' }}>
             ₹{virtualCash.toLocaleString('en-IN')}
           </span>
         </div>
@@ -147,7 +147,7 @@ export const PracticeScreen: React.FC = () => {
         {/* Column 1: Pro Order Ticket */}
         <div className="glass-card" style={{ padding: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
-            <h2 style={{ fontSize: '17px', fontWeight: 700, color: '#FFFFFF', margin: 0 }}>Simulated Order Ticket</h2>
+            <h2 style={{ fontSize: '17px', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>Simulated Order Ticket</h2>
             <span className="badge badge-profit" style={{ fontSize: '10px' }}>Zero Brokerage</span>
           </div>
 
@@ -157,7 +157,7 @@ export const PracticeScreen: React.FC = () => {
               display: 'grid',
               gridTemplateColumns: '1fr 1fr',
               gap: '6px',
-              background: 'rgba(0, 0, 0, 0.4)',
+              background: 'var(--bg-subtle)',
               padding: '4px',
               borderRadius: 'var(--radius-sm)',
               marginBottom: '16px',
@@ -216,14 +216,14 @@ export const PracticeScreen: React.FC = () => {
                 borderRadius: 'var(--radius-sm)',
                 border: '1px solid var(--border-medium)',
                 backgroundColor: 'var(--bg-input)',
-                color: '#FFFFFF',
+                color: 'var(--text-main)',
                 fontSize: '14px',
                 fontWeight: 600,
                 outline: 'none',
               }}
             >
               {Object.values(marketQuotes).map((item) => (
-                <option key={item.symbol} value={item.symbol} style={{ background: '#111111', color: '#FFFFFF' }}>
+                <option key={item.symbol} value={item.symbol} style={{ background: 'var(--bg-card)', color: 'var(--text-main)' }}>
                   {item.symbol} — ₹{item.price.toLocaleString('en-IN')}
                 </option>
               ))}
@@ -248,8 +248,8 @@ export const PracticeScreen: React.FC = () => {
                     borderRadius: 'var(--radius-xs)',
                     cursor: 'pointer',
                     border: orderType === t ? '1px solid var(--color-primary)' : '1px solid var(--border-subtle)',
-                    background: orderType === t ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.03)',
-                    color: orderType === t ? '#FFFFFF' : 'var(--text-muted)',
+                    background: orderType === t ? 'var(--color-primary-bg)' : 'var(--bg-subtle)',
+                    color: orderType === t ? 'var(--color-primary)' : 'var(--text-muted)',
                   }}
                 >
                   {t}
@@ -275,7 +275,7 @@ export const PracticeScreen: React.FC = () => {
                   borderRadius: 'var(--radius-sm)',
                   border: '1px solid var(--border-medium)',
                   backgroundColor: 'var(--bg-input)',
-                  color: '#FFFFFF',
+                  color: 'var(--text-main)',
                   fontWeight: 600,
                 }}
               />
@@ -289,7 +289,7 @@ export const PracticeScreen: React.FC = () => {
                 Quantity (Shares)
               </label>
               <span style={{ fontSize: '12px', color: 'var(--text-faint)' }}>
-                Owned: <strong style={{ color: '#FFFFFF' }}>{ownedShares}</strong>
+                Owned: <strong style={{ color: 'var(--text-main)' }}>{ownedShares}</strong>
               </span>
             </div>
 
@@ -314,7 +314,7 @@ export const PracticeScreen: React.FC = () => {
                   borderRadius: 'var(--radius-sm)',
                   border: '1px solid var(--border-medium)',
                   backgroundColor: 'var(--bg-input)',
-                  color: '#FFFFFF',
+                  color: 'var(--text-main)',
                   fontFamily: 'var(--font-mono)',
                   fontSize: '15px',
                   fontWeight: 700,
@@ -335,7 +335,8 @@ export const PracticeScreen: React.FC = () => {
           {/* Financial Breakdown */}
           <div
             style={{
-              backgroundColor: 'rgba(0, 0, 0, 0.3)',
+              backgroundColor: 'var(--bg-subtle)',
+              border: '1px solid var(--border-subtle)',
               borderRadius: 'var(--radius-sm)',
               padding: '12px 14px',
               marginBottom: '18px',
@@ -347,7 +348,7 @@ export const PracticeScreen: React.FC = () => {
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
               <span>Reference Fill Price</span>
-              <span className="tabular-nums" style={{ color: '#FFFFFF' }}>₹{effectivePrice.toLocaleString('en-IN')}</span>
+              <span className="tabular-nums" style={{ color: 'var(--text-main)' }}>₹{effectivePrice.toLocaleString('en-IN')}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
               <span>Estimated Order Value</span>
@@ -407,7 +408,7 @@ export const PracticeScreen: React.FC = () => {
         <div className="glass-card" style={{ padding: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
             <div>
-              <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#FFFFFF', margin: 0 }}>Order Book (L2 Depth)</h3>
+              <h3 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>Order Book (L2 Depth)</h3>
               <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{selectedSymbol} simulated queue</span>
             </div>
             <span className="badge badge-cyan" style={{ fontSize: '10px' }}>5 Bids / 5 Asks</span>
@@ -446,7 +447,7 @@ export const PracticeScreen: React.FC = () => {
                 <span className="tabular-nums" style={{ color: 'var(--color-loss)', fontWeight: 600 }}>
                   ₹{ask.price.toFixed(1)}
                 </span>
-                <span className="tabular-nums" style={{ color: '#D1D5DB' }}>
+                <span className="tabular-nums" style={{ color: 'var(--text-muted)' }}>
                   {ask.qty}
                 </span>
               </div>
@@ -458,7 +459,7 @@ export const PracticeScreen: React.FC = () => {
             style={{
               padding: '8px 12px',
               borderRadius: 'var(--radius-sm)',
-              backgroundColor: 'rgba(255, 255, 255, 0.04)',
+              backgroundColor: 'var(--bg-subtle)',
               borderTop: '1px solid var(--border-subtle)',
               borderBottom: '1px solid var(--border-subtle)',
               display: 'flex',
@@ -468,7 +469,7 @@ export const PracticeScreen: React.FC = () => {
             }}
           >
             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Market Mid-Spread</span>
-            <span className="tabular-nums" style={{ fontSize: '15px', fontWeight: 700, color: '#FFFFFF' }}>
+            <span className="tabular-nums" style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-main)' }}>
               ₹{effectivePrice.toLocaleString('en-IN')}
             </span>
           </div>
@@ -502,7 +503,7 @@ export const PracticeScreen: React.FC = () => {
                 <span className="tabular-nums" style={{ color: 'var(--color-profit)', fontWeight: 600 }}>
                   ₹{bid.price.toFixed(1)}
                 </span>
-                <span className="tabular-nums" style={{ color: '#D1D5DB' }}>
+                <span className="tabular-nums" style={{ color: 'var(--text-muted)' }}>
                   {bid.qty}
                 </span>
               </div>
@@ -515,7 +516,7 @@ export const PracticeScreen: React.FC = () => {
           {/* Active Positions */}
           <div className="glass-card" style={{ padding: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#FFFFFF', margin: 0 }}>Active Positions</h3>
+              <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>Active Positions</h3>
               <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{holdings.length} Instruments</span>
             </div>
 
@@ -541,7 +542,7 @@ export const PracticeScreen: React.FC = () => {
                     return (
                       <tr key={h.symbol} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
                         <td style={{ padding: '10px' }}>
-                          <strong style={{ color: '#FFFFFF' }}>{h.symbol}</strong>
+                          <strong style={{ color: 'var(--text-main)' }}>{h.symbol}</strong>
                           <div style={{ fontSize: '10px', color: 'var(--text-faint)' }}>{h.assetClass}</div>
                         </td>
                         <td style={{ padding: '10px' }} className="tabular-nums">{h.shares}</td>
@@ -583,7 +584,7 @@ export const PracticeScreen: React.FC = () => {
           {/* Recent Ledger Entries */}
           <div className="glass-card" style={{ padding: '24px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-              <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#FFFFFF', margin: 0 }}>Execution Ledger</h3>
+              <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>Execution Ledger</h3>
               <span className="badge badge-cyan" style={{ fontSize: '10px' }}>Atomic Ledger</span>
             </div>
 
@@ -597,7 +598,7 @@ export const PracticeScreen: React.FC = () => {
                     alignItems: 'center',
                     padding: '10px 12px',
                     borderRadius: 'var(--radius-sm)',
-                    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+                    backgroundColor: 'var(--bg-subtle)',
                     border: '1px solid var(--border-subtle)',
                     fontSize: '12px',
                   }}
@@ -621,11 +622,11 @@ export const PracticeScreen: React.FC = () => {
                         REPLAY
                       </span>
                     )}
-                    <strong style={{ color: '#FFFFFF' }}>{l.symbol}</strong>
+                    <strong style={{ color: 'var(--text-main)' }}>{l.symbol}</strong>
                     <span style={{ color: 'var(--text-muted)' }}>({l.shares} sh)</span>
                   </div>
                   <div style={{ textAlign: 'right' }}>
-                    <div className="tabular-nums" style={{ fontWeight: 600, color: '#FFFFFF' }}>₹{l.total.toLocaleString('en-IN')}</div>
+                    <div className="tabular-nums" style={{ fontWeight: 600, color: 'var(--text-main)' }}>₹{l.total.toLocaleString('en-IN')}</div>
                     <span style={{ fontSize: '10px', color: 'var(--text-faint)' }}>{l.timestamp.slice(0, 11)}</span>
                   </div>
                 </div>
@@ -659,31 +660,31 @@ export const PracticeScreen: React.FC = () => {
                 ✓
               </div>
               <span className="badge badge-profit">{lastReceipt.id} • {lastReceipt.status}</span>
-              <h3 style={{ fontSize: '22px', fontWeight: 700, color: '#FFFFFF', marginTop: '6px' }}>
+              <h3 style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-main)', marginTop: '6px' }}>
                 Order Executed Successfully
               </h3>
             </div>
 
-            <div style={{ backgroundColor: 'rgba(0,0,0,0.4)', padding: '16px', borderRadius: 'var(--radius-sm)', marginBottom: '20px', fontSize: '13px' }}>
+            <div style={{ backgroundColor: 'var(--bg-subtle)', border: '1px solid var(--border-subtle)', padding: '16px', borderRadius: 'var(--radius-sm)', marginBottom: '20px', fontSize: '13px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Security:</span>
-                <strong style={{ color: '#FFFFFF' }}>{lastReceipt.symbol}</strong>
+                <strong style={{ color: 'var(--text-main)' }}>{lastReceipt.symbol}</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Action:</span>
-                <span style={{ color: '#FFFFFF' }}>{lastReceipt.type} ({lastReceipt.orderType})</span>
+                <span style={{ color: 'var(--text-main)' }}>{lastReceipt.type} ({lastReceipt.orderType})</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Quantity:</span>
-                <span style={{ color: '#FFFFFF' }}>{lastReceipt.shares} shares</span>
+                <span style={{ color: 'var(--text-main)' }}>{lastReceipt.shares} shares</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Unit Fill Rate:</span>
-                <span style={{ color: '#FFFFFF' }}>₹{lastReceipt.fillPrice.toLocaleString('en-IN')}</span>
+                <span style={{ color: 'var(--text-main)' }}>₹{lastReceipt.fillPrice.toLocaleString('en-IN')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Total Consideration:</span>
-                <span style={{ color: '#FFFFFF', fontWeight: 700 }}>₹{lastReceipt.total.toLocaleString('en-IN')}</span>
+                <span style={{ color: 'var(--text-main)', fontWeight: 700 }}>₹{lastReceipt.total.toLocaleString('en-IN')}</span>
               </div>
               {lastReceipt.realizedPnL !== undefined && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>

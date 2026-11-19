@@ -123,7 +123,7 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
           <span style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>
             Asset Management & Rebalancing
           </span>
-          <h1 style={{ fontSize: 'clamp(22px, 5.5vw, 36px)', fontWeight: 700, color: '#FFFFFF', marginTop: '4px', letterSpacing: '-0.02em', wordBreak: 'break-word', lineHeight: 1.2 }}>
+          <h1 style={{ fontSize: 'clamp(22px, 5.5vw, 36px)', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px', letterSpacing: '-0.02em', wordBreak: 'break-word', lineHeight: 1.2 }}>
             Portfolio & Holdings Architecture
           </h1>
           <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '4px', wordBreak: 'break-word', lineHeight: 1.5 }}>
@@ -190,7 +190,7 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
           }}
         >
           <div>
-            <div style={{ color: '#FFFFFF', fontWeight: 600, fontSize: '15px' }}>
+            <div style={{ color: 'var(--text-main)', fontWeight: 600, fontSize: '15px' }}>
               Your paper wallet is empty
             </div>
             <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '2px' }}>
@@ -245,7 +245,7 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
               style={{
                 fontSize: 'clamp(30px, 4vw, 40px)',
                 fontWeight: 800,
-                color: '#FFFFFF',
+                color: 'var(--text-main)',
                 letterSpacing: '-0.02em',
                 lineHeight: 1.1,
               }}
@@ -285,7 +285,7 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
               <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block' }}>
                 Invested Equity
               </span>
-              <div className="tabular-nums" style={{ fontSize: '15px', fontWeight: 700, color: '#FFFFFF', marginTop: '2px' }}>
+              <div className="tabular-nums" style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-main)', marginTop: '2px' }}>
                 ₹{totalHoldingsValue.toLocaleString('en-IN')}
               </div>
               <span style={{ fontSize: '11px', color: 'var(--text-faint)' }}>
@@ -375,7 +375,7 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
                 pointerEvents: 'none',
               }}
             >
-              <span style={{ fontSize: '17px', fontWeight: 800, color: '#FFFFFF' }}>
+              <span style={{ fontSize: '17px', fontWeight: 800, color: 'var(--text-main)' }}>
                 {holdings.length}
               </span>
               <span style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
@@ -395,7 +395,7 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
                 <div key={h.symbol} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', fontSize: '11.5px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: h.color, display: 'inline-block' }} />
-                    <span style={{ color: '#FFFFFF', fontWeight: 500 }}>{h.symbol}</span>
+                    <span style={{ color: 'var(--text-main)', fontWeight: 500 }}>{h.symbol}</span>
                   </div>
                   <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>{pct.toFixed(1)}%</span>
                 </div>
@@ -513,7 +513,7 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
                     <tr>
                       <td colSpan={8} style={{ padding: '40px 24px', textAlign: 'center' }}>
                         <div style={{ maxWidth: '440px', margin: '0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                          <div style={{ color: '#FFFFFF', fontWeight: 600, fontSize: '14px' }}>
+                          <div style={{ color: 'var(--text-main)', fontWeight: 600, fontSize: '14px' }}>
                             No active equity positions
                           </div>
                           <div style={{ color: 'var(--text-muted)', fontSize: '12px', lineHeight: 1.5 }}>
@@ -524,8 +524,8 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
                             style={{
                               marginTop: '8px',
                               padding: '6px 14px',
-                              background: 'rgba(59, 130, 246, 0.15)',
-                              color: '#60a5fa',
+                              background: 'var(--color-primary-bg)',
+                              color: 'var(--color-primary)',
                               border: '1px solid rgba(59, 130, 246, 0.3)',
                               borderRadius: '6px',
                               fontSize: '12px',
@@ -555,7 +555,7 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
                         >
                           <td style={{ padding: '14px' }}>
                             <div className="truncate-text" style={{ maxWidth: '160px' }}>
-                              <strong style={{ color: '#FFFFFF', fontSize: '14px' }}>{h.symbol}</strong>
+                              <strong style={{ color: 'var(--text-main)', fontSize: '14px' }}>{h.symbol}</strong>
                               <div style={{ fontSize: '11px', color: 'var(--text-faint)' }}>{h.name}</div>
                             </div>
                           </td>
@@ -677,13 +677,13 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
                                 {isCall ? 'CE' : 'PE'}
                               </span>
                               <div>
-                                <strong style={{ color: '#FFFFFF', fontSize: '13px' }}>{opt.contract_symbol}</strong>
+                                <strong style={{ color: 'var(--text-main)', fontSize: '13px' }}>{opt.contract_symbol}</strong>
                                 <div style={{ fontSize: '11px', color: 'var(--text-faint)' }}>{opt.underlying}</div>
                               </div>
                             </div>
                           </td>
                           <td style={{ padding: '14px' }}>
-                            <div style={{ color: '#FFFFFF', fontSize: '13px' }}>{opt.expiry}</div>
+                            <div style={{ color: 'var(--text-main)', fontSize: '13px' }}>{opt.expiry}</div>
                             <span style={{ fontSize: '11px', color: opt.days_to_expiry <= 2 ? 'var(--color-loss)' : 'var(--color-action)' }}>
                               {opt.days_to_expiry} days to expiry
                             </span>
@@ -743,7 +743,7 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
                 alignItems: 'center',
                 gap: '10px',
                 fontSize: '12px',
-                color: '#FCA5A5',
+                color: 'var(--color-loss)',
               }}
             >
               <span>⚠️</span>
@@ -767,7 +767,7 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
         <div className="modal-overlay" onClick={() => setShowRebalanceModal(false)}>
           <div className="modal-content" style={{ maxWidth: '600px', padding: '32px' }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 style={{ fontSize: '20px', fontWeight: 700, color: '#FFFFFF', margin: 0 }}>
+              <h3 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>
                 FinEx Asset Allocation & Rebalance Simulator
               </h3>
               <button onClick={() => setShowRebalanceModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '20px', cursor: 'pointer' }}>✕</button>
@@ -777,8 +777,8 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
               Current portfolio has <strong>50.8%</strong> allocation in Technology (TCS + INFY). FinEx educational guidelines advise diversifying across uncorrelated sectors to help reduce unsystematic risk (note: diversification reduces some risks, but does not eliminate market risk or guarantee against loss).
             </p>
 
-            <div style={{ backgroundColor: 'rgba(0,0,0,0.3)', padding: '16px', borderRadius: 'var(--radius-sm)', marginBottom: '20px', fontSize: '13px' }}>
-              <strong style={{ color: '#FFFFFF', display: 'block', marginBottom: '8px' }}>Recommended Simulated Execution Steps:</strong>
+            <div style={{ backgroundColor: 'var(--bg-subtle)', border: '1px solid var(--border-subtle)', padding: '16px', borderRadius: 'var(--radius-sm)', marginBottom: '20px', fontSize: '13px' }}>
+              <strong style={{ color: 'var(--text-main)', display: 'block', marginBottom: '8px' }}>Recommended Simulated Execution Steps:</strong>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
                   <span>Sell 3 shares of TCS:</span>

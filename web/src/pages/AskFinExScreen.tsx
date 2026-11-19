@@ -240,7 +240,7 @@ export const AskFinExScreen: React.FC = () => {
         minHeight: 0,
         display: 'flex',
         overflow: 'hidden',
-        backgroundColor: '#07090E',
+        backgroundColor: 'var(--bg-app)',
       }}
     >
       {/* ============================================================== */}
@@ -253,8 +253,8 @@ export const AskFinExScreen: React.FC = () => {
             width: '280px',
             minWidth: '280px',
             maxWidth: '320px',
-            backgroundColor: '#090B10',
-            borderRight: '1px solid #1A1E29',
+            backgroundColor: 'var(--bg-sidebar)',
+            borderRight: '1px solid var(--border-subtle)',
             display: 'flex',
             flexDirection: 'column',
             height: '100%',
@@ -263,17 +263,17 @@ export const AskFinExScreen: React.FC = () => {
           }}
         >
         {/* Top Header & + New Chat Button */}
-        <div style={{ padding: '16px', borderBottom: '1px solid #1A1E29', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div style={{ padding: '16px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '14px', fontWeight: 700, color: '#FFFFFF', letterSpacing: '0.02em' }}>
+              <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)', letterSpacing: '0.02em' }}>
                 Chat History
               </span>
               <span
                 style={{
                   fontSize: '11px',
-                  backgroundColor: '#1E2330',
-                  color: '#A1A1AA',
+                  backgroundColor: 'var(--bg-card-hover)',
+                  color: 'var(--text-muted)',
                   padding: '2px 7px',
                   borderRadius: '10px',
                   fontWeight: 600,
@@ -284,8 +284,8 @@ export const AskFinExScreen: React.FC = () => {
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '11px', color: '#10B981', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10B981', display: 'inline-block' }} />
+              <span style={{ fontSize: '11px', color: 'var(--color-positive)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--color-positive)', display: 'inline-block' }} />
                 Connected
               </span>
               <button
@@ -293,10 +293,10 @@ export const AskFinExScreen: React.FC = () => {
                 className="mobile-only"
                 onClick={() => setIsHistoryOpen(false)}
                 style={{
-                  background: '#161922',
-                  border: '1px solid #2A2E39',
+                  background: 'var(--bg-card)',
+                  border: '1px solid var(--border-subtle)',
                   borderRadius: '4px',
-                  color: '#FFFFFF',
+                  color: 'var(--text-main)',
                   padding: '3px 8px',
                   fontSize: '11px',
                   cursor: 'pointer',
@@ -319,20 +319,20 @@ export const AskFinExScreen: React.FC = () => {
               gap: '8px',
               padding: '11px 16px',
               borderRadius: '8px',
-              backgroundColor: '#F29A60',
+              backgroundColor: 'var(--color-action)',
               border: 'none',
-              color: '#000000',
+              color: '#FFFFFF',
               fontSize: '13px',
               fontWeight: 700,
               cursor: 'pointer',
               transition: 'all 0.15s ease',
-              boxShadow: '0 2px 8px rgba(242, 154, 96, 0.25)',
+              boxShadow: 'var(--card-shadow)',
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#FFA76E';
+              e.currentTarget.style.backgroundColor = 'var(--color-action-hover)';
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = '#F29A60';
+              e.currentTarget.style.backgroundColor = 'var(--color-action)';
             }}
           >
             <span style={{ fontSize: '16px', lineHeight: 1 }}>+</span>
@@ -349,9 +349,9 @@ export const AskFinExScreen: React.FC = () => {
               width: '100%',
               padding: '8px 12px',
               borderRadius: '6px',
-              backgroundColor: '#11141C',
-              border: '1px solid #242938',
-              color: '#FFFFFF',
+              backgroundColor: 'var(--bg-input)',
+              border: '1px solid var(--border-subtle)',
+              color: 'var(--text-main)',
               fontSize: '12px',
               outline: 'none',
               boxSizing: 'border-box',
@@ -371,11 +371,11 @@ export const AskFinExScreen: React.FC = () => {
           }}
         >
           {loadingHistory ? (
-            <div style={{ textAlign: 'center', padding: '24px 0', color: '#787B86', fontSize: '12px' }}>
+            <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-muted)', fontSize: '12px' }}>
               Loading past chats...
             </div>
           ) : filteredConversations.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '28px 12px', color: '#787B86', fontSize: '12px', lineHeight: 1.5 }}>
+            <div style={{ textAlign: 'center', padding: '28px 12px', color: 'var(--text-muted)', fontSize: '12px', lineHeight: 1.5 }}>
               {searchFilter ? 'No matching chats found.' : 'No previous chats yet.\nStart a new chat to begin!'}
             </div>
           ) : (
@@ -393,8 +393,8 @@ export const AskFinExScreen: React.FC = () => {
                   style={{
                     padding: '10px 12px',
                     borderRadius: '7px',
-                    backgroundColor: isSelected ? 'rgba(242, 154, 96, 0.14)' : '#11141C',
-                    border: `1px solid ${isSelected ? '#F29A60' : '#1C202C'}`,
+                    backgroundColor: isSelected ? 'var(--color-action-bg)' : 'var(--bg-card)',
+                    border: `1px solid ${isSelected ? 'var(--color-action)' : 'var(--border-subtle)'}`,
                     cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
@@ -404,25 +404,25 @@ export const AskFinExScreen: React.FC = () => {
                   }}
                   onMouseEnter={(e) => {
                     if (!isSelected) {
-                      e.currentTarget.style.backgroundColor = '#171B26';
-                      e.currentTarget.style.borderColor = '#2B3142';
+                      e.currentTarget.style.backgroundColor = 'var(--bg-card-hover)';
+                      e.currentTarget.style.borderColor = 'var(--border-medium)';
                     }
                   }}
                   onMouseLeave={(e) => {
                     if (!isSelected) {
-                      e.currentTarget.style.backgroundColor = '#11141C';
-                      e.currentTarget.style.borderColor = '#1C202C';
+                      e.currentTarget.style.backgroundColor = 'var(--bg-card)';
+                      e.currentTarget.style.borderColor = 'var(--border-subtle)';
                     }
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
-                    <span style={{ fontSize: '13px', color: isSelected ? '#F29A60' : '#787B86' }}>💬</span>
+                    <span style={{ fontSize: '13px', color: isSelected ? 'var(--color-action)' : 'var(--text-muted)' }}>💬</span>
                     <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                       <span
                         style={{
                           fontSize: '12.5px',
                           fontWeight: isSelected ? 600 : 500,
-                          color: isSelected ? '#FFFFFF' : '#D1D4DC',
+                          color: isSelected ? 'var(--color-action)' : 'var(--text-main)',
                           whiteSpace: 'nowrap',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
@@ -431,7 +431,7 @@ export const AskFinExScreen: React.FC = () => {
                       >
                         {c.title || 'Research Session'}
                       </span>
-                      <span style={{ fontSize: '10px', color: '#787B86' }}>{formattedDate}</span>
+                      <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{formattedDate}</span>
                     </div>
                   </div>
 
@@ -443,7 +443,7 @@ export const AskFinExScreen: React.FC = () => {
                     style={{
                       background: 'none',
                       border: 'none',
-                      color: '#787B86',
+                      color: 'var(--text-muted)',
                       fontSize: '13px',
                       cursor: 'pointer',
                       padding: '4px',
@@ -454,11 +454,11 @@ export const AskFinExScreen: React.FC = () => {
                       opacity: isSelected ? 0.9 : 0.6,
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.color = '#EF4444';
+                      e.currentTarget.style.color = 'var(--color-negative)';
                       e.currentTarget.style.opacity = '1';
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.color = '#787B86';
+                      e.currentTarget.style.color = 'var(--text-muted)';
                       e.currentTarget.style.opacity = isSelected ? '0.9' : '0.6';
                     }}
                   >
@@ -478,7 +478,7 @@ export const AskFinExScreen: React.FC = () => {
       <div
         style={{
           flex: 1,
-          backgroundColor: '#07090E',
+          backgroundColor: 'var(--bg-app)',
           display: 'flex',
           flexDirection: 'column',
           height: '100%',
@@ -492,11 +492,11 @@ export const AskFinExScreen: React.FC = () => {
         <div
           style={{
             padding: '10px 16px',
-            borderBottom: '1px solid #1A1E29',
+            borderBottom: '1px solid var(--border-subtle)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            backgroundColor: '#090B10',
+            backgroundColor: 'var(--bg-sidebar)',
             flexShrink: 0,
             flexWrap: 'wrap',
             gap: '8px',
@@ -509,10 +509,10 @@ export const AskFinExScreen: React.FC = () => {
               onClick={() => setIsHistoryOpen(!isHistoryOpen)}
               title={isHistoryOpen ? 'Collapse Chat History' : 'Expand Chat History'}
               style={{
-                background: '#161922',
-                border: '1px solid #2A2E39',
+                background: 'var(--bg-card)',
+                border: '1px solid var(--border-subtle)',
                 borderRadius: '6px',
-                color: isHistoryOpen ? '#D1D4DC' : '#F29A60',
+                color: isHistoryOpen ? 'var(--text-primary)' : 'var(--color-action)',
                 padding: '6px 10px',
                 fontSize: '12px',
                 cursor: 'pointer',
@@ -529,13 +529,13 @@ export const AskFinExScreen: React.FC = () => {
 
             <div style={{ minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <h2 style={{ fontSize: '15px', fontWeight: 700, color: '#FFFFFF', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <h2 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-main)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {activeConversationId
                     ? conversations.find((c) => c.id === activeConversationId)?.title || 'FinEx AI Assistant'
                     : 'New Chat'}
                 </h2>
               </div>
-              <p style={{ margin: '2px 0 0 0', fontSize: '11.5px', color: '#787B86', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <p style={{ margin: '2px 0 0 0', fontSize: '11.5px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 Document-grounded market intelligence, technical momentum screening & regulatory citations.
               </p>
             </div>
@@ -551,9 +551,9 @@ export const AskFinExScreen: React.FC = () => {
                   fontSize: '11.5px',
                   padding: '5px 12px',
                   borderRadius: '6px',
-                  backgroundColor: showSourcesPanel ? 'rgba(242, 154, 96, 0.18)' : '#161922',
-                  border: `1px solid ${showSourcesPanel ? '#F29A60' : '#2A2E39'}`,
-                  color: showSourcesPanel ? '#F29A60' : '#D1D4DC',
+                  backgroundColor: showSourcesPanel ? 'var(--color-action-bg)' : 'var(--bg-card)',
+                  border: `1px solid ${showSourcesPanel ? 'var(--color-action)' : 'var(--border-subtle)'}`,
+                  color: showSourcesPanel ? 'var(--color-action)' : 'var(--text-primary)',
                   cursor: 'pointer',
                   fontWeight: 600,
                 }}
@@ -569,9 +569,9 @@ export const AskFinExScreen: React.FC = () => {
                 fontSize: '11.5px',
                 padding: '5px 12px',
                 borderRadius: '6px',
-                backgroundColor: '#161922',
-                border: '1px solid #2A2E39',
-                color: '#D1D4DC',
+                backgroundColor: 'var(--bg-card)',
+                border: '1px solid var(--border-subtle)',
+                color: 'var(--text-primary)',
                 cursor: 'pointer',
                 fontWeight: 600,
               }}
@@ -586,36 +586,36 @@ export const AskFinExScreen: React.FC = () => {
           <div
             style={{
               padding: '16px 20px',
-              backgroundColor: '#0F121C',
-              borderBottom: '1px solid #242938',
+              backgroundColor: 'var(--bg-card)',
+              borderBottom: '1px solid var(--border-subtle)',
               display: 'flex',
               flexDirection: 'column',
               gap: '8px',
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '12px', fontWeight: 700, color: '#F29A60', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-action)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                 Verified Regulatory Grounding Excerpt
               </span>
               <button
                 onClick={() => setShowSourcesPanel(false)}
-                style={{ background: 'none', border: 'none', color: '#787B86', cursor: 'pointer', fontSize: '13px' }}
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '13px' }}
               >
                 ✕ Close
               </button>
             </div>
-            <div style={{ fontSize: '13px', fontWeight: 600, color: '#FFFFFF' }}>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
               {selectedCitation.title} ({selectedCitation.publisher})
             </div>
             <div
               style={{
                 padding: '10px 14px',
-                backgroundColor: 'rgba(0, 0, 0, 0.35)',
-                border: '1px solid #1E222D',
+                backgroundColor: 'var(--bg-subtle)',
+                border: '1px solid var(--border-subtle)',
                 borderRadius: '6px',
                 fontSize: '12.5px',
                 lineHeight: 1.6,
-                color: '#D1D4DC',
+                color: 'var(--text-primary)',
                 fontStyle: 'italic',
               }}
             >
@@ -626,7 +626,7 @@ export const AskFinExScreen: React.FC = () => {
                 href={selectedCitation.source_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                style={{ fontSize: '11.5px', color: '#38BDF8', textDecoration: 'none' }}
+                style={{ fontSize: '11.5px', color: 'var(--color-action)', textDecoration: 'none' }}
               >
                 🔗 Read full regulatory publication
               </a>
@@ -674,13 +674,13 @@ export const AskFinExScreen: React.FC = () => {
               }}
             >
               <div>
-                <span style={{ fontSize: '13px', color: '#F29A60', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                <span style={{ fontSize: '13px', color: 'var(--color-action)', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
                   FinEx Financial Intelligence
                 </span>
-                <h1 style={{ fontSize: '32px', fontWeight: 700, color: '#FFFFFF', marginTop: '6px', letterSpacing: '-0.02em' }}>
+                <h1 style={{ fontSize: '32px', fontWeight: 700, color: 'var(--text-main)', marginTop: '6px', letterSpacing: '-0.02em' }}>
                   {greeting}
                 </h1>
-                <p style={{ color: '#A1A1AA', fontSize: '14px', marginTop: '6px', lineHeight: 1.5 }}>
+                <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginTop: '6px', lineHeight: 1.5 }}>
                   Ask questions grounded in live NSE market quotes, verified technical momentum indicators, and SEBI regulatory publications.
                 </p>
               </div>
@@ -714,8 +714,8 @@ export const AskFinExScreen: React.FC = () => {
                     onClick={() => handleSend(card.prompt)}
                     style={{
                       padding: '16px',
-                      backgroundColor: '#11141D',
-                      border: '1px solid #1F2433',
+                      backgroundColor: 'var(--bg-card)',
+                      border: '1px solid var(--border-subtle)',
                       borderRadius: '8px',
                       cursor: 'pointer',
                       display: 'flex',
@@ -724,16 +724,16 @@ export const AskFinExScreen: React.FC = () => {
                       transition: 'all 0.15s ease',
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = '#181C28';
-                      e.currentTarget.style.borderColor = '#F29A60';
+                      e.currentTarget.style.backgroundColor = 'var(--bg-card-hover)';
+                      e.currentTarget.style.borderColor = 'var(--color-action)';
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = '#11141D';
-                      e.currentTarget.style.borderColor = '#1F2433';
+                      e.currentTarget.style.backgroundColor = 'var(--bg-card)';
+                      e.currentTarget.style.borderColor = 'var(--border-subtle)';
                     }}
                   >
-                    <span style={{ fontSize: '13.5px', fontWeight: 600, color: '#FFFFFF' }}>{card.title}</span>
-                    <span style={{ fontSize: '11.5px', color: '#787B86', lineHeight: 1.4 }}>{card.subtitle}</span>
+                    <span style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--text-main)' }}>{card.title}</span>
+                    <span style={{ fontSize: '11.5px', color: 'var(--text-muted)', lineHeight: 1.4 }}>{card.subtitle}</span>
                   </div>
                 ))}
               </div>
@@ -748,12 +748,12 @@ export const AskFinExScreen: React.FC = () => {
                     style={{
                       alignSelf: 'flex-end',
                       maxWidth: '80%',
-                      backgroundColor: 'rgba(242, 154, 96, 0.14)',
-                      border: '1px solid rgba(242, 154, 96, 0.3)',
+                      backgroundColor: 'var(--color-action-bg)',
+                      border: '1px solid var(--color-action-border)',
                       borderRadius: '10px',
                       padding: '12px 18px',
                       fontSize: '13.5px',
-                      color: '#FFFFFF',
+                      color: 'var(--text-main)',
                       lineHeight: 1.5,
                     }}
                   >
@@ -768,8 +768,8 @@ export const AskFinExScreen: React.FC = () => {
                   style={{
                     alignSelf: 'flex-start',
                     maxWidth: '92%',
-                    backgroundColor: '#10131B',
-                    border: '1px solid #1E2330',
+                    backgroundColor: 'var(--bg-card)',
+                    border: '1px solid var(--border-subtle)',
                     borderRadius: '10px',
                     padding: '18px 22px',
                     display: 'flex',
@@ -778,12 +778,12 @@ export const AskFinExScreen: React.FC = () => {
                   }}
                 >
                   {m.headline && (
-                    <div style={{ fontSize: '15px', fontWeight: 700, color: '#FFFFFF', letterSpacing: '-0.01em' }}>
+                    <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-main)', letterSpacing: '-0.01em' }}>
                       {m.headline}
                     </div>
                   )}
 
-                  <div style={{ fontSize: '13.5px', lineHeight: 1.65, color: '#D4D8E2' }}>
+                  <div style={{ fontSize: '13.5px', lineHeight: 1.65, color: 'var(--text-primary)' }}>
                     {renderFormattedText(m.body)}
                   </div>
 
@@ -808,9 +808,9 @@ export const AskFinExScreen: React.FC = () => {
                             }}
                             style={{
                               fontSize: '11px',
-                              color: '#F29A60',
-                              backgroundColor: 'rgba(242, 154, 96, 0.1)',
-                              border: '1px solid rgba(242, 154, 96, 0.3)',
+                              color: 'var(--color-action)',
+                              backgroundColor: 'var(--color-action-bg)',
+                              border: '1px solid var(--color-action-border)',
                               padding: '4px 10px',
                               borderRadius: '4px',
                               cursor: 'pointer',
@@ -831,9 +831,9 @@ export const AskFinExScreen: React.FC = () => {
                     <div
                       style={{
                         fontSize: '11px',
-                        color: '#787B86',
+                        color: 'var(--text-muted)',
                         fontStyle: 'italic',
-                        borderTop: '1px solid #1A1E29',
+                        borderTop: '1px solid var(--border-subtle)',
                         paddingTop: '8px',
                       }}
                     >
@@ -850,14 +850,14 @@ export const AskFinExScreen: React.FC = () => {
               style={{
                 alignSelf: 'flex-start',
                 fontSize: '13px',
-                color: '#F29A60',
+                color: 'var(--color-action)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
                 padding: '12px 18px',
-                backgroundColor: '#10131B',
+                backgroundColor: 'var(--bg-card)',
                 borderRadius: '8px',
-                border: '1px solid #1E2330',
+                border: '1px solid var(--border-subtle)',
               }}
             >
               <span>⚡</span>
@@ -871,8 +871,8 @@ export const AskFinExScreen: React.FC = () => {
         <div
           style={{
             padding: '14px 24px 16px 24px',
-            borderTop: '1px solid #1A1E29',
-            backgroundColor: '#090B10',
+            borderTop: '1px solid var(--border-subtle)',
+            backgroundColor: 'var(--bg-sidebar)',
             flexShrink: 0,
           }}
         >
@@ -898,9 +898,9 @@ export const AskFinExScreen: React.FC = () => {
                   flex: 1,
                   padding: '13px 18px',
                   borderRadius: '8px',
-                  backgroundColor: '#12151F',
-                  border: '1px solid #242938',
-                  color: '#FFFFFF',
+                  backgroundColor: 'var(--bg-input)',
+                  border: '1px solid var(--border-subtle)',
+                  color: 'var(--text-main)',
                   fontSize: '13.5px',
                   outline: 'none',
                 }}
@@ -912,9 +912,9 @@ export const AskFinExScreen: React.FC = () => {
                 style={{
                   padding: '13px 24px',
                   borderRadius: '8px',
-                  backgroundColor: inputVal.trim() && !loading ? '#F29A60' : '#2A2E39',
-                  border: 'none',
-                  color: inputVal.trim() && !loading ? '#000000' : '#787B86',
+                  backgroundColor: inputVal.trim() && !loading ? 'var(--color-action)' : 'var(--bg-card-hover)',
+                  border: inputVal.trim() && !loading ? 'none' : '1px solid var(--border-subtle)',
+                  color: inputVal.trim() && !loading ? '#FFFFFF' : 'var(--text-muted)',
                   fontSize: '13px',
                   fontWeight: 700,
                   cursor: inputVal.trim() && !loading ? 'pointer' : 'not-allowed',
@@ -926,7 +926,7 @@ export const AskFinExScreen: React.FC = () => {
               </button>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: '#656A76', padding: '0 4px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: 'var(--text-muted)', padding: '0 4px' }}>
               <span>Virtual paper trading simulator. Educational metrics only. Not financial advice.</span>
               <span>Press Enter ↵ to send</span>
             </div>
