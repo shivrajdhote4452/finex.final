@@ -182,12 +182,21 @@ async def test_risk_questionnaire_and_assessment():
         )
         assert "SEBI (Investment Advisers) Regulations" in eval_data["disclaimer"]
 
-        # 3. Verify assessment persisted in profile
+        # 3. Verify assessment persisted in profile (verified against PostgreSQL)
+        from backend.app.database import engine
+
+        assert engine.dialect.name == "postgresql", f"Expected postgresql dialect, got {engine.dialect.name}"
+
         profile_resp = await client.get("/api/v1/risk/assessments/me", headers=headers)
         assert profile_resp.status_code == 200
         saved_data = profile_resp.json()["data"]
         assert saved_data["has_assessment"] is True
         assert saved_data["risk_band"] == "MODERATE"
+
+        # 4. Verify onboarding is marked complete in auth profile
+        me_resp = await client.get("/api/v1/users/me", headers=headers)
+        assert me_resp.status_code == 200
+        assert me_resp.json()["data"]["onboarding_completed"] is True
 
 
 @pytest.mark.asyncio
@@ -230,3 +239,147 @@ async def test_risk_aggressive_scenario():
         eval_data = eval_resp.json()["data"]
         assert eval_data["risk_band"] == "AGGRESSIVE"
         assert eval_data["composite_score"] >= 70
+
+
+@pytest.mark.asyncio
+async def test_risk_boundary_and_bankers_rounding_parity():
+    """Verify exact boundary values and standard Python banker's rounding parity (round half to even)."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # Boundary 39: Conservative upper edge (raw = 39.3125)
+        sub_39 = {
+            "horizon_category": "<1",
+            "questionnaire_version": "v1.0",
+            "answers": [
+                {"question_id": "Q1", "option_id": "Q1_A"},
+                {"question_id": "Q2", "option_id": "Q2_D"},
+                {"question_id": "Q3", "option_id": "Q3_C"},
+                {"question_id": "Q4", "option_id": "Q4_D"},
+            ],
+        }
+        res_39 = await client.post("/api/v1/risk/assessments", json=sub_39)
+        assert res_39.status_code == 200
+        assert res_39.json()["data"]["composite_score"] == 39
+        assert res_39.json()["data"]["risk_band"] == "CONSERVATIVE"
+
+        # Boundary 40: Moderate lower edge (raw = 40.125)
+        sub_40 = {
+            "horizon_category": "1-3",
+            "questionnaire_version": "v1.0",
+            "answers": [
+                {"question_id": "Q1", "option_id": "Q1_A"},
+                {"question_id": "Q2", "option_id": "Q2_D"},
+                {"question_id": "Q3", "option_id": "Q3_A"},
+                {"question_id": "Q4", "option_id": "Q4_C"},
+            ],
+        }
+        res_40 = await client.post("/api/v1/risk/assessments", json=sub_40)
+        assert res_40.status_code == 200
+        assert res_40.json()["data"]["composite_score"] == 40
+        assert res_40.json()["data"]["risk_band"] == "MODERATE"
+
+        # Boundary 69: Moderate upper edge (raw = 69.09375)
+        sub_69 = {
+            "horizon_category": "1-3",
+            "questionnaire_version": "v1.0",
+            "answers": [
+                {"question_id": "Q1", "option_id": "Q1_C"},
+                {"question_id": "Q2", "option_id": "Q2_D"},
+                {"question_id": "Q3", "option_id": "Q3_C"},
+                {"question_id": "Q4", "option_id": "Q4_D"},
+            ],
+        }
+        res_69 = await client.post("/api/v1/risk/assessments", json=sub_69)
+        assert res_69.status_code == 200
+        assert res_69.json()["data"]["composite_score"] == 69
+        assert res_69.json()["data"]["risk_band"] == "MODERATE"
+
+        # Boundary 70: Aggressive lower edge (raw = 70.375)
+        sub_70 = {
+            "horizon_category": "3-5",
+            "questionnaire_version": "v1.0",
+            "answers": [
+                {"question_id": "Q1", "option_id": "Q1_A"},
+                {"question_id": "Q2", "option_id": "Q2_D"},
+                {"question_id": "Q3", "option_id": "Q3_C"},
+                {"question_id": "Q4", "option_id": "Q4_C"},
+            ],
+        }
+        res_70 = await client.post("/api/v1/risk/assessments", json=sub_70)
+        assert res_70.status_code == 200
+        assert res_70.json()["data"]["composite_score"] == 70
+        assert res_70.json()["data"]["risk_band"] == "AGGRESSIVE"
+
+        # Banker's rounding case: raw = 26.5000 -> 26 (round half to even)
+        sub_26_5 = {
+            "horizon_category": "<1",
+            "questionnaire_version": "v1.0",
+            "answers": [
+                {"question_id": "Q1", "option_id": "Q1_B"},
+                {"question_id": "Q2", "option_id": "Q2_A"},
+                {"question_id": "Q3", "option_id": "Q3_B"},
+                {"question_id": "Q4", "option_id": "Q4_D"},
+            ],
+        }
+        res_26_5 = await client.post("/api/v1/risk/assessments", json=sub_26_5)
+        assert res_26_5.status_code == 200
+        assert res_26_5.json()["data"]["composite_score"] == 26
+        assert res_26_5.json()["data"]["risk_band"] == "CONSERVATIVE"
+
+        # Banker's rounding case: raw = 38.5000 -> 38 (round half to even)
+        sub_38_5 = {
+            "horizon_category": "<1",
+            "questionnaire_version": "v1.0",
+            "answers": [
+                {"question_id": "Q1", "option_id": "Q1_C"},
+                {"question_id": "Q2", "option_id": "Q2_B"},
+                {"question_id": "Q3", "option_id": "Q3_C"},
+                {"question_id": "Q4", "option_id": "Q4_D"},
+            ],
+        }
+        res_38_5 = await client.post("/api/v1/risk/assessments", json=sub_38_5)
+        assert res_38_5.status_code == 200
+        assert res_38_5.json()["data"]["composite_score"] == 38
+        assert res_38_5.json()["data"]["risk_band"] == "CONSERVATIVE"
+
+        # Banker's rounding case: raw = 40.5000 -> 40 (round half to even)
+        sub_40_5 = {
+            "horizon_category": "1-3",
+            "questionnaire_version": "v1.0",
+            "answers": [
+                {"question_id": "Q1", "option_id": "Q1_B"},
+                {"question_id": "Q2", "option_id": "Q2_C"},
+                {"question_id": "Q3", "option_id": "Q3_C"},
+                {"question_id": "Q4", "option_id": "Q4_A"},
+            ],
+        }
+        res_40_5 = await client.post("/api/v1/risk/assessments", json=sub_40_5)
+        assert res_40_5.status_code == 200
+        assert res_40_5.json()["data"]["composite_score"] == 40
+        assert res_40_5.json()["data"]["risk_band"] == "MODERATE"
+
+
+@pytest.mark.asyncio
+async def test_risk_submission_validation_errors():
+    """Verify incomplete or invalid submissions are rejected with HTTP 422."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        # Missing answers
+        res_missing = await client.post(
+            "/api/v1/risk/assessments",
+            json={"horizon_category": "3-5", "answers": [{"question_id": "Q1", "option_id": "Q1_A"}]},
+        )
+        assert res_missing.status_code == 422
+
+        # Invalid option ID
+        res_invalid = await client.post(
+            "/api/v1/risk/assessments",
+            json={
+                "horizon_category": "3-5",
+                "answers": [
+                    {"question_id": "Q1", "option_id": "INVALID_OPT"},
+                    {"question_id": "Q2", "option_id": "Q2_A"},
+                    {"question_id": "Q3", "option_id": "Q3_A"},
+                    {"question_id": "Q4", "option_id": "Q4_A"},
+                ],
+            },
+        )
+        assert res_invalid.status_code == 422

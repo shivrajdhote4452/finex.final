@@ -162,6 +162,13 @@ export const AppContent: React.FC = () => {
     const checkSession = async () => {
       const token = apiClient.getToken();
       if (!token || apiClient.isTokenExpired(token)) {
+        if (typeof window !== 'undefined') {
+          const hash = window.location.hash.toLowerCase();
+          if (hash.includes('onboarding') || hash.includes('step=')) {
+            if (isMounted) setAuthState('onboarding');
+            return;
+          }
+        }
         if (isMounted) setAuthState('welcome');
         return;
       }
@@ -193,8 +200,18 @@ export const AppContent: React.FC = () => {
     };
 
     checkSession();
+
+    const handleHash = () => {
+      const hash = window.location.hash.toLowerCase();
+      if (hash.includes('onboarding') || hash.includes('step=')) {
+        if (isMounted) setAuthState('onboarding');
+      }
+    };
+    window.addEventListener('hashchange', handleHash);
+
     return () => {
       isMounted = false;
+      window.removeEventListener('hashchange', handleHash);
     };
   }, []);
 
