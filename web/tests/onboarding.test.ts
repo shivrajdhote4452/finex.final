@@ -136,7 +136,7 @@ describe('Risk Onboarding Questionnaire & Domain Logic', () => {
     assert.equal(r70.risk_band, 'Aggressive');
   });
 
-  test('6. Half-up rounding consistency across fractional .5 boundary cases', () => {
+  test('6. Banker\'s rounding parity with backend Python round() across fractional .5 cases', () => {
     // Case where raw is exactly 26.5:
     // horizon '<1' (0.50), Q1_B (35), Q3_B (60) -> avg_w = 47.5
     // Q2_A (15), Q4_D (100) -> avg_c = 57.5
@@ -147,9 +147,37 @@ describe('Risk Onboarding Questionnaire & Domain Logic', () => {
       Q2: 'Q2_A',
       Q4: 'Q4_D',
     });
-    // Standard half-up rounds 26.5 to 27
-    assert.equal(r26_5.composite_score, 27);
+    // Python's round(26.5) rounds half to even -> 26
+    assert.equal(r26_5.composite_score, 26);
     assert.equal(r26_5.risk_band, 'Conservative');
+
+    // Case where raw is exactly 38.5:
+    // horizon '<1' (0.50), Q1_C (70), Q3_C (95) -> avg_w = 82.5
+    // Q2_B (45), Q4_D (100) -> avg_c = 72.5
+    // raw = (82.5 * 0.45 + 72.5 * 0.55) * 0.50 = (37.125 + 39.875) * 0.50 = 77.0 * 0.50 = 38.5
+    const r38_5 = evaluateDeterministicRisk('<1', {
+      Q1: 'Q1_C',
+      Q3: 'Q3_C',
+      Q2: 'Q2_B',
+      Q4: 'Q4_D',
+    });
+    // Python's round(38.5) rounds half to even -> 38
+    assert.equal(r38_5.composite_score, 38);
+    assert.equal(r38_5.risk_band, 'Conservative');
+
+    // Case where raw is exactly 40.5:
+    // horizon '1-3' (0.75), Q1_B (35), Q3_C (95) -> avg_w = 65
+    // Q2_C (75), Q4_A (15) -> avg_c = 45
+    // raw = (65 * 0.45 + 45 * 0.55) * 0.75 = (29.25 + 24.75) * 0.75 = 54.0 * 0.75 = 40.5
+    const r40_5 = evaluateDeterministicRisk('1-3', {
+      Q1: 'Q1_B',
+      Q3: 'Q3_C',
+      Q2: 'Q2_C',
+      Q4: 'Q4_A',
+    });
+    // Python's round(40.5) rounds half to even -> 40
+    assert.equal(r40_5.composite_score, 40);
+    assert.equal(r40_5.risk_band, 'Moderate');
   });
 
   test('7. Step sequence navigation rules: Back/Forward and direct editing preserve state', () => {

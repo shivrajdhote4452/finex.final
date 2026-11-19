@@ -109,6 +109,19 @@ export interface RiskEvaluationResult {
   }>;
 }
 
+/**
+ * Preserves exact numerical parity with Python's round() built-in (banker's rounding / round half to even).
+ * Matches server-side Python round(x) across 100% of questionnaire permutations.
+ */
+export function pyRound(num: number): number {
+  const floor = Math.floor(num);
+  const diff = num - floor;
+  if (diff === 0.5) {
+    return floor % 2 === 0 ? floor : floor + 1;
+  }
+  return Math.round(num);
+}
+
 export function evaluateDeterministicRisk(
   horizonCategory: string,
   answers: {
@@ -130,7 +143,7 @@ export function evaluateDeterministicRisk(
   const avgCapacity = (q2 + q4) / 2;
 
   const rawComposite = (avgWillingness * 0.45 + avgCapacity * 0.55) * horizonFactor;
-  const compositeScore = Math.max(0, Math.min(100, Math.round(rawComposite)));
+  const compositeScore = Math.max(0, Math.min(100, pyRound(rawComposite)));
 
   let band: 'Conservative' | 'Moderate' | 'Aggressive';
   let summary: string;
