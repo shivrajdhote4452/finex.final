@@ -154,7 +154,7 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
                 </span>
               )}
             </div>
-            <h2 style={{ fontSize: '24px', fontWeight: 700, color: '#FFFFFF', margin: 0 }}>
+            <h2 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>
               Option Chain — {selectedUnderlying}
             </h2>
             <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
@@ -173,7 +173,7 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
               style={{
                 backgroundColor: 'var(--bg-input)',
                 border: '1px solid var(--border-medium)',
-                color: '#FFFFFF',
+                color: 'var(--text-main)',
                 borderRadius: 'var(--radius-sm)',
                 padding: '8px 12px',
                 fontSize: '13px',
@@ -210,9 +210,9 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
                 borderRadius: 'var(--radius-xs)',
                 fontSize: '12px',
                 fontWeight: selectedUnderlying === u ? 700 : 500,
-                backgroundColor: selectedUnderlying === u ? 'rgba(242, 154, 96, 0.15)' : 'rgba(255, 255, 255, 0.03)',
+                backgroundColor: selectedUnderlying === u ? 'var(--color-action-bg)' : 'var(--bg-subtle)',
                 border: selectedUnderlying === u ? '1px solid var(--color-action)' : '1px solid var(--border-subtle)',
-                color: selectedUnderlying === u ? '#FFFFFF' : 'var(--text-muted)',
+                color: selectedUnderlying === u ? 'var(--color-action)' : 'var(--text-muted)',
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
               }}
@@ -284,7 +284,7 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
         >
           <span style={{ fontSize: '24px' }}>🛡️</span>
           <div>
-            <h4 style={{ margin: '0 0 4px 0', color: '#FFFFFF', fontSize: '15px' }}>
+            <h4 style={{ margin: '0 0 4px 0', color: 'var(--text-main)', fontSize: '15px' }}>
               Option Chain Data Unavailable
             </h4>
             <p style={{ margin: 0, fontSize: '13px', color: '#FCA5A5' }}>
@@ -308,7 +308,7 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
             <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
               Underlying Spot
             </span>
-            <div className="tabular-nums" style={{ fontSize: '20px', fontWeight: 800, color: '#FFFFFF', marginTop: '2px' }}>
+            <div className="tabular-nums" style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-main)', marginTop: '2px' }}>
               ₹{chainData.spot_price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </div>
             <span style={{ fontSize: '11px', color: 'var(--color-profit)' }}>
@@ -340,9 +340,9 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
               style={{
                 width: '100%',
                 marginTop: '4px',
-                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                backgroundColor: 'var(--bg-input)',
                 border: '1px solid var(--border-medium)',
-                color: '#FFFFFF',
+                color: 'var(--text-main)',
                 borderRadius: '4px',
                 padding: '4px 8px',
                 fontSize: '13px',
@@ -367,7 +367,7 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
               <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
                 Put-Call Ratio (PCR)
               </span>
-              <div className="tabular-nums" style={{ fontSize: '20px', fontWeight: 800, color: '#FFFFFF', marginTop: '2px' }}>
+              <div className="tabular-nums" style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-main)', marginTop: '2px' }}>
                 {chainData.pcr}
               </div>
               <span style={{ fontSize: '11px', color: chainData.pcr >= 1 ? 'var(--color-profit)' : 'var(--color-loss)' }}>
@@ -381,7 +381,7 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
             <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
               F&O Lot Size
             </span>
-            <div className="tabular-nums" style={{ fontSize: '20px', fontWeight: 800, color: '#FFFFFF', marginTop: '2px' }}>
+            <div className="tabular-nums" style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-main)', marginTop: '2px' }}>
               {chainData.lot_size} units
             </div>
             <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
@@ -395,7 +395,7 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
               <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>
                 Max Pain Strike
               </span>
-              <div className="tabular-nums" style={{ fontSize: '20px', fontWeight: 800, color: '#FFFFFF', marginTop: '2px' }}>
+              <div className="tabular-nums" style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-main)', marginTop: '2px' }}>
                 ₹{chainData.max_pain.toLocaleString('en-IN')}
               </div>
               <span style={{ fontSize: '11px', color: 'var(--text-faint)' }}>
@@ -420,7 +420,7 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#FFFFFF', margin: 0 }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>
               Strikes Ledger
             </h3>
             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
@@ -437,7 +437,7 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
                 borderRadius: '4px',
                 fontSize: '12px',
                 fontWeight: 600,
-                backgroundColor: strikeFilter === 'NEAR_ATM' ? 'var(--color-primary)' : 'rgba(255, 255, 255, 0.05)',
+                backgroundColor: strikeFilter === 'NEAR_ATM' ? 'var(--color-primary)' : 'var(--bg-subtle)',
                 color: strikeFilter === 'NEAR_ATM' ? '#FFFFFF' : 'var(--text-muted)',
                 border: 'none',
                 cursor: 'pointer',
@@ -452,7 +452,7 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
                 borderRadius: '4px',
                 fontSize: '12px',
                 fontWeight: 600,
-                backgroundColor: strikeFilter === 'ALL' ? 'var(--color-primary)' : 'rgba(255, 255, 255, 0.05)',
+                backgroundColor: strikeFilter === 'ALL' ? 'var(--color-primary)' : 'var(--bg-subtle)',
                 color: strikeFilter === 'ALL' ? '#FFFFFF' : 'var(--text-muted)',
                 border: 'none',
                 cursor: 'pointer',
@@ -505,8 +505,8 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
                   <th
                     style={{
                       padding: '10px',
-                      backgroundColor: 'rgba(255, 255, 255, 0.04)',
-                      color: '#FFFFFF',
+                      backgroundColor: 'var(--bg-subtle)',
+                      color: 'var(--text-main)',
                       fontSize: '12px',
                       fontWeight: 800,
                       letterSpacing: '0.05em',
@@ -628,7 +628,7 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
                           <span
                             className="tabular-nums"
                             style={{
-                              color: isCallItm ? 'var(--color-profit)' : '#FFFFFF',
+                              color: isCallItm ? 'var(--color-profit)' : 'var(--text-main)',
                               fontWeight: 700,
                               fontSize: '14px',
                             }}
@@ -684,7 +684,7 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
                           padding: '12px 14px',
                           borderRight: '1px solid var(--border-subtle)',
                           borderLeft: '1px solid var(--border-subtle)',
-                          backgroundColor: isAtm ? 'rgba(242, 154, 96, 0.18)' : 'rgba(255, 255, 255, 0.02)',
+                          backgroundColor: isAtm ? 'rgba(242, 154, 96, 0.18)' : 'var(--bg-subtle)',
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
@@ -693,7 +693,7 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
                             style={{
                               fontWeight: 800,
                               fontSize: isAtm ? '15px' : '13px',
-                              color: isAtm ? '#FFFFFF' : 'var(--text-muted)',
+                              color: isAtm ? 'var(--color-action)' : 'var(--text-main)',
                             }}
                           >
                             {row.strike_price.toLocaleString('en-IN')}
@@ -704,7 +704,7 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
                                 fontSize: '9px',
                                 fontWeight: 800,
                                 backgroundColor: 'var(--color-action)',
-                                color: '#000000',
+                                color: '#FFFFFF',
                                 padding: '1px 4px',
                                 borderRadius: '3px',
                               }}
@@ -753,7 +753,7 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
                           <span
                             className="tabular-nums"
                             style={{
-                              color: isPutItm ? 'var(--color-loss)' : '#FFFFFF',
+                              color: isPutItm ? 'var(--color-loss)' : 'var(--text-main)',
                               fontWeight: 700,
                               fontSize: '14px',
                             }}
@@ -832,7 +832,7 @@ export const OptionChainView: React.FC<OptionChainViewProps> = ({
             }}
           >
             <span>
-              Source: <strong style={{ color: '#FFFFFF' }}>{chainData.source}</strong> • Observed at:{' '}
+              Source: <strong style={{ color: 'var(--text-main)' }}>{chainData.source}</strong> • Observed at:{' '}
               {chainData.observed_at ? new Date(chainData.observed_at).toLocaleString('en-IN') : 'Live'}
             </span>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-faint)' }}>

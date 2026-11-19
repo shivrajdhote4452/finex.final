@@ -7,6 +7,7 @@ import {
 } from 'lightweight-charts';
 import { apiClient } from '../../api/client';
 import { useFinancial } from '../../context/FinancialContext';
+import { useTheme } from '../../context/ThemeContext';
 
 export interface TradeTimeMachineProps {
   initialSymbol?: string;
@@ -65,6 +66,8 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
   onPriceUpdate,
 }) => {
   const { virtualCash, executeOrder } = useFinancial();
+  const { resolvedTheme } = useTheme();
+  const isLight = resolvedTheme === 'light';
 
   // Configuration State
   const [symbol, setSymbol] = useState<string>(initialSymbol);
@@ -235,13 +238,13 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
 
     const chart = createChart(container, {
       layout: {
-        background: { type: ColorType.Solid, color: '#090D14' },
-        textColor: '#94A3B8',
+        background: { type: ColorType.Solid, color: isLight ? '#FFFFFF' : '#090D14' },
+        textColor: isLight ? '#475569' : '#94A3B8',
         fontSize: 12,
       },
       grid: {
-        vertLines: { color: 'rgba(255, 255, 255, 0.05)' },
-        horzLines: { color: 'rgba(255, 255, 255, 0.05)' },
+        vertLines: { color: isLight ? 'rgba(0, 0, 0, 0.06)' : 'rgba(255, 255, 255, 0.05)' },
+        horzLines: { color: isLight ? 'rgba(0, 0, 0, 0.06)' : 'rgba(255, 255, 255, 0.05)' },
       },
       crosshair: {
         vertLine: { color: '#F59E0B', width: 1, style: 2 },
@@ -260,7 +263,7 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
         },
       },
       timeScale: {
-        borderColor: 'rgba(245, 158, 11, 0.25)',
+        borderColor: isLight ? 'rgba(217, 107, 39, 0.3)' : 'rgba(245, 158, 11, 0.25)',
         timeVisible: true,
         secondsVisible: false,
         barSpacing: 9,
@@ -280,7 +283,7 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
         },
       },
       rightPriceScale: {
-        borderColor: 'rgba(245, 158, 11, 0.25)',
+        borderColor: isLight ? 'rgba(217, 107, 39, 0.3)' : 'rgba(245, 158, 11, 0.25)',
         scaleMargins: { top: 0.1, bottom: 0.15 },
         autoScale: true,
       },
@@ -321,6 +324,27 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
       chart.remove();
     };
   }, []);
+
+  // Dynamically update chart styling when theme toggles
+  useEffect(() => {
+    if (!chartInstanceRef.current) return;
+    chartInstanceRef.current.applyOptions({
+      layout: {
+        background: { type: ColorType.Solid, color: isLight ? '#FFFFFF' : '#090D14' },
+        textColor: isLight ? '#475569' : '#94A3B8',
+      },
+      grid: {
+        vertLines: { color: isLight ? 'rgba(0, 0, 0, 0.06)' : 'rgba(255, 255, 255, 0.05)' },
+        horzLines: { color: isLight ? 'rgba(0, 0, 0, 0.06)' : 'rgba(255, 255, 255, 0.05)' },
+      },
+      timeScale: {
+        borderColor: isLight ? 'rgba(217, 107, 39, 0.3)' : 'rgba(245, 158, 11, 0.25)',
+      },
+      rightPriceScale: {
+        borderColor: isLight ? 'rgba(217, 107, 39, 0.3)' : 'rgba(245, 158, 11, 0.25)',
+      },
+    });
+  }, [isLight]);
 
   // 3. Update Chart on step change
   useEffect(() => {
@@ -491,8 +515,8 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
         flexDirection: 'column',
         height: '100%',
         width: '100%',
-        backgroundColor: '#090D14',
-        color: '#E2E8F0',
+        backgroundColor: 'var(--bg-app)',
+        color: 'var(--text-main)',
         fontFamily: 'Inter, system-ui, sans-serif',
         overflow: 'hidden',
         position: 'relative',
@@ -506,9 +530,9 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: '8px 16px',
-          backgroundColor: '#171206',
-          borderBottom: '1px solid rgba(245, 158, 11, 0.4)',
-          color: '#FBBF24',
+          backgroundColor: isLight ? 'rgba(217, 107, 39, 0.08)' : '#171206',
+          borderBottom: isLight ? '1px solid rgba(217, 107, 39, 0.25)' : '1px solid rgba(245, 158, 11, 0.4)',
+          color: isLight ? 'var(--color-action)' : '#FBBF24',
           fontSize: '11px',
           fontWeight: 700,
           flexShrink: 0,
@@ -541,7 +565,7 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
           >
             TRADE TIME MACHINE
           </span>
-          <span style={{ color: '#FCD34D', letterSpacing: '0.3px', fontWeight: 700 }}>
+          <span style={{ color: isLight ? 'var(--color-action)' : '#FCD34D', letterSpacing: '0.3px', fontWeight: 700 }}>
             REPLAY — {symbol} — {selectedDate} — past NSE data, not live
           </span>
         </div>
@@ -551,27 +575,27 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
             <>
               <span
                 style={{
-                  backgroundColor: '#0F172A',
-                  border: '1px solid rgba(245, 158, 11, 0.3)',
+                  backgroundColor: isLight ? 'var(--bg-card)' : '#0F172A',
+                  border: `1px solid ${isLight ? 'var(--border-subtle)' : 'rgba(245, 158, 11, 0.3)'}`,
                   padding: '2px 8px',
                   borderRadius: '4px',
                   fontSize: '11px',
-                  color: '#94A3B8',
+                  color: isLight ? 'var(--text-muted)' : '#94A3B8',
                 }}
               >
-                🕐 <strong style={{ color: '#FFFFFF' }}>{currentCandle.timeStr || '09:15'} IST</strong>
+                🕐 <strong style={{ color: isLight ? 'var(--text-main)' : '#FFFFFF' }}>{currentCandle.timeStr || '09:15'} IST</strong>
                 {' '}(Bar {currentStep + 1}/{allCandles.length})
               </span>
               <span
                 style={{
-                  backgroundColor: '#0F172A',
-                  border: '1px solid rgba(245, 158, 11, 0.3)',
+                  backgroundColor: isLight ? 'var(--bg-card)' : '#0F172A',
+                  border: `1px solid ${isLight ? 'var(--border-subtle)' : 'rgba(245, 158, 11, 0.3)'}`,
                   padding: '2px 8px',
                   borderRadius: '4px',
                   fontSize: '11px',
                 }}
               >
-                LTP: <strong style={{ color: '#FFFFFF' }}>₹{currentCandle.close.toFixed(2)}</strong>
+                LTP: <strong style={{ color: isLight ? 'var(--text-main)' : '#FFFFFF' }}>₹{currentCandle.close.toFixed(2)}</strong>
                 {' '}
                 <span style={{ color: isPositiveDay ? '#10B981' : '#EF4444', fontWeight: 600 }}>
                   ({isPositiveDay ? '+' : ''}{dayChangePct.toFixed(2)}%)
@@ -603,8 +627,8 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: '8px 16px',
-          backgroundColor: '#0D1117',
-          borderBottom: '1px solid #1E293B',
+          backgroundColor: isLight ? 'var(--bg-card)' : '#0D1117',
+          borderBottom: isLight ? '1px solid var(--border-subtle)' : '1px solid #1E293B',
           fontSize: '12px',
           gap: '12px',
           flexWrap: 'wrap',
@@ -613,14 +637,14 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
       >
         {/* Symbol & Date Pickers */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <label style={{ color: '#94A3B8', fontSize: '11px', fontWeight: 600 }}>Symbol:</label>
+          <label style={{ color: isLight ? 'var(--text-muted)' : '#94A3B8', fontSize: '11px', fontWeight: 600 }}>Symbol:</label>
           <select
             value={symbol}
             onChange={(e) => setSymbol(e.target.value)}
             style={{
-              backgroundColor: '#1E293B',
-              color: '#FFFFFF',
-              border: '1px solid #334155',
+              backgroundColor: isLight ? 'var(--bg-subtle)' : '#1E293B',
+              color: isLight ? 'var(--text-main)' : '#FFFFFF',
+              border: isLight ? '1px solid var(--border-medium)' : '1px solid #334155',
               borderRadius: '4px',
               padding: '4px 8px',
               fontSize: '11px',
@@ -635,7 +659,7 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
             ))}
           </select>
 
-          <label style={{ color: '#94A3B8', fontSize: '11px', fontWeight: 600, marginLeft: '6px' }}>
+          <label style={{ color: isLight ? 'var(--text-muted)' : '#94A3B8', fontSize: '11px', fontWeight: 600, marginLeft: '6px' }}>
             Trading Date:
           </label>
           <input
@@ -644,9 +668,9 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
             max="2026-11-10"
             onChange={(e) => setSelectedDate(e.target.value)}
             style={{
-              backgroundColor: '#1E293B',
-              color: '#FFFFFF',
-              border: '1px solid #334155',
+              backgroundColor: isLight ? 'var(--bg-subtle)' : '#1E293B',
+              color: isLight ? 'var(--text-main)' : '#FFFFFF',
+              border: isLight ? '1px solid var(--border-medium)' : '1px solid #334155',
               borderRadius: '4px',
               padding: '3px 8px',
               fontSize: '11px',
@@ -659,9 +683,9 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
             <button
               onClick={() => setSelectedDate('2026-10-16')}
               style={{
-                backgroundColor: selectedDate === '2026-10-16' ? '#2563EB' : 'rgba(255, 255, 255, 0.05)',
-                color: selectedDate === '2026-10-16' ? '#FFFFFF' : '#94A3B8',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
+                backgroundColor: selectedDate === '2026-10-16' ? '#2563EB' : (isLight ? 'var(--bg-subtle)' : 'rgba(255, 255, 255, 0.05)'),
+                color: selectedDate === '2026-10-16' ? '#FFFFFF' : (isLight ? 'var(--text-muted)' : '#94A3B8'),
+                border: isLight ? '1px solid var(--border-subtle)' : '1px solid rgba(255, 255, 255, 0.1)',
                 borderRadius: '4px',
                 padding: '2px 8px',
                 fontSize: '10px',
@@ -675,9 +699,9 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
             <button
               onClick={() => setSelectedDate('2026-10-15')}
               style={{
-                backgroundColor: selectedDate === '2026-10-15' ? '#2563EB' : 'rgba(255, 255, 255, 0.05)',
-                color: selectedDate === '2026-10-15' ? '#FFFFFF' : '#94A3B8',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
+                backgroundColor: selectedDate === '2026-10-15' ? '#2563EB' : (isLight ? 'var(--bg-subtle)' : 'rgba(255, 255, 255, 0.05)'),
+                color: selectedDate === '2026-10-15' ? '#FFFFFF' : (isLight ? 'var(--text-muted)' : '#94A3B8'),
+                border: isLight ? '1px solid var(--border-subtle)' : '1px solid rgba(255, 255, 255, 0.1)',
                 borderRadius: '4px',
                 padding: '2px 8px',
                 fontSize: '10px',
@@ -713,9 +737,9 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
             <button
               onClick={handleRestart}
               style={{
-                backgroundColor: '#1E293B',
-                color: '#E2E8F0',
-                border: '1px solid #334155',
+                backgroundColor: isLight ? 'var(--bg-subtle)' : '#1E293B',
+                color: isLight ? 'var(--text-main)' : '#E2E8F0',
+                border: isLight ? '1px solid var(--border-subtle)' : '1px solid #334155',
                 borderRadius: '4px',
                 padding: '4px 8px',
                 fontSize: '11px',
@@ -730,9 +754,9 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
               onClick={handleStepBackward}
               disabled={currentStep === 0}
               style={{
-                backgroundColor: '#1E293B',
-                color: currentStep === 0 ? '#64748B' : '#E2E8F0',
-                border: '1px solid #334155',
+                backgroundColor: isLight ? 'var(--bg-subtle)' : '#1E293B',
+                color: currentStep === 0 ? 'var(--text-muted)' : (isLight ? 'var(--text-main)' : '#E2E8F0'),
+                border: isLight ? '1px solid var(--border-subtle)' : '1px solid #334155',
                 borderRadius: '4px',
                 padding: '4px 8px',
                 fontSize: '11px',
@@ -766,9 +790,9 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
               onClick={handleStepForward}
               disabled={currentStep >= allCandles.length - 1}
               style={{
-                backgroundColor: '#1E293B',
-                color: currentStep >= allCandles.length - 1 ? '#64748B' : '#E2E8F0',
-                border: '1px solid #334155',
+                backgroundColor: isLight ? 'var(--bg-subtle)' : '#1E293B',
+                color: currentStep >= allCandles.length - 1 ? 'var(--text-muted)' : (isLight ? 'var(--text-main)' : '#E2E8F0'),
+                border: isLight ? '1px solid var(--border-subtle)' : '1px solid #334155',
                 borderRadius: '4px',
                 padding: '4px 8px',
                 fontSize: '11px',
@@ -781,14 +805,14 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
             </button>
 
             {/* Speed Selector */}
-            <div style={{ display: 'flex', backgroundColor: '#1E293B', borderRadius: '4px', padding: '1px' }}>
+            <div style={{ display: 'flex', backgroundColor: isLight ? 'var(--bg-subtle)' : '#1E293B', borderRadius: '4px', padding: '1px' }}>
               {([1, 4, 16] as const).map((s) => (
                 <button
                   key={s}
                   onClick={() => setSpeed(s)}
                   style={{
                     backgroundColor: speed === s ? '#F59E0B' : 'transparent',
-                    color: speed === s ? '#000000' : '#94A3B8',
+                    color: speed === s ? '#000000' : (isLight ? 'var(--text-muted)' : '#94A3B8'),
                     border: 'none',
                     borderRadius: '3px',
                     padding: '2px 7px',
@@ -812,14 +836,14 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
             display: 'flex',
             alignItems: 'center',
             padding: '4px 16px',
-            backgroundColor: '#090D14',
-            borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
+            backgroundColor: isLight ? 'var(--bg-card)' : '#090D14',
+            borderBottom: isLight ? '1px solid var(--border-subtle)' : '1px solid rgba(255, 255, 255, 0.05)',
             gap: '12px',
             flexShrink: 0,
             fontSize: '11px',
           }}
         >
-          <span style={{ color: '#64748B', flexShrink: 0 }}>09:15 IST</span>
+          <span style={{ color: isLight ? 'var(--text-muted)' : '#64748B', flexShrink: 0 }}>09:15 IST</span>
           <input
             type="range"
             min={0}
@@ -836,7 +860,7 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
               height: '4px',
             }}
           />
-          <span style={{ color: '#64748B', flexShrink: 0 }}>15:30 IST</span>
+          <span style={{ color: isLight ? 'var(--text-muted)' : '#64748B', flexShrink: 0 }}>15:30 IST</span>
         </div>
       )}
 
@@ -867,7 +891,7 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                backgroundColor: '#090D14',
+                backgroundColor: 'var(--bg-app)',
                 zIndex: 20,
                 gap: '12px',
               }}
@@ -877,12 +901,12 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
                   width: '32px',
                   height: '32px',
                   border: '3px solid rgba(245, 158, 11, 0.2)',
-                  borderTopColor: '#F59E0B',
+                  borderTopColor: 'var(--color-action)',
                   borderRadius: '50%',
                   animation: 'spin 1s linear infinite',
                 }}
               />
-              <span style={{ color: '#FCD34D', fontSize: '13px', fontWeight: 600 }}>
+              <span style={{ color: isLight ? 'var(--color-action)' : '#FCD34D', fontSize: '13px', fontWeight: 600 }}>
                 Loading verified historical candles for {symbol} ({selectedDate})...
               </span>
             </div>
@@ -901,7 +925,7 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                backgroundColor: '#090D14',
+                backgroundColor: 'var(--bg-app)',
                 zIndex: 20,
                 padding: '32px',
                 textAlign: 'center',
@@ -910,11 +934,17 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
               <div
                 style={{
                   maxWidth: '560px',
-                  backgroundColor: '#0F172A',
-                  border: `1px solid ${emptyState.type === 'holiday' ? 'rgba(239, 68, 68, 0.4)' : 'rgba(148, 163, 184, 0.2)'}`,
+                  backgroundColor: isLight ? 'var(--bg-card)' : '#0F172A',
+                  border: `1px solid ${
+                    emptyState.type === 'holiday'
+                      ? 'rgba(239, 68, 68, 0.4)'
+                      : isLight
+                        ? 'var(--border-subtle)'
+                        : 'rgba(148, 163, 184, 0.2)'
+                  }`,
                   borderRadius: '12px',
                   padding: '28px',
-                  boxShadow: '0 12px 32px rgba(0, 0, 0, 0.6)',
+                  boxShadow: isLight ? '0 12px 32px rgba(0, 0, 0, 0.08)' : '0 12px 32px rgba(0, 0, 0, 0.6)',
                 }}
               >
                 <div style={{ fontSize: '36px', marginBottom: '12px' }}>
@@ -924,7 +954,7 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
                   style={{
                     fontSize: '17px',
                     fontWeight: 700,
-                    color: emptyState.type === 'holiday' ? '#F87171' : '#E2E8F0',
+                    color: emptyState.type === 'holiday' ? '#F87171' : 'var(--text-main)',
                     margin: '0 0 8px 0',
                   }}
                 >
@@ -932,7 +962,7 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
                     ? `NSE Closed — ${emptyState.holidayName || 'Market Holiday'}`
                     : `No Historical Candles for ${symbol}`}
                 </h3>
-                <p style={{ fontSize: '13px', color: '#94A3B8', lineHeight: '1.6', margin: '0 0 20px 0' }}>
+                <p style={{ fontSize: '13px', color: isLight ? 'var(--text-muted)' : '#94A3B8', lineHeight: '1.6', margin: '0 0 20px 0' }}>
                   {emptyState.message}
                 </p>
 
@@ -961,9 +991,9 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
                       setSymbol('TCS');
                     }}
                     style={{
-                      backgroundColor: '#1E293B',
-                      color: '#94A3B8',
-                      border: '1px solid #334155',
+                      backgroundColor: isLight ? 'var(--bg-subtle)' : '#1E293B',
+                      color: isLight ? 'var(--text-muted)' : '#94A3B8',
+                      border: isLight ? '1px solid var(--border-subtle)' : '1px solid #334155',
                       borderRadius: '6px',
                       padding: '8px 16px',
                       fontSize: '12px',
@@ -984,8 +1014,8 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
           <div
             style={{
               width: '280px',
-              backgroundColor: '#0B0F19',
-              borderLeft: '1px solid #1E293B',
+              backgroundColor: isLight ? 'var(--bg-card)' : '#0B0F19',
+              borderLeft: isLight ? '1px solid var(--border-subtle)' : '1px solid #1E293B',
               display: 'flex',
               flexDirection: 'column',
               padding: '16px',
@@ -995,10 +1025,10 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
             }}
           >
             <div>
-              <div style={{ fontSize: '10px', color: '#F59E0B', fontWeight: 800, letterSpacing: '0.5px' }}>
+              <div style={{ fontSize: '10px', color: 'var(--color-action)', fontWeight: 800, letterSpacing: '0.5px' }}>
                 REPLAY PAPER TRADE
               </div>
-              <h4 style={{ margin: '2px 0 0 0', fontSize: '15px', color: '#FFFFFF', fontWeight: 700 }}>
+              <h4 style={{ margin: '2px 0 0 0', fontSize: '15px', color: 'var(--text-main)', fontWeight: 700 }}>
                 {symbol} Order Ticket
               </h4>
             </div>
@@ -1006,8 +1036,8 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
             {/* Price Card */}
             <div
               style={{
-                backgroundColor: '#111827',
-                border: '1px solid #1F2937',
+                backgroundColor: isLight ? 'var(--bg-subtle)' : '#111827',
+                border: isLight ? '1px solid var(--border-subtle)' : '1px solid #1F2937',
                 borderRadius: '6px',
                 padding: '10px 12px',
                 display: 'flex',
@@ -1015,20 +1045,20 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
                 gap: '4px',
               }}
             >
-              <span style={{ fontSize: '10px', color: '#94A3B8' }}>Replay Close Price:</span>
-              <div style={{ fontSize: '20px', fontWeight: 800, color: '#FFFFFF' }}>
+              <span style={{ fontSize: '10px', color: isLight ? 'var(--text-muted)' : '#94A3B8' }}>Replay Close Price:</span>
+              <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-main)' }}>
                 ₹{currentCandle.close.toFixed(2)}
               </div>
-              <span style={{ fontSize: '10px', color: '#64748B' }}>
+              <span style={{ fontSize: '10px', color: isLight ? 'var(--text-muted)' : '#64748B' }}>
                 Open: ₹{currentCandle.open.toFixed(2)} | High: ₹{currentCandle.high.toFixed(2)} | Low: ₹{currentCandle.low.toFixed(2)}
               </span>
             </div>
 
             {/* Shares Quantity Selector */}
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#94A3B8', marginBottom: '6px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: isLight ? 'var(--text-muted)' : '#94A3B8', marginBottom: '6px' }}>
                 <span>Shares:</span>
-                <span style={{ color: '#FFFFFF', fontWeight: 700 }}>{orderQty} shares</span>
+                <span style={{ color: 'var(--text-main)', fontWeight: 700 }}>{orderQty} shares</span>
               </div>
               <div style={{ display: 'flex', gap: '4px' }}>
                 {[1, 5, 10, 25].map((q) => (
@@ -1037,9 +1067,9 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
                     onClick={() => setOrderQty(q)}
                     style={{
                       flex: 1,
-                      backgroundColor: orderQty === q ? '#F59E0B' : '#1E293B',
-                      color: orderQty === q ? '#000000' : '#E2E8F0',
-                      border: 'none',
+                      backgroundColor: orderQty === q ? 'var(--color-action)' : (isLight ? 'var(--bg-subtle)' : '#1E293B'),
+                      color: orderQty === q ? '#FFFFFF' : (isLight ? 'var(--text-main)' : '#E2E8F0'),
+                      border: orderQty === q ? 'none' : (isLight ? '1px solid var(--border-subtle)' : 'none'),
                       borderRadius: '4px',
                       padding: '5px 0',
                       fontSize: '11px',
@@ -1054,14 +1084,14 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
             </div>
 
             {/* Order Value & Available Cash */}
-            <div style={{ fontSize: '11px', display: 'flex', flexDirection: 'column', gap: '4px', color: '#94A3B8' }}>
+            <div style={{ fontSize: '11px', display: 'flex', flexDirection: 'column', gap: '4px', color: isLight ? 'var(--text-muted)' : '#94A3B8' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span>Estimated Total:</span>
-                <strong style={{ color: '#FCD34D' }}>₹{(currentCandle.close * orderQty).toFixed(2)}</strong>
+                <strong style={{ color: 'var(--color-action)' }}>₹{(currentCandle.close * orderQty).toFixed(2)}</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span>Paper Cash:</span>
-                <strong style={{ color: '#FFFFFF' }}>₹{virtualCash.toLocaleString('en-IN')}</strong>
+                <strong style={{ color: 'var(--text-main)' }}>₹{virtualCash.toLocaleString('en-IN')}</strong>
               </div>
             </div>
 
@@ -1071,8 +1101,8 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
                 onClick={() => handleExecuteReplayTrade('BUY')}
                 disabled={isExecutingTrade || currentCandle.close * orderQty > virtualCash}
                 style={{
-                  backgroundColor: '#10B981',
-                  color: '#FFFFFF',
+                  backgroundColor: 'var(--color-profit)',
+                  color: 'var(--color-profit-contrast, #FFFFFF)',
                   border: 'none',
                   borderRadius: '6px',
                   padding: '10px 0',
@@ -1088,8 +1118,8 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
                 onClick={() => handleExecuteReplayTrade('SELL')}
                 disabled={isExecutingTrade}
                 style={{
-                  backgroundColor: '#EF4444',
-                  color: '#FFFFFF',
+                  backgroundColor: 'var(--color-loss)',
+                  color: 'var(--color-loss-contrast, #FFFFFF)',
                   border: 'none',
                   borderRadius: '6px',
                   padding: '10px 0',
@@ -1111,7 +1141,7 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
                   borderRadius: '6px',
                   padding: '8px 10px',
                   fontSize: '11px',
-                  color: tradeConfirmation.type === 'success' ? '#34D399' : '#F87171',
+                  color: tradeConfirmation.type === 'success' ? '#10B981' : '#EF4444',
                   lineHeight: '1.4',
                 }}
               >
@@ -1121,8 +1151,8 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
 
             {/* Session Replay Trade History */}
             {sessionTrades.length > 0 && (
-              <div style={{ marginTop: 'auto', borderTop: '1px solid #1E293B', paddingTop: '10px' }}>
-                <div style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 700, marginBottom: '6px' }}>
+              <div style={{ marginTop: 'auto', borderTop: isLight ? '1px solid var(--border-subtle)' : '1px solid #1E293B', paddingTop: '10px' }}>
+                <div style={{ fontSize: '10px', color: isLight ? 'var(--text-muted)' : '#94A3B8', fontWeight: 700, marginBottom: '6px' }}>
                   SESSION REPLAY TRADES ({sessionTrades.length})
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '120px', overflowY: 'auto' }}>
@@ -1130,7 +1160,8 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
                     <div
                       key={t.id}
                       style={{
-                        backgroundColor: '#1E293B',
+                        backgroundColor: isLight ? 'var(--bg-subtle)' : '#1E293B',
+                        border: isLight ? '1px solid var(--border-subtle)' : 'none',
                         borderRadius: '4px',
                         padding: '4px 6px',
                         fontSize: '10px',
@@ -1141,7 +1172,7 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
                       <span style={{ color: t.side === 'BUY' ? '#10B981' : '#EF4444', fontWeight: 700 }}>
                         {t.side} {t.shares} @ ₹{t.price.toFixed(2)}
                       </span>
-                      <span style={{ color: '#64748B' }}>{t.timeIST}</span>
+                      <span style={{ color: isLight ? 'var(--text-muted)' : '#64748B' }}>{t.timeIST}</span>
                     </div>
                   ))}
                 </div>

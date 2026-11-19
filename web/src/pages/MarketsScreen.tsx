@@ -1158,25 +1158,25 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate, initia
               ← Back to {marketView === 'indices' ? 'Indices' : 'Instruments'}
             </button>
             <span style={{ color: 'var(--text-faint)' }}>/</span>
-            <span style={{ color: '#FFFFFF', fontWeight: 600 }}>{idxItem.display_name}</span>
+            <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>{idxItem.display_name}</span>
           </div>
 
           {/* Header Ribbon */}
           <div className="glass-card" style={{ padding: '28px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '20px' }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                <h1 style={{ fontSize: '32px', fontWeight: 700, color: '#FFFFFF', margin: 0 }}>
+                <h1 style={{ fontSize: '32px', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>
                   {idxItem.display_name}
                 </h1>
                 <span className="badge badge-neutral">{idxItem.exchange}: {idxItem.symbol}</span>
                 <span className="badge badge-cyan">{idxItem.category === 'headline' ? 'Headline · Tier 1' : 'Sectoral · Tier 2'}</span>
-                <span className="badge badge-neutral" style={{ border: '1px solid rgba(242, 154, 96, 0.4)', color: '#F29A60' }}>
+                <span className="badge badge-neutral" style={{ border: '1px solid rgba(242, 154, 96, 0.4)', color: 'var(--color-action)' }}>
                   Benchmark Index
                 </span>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'baseline', gap: '16px', marginTop: '12px', flexWrap: 'wrap' }}>
-                <div className="tabular-nums" style={{ fontSize: '42px', fontWeight: 800, color: '#FFFFFF' }}>
+                <div className="tabular-nums" style={{ fontSize: '42px', fontWeight: 800, color: 'var(--text-main)' }}>
                   ₹{idxItem.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </div>
                 <span className={isPositive ? 'badge badge-profit' : 'badge badge-loss'} style={{ fontSize: '14px', padding: '4px 10px' }}>
@@ -1205,7 +1205,7 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate, initia
                   padding: '8px 14px',
                   borderRadius: 'var(--radius-sm)',
                   fontSize: '12px',
-                  color: '#F29A60',
+                  color: 'var(--color-action)',
                 }}
               >
                 <span>🛡️</span>
@@ -1227,7 +1227,7 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate, initia
             <div className="glass-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#FFFFFF', margin: 0 }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-main)', margin: 0 }}>
                     {idxItem.display_name} Price Action
                   </h3>
                   <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
@@ -1243,26 +1243,26 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate, initia
 
             {/* Index Fundamentals Sidebar */}
             <div className="glass-card" style={{ padding: '28px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#FFFFFF', margin: 0 }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-main)', margin: 0 }}>
                 Index Summary & Mechanics
               </h3>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '13px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
                   <span style={{ color: 'var(--text-muted)' }}>Day Range</span>
-                  <span className="tabular-nums" style={{ color: '#FFFFFF' }}>
+                  <span className="tabular-nums" style={{ color: 'var(--text-main)' }}>
                     ₹{idxItem.low_price?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) ?? '---'} - ₹{idxItem.high_price?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) ?? '---'}
                   </span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
                   <span style={{ color: 'var(--text-muted)' }}>Opening Level</span>
-                  <span className="tabular-nums" style={{ color: '#FFFFFF' }}>
+                  <span className="tabular-nums" style={{ color: 'var(--text-main)' }}>
                     ₹{idxItem.open_price?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) ?? '---'}
                   </span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
                   <span style={{ color: 'var(--text-muted)' }}>Exchange</span>
-                  <span style={{ color: '#FFFFFF', fontWeight: 600 }}>{idxItem.exchange} India</span>
+                  <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>{idxItem.exchange} India</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
                   <span style={{ color: 'var(--text-muted)' }}>Category & Tier</span>
@@ -1319,14 +1319,14 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate, initia
             ← Back to Instruments
           </button>
           <span style={{ color: 'var(--text-faint)' }}>/</span>
-          <span style={{ color: '#FFFFFF', fontWeight: 600 }}>{inst.symbol}</span>
+          <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>{inst.symbol}</span>
         </div>
 
         {/* Header Ribbon */}
         <div className="glass-card" style={{ padding: '28px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <h1 style={{ fontSize: '32px', fontWeight: 700, color: '#FFFFFF', margin: 0 }}>
+              <h1 style={{ fontSize: '32px', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>
                 {inst.name}
               </h1>
               <span className="badge badge-neutral">NSE: {inst.symbol}</span>
@@ -1334,7 +1334,7 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate, initia
             </div>
 
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '16px', marginTop: '12px' }}>
-              <div className="tabular-nums" style={{ fontSize: '42px', fontWeight: 800, color: '#FFFFFF' }}>
+              <div className="tabular-nums" style={{ fontSize: '42px', fontWeight: 800, color: 'var(--text-main)' }}>
                 ₹{inst.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </div>
               <span className={inst.isPositive ? 'badge badge-profit' : 'badge badge-loss'} style={{ fontSize: '14px', padding: '4px 10px' }}>
@@ -1364,12 +1364,12 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate, initia
           <div className="glass-card" style={{ padding: '28px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
               <div>
-                <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#FFFFFF' }}>Simulated Price History</h3>
+                <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-main)' }}>Simulated Price History</h3>
                 <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Historical daily candles from yfinance baseline</span>
               </div>
 
               {/* Timeframe Selectors */}
-              <div style={{ display: 'flex', gap: '4px', background: 'rgba(0, 0, 0, 0.3)', padding: '3px', borderRadius: 'var(--radius-xs)' }}>
+              <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-subtle)', padding: '3px', borderRadius: 'var(--radius-xs)' }}>
                 {(['1D', '1W', '1M', '1Y'] as const).map((period) => (
                   <button
                     key={period}
@@ -1423,26 +1423,26 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate, initia
 
           {/* Fundamentals Sidebar */}
           <div className="glass-card" style={{ padding: '28px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#FFFFFF', margin: 0 }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-main)', margin: 0 }}>
               Instrument Summary
             </h3>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '13px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Day Range</span>
-                <span className="tabular-nums" style={{ color: '#FFFFFF' }}>₹{inst.low} - ₹{inst.high}</span>
+                <span className="tabular-nums" style={{ color: 'var(--text-main)' }}>₹{inst.low} - ₹{inst.high}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Opening Price</span>
-                <span className="tabular-nums" style={{ color: '#FFFFFF' }}>₹{inst.open}</span>
+                <span className="tabular-nums" style={{ color: 'var(--text-main)' }}>₹{inst.open}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Volume</span>
-                <span className="tabular-nums" style={{ color: '#FFFFFF' }}>{inst.volume}</span>
+                <span className="tabular-nums" style={{ color: 'var(--text-main)' }}>{inst.volume}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Market Cap</span>
-                <span className="tabular-nums" style={{ color: '#FFFFFF' }}>{inst.mktCap}</span>
+                <span className="tabular-nums" style={{ color: 'var(--text-main)' }}>{inst.mktCap}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Data Provenance</span>
@@ -1560,7 +1560,7 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate, initia
               <span style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>
                 Macro & Benchmark Intelligence
               </span>
-              <h1 style={{ fontSize: 'clamp(22px, 5.5vw, 36px)', fontWeight: 700, color: '#FFFFFF', marginTop: '4px', letterSpacing: '-0.02em', wordBreak: 'break-word', lineHeight: 1.2 }}>
+              <h1 style={{ fontSize: 'clamp(22px, 5.5vw, 36px)', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px', letterSpacing: '-0.02em', wordBreak: 'break-word', lineHeight: 1.2 }}>
                 Indian Market Indices
               </h1>
               <p
@@ -1584,7 +1584,7 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate, initia
                   borderRadius: 'var(--radius-sm)',
                   border: '1px solid var(--border-medium)',
                   backgroundColor: 'var(--bg-input)',
-                  color: '#FFFFFF',
+                  color: 'var(--text-main)',
                   fontFamily: 'var(--font-sans)',
                   fontSize: '14px',
                   boxSizing: 'border-box',
@@ -1607,9 +1607,9 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate, initia
                 style={{
                   padding: '8px 16px',
                   borderRadius: 'var(--radius-sm)',
-                  border: indexCategoryFilter === cat.id ? '1px solid var(--color-primary)' : '1px solid var(--border-subtle)',
-                  background: indexCategoryFilter === cat.id ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.02)',
-                  color: indexCategoryFilter === cat.id ? '#FFFFFF' : 'var(--text-muted)',
+                  border: indexCategoryFilter === cat.id ? '1px solid var(--color-action)' : '1px solid var(--border-subtle)',
+                  background: indexCategoryFilter === cat.id ? 'var(--color-action-bg)' : 'var(--bg-subtle)',
+                  color: indexCategoryFilter === cat.id ? 'var(--color-action)' : 'var(--text-muted)',
                   fontSize: '13px',
                   fontWeight: indexCategoryFilter === cat.id ? 600 : 500,
                   cursor: 'pointer',
@@ -1670,7 +1670,7 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate, initia
                         </span>
                       </div>
 
-                      <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#FFFFFF', margin: '0 0 6px 0' }}>
+                      <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-main)', margin: '0 0 6px 0' }}>
                         {idx.display_name}
                       </h3>
                       <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0, lineHeight: 1.4, minHeight: '34px' }}>
@@ -1681,7 +1681,7 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate, initia
                     {/* Price & Sparkline Row */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', paddingTop: '10px', borderTop: '1px solid var(--border-subtle)' }}>
                       <div>
-                        <div className="tabular-nums" style={{ fontSize: '24px', fontWeight: 800, color: '#FFFFFF' }}>
+                        <div className="tabular-nums" style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-main)' }}>
                           ₹{idx.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </div>
                         <div style={{ marginTop: '4px' }}>
@@ -1726,7 +1726,7 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate, initia
               <span style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>
                 Market Intelligence
               </span>
-              <h1 style={{ fontSize: 'clamp(22px, 5.5vw, 36px)', fontWeight: 700, color: '#FFFFFF', marginTop: '4px', letterSpacing: '-0.02em', wordBreak: 'break-word', lineHeight: 1.2 }}>
+              <h1 style={{ fontSize: 'clamp(22px, 5.5vw, 36px)', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px', letterSpacing: '-0.02em', wordBreak: 'break-word', lineHeight: 1.2 }}>
                 Instruments & Watchlist
               </h1>
               <p
@@ -1750,7 +1750,7 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate, initia
                   borderRadius: 'var(--radius-sm)',
                   border: '1px solid var(--border-medium)',
                   backgroundColor: 'var(--bg-input)',
-                  color: '#FFFFFF',
+                  color: 'var(--text-main)',
                   fontFamily: 'var(--font-sans)',
                   fontSize: '14px',
                   boxSizing: 'border-box',
@@ -1779,9 +1779,9 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate, initia
                 style={{
                   padding: '8px 16px',
                   borderRadius: 'var(--radius-sm)',
-                  border: selectedSector === sec.id ? '1px solid var(--color-primary)' : '1px solid var(--border-subtle)',
-                  background: selectedSector === sec.id ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.02)',
-                  color: selectedSector === sec.id ? '#FFFFFF' : 'var(--text-muted)',
+                  border: selectedSector === sec.id ? '1px solid var(--color-action)' : '1px solid var(--border-subtle)',
+                  background: selectedSector === sec.id ? 'var(--color-action-bg)' : 'var(--bg-subtle)',
+                  color: selectedSector === sec.id ? 'var(--color-action)' : 'var(--text-muted)',
                   fontSize: '13px',
                   fontWeight: selectedSector === sec.id ? 600 : 500,
                   cursor: 'pointer',
@@ -1834,7 +1834,7 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate, initia
                               width: '36px',
                               height: '36px',
                               borderRadius: 'var(--radius-sm)',
-                              backgroundColor: 'rgba(255, 255, 255, 0.06)',
+                              backgroundColor: 'var(--bg-subtle)',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
@@ -1845,7 +1845,7 @@ export const MarketsScreen: React.FC<MarketsScreenProps> = ({ onNavigate, initia
                             {inst.symbol.slice(0, 2)}
                           </div>
                           <div className="truncate-text" style={{ maxWidth: '240px' }}>
-                            <strong style={{ color: '#FFFFFF', fontSize: '15px' }}>{inst.symbol}</strong>
+                            <strong style={{ color: 'var(--text-main)', fontSize: '15px' }}>{inst.symbol}</strong>
                             <div style={{ fontSize: '12px', color: 'var(--text-faint)' }} className="truncate-text">{inst.name}</div>
                           </div>
                         </div>

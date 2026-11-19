@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createChart, ColorType, IChartApi, ISeriesApi } from 'lightweight-charts';
 import { apiClient } from '../../api/client';
+import { useTheme } from '../../context/ThemeContext';
 
 interface FinExLiveChartProps {
   symbol: string;
@@ -149,7 +150,35 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
   const [cachedLabel, setCachedLabel] = useState<string | null>(null);
   const [noDataAvailable, setNoDataAvailable] = useState<boolean>(false);
 
+  const { resolvedTheme } = useTheme();
+  const isLight = resolvedTheme === 'light';
+
   const cleanSymbol = symbol.replace('.NS', '').replace('NSE:', '').trim().toUpperCase();
+
+  // Dynamic theme update for chart instance without reloading data
+  useEffect(() => {
+    if (!chartInstanceRef.current) return;
+    chartInstanceRef.current.applyOptions({
+      layout: {
+        background: { type: ColorType.Solid, color: isLight ? '#FFFFFF' : '#090D14' },
+        textColor: isLight ? '#475569' : '#94A3B8',
+      },
+      grid: {
+        vertLines: { color: isLight ? 'rgba(0, 0, 0, 0.05)' : 'rgba(255, 255, 255, 0.05)' },
+        horzLines: { color: isLight ? 'rgba(0, 0, 0, 0.05)' : 'rgba(255, 255, 255, 0.05)' },
+      },
+      crosshair: {
+        vertLine: { color: isLight ? '#D96B27' : '#6366F1', width: 1, style: 2 },
+        horzLine: { color: isLight ? '#D96B27' : '#6366F1', width: 1, style: 2 },
+      },
+      timeScale: {
+        borderColor: isLight ? '#E2E8F0' : 'rgba(255, 255, 255, 0.1)',
+      },
+      rightPriceScale: {
+        borderColor: isLight ? '#E2E8F0' : 'rgba(255, 255, 255, 0.1)',
+      },
+    });
+  }, [isLight]);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -160,17 +189,17 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
 
     const chart = createChart(container, {
       layout: {
-        background: { type: ColorType.Solid, color: '#090D14' },
-        textColor: '#94A3B8',
+        background: { type: ColorType.Solid, color: isLight ? '#FFFFFF' : '#090D14' },
+        textColor: isLight ? '#475569' : '#94A3B8',
         fontSize: 12,
       },
       grid: {
-        vertLines: { color: 'rgba(255, 255, 255, 0.05)' },
-        horzLines: { color: 'rgba(255, 255, 255, 0.05)' },
+        vertLines: { color: isLight ? 'rgba(0, 0, 0, 0.05)' : 'rgba(255, 255, 255, 0.05)' },
+        horzLines: { color: isLight ? 'rgba(0, 0, 0, 0.05)' : 'rgba(255, 255, 255, 0.05)' },
       },
       crosshair: {
-        vertLine: { color: '#6366F1', width: 1, style: 2 },
-        horzLine: { color: '#6366F1', width: 1, style: 2 },
+        vertLine: { color: isLight ? '#D96B27' : '#6366F1', width: 1, style: 2 },
+        horzLine: { color: isLight ? '#D96B27' : '#6366F1', width: 1, style: 2 },
       },
       localization: {
         locale: 'en-IN',
@@ -183,7 +212,7 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
         },
       },
       timeScale: {
-        borderColor: 'rgba(255, 255, 255, 0.1)',
+        borderColor: isLight ? '#E2E8F0' : 'rgba(255, 255, 255, 0.1)',
         timeVisible: true,
         secondsVisible: false,
         barSpacing: 8,
@@ -203,7 +232,7 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
         },
       },
       rightPriceScale: {
-        borderColor: 'rgba(255, 255, 255, 0.1)',
+        borderColor: isLight ? '#E2E8F0' : 'rgba(255, 255, 255, 0.1)',
         scaleMargins: { top: 0.08, bottom: 0.12 },
         autoScale: true,
       },
@@ -752,17 +781,17 @@ export const FinExLiveChart: React.FC<FinExLiveChartProps> = ({
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              backgroundColor: 'rgba(9, 13, 20, 0.92)',
+              backgroundColor: isLight ? 'rgba(255, 255, 255, 0.94)' : 'rgba(9, 13, 20, 0.92)',
               backdropFilter: 'blur(3px)',
               zIndex: 5,
               padding: 24,
               textAlign: 'center',
             }}
           >
-            <div style={{ fontSize: 15, fontWeight: 600, color: '#F1F5F9', marginBottom: 6 }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-main)', marginBottom: 6 }}>
               No market data available for this symbol
             </div>
-            <div style={{ fontSize: 12, color: '#94A3B8', maxWidth: 360, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', maxWidth: 360, lineHeight: 1.5 }}>
               Market data is currently offline. No cached or live candles exist for {cleanSymbol}.
             </div>
           </div>

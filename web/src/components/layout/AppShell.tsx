@@ -105,10 +105,10 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
                 className="mobile-only"
                 onClick={() => setIsMobileMenuOpen(false)}
                 style={{
-                  background: '#181818',
+                  background: 'var(--bg-card)',
                   border: '1px solid var(--border-subtle)',
                   borderRadius: 'var(--radius-xs)',
-                  color: '#FFFFFF',
+                  color: 'var(--text-main)',
                   padding: '4px 8px',
                   fontSize: '12px',
                   cursor: 'pointer',
@@ -131,11 +131,11 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
                       setIsMobileMenuOpen(false);
                     }}
                     style={{
-                      background: isActive ? '#141414' : 'transparent',
+                      background: isActive ? 'var(--bg-card-hover)' : 'transparent',
                       border: 'none',
                       borderLeft: isActive ? '2px solid var(--color-action)' : '2px solid transparent',
                       borderRadius: 'var(--radius-xs)',
-                      color: isActive ? '#FFFFFF' : 'var(--text-muted)',
+                      color: isActive ? 'var(--text-main)' : 'var(--text-muted)',
                       fontFamily: 'var(--font-sans)',
                       fontSize: '13px',
                       fontWeight: isActive ? 600 : 500,
@@ -149,8 +149,8 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
                     }}
                     onMouseEnter={(e) => {
                       if (!isActive) {
-                        e.currentTarget.style.color = '#FFFFFF';
-                        e.currentTarget.style.backgroundColor = '#101010';
+                        e.currentTarget.style.color = 'var(--text-main)';
+                        e.currentTarget.style.backgroundColor = 'var(--bg-card-hover)';
                       }
                     }}
                     onMouseLeave={(e) => {
@@ -164,8 +164,8 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
                     {item.badge !== undefined && (
                       <span
                         style={{
-                          backgroundColor: item.id === 'alerts' ? 'var(--color-loss)' : '#242424',
-                          color: '#FFFFFF',
+                          backgroundColor: item.id === 'alerts' ? 'var(--color-loss)' : 'var(--bg-subtle)',
+                          color: item.id === 'alerts' ? '#FFFFFF' : 'var(--text-main)',
                           fontSize: '10px',
                           fontWeight: 700,
                           borderRadius: '10px',
@@ -187,7 +187,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
             {/* Legal Educational Badge */}
             <div
               style={{
-                backgroundColor: '#101010',
+                backgroundColor: 'var(--bg-card)',
                 border: '1px solid var(--border-subtle)',
                 borderRadius: 'var(--radius-xs)',
                 padding: '10px 12px',
@@ -242,7 +242,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
                 style={{
                   background: 'transparent',
                   border: 'none',
-                  color: '#FFFFFF',
+                  color: 'var(--text-main)',
                   fontSize: '20px',
                   lineHeight: 1,
                   cursor: 'pointer',
@@ -258,7 +258,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
                 onClick={() => onNavigate('overview')}
                 style={{ display: 'flex', alignItems: 'baseline', gap: '2px', cursor: 'pointer' }}
               >
-                <span style={{ fontSize: '18px', fontWeight: 900, color: '#FFFFFF', letterSpacing: '-0.03em' }}>Fin</span>
+                <span style={{ fontSize: '18px', fontWeight: 900, color: 'var(--text-main)', letterSpacing: '-0.03em' }}>Fin</span>
                 <span style={{ fontSize: '18px', fontWeight: 900, color: 'var(--color-action)', letterSpacing: '-0.03em' }}>Ex</span>
               </div>
             </div>
@@ -339,7 +339,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
                   border: isSearchFocused ? '1px solid var(--color-action)' : '1px solid var(--border-subtle)',
                   borderRadius: 'var(--radius-xs)',
                   padding: '7px 64px 7px 12px',
-                  color: '#FFFFFF',
+                  color: 'var(--text-main)',
                   fontSize: '12px',
                   fontFamily: 'var(--font-sans)',
                   outline: 'none',
@@ -352,8 +352,8 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
                   right: '8px',
                   top: '50%',
                   transform: 'translateY(-50%)',
-                  backgroundColor: '#1C1C1C',
-                  border: '1px solid #2C2C2C',
+                  backgroundColor: 'var(--bg-subtle)',
+                  border: '1px solid var(--border-subtle)',
                   borderRadius: '3px',
                   padding: '1px 5px',
                   fontSize: '10px',
@@ -387,11 +387,11 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
                 )}
                 <div>
                   <span style={{ color: 'var(--text-muted)' }}>Holdings: </span>
-                  <span style={{ color: '#FFFFFF', fontWeight: 600 }}>₹{(totalHoldingsValue ?? 0).toLocaleString('en-IN')}</span>
+                  <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>₹{(totalHoldingsValue ?? 0).toLocaleString('en-IN')}</span>
                 </div>
                 <div>
                   <span style={{ color: 'var(--text-muted)' }}>Virtual cash: </span>
-                  <span style={{ color: '#FFFFFF', fontWeight: 600 }}>₹{(virtualCash ?? 0).toLocaleString('en-IN')}</span>
+                  <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>₹{(virtualCash ?? 0).toLocaleString('en-IN')}</span>
                 </div>
                 <div>
                   <span style={{ color: 'var(--text-muted)' }}>Total: </span>

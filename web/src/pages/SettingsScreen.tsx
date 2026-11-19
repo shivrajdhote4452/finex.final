@@ -80,7 +80,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
         <span style={{ fontSize: '11px', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-primary)', fontWeight: 600 }}>
           {isOwner ? 'User Preferences & Sandbox Governance' : 'User Preferences & Trading Rules'}
         </span>
-        <h1 style={{ fontSize: '36px', fontWeight: 700, color: '#FFFFFF', marginTop: '4px', letterSpacing: '-0.02em' }}>
+        <h1 style={{ fontSize: '36px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px', letterSpacing: '-0.02em' }}>
           Workspace Settings
         </h1>
         <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginTop: '4px' }}>
@@ -102,7 +102,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
               justifyContent: 'center',
               fontWeight: 800,
               fontSize: '20px',
-              color: '#000000',
+              color: '#FFFFFF',
               boxShadow: '0 0 16px rgba(242, 154, 96, 0.35)',
               marginBottom: '20px',
             }}
@@ -110,7 +110,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
             {initials}
           </div>
 
-          <h2 style={{ fontSize: '24px', fontWeight: 700, color: '#FFFFFF', margin: '0 0 4px 0' }}>
+          <h2 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-main)', margin: '0 0 4px 0' }}>
             {fullName}
           </h2>
           <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '28px' }}>
@@ -128,9 +128,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
                     textAlign: 'left',
                     padding: '10px 14px',
                     borderRadius: 'var(--radius-sm)',
-                    background: isActive ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
-                    border: isActive ? '1px solid var(--color-primary)' : '1px solid transparent',
-                    color: isActive ? '#FFFFFF' : 'var(--text-muted)',
+                    background: isActive ? 'var(--color-action-bg)' : 'transparent',
+                    border: isActive ? '1px solid var(--color-action)' : '1px solid transparent',
+                    color: isActive ? 'var(--color-action)' : 'var(--text-muted)',
                     fontWeight: isActive ? 600 : 500,
                     cursor: 'pointer',
                     fontSize: '13px',
@@ -167,14 +167,14 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
         <div className="glass-card" style={{ padding: '32px' }}>
           {activeSubTab === 'profile' && (
             <div>
-              <h3 style={{ fontSize: '18px', fontWeight: 600, color: '#FFFFFF', marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '20px' }}>
                 Investor Profile & Risk Parameters
               </h3>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '16px', borderBottom: '1px solid var(--border-subtle)' }}>
                   <div>
-                    <div style={{ fontSize: '14px', fontWeight: 600, color: '#FFFFFF' }}>Display Name</div>
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' }}>Display Name</div>
                     <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{fullName}</div>
                   </div>
                   <span className="badge badge-neutral">{isOwner ? 'Primary Admin' : 'Active Investor'}</span>
@@ -182,7 +182,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '16px', borderBottom: '1px solid var(--border-subtle)' }}>
                   <div>
-                    <div style={{ fontSize: '14px', fontWeight: 600, color: '#FFFFFF' }}>Assessed Risk Profile</div>
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' }}>Assessed Risk Profile</div>
                     <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Deterministic Score: 68/100 (Balanced Equity-Debt)</div>
                   </div>
                   <span className="badge badge-cyan">Moderate</span>
@@ -190,7 +190,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '16px', borderBottom: '1px solid var(--border-subtle)' }}>
                   <div>
-                    <div style={{ fontSize: '14px', fontWeight: 600, color: '#FFFFFF' }}>Investment Horizon</div>
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' }}>Investment Horizon</div>
                     <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>3 to 5 Years Capital Target</div>
                   </div>
                   <span className="badge badge-profit">3–5 Years</span>
@@ -223,7 +223,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
 
           {activeSubTab === 'security' && (
             <div>
-              <h3 style={{ fontSize: '18px', fontWeight: 600, color: '#FFFFFF', marginBottom: '8px' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '8px' }}>
                 Account Security &amp; Sign-In Methods
               </h3>
               <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '24px' }}>
@@ -233,9 +233,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                 {/* Linked Methods Status Card */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                  <div style={{ padding: '16px', borderRadius: 'var(--radius-sm)', backgroundColor: '#0A0A0C', border: '1px solid #1F1F23' }}>
+                  <div style={{ padding: '16px', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--bg-subtle)', border: '1px solid var(--border-subtle)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <strong style={{ fontSize: '13px', color: '#FFFFFF' }}>Google Sign-In</strong>
+                      <strong style={{ fontSize: '13px', color: 'var(--text-main)' }}>Google Sign-In</strong>
                       <span className="badge badge-profit">Connected</span>
                     </div>
                     <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
@@ -243,9 +243,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
                     </div>
                   </div>
 
-                  <div style={{ padding: '16px', borderRadius: 'var(--radius-sm)', backgroundColor: '#0A0A0C', border: '1px solid #1F1F23' }}>
+                  <div style={{ padding: '16px', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--bg-subtle)', border: '1px solid var(--border-subtle)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <strong style={{ fontSize: '13px', color: '#FFFFFF' }}>Email &amp; Password</strong>
+                      <strong style={{ fontSize: '13px', color: 'var(--text-main)' }}>Email &amp; Password</strong>
                       <span className={userProfile?.has_password ? 'badge badge-profit' : 'badge badge-neutral'}>
                         {userProfile?.has_password ? 'Password Active' : 'Not Set'}
                       </span>
@@ -259,8 +259,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
                 </div>
 
                 {/* Password Form Card */}
-                <div style={{ padding: '24px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(255, 255, 255, 0.02)', border: '1px solid #1F1F23' }}>
-                  <h4 style={{ fontSize: '15px', fontWeight: 600, color: '#FFFFFF', marginBottom: '6px' }}>
+                <div style={{ padding: '24px', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--bg-subtle)', border: '1px solid var(--border-subtle)' }}>
+                  <h4 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '6px' }}>
                     {userProfile?.has_password ? 'Change Account Password' : 'Set Account Password'}
                   </h4>
                   <p style={{ fontSize: '12.5px', color: 'var(--text-muted)', marginBottom: '18px' }}>
@@ -284,7 +284,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
                   <form onSubmit={handleSavePassword} style={{ maxWidth: '420px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
                     {userProfile?.has_password && (
                       <div>
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#A1A1AA', marginBottom: '4px', textTransform: 'uppercase' }}>
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>
                           Current Password
                         </label>
                         <input
@@ -293,13 +293,13 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
                           onChange={(e) => setCurrentPassword(e.target.value)}
                           required
                           placeholder="••••••••"
-                          style={{ width: '100%', padding: '9px 12px', backgroundColor: '#0A0A0C', border: '1px solid #27272A', borderRadius: 'var(--radius-xs)', color: '#FFFFFF', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }}
+                          style={{ width: '100%', padding: '9px 12px', backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-medium)', borderRadius: 'var(--radius-xs)', color: 'var(--text-main)', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }}
                         />
                       </div>
                     )}
 
                     <div>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#A1A1AA', marginBottom: '4px', textTransform: 'uppercase' }}>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>
                         New Password (min 8 characters)
                       </label>
                       <input
@@ -308,12 +308,12 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
                         onChange={(e) => setNewPassword(e.target.value)}
                         required
                         placeholder="••••••••"
-                        style={{ width: '100%', padding: '9px 12px', backgroundColor: '#0A0A0C', border: '1px solid #27272A', borderRadius: 'var(--radius-xs)', color: '#FFFFFF', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }}
+                        style={{ width: '100%', padding: '9px 12px', backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-medium)', borderRadius: 'var(--radius-xs)', color: 'var(--text-main)', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }}
                       />
                     </div>
 
                     <div>
-                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#A1A1AA', marginBottom: '4px', textTransform: 'uppercase' }}>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>
                         Confirm New Password
                       </label>
                       <input
@@ -322,7 +322,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
                         onChange={(e) => setConfirmPassword(e.target.value)}
                         required
                         placeholder="••••••••"
-                        style={{ width: '100%', padding: '9px 12px', backgroundColor: '#0A0A0C', border: '1px solid #27272A', borderRadius: 'var(--radius-xs)', color: '#FFFFFF', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }}
+                        style={{ width: '100%', padding: '9px 12px', backgroundColor: 'var(--bg-input)', border: '1px solid var(--border-medium)', borderRadius: 'var(--radius-xs)', color: 'var(--text-main)', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }}
                       />
                     </div>
 
@@ -335,7 +335,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
                           fontSize: '13px',
                           fontWeight: 600,
                           backgroundColor: 'var(--color-action)',
-                          color: '#000000',
+                          color: '#FFFFFF',
                           border: 'none',
                           borderRadius: 'var(--radius-xs)',
                           cursor: pwLoading ? 'not-allowed' : 'pointer',
@@ -366,7 +366,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
 
           {isOwner && activeSubTab === 'sandbox' && (
             <div>
-              <h3 style={{ fontSize: '18px', fontWeight: 600, color: '#FFFFFF', marginBottom: '8px' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '8px' }}>
                 Paper Trading Sandbox Controls
               </h3>
               <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '24px' }}>
@@ -377,7 +377,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
                 <div style={{ padding: '20px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(245, 158, 11, 0.08)', border: '1px solid var(--color-virtual-border)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                      <div style={{ fontSize: '14px', fontWeight: 700, color: '#FFFFFF' }}>Current Virtual Cash</div>
+                      <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)' }}>Current Virtual Cash</div>
                       <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Available capital for simulated execution</div>
                     </div>
                     <div className="tabular-nums" style={{ fontSize: '24px', fontWeight: 700, color: 'var(--color-virtual)' }}>
@@ -388,7 +388,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 0', borderBottom: '1px solid var(--border-subtle)' }}>
                   <div>
-                    <div style={{ fontSize: '14px', fontWeight: 600, color: '#FFFFFF' }}>Reset Sandbox Account</div>
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' }}>Reset Sandbox Account</div>
                     <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Restores virtual cash to ₹50,000 and resets initial holdings</div>
                   </div>
                   <button
@@ -402,7 +402,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 0', borderBottom: '1px solid var(--border-subtle)' }}>
                   <div>
-                    <div style={{ fontSize: '14px', fontWeight: 600, color: '#FFFFFF' }}>Matching Engine Reference</div>
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)' }}>Matching Engine Reference</div>
                     <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>NSE Real-time observation quotes with zero-slippage paper fills</div>
                   </div>
                   <span className="badge badge-profit">Active (Live)</span>
@@ -413,7 +413,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
 
           {activeSubTab === 'compliance' && (
             <div>
-              <h3 style={{ fontSize: '18px', fontWeight: 600, color: '#FFFFFF', marginBottom: '8px' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '8px' }}>
                 Regulatory Consent & Educational Grounding
               </h3>
               <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '24px' }}>
@@ -421,9 +421,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
               </p>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                <div style={{ padding: '16px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-subtle)' }}>
+                <div style={{ padding: '16px', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--bg-subtle)', border: '1px solid var(--border-subtle)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                    <strong style={{ color: '#FFFFFF' }}>SEBI Paper Trading Risk Disclosure</strong>
+                    <strong style={{ color: 'var(--text-main)' }}>SEBI Paper Trading Risk Disclosure</strong>
                     <span className="badge badge-profit">Accepted v1.0</span>
                   </div>
                   <p style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
@@ -431,9 +431,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
                   </p>
                 </div>
 
-                <div style={{ padding: '16px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-subtle)' }}>
+                <div style={{ padding: '16px', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--bg-subtle)', border: '1px solid var(--border-subtle)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                    <strong style={{ color: '#FFFFFF' }}>AI Answer Grounding Policy</strong>
+                    <strong style={{ color: 'var(--text-main)' }}>AI Answer Grounding Policy</strong>
                     <span className="badge badge-cyan">Active Enforcement</span>
                   </div>
                   <p style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
@@ -441,9 +441,9 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onSignOut }) => 
                   </p>
                 </div>
 
-                <div style={{ padding: '16px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ padding: '16px', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--bg-subtle)', border: '1px solid var(--border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
-                    <strong style={{ color: '#FFFFFF', fontSize: '13px' }}>Public Legal &amp; Governance Documents</strong>
+                    <strong style={{ color: 'var(--text-main)', fontSize: '13px' }}>Public Legal &amp; Governance Documents</strong>
                     <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
                       Review our verified data privacy commitments and terms of service.
                     </div>

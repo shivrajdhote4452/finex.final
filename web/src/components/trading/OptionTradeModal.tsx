@@ -101,11 +101,11 @@ export const OptionTradeModal: React.FC<OptionTradeModalProps> = ({
         style={{
           maxWidth: '540px',
           width: '90%',
-          backgroundColor: '#0A0A0A',
+          backgroundColor: 'var(--bg-card)',
           border: '1px solid var(--border-subtle)',
           borderRadius: '12px',
           padding: '28px',
-          boxShadow: '0 20px 40px rgba(0,0,0,0.8)',
+          boxShadow: 'var(--dropdown-shadow)',
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -133,7 +133,7 @@ export const OptionTradeModal: React.FC<OptionTradeModalProps> = ({
             <span className="badge badge-profit" style={{ marginBottom: '8px' }}>
               OPTION FILLED • {receipt.order_id}
             </span>
-            <h3 style={{ fontSize: '22px', fontWeight: 700, color: '#FFFFFF', marginTop: '4px' }}>
+            <h3 style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
               Long {isCall ? 'Call' : 'Put'} Purchased
             </h3>
             <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '20px' }}>
@@ -142,7 +142,7 @@ export const OptionTradeModal: React.FC<OptionTradeModalProps> = ({
 
             <div
               style={{
-                backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                backgroundColor: 'var(--bg-subtle)',
                 border: '1px solid var(--border-subtle)',
                 borderRadius: '8px',
                 padding: '16px',
@@ -156,17 +156,17 @@ export const OptionTradeModal: React.FC<OptionTradeModalProps> = ({
             >
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Contract</span>
-                <strong style={{ color: '#FFFFFF' }}>{receipt.contract_symbol}</strong>
+                <strong style={{ color: 'var(--text-main)' }}>{receipt.contract_symbol}</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Position Size</span>
-                <span style={{ color: '#FFFFFF' }}>
+                <span style={{ color: 'var(--text-main)' }}>
                   {receipt.lots} Lot(s) ({receipt.total_quantity} units)
                 </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Entry Premium</span>
-                <span className="tabular-nums" style={{ color: '#FFFFFF' }}>
+                <span className="tabular-nums" style={{ color: 'var(--text-main)' }}>
                   ₹{Number(receipt.fill_premium).toFixed(2)}
                 </span>
               </div>
@@ -184,7 +184,7 @@ export const OptionTradeModal: React.FC<OptionTradeModalProps> = ({
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Breakeven at Expiry</span>
-                <span className="tabular-nums" style={{ color: '#FFFFFF', fontWeight: 600 }}>
+                <span className="tabular-nums" style={{ color: 'var(--text-main)', fontWeight: 600 }}>
                   ₹{Number(receipt.breakeven).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </span>
               </div>
@@ -224,13 +224,13 @@ export const OptionTradeModal: React.FC<OptionTradeModalProps> = ({
                     {contract.underlying}
                   </span>
                 </div>
-                <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#FFFFFF', margin: 0 }}>
+                <h3 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
                   Strike ₹{contract.strike.toLocaleString('en-IN')} {isCall ? 'CE' : 'PE'}
                 </h3>
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                  Expiry: <strong style={{ color: '#FFFFFF' }}>{contract.expiry}</strong> •{' '}
+                  Expiry: <strong style={{ color: 'var(--text-main)' }}>{contract.expiry}</strong> •{' '}
                   <span style={{ color: 'var(--color-action)' }}>{contract.days_to_expiry} days to expiry</span> •{' '}
-                  <span>Spot: <strong style={{ color: '#FFFFFF' }}>₹{underlyingSpot.toLocaleString('en-IN')}</strong></span>
+                  <span>Spot: <strong style={{ color: 'var(--text-main)' }}>₹{underlyingSpot.toLocaleString('en-IN')}</strong></span>
                 </div>
               </div>
 
@@ -255,7 +255,7 @@ export const OptionTradeModal: React.FC<OptionTradeModalProps> = ({
                 display: 'grid',
                 gridTemplateColumns: 'repeat(4, 1fr)',
                 gap: '8px',
-                backgroundColor: 'rgba(255, 255, 255, 0.02)',
+                backgroundColor: 'var(--bg-subtle)',
                 border: '1px solid var(--border-subtle)',
                 borderRadius: '8px',
                 padding: '12px',
@@ -265,19 +265,19 @@ export const OptionTradeModal: React.FC<OptionTradeModalProps> = ({
             >
               <div>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>LTP Premium</div>
-                <div className="tabular-nums" style={{ fontSize: '15px', fontWeight: 700, color: '#FFFFFF' }}>
+                <div className="tabular-nums" style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-main)' }}>
                   ₹{premium.toFixed(2)}
                 </div>
               </div>
               <div>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>IV</div>
-                <div className="tabular-nums" style={{ fontSize: '15px', fontWeight: 600, color: '#FFFFFF' }}>
+                <div className="tabular-nums" style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-main)' }}>
                   {contract.implied_volatility}%
                 </div>
               </div>
               <div>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Delta (Δ)</div>
-                <div className="tabular-nums" style={{ fontSize: '15px', fontWeight: 600, color: '#FFFFFF' }}>
+                <div className="tabular-nums" style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-main)' }}>
                   {contract.greeks?.delta ?? '—'}
                 </div>
               </div>
@@ -292,11 +292,11 @@ export const OptionTradeModal: React.FC<OptionTradeModalProps> = ({
             {/* Order Configuration: Lots & Units */}
             <div style={{ marginBottom: '20px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <label style={{ fontSize: '13px', fontWeight: 600, color: '#FFFFFF' }}>
+                <label style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-main)' }}>
                   Order Lots (1 Lot = {lotSize} units)
                 </label>
                 <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                  Total: <strong style={{ color: '#FFFFFF' }}>{totalUnits} units</strong>
+                  Total: <strong style={{ color: 'var(--text-main)' }}>{totalUnits} units</strong>
                 </span>
               </div>
 
@@ -309,9 +309,9 @@ export const OptionTradeModal: React.FC<OptionTradeModalProps> = ({
                     width: '42px',
                     height: '42px',
                     borderRadius: '6px',
-                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                    backgroundColor: 'var(--bg-subtle)',
                     border: '1px solid var(--border-subtle)',
-                    color: '#FFFFFF',
+                    color: 'var(--text-main)',
                     fontSize: '18px',
                     fontWeight: 700,
                     cursor: lots <= 1 ? 'not-allowed' : 'pointer',
@@ -329,10 +329,10 @@ export const OptionTradeModal: React.FC<OptionTradeModalProps> = ({
                   style={{
                     flex: 1,
                     height: '42px',
-                    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-                    border: '1px solid var(--border-subtle)',
+                    backgroundColor: 'var(--bg-input)',
+                    border: '1px solid var(--border-medium)',
                     borderRadius: '6px',
-                    color: '#FFFFFF',
+                    color: 'var(--text-main)',
                     fontSize: '16px',
                     fontWeight: 700,
                     textAlign: 'center',
@@ -345,9 +345,9 @@ export const OptionTradeModal: React.FC<OptionTradeModalProps> = ({
                     width: '42px',
                     height: '42px',
                     borderRadius: '6px',
-                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                    backgroundColor: 'var(--bg-subtle)',
                     border: '1px solid var(--border-subtle)',
-                    color: '#FFFFFF',
+                    color: 'var(--text-main)',
                     fontSize: '18px',
                     fontWeight: 700,
                     cursor: 'pointer',
@@ -361,7 +361,7 @@ export const OptionTradeModal: React.FC<OptionTradeModalProps> = ({
             {/* Deterministic Cost Math Box */}
             <div
               style={{
-                backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                backgroundColor: 'var(--bg-subtle)',
                 border: '1px solid var(--border-subtle)',
                 borderRadius: '8px',
                 padding: '16px',
@@ -379,7 +379,7 @@ export const OptionTradeModal: React.FC<OptionTradeModalProps> = ({
                 </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#FFFFFF', fontWeight: 600 }}>Total Order Cost</span>
+                <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>Total Order Cost</span>
                 <strong className="tabular-nums" style={{ color: 'var(--color-action)', fontSize: '15px' }}>
                   ₹{totalCost.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </strong>
@@ -392,7 +392,7 @@ export const OptionTradeModal: React.FC<OptionTradeModalProps> = ({
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Breakeven at Expiry</span>
-                <strong className="tabular-nums" style={{ color: '#FFFFFF' }}>
+                <strong className="tabular-nums" style={{ color: 'var(--text-main)' }}>
                   ₹{breakeven.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </strong>
               </div>
@@ -416,7 +416,7 @@ export const OptionTradeModal: React.FC<OptionTradeModalProps> = ({
             >
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '10px' }}>
                 <span style={{ fontSize: '16px' }}>⚠️</span>
-                <div style={{ fontSize: '12px', color: '#FCA5A5', lineHeight: 1.4 }}>
+                <div style={{ fontSize: '12px', color: '#DC2626', lineHeight: 1.4 }}>
                   <strong>Mandatory Risk Notice:</strong> You can lose the full premium if this expires out of the money.
                   Options positions lose time value daily (theta decay) and expire worthless if spot finishes {isCall ? 'below' : 'above'} strike ₹{contract.strike.toLocaleString('en-IN')}.
                 </div>
@@ -429,7 +429,7 @@ export const OptionTradeModal: React.FC<OptionTradeModalProps> = ({
                   gap: '8px',
                   cursor: 'pointer',
                   fontSize: '12px',
-                  color: '#FFFFFF',
+                  color: 'var(--text-main)',
                   fontWeight: 500,
                   userSelect: 'none',
                 }}

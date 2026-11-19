@@ -133,7 +133,7 @@ export const QuickTradeModal: React.FC = () => {
             <span className="badge badge-profit" style={{ marginBottom: '8px' }}>
               ORDER EXECUTED • {receipt.id}
             </span>
-            <h3 style={{ fontSize: '24px', fontWeight: 700, color: '#FFFFFF', marginTop: '4px' }}>
+            <h3 style={{ fontSize: '24px', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>
               {receipt.type === 'BUY' ? 'Purchase Successful' : 'Sale Executed'}
             </h3>
             <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '24px' }}>
@@ -142,7 +142,7 @@ export const QuickTradeModal: React.FC = () => {
 
             <div
               style={{
-                backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                backgroundColor: 'var(--bg-subtle)',
                 border: '1px solid var(--border-subtle)',
                 borderRadius: 'var(--radius-sm)',
                 padding: '20px',
@@ -153,15 +153,15 @@ export const QuickTradeModal: React.FC = () => {
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Instrument</span>
-                <strong style={{ color: '#FFFFFF' }}>{receipt.symbol} ({receipt.shares} shares)</strong>
+                <strong style={{ color: 'var(--text-main)' }}>{receipt.symbol} ({receipt.shares} shares)</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Fill Price</span>
-                <span className="tabular-nums" style={{ color: '#FFFFFF' }}>₹{receipt.fillPrice.toLocaleString('en-IN')}</span>
+                <span className="tabular-nums" style={{ color: 'var(--text-main)' }}>₹{receipt.fillPrice.toLocaleString('en-IN')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Gross Consideration</span>
-                <span className="tabular-nums" style={{ color: '#FFFFFF', fontWeight: 600 }}>₹{receipt.total.toLocaleString('en-IN')}</span>
+                <span className="tabular-nums" style={{ color: 'var(--text-main)', fontWeight: 600 }}>₹{receipt.total.toLocaleString('en-IN')}</span>
               </div>
               {receipt.realizedPnL !== undefined && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
@@ -210,7 +210,7 @@ export const QuickTradeModal: React.FC = () => {
                   ⚡
                 </div>
                 <div>
-                  <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#FFFFFF', margin: 0 }}>
+                  <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>
                     Quick Order Execution
                   </h3>
                   <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
@@ -240,7 +240,8 @@ export const QuickTradeModal: React.FC = () => {
                 display: 'grid',
                 gridTemplateColumns: '1fr 1fr',
                 gap: '8px',
-                background: 'rgba(0, 0, 0, 0.4)',
+                background: 'var(--bg-subtle)',
+                border: '1px solid var(--border-subtle)',
                 padding: '4px',
                 borderRadius: 'var(--radius-sm)',
                 marginBottom: '20px',
@@ -255,9 +256,9 @@ export const QuickTradeModal: React.FC = () => {
                   fontWeight: 700,
                   fontSize: '13px',
                   cursor: 'pointer',
-                  background: tradeType === 'BUY' ? 'linear-gradient(135deg, #10B981 0%, #059669 100%)' : 'transparent',
-                  color: tradeType === 'BUY' ? '#FFFFFF' : 'var(--text-muted)',
-                  boxShadow: tradeType === 'BUY' ? '0 0 14px rgba(16, 185, 129, 0.35)' : 'none',
+                  background: tradeType === 'BUY' ? 'var(--color-profit)' : 'transparent',
+                  color: tradeType === 'BUY' ? 'var(--color-profit-contrast, #FFFFFF)' : 'var(--text-muted)',
+                  boxShadow: tradeType === 'BUY' ? '0 0 14px var(--color-profit-border)' : 'none',
                   transition: 'all 0.15s ease',
                 }}
               >
@@ -272,9 +273,9 @@ export const QuickTradeModal: React.FC = () => {
                   fontWeight: 700,
                   fontSize: '13px',
                   cursor: 'pointer',
-                  background: tradeType === 'SELL' ? 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)' : 'transparent',
-                  color: tradeType === 'SELL' ? '#FFFFFF' : 'var(--text-muted)',
-                  boxShadow: tradeType === 'SELL' ? '0 0 14px rgba(239, 68, 68, 0.35)' : 'none',
+                  background: tradeType === 'SELL' ? 'var(--color-loss)' : 'transparent',
+                  color: tradeType === 'SELL' ? 'var(--color-loss-contrast, #FFFFFF)' : 'var(--text-muted)',
+                  boxShadow: tradeType === 'SELL' ? '0 0 14px var(--color-loss-border)' : 'none',
                   transition: 'all 0.15s ease',
                 }}
               >
@@ -302,13 +303,13 @@ export const QuickTradeModal: React.FC = () => {
                     borderRadius: 'var(--radius-sm)',
                     border: '1px solid var(--border-medium)',
                     backgroundColor: 'var(--bg-input)',
-                    color: '#FFFFFF',
+                    color: 'var(--text-main)',
                     fontWeight: 600,
                     outline: 'none',
                   }}
                 >
                   {Object.values(marketQuotes).map((q) => (
-                    <option key={q.symbol} value={q.symbol} style={{ backgroundColor: '#111111', color: '#FFFFFF' }}>
+                    <option key={q.symbol} value={q.symbol} style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}>
                       {q.symbol} — {q.name}
                     </option>
                   ))}
@@ -323,14 +324,14 @@ export const QuickTradeModal: React.FC = () => {
                   style={{
                     padding: '9px 12px',
                     borderRadius: 'var(--radius-sm)',
-                    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+                    backgroundColor: 'var(--bg-subtle)',
                     border: '1px solid var(--border-subtle)',
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
                   }}
                 >
-                  <span className="tabular-nums" style={{ fontSize: '15px', fontWeight: 700, color: '#FFFFFF' }}>
+                  <span className="tabular-nums" style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-main)' }}>
                     ₹{currentQuote.price.toLocaleString('en-IN')}
                   </span>
                   <span className={currentQuote.isPositive ? 'badge badge-profit' : 'badge badge-loss'} style={{ fontSize: '10px' }}>
@@ -357,9 +358,9 @@ export const QuickTradeModal: React.FC = () => {
                       fontWeight: 600,
                       borderRadius: 'var(--radius-xs)',
                       cursor: 'pointer',
-                      border: orderType === type ? '1px solid var(--color-primary)' : '1px solid var(--border-subtle)',
-                      background: orderType === type ? 'rgba(59, 130, 246, 0.15)' : 'rgba(255, 255, 255, 0.03)',
-                      color: orderType === type ? '#FFFFFF' : 'var(--text-muted)',
+                      border: orderType === type ? '1px solid var(--color-action)' : '1px solid var(--border-subtle)',
+                      background: orderType === type ? 'var(--color-action-bg)' : 'var(--bg-subtle)',
+                      color: orderType === type ? 'var(--color-action)' : 'var(--text-muted)',
                     }}
                   >
                     {type}
@@ -385,7 +386,7 @@ export const QuickTradeModal: React.FC = () => {
                     borderRadius: 'var(--radius-sm)',
                     border: '1px solid var(--border-medium)',
                     backgroundColor: 'var(--bg-input)',
-                    color: '#FFFFFF',
+                    color: 'var(--text-main)',
                     fontWeight: 600,
                   }}
                 />
@@ -399,7 +400,7 @@ export const QuickTradeModal: React.FC = () => {
                   Quantity (Shares)
                 </label>
                 <span style={{ fontSize: '12px', color: 'var(--text-faint)' }}>
-                  Owned: <strong style={{ color: '#FFFFFF' }}>{ownedShares}</strong>
+                  Owned: <strong style={{ color: 'var(--text-main)' }}>{ownedShares}</strong>
                 </span>
               </div>
 
@@ -415,7 +416,7 @@ export const QuickTradeModal: React.FC = () => {
                     borderRadius: 'var(--radius-sm)',
                     border: '1px solid var(--border-medium)',
                     backgroundColor: 'var(--bg-input)',
-                    color: '#FFFFFF',
+                    color: 'var(--text-main)',
                     fontWeight: 700,
                     fontSize: '16px',
                   }}
@@ -449,7 +450,7 @@ export const QuickTradeModal: React.FC = () => {
                       padding: '4px',
                       fontSize: '11px',
                       borderRadius: 'var(--radius-xs)',
-                      background: 'rgba(255, 255, 255, 0.04)',
+                      background: 'var(--bg-subtle)',
                       border: '1px solid var(--border-subtle)',
                       color: 'var(--text-muted)',
                       cursor: 'pointer',
@@ -464,7 +465,7 @@ export const QuickTradeModal: React.FC = () => {
             {/* Financial Consideration & Ledger Impact */}
             <div
               style={{
-                backgroundColor: 'rgba(0, 0, 0, 0.25)',
+                backgroundColor: 'var(--bg-subtle)',
                 border: '1px solid var(--border-subtle)',
                 borderRadius: 'var(--radius-sm)',
                 padding: '14px',
@@ -474,7 +475,7 @@ export const QuickTradeModal: React.FC = () => {
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Estimated Consideration</span>
-                <span className="tabular-nums" style={{ color: '#FFFFFF', fontWeight: 600 }}>
+                <span className="tabular-nums" style={{ color: 'var(--text-main)', fontWeight: 600 }}>
                   ₹{totalAmount.toLocaleString('en-IN')}
                 </span>
               </div>
@@ -511,14 +512,13 @@ export const QuickTradeModal: React.FC = () => {
             <button
               onClick={handleSubmit}
               disabled={isSubmitting}
-              className={tradeType === 'BUY' ? 'btn-emerald' : 'btn'}
+              className={tradeType === 'BUY' ? 'btn-buy' : 'btn-sell'}
               style={{
                 width: '100%',
                 padding: '14px',
                 fontSize: '14px',
                 borderRadius: 'var(--radius-sm)',
                 cursor: 'pointer',
-                background: tradeType === 'SELL' ? 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)' : undefined,
               }}
             >
               {isSubmitting

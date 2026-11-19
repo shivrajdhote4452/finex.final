@@ -22,6 +22,7 @@ import {
 import { FinExLiveChart } from '../components/market/FinExLiveChart';
 import { TradeTimeMachine } from '../components/market/TradeTimeMachine';
 import { CleanFormattedText } from '../components/common/CleanFormattedText';
+import { useTheme } from '../context/ThemeContext';
 
 export interface ChartWorkspaceProps {
   onNavigate?: (tab: any) => void;
@@ -34,6 +35,8 @@ export type DrawingTool = 'crosshair' | 'trend_line' | 'horizontal_line' | 'vert
 // Official TradingView Advanced Widget Component with script embed
 const TradingViewProWidget: React.FC<{ symbol: string; timeframe: string }> = ({ symbol, timeframe }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const { resolvedTheme } = useTheme();
+  const isLight = resolvedTheme === 'light';
 
   useEffect(() => {
     const currentContainer = containerRef.current;
@@ -67,7 +70,7 @@ const TradingViewProWidget: React.FC<{ symbol: string; timeframe: string }> = ({
       symbol: `BSE:${cleanSymbol}`,
       interval: tvInterval,
       timezone: 'Asia/Kolkata',
-      theme: 'dark',
+      theme: isLight ? 'light' : 'dark',
       style: '1',
       locale: 'en',
       enable_publishing: false,
@@ -100,6 +103,8 @@ const TradingViewProWidget: React.FC<{ symbol: string; timeframe: string }> = ({
 
 export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
   const { virtualCash, holdings, ledger, marketQuotes, executeOrder } = useFinancial();
+  const { resolvedTheme } = useTheme();
+  const isLight = resolvedTheme === 'light';
 
   // Active Symbol & Timeframe
   const [selectedSymbol, setSelectedSymbol] = useState<string>('RELIANCE');
@@ -311,37 +316,37 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
       width: container.clientWidth,
       height: container.clientHeight,
       layout: {
-        background: { type: ColorType.Solid, color: '#000000' },
-        textColor: '#8E8E93',
+        background: { type: ColorType.Solid, color: isLight ? '#FFFFFF' : '#000000' },
+        textColor: isLight ? '#475569' : '#8E8E93',
         fontSize: 11,
         fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
       },
       grid: {
-        vertLines: { color: 'rgba(255, 255, 255, 0.05)' },
-        horzLines: { color: 'rgba(255, 255, 255, 0.05)' },
+        vertLines: { color: isLight ? 'rgba(0, 0, 0, 0.05)' : 'rgba(255, 255, 255, 0.05)' },
+        horzLines: { color: isLight ? 'rgba(0, 0, 0, 0.05)' : 'rgba(255, 255, 255, 0.05)' },
       },
       crosshair: {
         mode: CrosshairMode.Normal,
         vertLine: {
-          color: '#F29A60',
+          color: isLight ? '#D96B27' : '#F29A60',
           width: 1,
           style: LineStyle.Dashed,
-          labelBackgroundColor: '#1C1C1E',
+          labelBackgroundColor: isLight ? '#FFFFFF' : '#1C1C1E',
         },
         horzLine: {
-          color: '#F29A60',
+          color: isLight ? '#D96B27' : '#F29A60',
           width: 1,
           style: LineStyle.Dashed,
-          labelBackgroundColor: '#1C1C1E',
+          labelBackgroundColor: isLight ? '#FFFFFF' : '#1C1C1E',
         },
       },
       timeScale: {
-        borderColor: '#2C2C2E',
+        borderColor: isLight ? '#E2E8F0' : '#2C2C2E',
         timeVisible: true,
         secondsVisible: false,
       },
       rightPriceScale: {
-        borderColor: '#2C2C2E',
+        borderColor: isLight ? '#E2E8F0' : '#2C2C2E',
         scaleMargins: {
           top: 0.1,
           bottom: 0.25,
@@ -370,6 +375,37 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
       }
     };
   }, []);
+
+  // Sync lightweight-charts options when theme toggles
+  useEffect(() => {
+    if (!chartInstanceRef.current) return;
+    chartInstanceRef.current.applyOptions({
+      layout: {
+        background: { type: ColorType.Solid, color: isLight ? '#FFFFFF' : '#000000' },
+        textColor: isLight ? '#475569' : '#8E8E93',
+      },
+      grid: {
+        vertLines: { color: isLight ? 'rgba(0, 0, 0, 0.05)' : 'rgba(255, 255, 255, 0.05)' },
+        horzLines: { color: isLight ? 'rgba(0, 0, 0, 0.05)' : 'rgba(255, 255, 255, 0.05)' },
+      },
+      crosshair: {
+        vertLine: {
+          color: isLight ? '#D96B27' : '#F29A60',
+          labelBackgroundColor: isLight ? '#FFFFFF' : '#1C1C1E',
+        },
+        horzLine: {
+          color: isLight ? '#D96B27' : '#F29A60',
+          labelBackgroundColor: isLight ? '#FFFFFF' : '#1C1C1E',
+        },
+      },
+      timeScale: {
+        borderColor: isLight ? '#E2E8F0' : '#2C2C2E',
+      },
+      rightPriceScale: {
+        borderColor: isLight ? '#E2E8F0' : '#2C2C2E',
+      },
+    });
+  }, [isLight]);
 
   // 3. Load & Render Bars when symbol, timeframe, or chartType changes
   const loadChartData = useCallback(async () => {
@@ -870,8 +906,8 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
         height: '100%',
         flex: 1,
         minHeight: 0,
-        backgroundColor: '#000000',
-        color: '#FFFFFF',
+        backgroundColor: 'var(--bg-app)',
+        color: 'var(--text-main)',
         fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
         overflow: 'hidden',
       }}
@@ -888,9 +924,9 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',
-                backgroundColor: '#16161A',
-                color: '#FFFFFF',
-                border: '1px solid #2C2C2E',
+                backgroundColor: 'var(--bg-card)',
+                color: 'var(--text-main)',
+                border: '1px solid var(--border-medium)',
                 borderRadius: '6px',
                 padding: '4px 10px',
                 cursor: 'pointer',
@@ -904,8 +940,8 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                   width: '22px',
                   height: '22px',
                   borderRadius: '50%',
-                  backgroundColor: '#F29A60',
-                  color: '#000000',
+                  backgroundColor: 'var(--color-action)',
+                  color: '#FFFFFF',
                   fontWeight: 800,
                   fontSize: '11px',
                   display: 'flex',
@@ -920,12 +956,12 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                   <span style={{ fontWeight: 800, fontSize: '13px', fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.3px' }}>
                     {selectedSymbol}
                   </span>
-                  <span style={{ fontSize: '9px', color: '#8E8E93', backgroundColor: '#242428', padding: '1px 4px', borderRadius: '3px', fontWeight: 700 }}>
+                  <span style={{ fontSize: '9px', color: 'var(--text-muted)', backgroundColor: 'var(--bg-subtle)', padding: '1px 4px', borderRadius: '3px', fontWeight: 700 }}>
                     {marketMode.mode.includes('US') ? 'US • IEX' : 'NSE'}
                   </span>
                 </div>
               </div>
-              <span style={{ color: '#8E8E93', fontSize: '10px', marginLeft: '2px' }}>▼</span>
+              <span style={{ color: 'var(--text-muted)', fontSize: '10px', marginLeft: '2px' }}>▼</span>
             </button>
 
             {/* Quick Search Trigger Input (Desktop Only) */}
@@ -936,9 +972,9 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '6px',
-                backgroundColor: '#101012',
-                color: '#8E8E93',
-                border: '1px solid #242428',
+                backgroundColor: 'var(--bg-input)',
+                color: 'var(--text-muted)',
+                border: '1px solid var(--border-subtle)',
                 borderRadius: '6px',
                 padding: '4px 10px',
                 fontSize: '11px',
@@ -947,33 +983,33 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
               title="Press Ctrl+K or / to search"
             >
               <span>🔍</span>
-              <span style={{ color: '#636366' }}>Search stocks...</span>
-              <span style={{ fontSize: '9px', backgroundColor: '#1C1C1E', padding: '1px 4px', borderRadius: '3px', color: '#8E8E93' }}>
+              <span style={{ color: 'var(--text-muted)' }}>Search stocks...</span>
+              <span style={{ fontSize: '9px', backgroundColor: 'var(--bg-subtle)', padding: '1px 4px', borderRadius: '3px', color: 'var(--text-muted)' }}>
                 Ctrl+K
               </span>
             </button>
 
             {/* Live Price Tag */}
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '5px', marginLeft: '2px', minWidth: 0, flexShrink: 1 }}>
-              <span style={{ fontSize: '14px', fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", color: '#FFFFFF', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: '14px', fontWeight: 700, fontFamily: "'JetBrains Mono', monospace", color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
                 {!currentQuote.isPriceUnavailable && currentQuote.price > 0 ? (
                   formatQuotePrice(currentQuote, marketMode.currency === 'USD' ? '$' : '₹')
                 ) : (
-                  <span style={{ color: '#8E8E93' }}>—</span>
+                  <span style={{ color: 'var(--text-muted)' }}>—</span>
                 )}
               </span>
               {(() => {
                 const chg = formatQuoteChange(currentQuote);
                 if (chg.isUnavailable) {
                   return (
-                    <span style={{ fontSize: '11px', fontWeight: 500, color: '#8E8E93', whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 500, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                       —
                     </span>
                   );
                 }
                 if (chg.isZero) {
                   return (
-                    <span style={{ fontSize: '11px', fontWeight: 500, color: '#8E8E93', whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 500, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                       0.00 (0.00%)
                     </span>
                   );
@@ -1000,10 +1036,10 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
             <button
               onClick={() => setIsSearchModalOpen(true)}
               style={{
-                background: '#16161A',
-                border: '1px solid #2C2C2E',
+                background: 'var(--bg-card)',
+                border: '1px solid var(--border-medium)',
                 borderRadius: '4px',
-                color: '#FFFFFF',
+                color: 'var(--text-main)',
                 padding: '4px 8px',
                 fontSize: '12px',
                 cursor: 'pointer',
@@ -1015,9 +1051,9 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
             <button
               onClick={() => setIsRightCollapsed(!isRightCollapsed)}
               style={{
-                background: !isRightCollapsed ? '#F29A60' : '#16161A',
-                color: !isRightCollapsed ? '#000000' : '#FFFFFF',
-                border: '1px solid #2C2C2E',
+                background: !isRightCollapsed ? 'var(--color-action)' : 'var(--bg-card)',
+                color: !isRightCollapsed ? '#FFFFFF' : 'var(--text-main)',
+                border: '1px solid var(--border-medium)',
                 borderRadius: '4px',
                 padding: '4px 8px',
                 fontSize: '11px',
@@ -1031,9 +1067,9 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
             <button
               onClick={() => setIsBottomCollapsed(!isBottomCollapsed)}
               style={{
-                background: !isBottomCollapsed ? '#26A69A' : '#16161A',
-                color: !isBottomCollapsed ? '#000000' : '#26A69A',
-                border: '1px solid #26A69A',
+                background: !isBottomCollapsed ? 'var(--color-profit)' : 'var(--bg-card)',
+                color: !isBottomCollapsed ? '#FFFFFF' : 'var(--text-main)',
+                border: !isBottomCollapsed ? '1px solid var(--color-profit)' : '1px solid var(--border-medium)',
                 borderRadius: '4px',
                 padding: '4px 8px',
                 fontSize: '11px',
@@ -1054,8 +1090,8 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
               key={tf}
               onClick={() => setTimeframe(tf)}
               style={{
-                backgroundColor: timeframe === tf ? '#2C2C2E' : 'transparent',
-                color: timeframe === tf ? '#F29A60' : '#8E8E93',
+                backgroundColor: timeframe === tf ? 'var(--bg-card-hover)' : 'transparent',
+                color: timeframe === tf ? 'var(--color-action)' : 'var(--text-muted)',
                 border: 'none',
                 borderRadius: '3px',
                 padding: '4px 7px',
@@ -1068,7 +1104,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
             </button>
           ))}
 
-          <div style={{ width: '1px', height: '16px', backgroundColor: '#2C2C2E', margin: '0 4px' }} />
+          <div style={{ width: '1px', height: '16px', backgroundColor: 'var(--border-subtle)', margin: '0 4px' }} />
 
           {/* Chart Style */}
           {(['candlestick', 'line', 'bar', 'area'] as ChartType[]).map((type) => (
@@ -1076,8 +1112,8 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
               key={type}
               onClick={() => setChartType(type)}
               style={{
-                backgroundColor: chartType === type ? '#2C2C2E' : 'transparent',
-                color: chartType === type ? '#F29A60' : '#8E8E93',
+                backgroundColor: chartType === type ? 'var(--bg-card-hover)' : 'transparent',
+                color: chartType === type ? 'var(--color-action)' : 'var(--text-muted)',
                 border: 'none',
                 borderRadius: '3px',
                 padding: '4px 6px',
@@ -1090,15 +1126,15 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
             </button>
           ))}
 
-          <div style={{ width: '1px', height: '16px', backgroundColor: '#2C2C2E', margin: '0 4px' }} />
+          <div style={{ width: '1px', height: '16px', backgroundColor: 'var(--border-subtle)', margin: '0 4px' }} />
 
           {/* Indicators Dropdown Toggles */}
           <button
             onClick={() => setActiveIndicators((prev) => ({ ...prev, sma20: !prev.sma20 }))}
             style={{
-              backgroundColor: activeIndicators.sma20 ? '#3A2E1E' : 'transparent',
-              color: activeIndicators.sma20 ? '#FFD700' : '#8E8E93',
-              border: '1px solid #2C2C2E',
+              backgroundColor: activeIndicators.sma20 ? (isLight ? '#FEF3C7' : '#3A2E1E') : 'transparent',
+              color: activeIndicators.sma20 ? (isLight ? '#B45309' : '#FFD700') : 'var(--text-muted)',
+              border: '1px solid var(--border-subtle)',
               borderRadius: '3px',
               padding: '3px 6px',
               fontSize: '11px',
@@ -1110,9 +1146,9 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
           <button
             onClick={() => setActiveIndicators((prev) => ({ ...prev, ema20: !prev.ema20 }))}
             style={{
-              backgroundColor: activeIndicators.ema20 ? '#1E2E3A' : 'transparent',
-              color: activeIndicators.ema20 ? '#00E5FF' : '#8E8E93',
-              border: '1px solid #2C2C2E',
+              backgroundColor: activeIndicators.ema20 ? (isLight ? '#E0F2FE' : '#1E2E3A') : 'transparent',
+              color: activeIndicators.ema20 ? (isLight ? '#0369A1' : '#00E5FF') : 'var(--text-muted)',
+              border: '1px solid var(--border-subtle)',
               borderRadius: '3px',
               padding: '3px 6px',
               fontSize: '11px',
@@ -1124,9 +1160,9 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
           <button
             onClick={() => setActiveIndicators((prev) => ({ ...prev, bollinger: !prev.bollinger }))}
             style={{
-              backgroundColor: activeIndicators.bollinger ? '#2C2C2E' : 'transparent',
-              color: activeIndicators.bollinger ? '#FFFFFF' : '#8E8E93',
-              border: '1px solid #2C2C2E',
+              backgroundColor: activeIndicators.bollinger ? 'var(--bg-card-hover)' : 'transparent',
+              color: activeIndicators.bollinger ? 'var(--text-main)' : 'var(--text-muted)',
+              border: '1px solid var(--border-subtle)',
               borderRadius: '3px',
               padding: '3px 6px',
               fontSize: '11px',
@@ -1137,15 +1173,15 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
           </button>
 
           {/* Layout Selector (Section 8B) */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '2px', backgroundColor: '#121214', padding: '2px', borderRadius: '4px', border: '1px solid #2C2C2E' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '2px', backgroundColor: 'var(--bg-card)', padding: '2px', borderRadius: '4px', border: '1px solid var(--border-subtle)' }}>
             {(['single', 'dual_h', 'dual_v', 'quad'] as WorkspaceLayout[]).map((lay) => (
               <button
                 key={lay}
                 title={`Layout: ${lay}`}
                 onClick={() => setLayout(lay)}
                 style={{
-                  backgroundColor: layout === lay ? '#2C2C2E' : 'transparent',
-                  color: layout === lay ? '#F29A60' : '#8E8E93',
+                  backgroundColor: layout === lay ? 'var(--bg-card-hover)' : 'transparent',
+                  color: layout === lay ? 'var(--color-action)' : 'var(--text-muted)',
                   border: 'none',
                   borderRadius: '3px',
                   padding: '2px 5px',
@@ -1169,9 +1205,9 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
               alignItems: 'center',
               gap: '6px',
               padding: '3px 8px',
-              backgroundColor: '#121214',
+              backgroundColor: 'var(--bg-card)',
               borderRadius: '4px',
-              border: '1px solid #2C2C2E',
+              border: '1px solid var(--border-subtle)',
             }}
           >
             {(() => {
@@ -1314,15 +1350,15 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: '4px 14px',
-          backgroundColor: '#09090B',
-          borderBottom: '1px solid #1C1C1E',
+          backgroundColor: 'var(--bg-card)',
+          borderBottom: '1px solid var(--border-subtle)',
           fontSize: '11px',
           flexShrink: 0,
           overflowX: 'auto',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <span style={{ fontSize: '10px', color: '#636366', fontWeight: 700, marginRight: '4px', letterSpacing: '0.4px' }}>
+          <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 700, marginRight: '4px', letterSpacing: '0.4px' }}>
             RANGE:
           </span>
           {(['1D', '1W', '1M', '3M', '6M', '1Y', '5Y', 'ALL'] as const).map((r) => (
@@ -1336,9 +1372,9 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                 else setTimeframe('1D');
               }}
               style={{
-                backgroundColor: rangePreset === r ? '#F29A60' : 'transparent',
-                color: rangePreset === r ? '#000000' : '#8E8E93',
-                border: rangePreset === r ? 'none' : '1px solid #242428',
+                backgroundColor: rangePreset === r ? 'var(--color-action)' : 'transparent',
+                color: rangePreset === r ? '#FFFFFF' : 'var(--text-muted)',
+                border: rangePreset === r ? 'none' : '1px solid var(--border-subtle)',
                 borderRadius: '4px',
                 padding: '3px 8px',
                 fontSize: '11px',
@@ -1354,8 +1390,8 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
 
         {/* Active Engine & Stock Mode Info (Desktop Only) */}
         <div className="desktop-flex" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span style={{ fontSize: '11px', color: '#8E8E93' }}>
-            Active: <strong style={{ color: '#FFFFFF' }}>{selectedSymbol}</strong> ({marketMode.mode.includes('US') ? 'US Equity' : 'NSE Nifty'})
+          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+            Active: <strong style={{ color: 'var(--text-main)' }}>{selectedSymbol}</strong> ({marketMode.mode.includes('US') ? 'US Equity' : 'NSE Nifty'})
           </span>
           <span
             style={{
@@ -1380,8 +1416,8 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
           className="chart-left-toolbar desktop-flex"
           style={{
             width: '42px',
-            backgroundColor: '#080808',
-            borderRight: '1px solid #1C1C1E',
+            backgroundColor: 'var(--bg-sidebar)',
+            borderRight: '1px solid var(--border-subtle)',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
@@ -1395,8 +1431,8 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
             style={{
               width: '30px',
               height: '30px',
-              backgroundColor: activeTool === 'crosshair' ? '#2C2C2E' : 'transparent',
-              color: activeTool === 'crosshair' ? '#F29A60' : '#8E8E93',
+              backgroundColor: activeTool === 'crosshair' ? 'var(--bg-card-hover)' : 'transparent',
+              color: activeTool === 'crosshair' ? 'var(--color-action)' : 'var(--text-muted)',
               border: 'none',
               borderRadius: '4px',
               cursor: 'pointer',
@@ -1414,8 +1450,8 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
             style={{
               width: '30px',
               height: '30px',
-              backgroundColor: activeTool === 'trend_line' ? '#2C2C2E' : 'transparent',
-              color: activeTool === 'trend_line' ? '#F29A60' : '#8E8E93',
+              backgroundColor: activeTool === 'trend_line' ? 'var(--bg-card-hover)' : 'transparent',
+              color: activeTool === 'trend_line' ? 'var(--color-action)' : 'var(--text-muted)',
               border: 'none',
               borderRadius: '4px',
               cursor: 'pointer',
@@ -1433,8 +1469,8 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
             style={{
               width: '30px',
               height: '30px',
-              backgroundColor: activeTool === 'horizontal_line' ? '#2C2C2E' : 'transparent',
-              color: activeTool === 'horizontal_line' ? '#F29A60' : '#8E8E93',
+              backgroundColor: activeTool === 'horizontal_line' ? 'var(--bg-card-hover)' : 'transparent',
+              color: activeTool === 'horizontal_line' ? 'var(--color-action)' : 'var(--text-muted)',
               border: 'none',
               borderRadius: '4px',
               cursor: 'pointer',
@@ -1452,8 +1488,8 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
             style={{
               width: '30px',
               height: '30px',
-              backgroundColor: activeTool === 'rectangle' ? '#2C2C2E' : 'transparent',
-              color: activeTool === 'rectangle' ? '#F29A60' : '#8E8E93',
+              backgroundColor: activeTool === 'rectangle' ? 'var(--bg-card-hover)' : 'transparent',
+              color: activeTool === 'rectangle' ? 'var(--color-action)' : 'var(--text-muted)',
               border: 'none',
               borderRadius: '4px',
               cursor: 'pointer',
@@ -1471,8 +1507,8 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
             style={{
               width: '30px',
               height: '30px',
-              backgroundColor: activeTool === 'fibonacci' ? '#2C2C2E' : 'transparent',
-              color: activeTool === 'fibonacci' ? '#F29A60' : '#8E8E93',
+              backgroundColor: activeTool === 'fibonacci' ? 'var(--bg-card-hover)' : 'transparent',
+              color: activeTool === 'fibonacci' ? 'var(--color-action)' : 'var(--text-muted)',
               border: 'none',
               borderRadius: '4px',
               cursor: 'pointer',
@@ -1485,7 +1521,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
             %
           </button>
 
-          <div style={{ width: '24px', height: '1px', backgroundColor: '#2C2C2E', margin: '4px 0' }} />
+          <div style={{ width: '24px', height: '1px', backgroundColor: 'var(--border-subtle)', margin: '4px 0' }} />
 
           <button
             title="Clear Drawings"
@@ -1494,7 +1530,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
               width: '30px',
               height: '30px',
               backgroundColor: 'transparent',
-              color: '#8E8E93',
+              color: 'var(--text-muted)',
               border: 'none',
               borderRadius: '4px',
               cursor: 'pointer',
@@ -1507,7 +1543,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
             🗑
           </button>
           {savedDrawings.length > 0 && (
-            <span style={{ fontSize: '9px', color: '#8E8E93', fontFamily: 'monospace' }}>
+            <span style={{ fontSize: '9px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
               {savedDrawings.length}
             </span>
           )}
@@ -1516,7 +1552,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
         {/* 2. Center Chart Area */}
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, minHeight: 0, position: 'relative', overflow: 'hidden' }}>
           {chartEngine === 'time_machine' ? (
-            <div style={{ flex: 1, width: '100%', minHeight: 0, backgroundColor: '#090D14', position: 'relative', display: 'flex', overflow: 'hidden' }}>
+            <div style={{ flex: 1, width: '100%', minHeight: 0, backgroundColor: 'var(--bg-app)', position: 'relative', display: 'flex', overflow: 'hidden' }}>
               <TradeTimeMachine
                 key={`time-machine-${selectedSymbol}`}
                 initialSymbol={selectedSymbol}
@@ -1526,7 +1562,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
               />
             </div>
           ) : chartEngine === 'finex_live' ? (
-            <div style={{ flex: 1, width: '100%', minHeight: 0, backgroundColor: '#090D14', position: 'relative', display: 'flex', overflow: 'hidden' }}>
+            <div style={{ flex: 1, width: '100%', minHeight: 0, backgroundColor: 'var(--bg-app)', position: 'relative', display: 'flex', overflow: 'hidden' }}>
               <FinExLiveChart
                 key={`finex-live-${selectedSymbol}-${timeframe}-${rangePreset}`}
                 symbol={selectedSymbol}
@@ -1549,7 +1585,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
             </div>
           ) : (
             /* Official TradingView Advanced Widget (Full TradingView Experience) */
-            <div style={{ flex: 1, width: '100%', minHeight: 0, backgroundColor: '#000000', position: 'relative' }}>
+            <div style={{ flex: 1, width: '100%', minHeight: 0, backgroundColor: 'var(--bg-app)', position: 'relative' }}>
               <TradingViewProWidget key={`${selectedSymbol}-${timeframe}`} symbol={selectedSymbol} timeframe={timeframe} />
             </div>
           )}
@@ -1579,8 +1615,8 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
             className={`chart-bottom-panel ${isBottomCollapsed ? 'collapsed' : ''}`}
             style={{
               height: isBottomCollapsed ? '28px' : '165px',
-              backgroundColor: '#0A0A0C',
-              borderTop: '1px solid #1C1C1E',
+              backgroundColor: 'var(--bg-card)',
+              borderTop: '1px solid var(--border-subtle)',
               display: 'flex',
               flexDirection: 'column',
               flexShrink: 0,
@@ -1595,8 +1631,8 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                 justifyContent: 'space-between',
                 padding: '0 12px',
                 height: '28px',
-                backgroundColor: '#121214',
-                borderBottom: isBottomCollapsed ? 'none' : '1px solid #1C1C1E',
+                backgroundColor: 'var(--bg-subtle)',
+                borderBottom: isBottomCollapsed ? 'none' : '1px solid var(--border-subtle)',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflowX: 'auto', whiteSpace: 'nowrap' }}>
@@ -1609,9 +1645,9 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                     }}
                     style={{
                       backgroundColor: 'transparent',
-                      color: bottomTab === tab && !isBottomCollapsed ? '#F29A60' : '#8E8E93',
+                      color: bottomTab === tab && !isBottomCollapsed ? 'var(--color-action)' : 'var(--text-muted)',
                       border: 'none',
-                      borderBottom: bottomTab === tab && !isBottomCollapsed ? '2px solid #F29A60' : 'none',
+                      borderBottom: bottomTab === tab && !isBottomCollapsed ? '2px solid var(--color-action)' : 'none',
                       height: '28px',
                       padding: '0 8px',
                       fontSize: '11px',
@@ -1630,7 +1666,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                 onClick={() => setIsBottomCollapsed(!isBottomCollapsed)}
                 style={{
                   backgroundColor: 'transparent',
-                  color: '#8E8E93',
+                  color: 'var(--text-muted)',
                   border: 'none',
                   fontSize: '12px',
                   cursor: 'pointer',
@@ -1653,9 +1689,9 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                           onClick={() => setOrderSide('BUY')}
                           style={{
                             padding: '6px 16px',
-                            backgroundColor: orderSide === 'BUY' ? '#26A69A' : '#1C1C1E',
-                            color: '#FFFFFF',
-                            border: 'none',
+                            backgroundColor: orderSide === 'BUY' ? 'var(--color-profit)' : 'var(--bg-subtle)',
+                            color: orderSide === 'BUY' ? 'var(--color-profit-contrast, #FFFFFF)' : 'var(--text-muted)',
+                            border: orderSide === 'BUY' ? 'none' : '1px solid var(--border-subtle)',
                             borderRadius: '4px',
                             fontWeight: 700,
                             fontSize: '12px',
@@ -1668,9 +1704,9 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                           onClick={() => setOrderSide('SELL')}
                           style={{
                             padding: '6px 16px',
-                            backgroundColor: orderSide === 'SELL' ? '#EF5350' : '#1C1C1E',
-                            color: '#FFFFFF',
-                            border: 'none',
+                            backgroundColor: orderSide === 'SELL' ? 'var(--color-loss)' : 'var(--bg-subtle)',
+                            color: orderSide === 'SELL' ? 'var(--color-loss-contrast, #FFFFFF)' : 'var(--text-muted)',
+                            border: orderSide === 'SELL' ? 'none' : '1px solid var(--border-subtle)',
                             borderRadius: '4px',
                             fontWeight: 700,
                             fontSize: '12px',
@@ -1682,14 +1718,14 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                       </div>
 
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                        <label style={{ fontSize: '11px', color: '#8E8E93' }}>Type:</label>
+                        <label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Type:</label>
                         <select
                           value={orderType}
                           onChange={(e) => setOrderType(e.target.value as OrderExecutionType)}
                           style={{
-                            backgroundColor: '#1C1C1E',
-                            color: '#FFFFFF',
-                            border: '1px solid #2C2C2E',
+                            backgroundColor: 'var(--bg-input)',
+                            color: 'var(--text-main)',
+                            border: '1px solid var(--border-medium)',
                             borderRadius: '3px',
                             padding: '3px 6px',
                             fontSize: '11px',
@@ -1704,7 +1740,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                     {/* Quantity & Price */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <label style={{ fontSize: '11px', color: '#8E8E93', width: '60px' }}>Shares:</label>
+                        <label style={{ fontSize: '11px', color: 'var(--text-muted)', width: '60px' }}>Shares:</label>
                         <input
                           type="number"
                           min="1"
@@ -1713,9 +1749,9 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                           onChange={(e) => setOrderShares(Math.max(1, parseInt(e.target.value) || 1))}
                           style={{
                             width: '80px',
-                            backgroundColor: '#1C1C1E',
-                            color: '#FFFFFF',
-                            border: '1px solid #2C2C2E',
+                            backgroundColor: 'var(--bg-input)',
+                            color: 'var(--text-main)',
+                            border: '1px solid var(--border-medium)',
                             borderRadius: '3px',
                             padding: '4px 6px',
                             fontSize: '12px',
@@ -1726,7 +1762,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
 
                       {orderType === 'LIMIT' && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <label style={{ fontSize: '11px', color: '#8E8E93', width: '60px' }}>Limit Price:</label>
+                          <label style={{ fontSize: '11px', color: 'var(--text-muted)', width: '60px' }}>Limit Price:</label>
                           <input
                             type="number"
                             step="0.05"
@@ -1734,9 +1770,9 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                             onChange={(e) => setOrderLimitPrice(parseFloat(e.target.value) || 0)}
                             style={{
                               width: '80px',
-                              backgroundColor: '#1C1C1E',
-                              color: '#FFFFFF',
-                              border: '1px solid #2C2C2E',
+                              backgroundColor: 'var(--bg-input)',
+                              color: 'var(--text-main)',
+                              border: '1px solid var(--border-medium)',
                               borderRadius: '3px',
                               padding: '4px 6px',
                               fontSize: '12px',
@@ -1749,14 +1785,14 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
 
                     {/* Calculations & Submit */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '180px' }}>
-                      <div style={{ fontSize: '11px', color: '#8E8E93' }}>
-                        Estimated Total: <strong style={{ color: '#FFFFFF' }}>₹{orderEstTotal.toFixed(2)}</strong>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                        Estimated Total: <strong style={{ color: 'var(--text-main)' }}>₹{orderEstTotal.toFixed(2)}</strong>
                       </div>
-                      <div style={{ fontSize: '11px', color: '#8E8E93' }}>
-                        Virtual Cash: <span style={{ color: '#26A69A' }}>₹{virtualCash.toLocaleString('en-IN')}</span>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                        Virtual Cash: <span style={{ color: 'var(--color-profit)', fontWeight: 600 }}>₹{virtualCash.toLocaleString('en-IN')}</span>
                       </div>
-                      <div style={{ fontSize: '11px', color: '#8E8E93' }}>
-                        Holding: <span style={{ color: '#FFFFFF' }}>{ownedShares} shares</span>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                        Holding: <span style={{ color: 'var(--text-main)' }}>{ownedShares} shares</span>
                       </div>
 
                       <button
@@ -1764,8 +1800,8 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                         disabled={orderExecuting}
                         style={{
                           marginTop: '6px',
-                          backgroundColor: orderSide === 'BUY' ? '#26A69A' : '#EF5350',
-                          color: '#FFFFFF',
+                          backgroundColor: orderSide === 'BUY' ? 'var(--color-profit)' : 'var(--color-loss)',
+                          color: orderSide === 'BUY' ? 'var(--color-profit-contrast, #FFFFFF)' : 'var(--color-loss-contrast, #FFFFFF)',
                           border: 'none',
                           borderRadius: '4px',
                           padding: '6px 12px',
@@ -1781,7 +1817,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                         <div
                           style={{
                             fontSize: '11px',
-                            color: orderFeedback.type === 'success' ? '#26A69A' : '#EF5350',
+                            color: orderFeedback.type === 'success' ? 'var(--color-profit)' : 'var(--color-loss)',
                             marginTop: '4px',
                           }}
                         >
@@ -1796,7 +1832,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                   <div>
                     <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse' }}>
                       <thead>
-                        <tr style={{ color: '#8E8E93', borderBottom: '1px solid #1C1C1E', textAlign: 'left' }}>
+                        <tr style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border-subtle)', textAlign: 'left' }}>
                           <th style={{ padding: '4px' }}>Symbol</th>
                           <th style={{ padding: '4px' }}>Shares</th>
                           <th style={{ padding: '4px' }}>Avg Price</th>
@@ -1806,12 +1842,12 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                       </thead>
                       <tbody>
                         {holdings.map((h) => (
-                          <tr key={h.symbol} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                            <td style={{ padding: '6px 4px', fontWeight: 600 }}>{h.symbol}</td>
-                            <td style={{ padding: '6px 4px' }}>{h.shares}</td>
-                            <td style={{ padding: '6px 4px' }}>₹{h.avgPrice.toFixed(2)}</td>
-                            <td style={{ padding: '6px 4px' }}>₹{h.currentPrice.toFixed(2)}</td>
-                            <td style={{ padding: '6px 4px', color: '#26A69A' }}>
+                          <tr key={h.symbol} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                            <td style={{ padding: '6px 4px', fontWeight: 600, color: 'var(--text-main)' }}>{h.symbol}</td>
+                            <td style={{ padding: '6px 4px', color: 'var(--text-main)' }}>{h.shares}</td>
+                            <td style={{ padding: '6px 4px', color: 'var(--text-main)' }}>₹{h.avgPrice.toFixed(2)}</td>
+                            <td style={{ padding: '6px 4px', color: 'var(--text-main)' }}>₹{h.currentPrice.toFixed(2)}</td>
+                            <td style={{ padding: '6px 4px', color: 'var(--color-profit)' }}>
                               ₹{(h.shares * h.currentPrice).toFixed(2)}
                             </td>
                           </tr>
@@ -1825,7 +1861,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                   <div>
                     <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse' }}>
                       <thead>
-                        <tr style={{ color: '#8E8E93', borderBottom: '1px solid #1C1C1E', textAlign: 'left' }}>
+                        <tr style={{ color: 'var(--text-muted)', borderBottom: '1px solid var(--border-subtle)', textAlign: 'left' }}>
                           <th style={{ padding: '4px' }}>Time</th>
                           <th style={{ padding: '4px' }}>Action</th>
                           <th style={{ padding: '4px' }}>Symbol</th>
@@ -1837,12 +1873,12 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                       </thead>
                       <tbody>
                         {ledger.slice(0, 5).map((l) => (
-                          <tr key={l.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                            <td style={{ padding: '6px 4px', color: '#8E8E93' }}>{l.timestamp.split('T')[1]?.slice(0, 8)}</td>
+                          <tr key={l.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                            <td style={{ padding: '6px 4px', color: 'var(--text-muted)' }}>{l.timestamp.split('T')[1]?.slice(0, 8)}</td>
                             <td
                               style={{
                                 padding: '6px 4px',
-                                color: l.type === 'BUY' ? '#26A69A' : '#EF5350',
+                                color: l.type === 'BUY' ? 'var(--color-profit)' : 'var(--color-loss)',
                                 fontWeight: 600,
                               }}
                             >
@@ -1865,11 +1901,11 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                                 </span>
                               )}
                             </td>
-                            <td style={{ padding: '6px 4px', fontWeight: 600 }}>{l.symbol}</td>
-                            <td style={{ padding: '6px 4px' }}>{l.shares}</td>
-                            <td style={{ padding: '6px 4px' }}>₹{l.fillPrice.toFixed(2)}</td>
-                            <td style={{ padding: '6px 4px' }}>₹{l.total.toFixed(2)}</td>
-                            <td style={{ padding: '6px 4px', color: '#26A69A' }}>{l.status}</td>
+                            <td style={{ padding: '6px 4px', fontWeight: 600, color: 'var(--text-main)' }}>{l.symbol}</td>
+                            <td style={{ padding: '6px 4px', color: 'var(--text-main)' }}>{l.shares}</td>
+                            <td style={{ padding: '6px 4px', color: 'var(--text-main)' }}>₹{l.fillPrice.toFixed(2)}</td>
+                            <td style={{ padding: '6px 4px', color: 'var(--text-main)' }}>₹{l.total.toFixed(2)}</td>
+                            <td style={{ padding: '6px 4px', color: 'var(--color-profit)' }}>{l.status}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1883,11 +1919,11 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                       {/* Today's Range Slider */}
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#8E8E93' }}>
-                          <span>Today's Low: <strong style={{ color: '#FFFFFF' }}>{formatQuoteHighLow(currentQuote.low, currentQuote.isHighLowUnavailable)}</strong></span>
-                          <span>Today's High: <strong style={{ color: '#FFFFFF' }}>{formatQuoteHighLow(currentQuote.high, currentQuote.isHighLowUnavailable)}</strong></span>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-muted)' }}>
+                          <span>Today's Low: <strong style={{ color: 'var(--text-main)' }}>{formatQuoteHighLow(currentQuote.low, currentQuote.isHighLowUnavailable)}</strong></span>
+                          <span>Today's High: <strong style={{ color: 'var(--text-main)' }}>{formatQuoteHighLow(currentQuote.high, currentQuote.isHighLowUnavailable)}</strong></span>
                         </div>
-                        <div style={{ height: '6px', backgroundColor: '#1C1C1E', borderRadius: '3px', position: 'relative', overflow: 'hidden' }}>
+                        <div style={{ height: '6px', backgroundColor: 'var(--bg-input)', borderRadius: '3px', position: 'relative', overflow: 'hidden' }}>
                           <div
                             style={{
                               position: 'absolute',
@@ -1904,11 +1940,11 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
 
                       {/* 52-Week Range Slider */}
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#8E8E93' }}>
-                          <span>52W Low: <strong style={{ color: '#FFFFFF' }}>—</strong></span>
-                          <span>52W High: <strong style={{ color: '#FFFFFF' }}>—</strong></span>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-muted)' }}>
+                          <span>52W Low: <strong style={{ color: 'var(--text-main)' }}>—</strong></span>
+                          <span>52W High: <strong style={{ color: 'var(--text-main)' }}>—</strong></span>
                         </div>
-                        <div style={{ height: '6px', backgroundColor: '#1C1C1E', borderRadius: '3px', position: 'relative', overflow: 'hidden' }}>
+                        <div style={{ height: '6px', backgroundColor: 'var(--bg-input)', borderRadius: '3px', position: 'relative', overflow: 'hidden' }}>
                           <div
                             style={{
                               position: 'absolute',
@@ -1925,32 +1961,32 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                     </div>
 
                     {/* Key Fundamentals Grid (Groww style) */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '12px', backgroundColor: '#121214', padding: '10px 14px', borderRadius: '6px', border: '1px solid #1C1C1E' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '12px', backgroundColor: 'var(--bg-subtle)', padding: '10px 14px', borderRadius: '6px', border: '1px solid var(--border-subtle)' }}>
                       <div>
-                        <div style={{ fontSize: '10px', color: '#8E8E93' }}>Market Cap</div>
-                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#FFFFFF', marginTop: '2px' }}>
+                        <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Market Cap</div>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)', marginTop: '2px' }}>
                           —
                         </div>
                       </div>
                       <div>
-                        <div style={{ fontSize: '10px', color: '#8E8E93' }}>P/E Ratio</div>
-                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#FFFFFF', marginTop: '2px' }}>24.8</div>
+                        <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>P/E Ratio</div>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)', marginTop: '2px' }}>24.8</div>
                       </div>
                       <div>
-                        <div style={{ fontSize: '10px', color: '#8E8E93' }}>P/B Ratio</div>
-                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#FFFFFF', marginTop: '2px' }}>2.15</div>
+                        <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>P/B Ratio</div>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)', marginTop: '2px' }}>2.15</div>
                       </div>
                       <div>
-                        <div style={{ fontSize: '10px', color: '#8E8E93' }}>Industry P/E</div>
-                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#FFFFFF', marginTop: '2px' }}>22.4</div>
+                        <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Industry P/E</div>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)', marginTop: '2px' }}>22.4</div>
                       </div>
                       <div>
-                        <div style={{ fontSize: '10px', color: '#8E8E93' }}>ROE</div>
-                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#26A69A', marginTop: '2px' }}>14.8%</div>
+                        <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>ROE</div>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-profit)', marginTop: '2px' }}>14.8%</div>
                       </div>
                       <div>
-                        <div style={{ fontSize: '10px', color: '#8E8E93' }}>Div. Yield</div>
-                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#FFFFFF', marginTop: '2px' }}>0.42%</div>
+                        <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Div. Yield</div>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)', marginTop: '2px' }}>0.42%</div>
                       </div>
                     </div>
                   </div>
@@ -1965,8 +2001,8 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
           className={`chart-right-panel ${isRightCollapsed ? 'collapsed' : ''}`}
           style={{
             width: isRightCollapsed ? '28px' : '340px',
-            backgroundColor: '#080808',
-            borderLeft: '1px solid #1C1C1E',
+            backgroundColor: 'var(--bg-sidebar)',
+            borderLeft: '1px solid var(--border-subtle)',
             display: 'flex',
             flexDirection: 'column',
             transition: 'width 0.2s ease',
@@ -1979,8 +2015,8 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
               alignItems: 'center',
               justifyContent: 'space-between',
               padding: '6px 8px',
-              backgroundColor: '#121214',
-              borderBottom: '1px solid #1C1C1E',
+              backgroundColor: 'var(--bg-subtle)',
+              borderBottom: '1px solid var(--border-subtle)',
             }}
           >
             {!isRightCollapsed ? (
@@ -1988,8 +2024,8 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                 <button
                   onClick={() => setRightPanelTab('ai')}
                   style={{
-                    backgroundColor: rightPanelTab === 'ai' ? '#2C2C2E' : 'transparent',
-                    color: rightPanelTab === 'ai' ? '#F29A60' : '#8E8E93',
+                    backgroundColor: rightPanelTab === 'ai' ? 'var(--bg-card-hover)' : 'transparent',
+                    color: rightPanelTab === 'ai' ? 'var(--color-action)' : 'var(--text-muted)',
                     border: 'none',
                     borderRadius: '3px',
                     padding: '3px 6px',
@@ -2006,8 +2042,8 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                 <button
                   onClick={() => setRightPanelTab('watchlist')}
                   style={{
-                    backgroundColor: rightPanelTab === 'watchlist' ? '#2C2C2E' : 'transparent',
-                    color: rightPanelTab === 'watchlist' ? '#F29A60' : '#8E8E93',
+                    backgroundColor: rightPanelTab === 'watchlist' ? 'var(--bg-card-hover)' : 'transparent',
+                    color: rightPanelTab === 'watchlist' ? 'var(--color-action)' : 'var(--text-muted)',
                     border: 'none',
                     borderRadius: '3px',
                     padding: '3px 6px',
@@ -2027,7 +2063,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
               onClick={() => setIsRightCollapsed(!isRightCollapsed)}
               style={{
                 backgroundColor: 'transparent',
-                color: '#8E8E93',
+                color: 'var(--text-muted)',
                 border: 'none',
                 cursor: 'pointer',
                 fontSize: isRightCollapsed ? '11px' : '14px',
@@ -2063,15 +2099,15 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                           flexDirection: 'column',
                           alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
                           maxWidth: '92%',
-                          backgroundColor: m.role === 'user' ? '#1C1C1E' : '#121214',
-                          border: m.role === 'user' ? '1px solid #2C2C2E' : '1px solid #1C1C1E',
+                          backgroundColor: m.role === 'user' ? 'var(--bg-subtle)' : 'var(--bg-card)',
+                          border: '1px solid var(--border-subtle)',
                           borderRadius: '6px',
                           padding: '8px 10px',
                           fontSize: '12px',
                           lineHeight: '1.4',
                         }}
                       >
-                        <div style={{ color: m.role === 'user' ? '#FFFFFF' : '#E5E5EA' }}>
+                        <div style={{ color: 'var(--text-main)' }}>
                           {m.role === 'user' ? (
                             <div style={{ whiteSpace: 'pre-wrap' }}>{m.text}</div>
                           ) : (
@@ -2085,15 +2121,15 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                             style={{
                               marginTop: '8px',
                               padding: '8px',
-                              backgroundColor: '#0A0A0C',
-                              border: '1px solid #F29A60',
+                              backgroundColor: 'var(--bg-card)',
+                              border: '1px solid var(--color-action)',
                               borderRadius: '4px',
                             }}
                           >
-                            <div style={{ fontSize: '11px', fontWeight: 700, color: '#F29A60', marginBottom: '4px' }}>
+                            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-action)', marginBottom: '4px' }}>
                               📋 Paper Investment Proposal
                             </div>
-                            <div style={{ fontSize: '11px', color: '#8E8E93' }}>
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                               Budget: {m.proposal.currency} {m.proposal.total_budget} • Expires in{' '}
                               {m.proposal.expires_in_minutes}m
                             </div>
@@ -2111,7 +2147,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                                   <span>
                                     {alloc.side} {alloc.quantity}x {alloc.symbol}
                                   </span>
-                                  <span style={{ color: '#26A69A' }}>
+                                  <span style={{ color: 'var(--color-profit)' }}>
                                     ₹{alloc.estimated_subtotal?.toFixed(0)}
                                   </span>
                                 </div>
@@ -2123,8 +2159,8 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                               style={{
                                 marginTop: '8px',
                                 width: '100%',
-                                backgroundColor: '#F29A60',
-                                color: '#000000',
+                                backgroundColor: 'var(--color-action)',
+                                color: '#FFFFFF',
                                 border: 'none',
                                 borderRadius: '3px',
                                 padding: '6px',
@@ -2141,7 +2177,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                         )}
 
                         {m.disclaimer && (
-                          <div style={{ marginTop: '4px', fontSize: '10px', color: '#8E8E93' }}>
+                          <div style={{ marginTop: '4px', fontSize: '10px', color: 'var(--text-muted)' }}>
                             {m.disclaimer}
                           </div>
                         )}
@@ -2165,20 +2201,20 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                         }}
                         style={{
                           fontSize: '10px',
-                          backgroundColor: '#161618',
-                          color: '#A1A1AA',
-                          border: '1px solid #27272A',
+                          backgroundColor: 'var(--bg-card)',
+                          color: 'var(--text-muted)',
+                          border: '1px solid var(--border-subtle)',
                           borderRadius: '12px',
                           padding: '3px 8px',
                           cursor: 'pointer',
                         }}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.color = '#F29A60';
-                          e.currentTarget.style.borderColor = '#F29A60';
+                          e.currentTarget.style.color = 'var(--color-action)';
+                          e.currentTarget.style.borderColor = 'var(--color-action)';
                         }}
                         onMouseLeave={(e) => {
-                          e.currentTarget.style.color = '#A1A1AA';
-                          e.currentTarget.style.borderColor = '#27272A';
+                          e.currentTarget.style.color = 'var(--text-muted)';
+                          e.currentTarget.style.borderColor = 'var(--border-subtle)';
                         }}
                       >
                         {btnText}
@@ -2198,9 +2234,9 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                       }}
                       style={{
                         flex: 1,
-                        backgroundColor: '#121214',
-                        color: '#FFFFFF',
-                        border: '1px solid #2C2C2E',
+                        backgroundColor: 'var(--bg-input)',
+                        color: 'var(--text-main)',
+                        border: '1px solid var(--border-medium)',
                         borderRadius: '4px',
                         padding: '6px 8px',
                         fontSize: '11px',
@@ -2210,8 +2246,8 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                       onClick={handleSendAiMessage}
                       disabled={aiLoading}
                       style={{
-                        backgroundColor: '#F29A60',
-                        color: '#000000',
+                        backgroundColor: 'var(--color-action)',
+                        color: '#FFFFFF',
                         border: 'none',
                         borderRadius: '4px',
                         padding: '6px 10px',
@@ -2237,23 +2273,23 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                         alignItems: 'center',
                         justifyContent: 'space-between',
                         padding: '6px 8px',
-                        backgroundColor: selectedSymbol === quote.symbol ? '#1C1C1E' : 'transparent',
+                        backgroundColor: selectedSymbol === quote.symbol ? 'var(--bg-card-hover)' : 'transparent',
                         borderRadius: '4px',
                         cursor: 'pointer',
                       }}
                     >
                       <div>
-                        <div style={{ fontSize: '12px', fontWeight: 700 }}>{quote.symbol}</div>
-                        <div style={{ fontSize: '10px', color: '#8E8E93' }}>{quote.name}</div>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-main)' }}>{quote.symbol}</div>
+                        <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{quote.name}</div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: '12px', fontFamily: "'JetBrains Mono', monospace" }}>
+                        <div style={{ fontSize: '12px', fontFamily: "'JetBrains Mono', monospace", color: 'var(--text-main)' }}>
                           ₹{quote.price.toFixed(2)}
                         </div>
                         <div
                           style={{
                             fontSize: '10px',
-                            color: quote.isPositive ? '#26A69A' : '#EF5350',
+                            color: quote.isPositive ? 'var(--color-profit)' : 'var(--color-loss)',
                             fontWeight: 600,
                           }}
                         >
@@ -2277,7 +2313,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
           style={{
             position: 'fixed',
             inset: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.75)',
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
             backdropFilter: 'blur(6px)',
             display: 'flex',
             alignItems: 'flex-start',
@@ -2291,10 +2327,10 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
             style={{
               width: '580px',
               maxWidth: '92vw',
-              backgroundColor: '#121215',
-              border: '1px solid #2C2C2E',
+              backgroundColor: 'var(--bg-card)',
+              border: '1px solid var(--border-medium)',
               borderRadius: '12px',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.85)',
+              boxShadow: 'var(--dropdown-shadow)',
               display: 'flex',
               flexDirection: 'column',
               overflow: 'hidden',
@@ -2307,10 +2343,10 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                 alignItems: 'center',
                 gap: '12px',
                 padding: '14px 18px',
-                borderBottom: '1px solid #222226',
+                borderBottom: '1px solid var(--border-subtle)',
               }}
             >
-              <span style={{ fontSize: '18px', color: '#8E8E93' }}>🔍</span>
+              <span style={{ fontSize: '18px', color: 'var(--text-muted)' }}>🔍</span>
               <input
                 autoFocus
                 type="text"
@@ -2320,7 +2356,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                 style={{
                   flex: 1,
                   backgroundColor: 'transparent',
-                  color: '#FFFFFF',
+                  color: 'var(--text-main)',
                   border: 'none',
                   outline: 'none',
                   fontSize: '15px',
@@ -2334,7 +2370,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                   style={{
                     backgroundColor: 'transparent',
                     border: 'none',
-                    color: '#8E8E93',
+                    color: 'var(--text-muted)',
                     cursor: 'pointer',
                     fontSize: '14px',
                   }}
@@ -2345,11 +2381,11 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
               <span
                 style={{
                   fontSize: '10px',
-                  backgroundColor: '#1C1C1E',
-                  color: '#8E8E93',
+                  backgroundColor: 'var(--bg-subtle)',
+                  color: 'var(--text-muted)',
                   padding: '2px 6px',
                   borderRadius: '4px',
-                  border: '1px solid #2C2C2E',
+                  border: '1px solid var(--border-subtle)',
                 }}
               >
                 ESC
@@ -2363,7 +2399,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                 alignItems: 'center',
                 gap: '6px',
                 padding: '10px 18px',
-                borderBottom: '1px solid #1C1C1E',
+                borderBottom: '1px solid var(--border-subtle)',
                 overflowX: 'auto',
               }}
             >
@@ -2373,8 +2409,8 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                     key={cat}
                     onClick={() => setSelectedCategory(cat)}
                     style={{
-                      backgroundColor: selectedCategory === cat ? '#F29A60' : '#1C1C1E',
-                      color: selectedCategory === cat ? '#000000' : '#8E8E93',
+                      backgroundColor: selectedCategory === cat ? 'var(--color-action)' : 'var(--bg-subtle)',
+                      color: selectedCategory === cat ? '#FFFFFF' : 'var(--text-muted)',
                       border: 'none',
                       borderRadius: '16px',
                       padding: '4px 12px',
@@ -2444,7 +2480,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
 
                 if (filtered.length === 0) {
                   return (
-                    <div style={{ padding: '30px 20px', textAlign: 'center', color: '#8E8E93', fontSize: '13px' }}>
+                    <div style={{ padding: '30px 20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
                       No stocks found matching "{searchQuery}".
                     </div>
                   );
@@ -2464,16 +2500,10 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                         alignItems: 'center',
                         justifyContent: 'space-between',
                         padding: '10px 14px',
-                        backgroundColor: isSelected ? '#1E1E24' : 'transparent',
+                        backgroundColor: isSelected ? 'var(--bg-card-hover)' : 'transparent',
                         borderRadius: '8px',
                         cursor: 'pointer',
                         transition: 'background-color 0.1s ease',
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!isSelected) e.currentTarget.style.backgroundColor = '#18181C';
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -2482,9 +2512,9 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                             width: '32px',
                             height: '32px',
                             borderRadius: '50%',
-                            backgroundColor: '#202026',
-                            color: isSelected ? '#F29A60' : '#FFFFFF',
-                            border: isSelected ? '1px solid #F29A60' : '1px solid #2C2C2E',
+                            backgroundColor: 'var(--bg-subtle)',
+                            color: isSelected ? 'var(--color-action)' : 'var(--text-main)',
+                            border: isSelected ? '1px solid var(--color-action)' : '1px solid var(--border-subtle)',
                             fontWeight: 800,
                             fontSize: '12px',
                             display: 'flex',
@@ -2496,14 +2526,14 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                         </div>
                         <div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ fontWeight: 800, fontSize: '13px', color: '#FFFFFF', fontFamily: "'JetBrains Mono', monospace" }}>
+                            <span style={{ fontWeight: 800, fontSize: '13px', color: 'var(--text-main)', fontFamily: "'JetBrains Mono', monospace" }}>
                               {inst.symbol}
                             </span>
-                            <span style={{ fontSize: '9px', color: '#8E8E93', backgroundColor: '#222226', padding: '1px 5px', borderRadius: '3px' }}>
+                            <span style={{ fontSize: '9px', color: 'var(--text-muted)', backgroundColor: 'var(--bg-subtle)', padding: '1px 5px', borderRadius: '3px' }}>
                               {inst.exchange || 'NSE'}
                             </span>
                           </div>
-                          <div style={{ fontSize: '11px', color: '#8E8E93', marginTop: '2px' }}>
+                          <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
                             {inst.name}
                           </div>
                         </div>
@@ -2513,9 +2543,9 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                         <span
                           style={{
                             fontSize: '11px',
-                            color: '#F29A60',
-                            backgroundColor: 'rgba(242, 154, 96, 0.1)',
-                            border: '1px solid rgba(242, 154, 96, 0.3)',
+                            color: 'var(--color-action)',
+                            backgroundColor: 'var(--color-action-bg)',
+                            border: '1px solid var(--color-action)',
                             padding: '3px 8px',
                             borderRadius: '4px',
                             fontWeight: 600,

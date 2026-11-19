@@ -61,7 +61,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#FFFFFF', margin: 0 }}>
+          <h3 style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-main)', margin: 0 }}>
             {title}
           </h3>
           <span className="badge badge-neutral" style={{ fontSize: '11px' }}>
@@ -136,7 +136,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                 borderRadius: 'var(--radius-xs)',
                 border: '1px solid var(--border-medium)',
                 backgroundColor: 'var(--bg-input)',
-                color: '#FFFFFF',
+                color: 'var(--text-main)',
                 fontSize: '12px',
                 outline: 'none',
                 boxSizing: 'border-box',
@@ -159,7 +159,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
           }}
         >
           <div style={{ fontSize: '28px', marginBottom: '8px' }}>📜</div>
-          <div style={{ fontSize: '14px', fontWeight: 600, color: '#FFFFFF', marginBottom: '4px' }}>
+          <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-main)', marginBottom: '4px' }}>
             {ledger.length === 0
               ? 'No trades yet — your paper trades will appear here'
               : 'No transactions match the selected filter'}
@@ -281,7 +281,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                     {/* Symbol */}
                     <td style={{ padding: '12px 14px' }}>
                       <div className="truncate-text" style={{ maxWidth: '140px' }}>
-                        <strong style={{ color: '#FFFFFF', fontSize: '13px' }}>
+                        <strong style={{ color: 'var(--text-main)', fontSize: '13px' }}>
                           {entry.symbol}
                         </strong>
                         {entry.name && (
@@ -304,7 +304,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
 
                     {/* Total Value */}
                     <td
-                      style={{ padding: '12px 14px', fontWeight: 600, color: '#FFFFFF' }}
+                      style={{ padding: '12px 14px', fontWeight: 600, color: 'var(--text-main)' }}
                       className="tabular-nums"
                     >
                       ₹{entry.total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
@@ -366,7 +366,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                 <span className="badge badge-neutral" style={{ fontSize: '10px', marginBottom: '6px' }}>
                   TRADE CONFIRMATION • {selectedEntry.id}
                 </span>
-                <h3 style={{ fontSize: '20px', fontWeight: 700, color: '#FFFFFF', margin: 0 }}>
+                <h3 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>
                   Electronic Contract Note
                 </h3>
               </div>
@@ -392,7 +392,8 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
 
             <div
               style={{
-                backgroundColor: 'rgba(0,0,0,0.4)',
+                backgroundColor: 'var(--bg-subtle)',
+                border: '1px solid var(--border-subtle)',
                 padding: '16px',
                 borderRadius: 'var(--radius-sm)',
                 marginBottom: '20px',
@@ -404,7 +405,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
             >
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Security Symbol:</span>
-                <strong style={{ color: '#FFFFFF' }}>{selectedEntry.symbol}</strong>
+                <strong style={{ color: 'var(--text-main)' }}>{selectedEntry.symbol}</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Side & Type:</span>
@@ -439,17 +440,17 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Quantity Executed:</span>
-                <span style={{ color: '#FFFFFF' }}>{selectedEntry.shares} shares</span>
+                <span style={{ color: 'var(--text-main)' }}>{selectedEntry.shares} shares</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Execution Price:</span>
-                <span style={{ color: '#FFFFFF' }}>
+                <span style={{ color: 'var(--text-main)' }}>
                   ₹{selectedEntry.fillPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Gross Consideration:</span>
-                <span style={{ color: '#FFFFFF', fontWeight: 700 }}>
+                <span style={{ color: 'var(--text-main)', fontWeight: 700 }}>
                   ₹{selectedEntry.total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                 </span>
               </div>
