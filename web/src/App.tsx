@@ -200,8 +200,18 @@ export const AppContent: React.FC = () => {
     };
 
     checkSession();
+
+    const handleHash = () => {
+      const hash = window.location.hash.toLowerCase();
+      if (hash.includes('onboarding') || hash.includes('step=')) {
+        if (isMounted) setAuthState('onboarding');
+      }
+    };
+    window.addEventListener('hashchange', handleHash);
+
     return () => {
       isMounted = false;
+      window.removeEventListener('hashchange', handleHash);
     };
   }, []);
 

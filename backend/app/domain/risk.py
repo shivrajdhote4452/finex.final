@@ -5,6 +5,7 @@ Evaluates risk profiles deterministically based on willingness, capacity, and ho
 Zero hallucinations or speculative recommendations. Cites SEBI Asset Allocation principles.
 """
 
+import math
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -150,7 +151,7 @@ def evaluate_risk_profile(submission: AssessmentSubmission) -> RiskAssessmentRes
 
     # 40% willingness, 40% capacity, 20% horizon adjustment
     raw_composite = (avg_willingness * 0.45 + avg_capacity * 0.55) * horizon_factor
-    composite_score = max(0, min(100, int(round(raw_composite))))
+    composite_score = max(0, min(100, int(math.floor(raw_composite + 0.5))))
 
     # Deterministic risk band categorization
     if composite_score < 40:

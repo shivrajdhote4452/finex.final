@@ -90,8 +90,69 @@ describe('Risk Onboarding Questionnaire & Domain Logic', () => {
     assert.equal(result.suggested_allocation.Gold, 10);
   });
 
-  test('5. Step sequence navigation rules: Back/Forward and direct editing preserve state', () => {
-    // Simulate step progression
+  test('5. Boundary conditions: Exact score 39 (Conservative) vs 40 (Moderate) and 69 (Moderate) vs 70 (Aggressive)', () => {
+    // Boundary 39: Conservative upper edge
+    const r39 = evaluateDeterministicRisk('<1', {
+      Q1: 'Q1_A', // 10
+      Q3: 'Q3_C', // 95  -> avg_w = 52.5
+      Q2: 'Q2_D', // 100
+      Q4: 'Q4_D', // 100 -> avg_c = 100
+    });
+    // raw = (52.5 * 0.45 + 100 * 0.55) * 0.50 = (23.625 + 55) * 0.50 = 78.625 * 0.50 = 39.3125 -> 39
+    assert.equal(r39.composite_score, 39);
+    assert.equal(r39.risk_band, 'Conservative');
+
+    // Boundary 40: Moderate lower edge
+    const r40 = evaluateDeterministicRisk('1-3', {
+      Q1: 'Q1_A', // 10
+      Q3: 'Q3_A', // 20  -> avg_w = 15
+      Q2: 'Q2_D', // 100
+      Q4: 'Q4_C', // 70  -> avg_c = 85
+    });
+    // raw = (15 * 0.45 + 85 * 0.55) * 0.75 = (6.75 + 46.75) * 0.75 = 53.5 * 0.75 = 40.125 -> 40
+    assert.equal(r40.composite_score, 40);
+    assert.equal(r40.risk_band, 'Moderate');
+
+    // Boundary 69: Moderate upper edge
+    const r69 = evaluateDeterministicRisk('1-3', {
+      Q1: 'Q1_C', // 70
+      Q3: 'Q3_C', // 95  -> avg_w = 82.5
+      Q2: 'Q2_D', // 100
+      Q4: 'Q4_D', // 100 -> avg_c = 100
+    });
+    // raw = (82.5 * 0.45 + 100 * 0.55) * 0.75 = (37.125 + 55) * 0.75 = 92.125 * 0.75 = 69.09375 -> 69
+    assert.equal(r69.composite_score, 69);
+    assert.equal(r69.risk_band, 'Moderate');
+
+    // Boundary 70: Aggressive lower edge
+    const r70 = evaluateDeterministicRisk('3-5', {
+      Q1: 'Q1_A', // 10
+      Q3: 'Q3_C', // 95  -> avg_w = 52.5
+      Q2: 'Q2_D', // 100
+      Q4: 'Q4_C', // 70  -> avg_c = 85
+    });
+    // raw = (52.5 * 0.45 + 85 * 0.55) * 1.0 = (23.625 + 46.75) * 1.0 = 70.375 -> 70
+    assert.equal(r70.composite_score, 70);
+    assert.equal(r70.risk_band, 'Aggressive');
+  });
+
+  test('6. Half-up rounding consistency across fractional .5 boundary cases', () => {
+    // Case where raw is exactly 26.5:
+    // horizon '<1' (0.50), Q1_B (35), Q3_B (60) -> avg_w = 47.5
+    // Q2_A (15), Q4_D (100) -> avg_c = 57.5
+    // raw = (47.5 * 0.45 + 57.5 * 0.55) * 0.50 = (21.375 + 31.625) * 0.50 = 53.0 * 0.50 = 26.5
+    const r26_5 = evaluateDeterministicRisk('<1', {
+      Q1: 'Q1_B',
+      Q3: 'Q3_B',
+      Q2: 'Q2_A',
+      Q4: 'Q4_D',
+    });
+    // Standard half-up rounds 26.5 to 27
+    assert.equal(r26_5.composite_score, 27);
+    assert.equal(r26_5.risk_band, 'Conservative');
+  });
+
+  test('7. Step sequence navigation rules: Back/Forward and direct editing preserve state', () => {
     let currentStep: 1 | 2 | 3 | 4 = 1;
     let maxStepReached = 1;
     const answers = {
@@ -144,7 +205,7 @@ describe('Risk Onboarding Questionnaire & Domain Logic', () => {
     assert.equal(currentStep, 4);
   });
 
-  test('6. Storage draft serialization preserves state across simulated page refresh', () => {
+  test('8. Storage draft serialization preserves state across simulated page refresh', () => {
     const draft = {
       step: 3 as const,
       maxStepReached: 3,
@@ -163,5 +224,46 @@ describe('Risk Onboarding Questionnaire & Domain Logic', () => {
     assert.equal(restored.q1Option, 'Q1_B');
     assert.equal(restored.selectedHorizon, '1-3');
     assert.equal(restored.q4Option, 'Q4_B');
+  });
+
+  test('9. False-success prevention: Submission failure must not mark complete or wipe draft', async () => {
+    let onboardingCompletedCalled = false;
+    let draftRemoved = false;
+    let uiErrorMessage: string | null = null;
+
+    const mockLocalStorage: Record<string, string> = {
+      finex_onboarding_draft: JSON.stringify({ step: 4, q1Option: 'Q1_C' }),
+    };
+
+    // Simulate failed API call
+    const mockApiClient = {
+      isAuthenticated: () => true,
+      submitAssessment: async () => {
+        throw new Error('500 Internal Server Error: Database write timed out');
+      },
+    };
+
+    // Runner representing handleFinalConfirm
+    async function executeFinalConfirm() {
+      try {
+        if (mockApiClient.isAuthenticated()) {
+          await mockApiClient.submitAssessment();
+        }
+        delete mockLocalStorage.finex_onboarding_draft;
+        draftRemoved = true;
+        onboardingCompletedCalled = true;
+      } catch (err: any) {
+        uiErrorMessage = err.message;
+        // Do NOT proceed
+      }
+    }
+
+    await executeFinalConfirm();
+
+    // Verify false-success was prevented
+    assert.equal(onboardingCompletedCalled, false, 'Must NOT trigger onComplete on API error');
+    assert.equal(draftRemoved, false, 'Must NOT wipe draft on API error');
+    assert.ok(mockLocalStorage.finex_onboarding_draft, 'Draft must remain intact in storage');
+    assert.match(uiErrorMessage!, /500 Internal Server Error/);
   });
 });

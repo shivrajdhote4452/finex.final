@@ -109,6 +109,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
   const [q4Option, setQ4Option] = useState<string>('Q4_C');
 
   const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [evaluatedProfile, setEvaluatedProfile] = useState<RiskEvaluationResult>(() =>
     evaluateDeterministicRisk('3-5', {
       Q1: 'Q1_C',
@@ -118,10 +120,22 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
     })
   );
 
+  // Recalculate deterministic profile whenever selections change
+  useEffect(() => {
+    const updated = evaluateDeterministicRisk(selectedHorizon, {
+      Q1: q1Option,
+      Q2: q2Option,
+      Q3: q3Option,
+      Q4: q4Option,
+    });
+    setEvaluatedProfile(updated);
+  }, [selectedHorizon, q1Option, q2Option, q3Option, q4Option]);
+
   // Synchronize step and browser history
   const setStep = useCallback((newStep: 1 | 2 | 3 | 4, updateHistory = true) => {
     setStepState(newStep);
     setMaxStepReached((prev) => Math.max(prev, newStep));
+    setSubmitError(null);
     if (updateHistory && typeof window !== 'undefined') {
       window.history.pushState({ onboardingStep: newStep }, '', `#step=${newStep}`);
     }
@@ -189,57 +203,58 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Compute profile either via backend or deterministic fallback
-  const handleCalculateProfile = async () => {
+  // Compute profile and advance to Step 4 review screen
+  const handleCalculateProfile = () => {
     setLoading(true);
-    const deterministic = evaluateDeterministicRisk(selectedHorizon, {
-      Q1: q1Option,
-      Q2: q2Option,
-      Q3: q3Option,
-      Q4: q4Option,
-    });
-
-    try {
-      const res = await apiClient.risk.submitAssessment({
-        questionnaire_version: 'v1.0',
-        horizon_category: selectedHorizon,
-        answers: [
-          { question_id: 'Q1', option_id: q1Option },
-          { question_id: 'Q2', option_id: q2Option },
-          { question_id: 'Q3', option_id: q3Option },
-          { question_id: 'Q4', option_id: q4Option },
-        ],
-      });
-
-      if (res) {
-        setEvaluatedProfile({
-          ...deterministic,
-          composite_score: res.composite_score ?? deterministic.composite_score,
-          risk_band: (res.risk_band as any) || deterministic.risk_band,
-          explanation: res.explanation || deterministic.explanation,
-          citation: res.citation || deterministic.citation,
-          disclaimer: res.disclaimer || deterministic.disclaimer,
-          suggested_allocation: (res.suggested_allocation as any) || deterministic.suggested_allocation,
-          factors: res.factors || deterministic.factors,
-        });
-      } else {
-        setEvaluatedProfile(deterministic);
-      }
-    } catch {
-      // Deterministic fallback aligns with backend formula
-      setEvaluatedProfile(deterministic);
-    } finally {
-      setLoading(false);
-      setStep(4);
-    }
+    setSubmitError(null);
+    setStep(4);
+    setLoading(false);
   };
 
-  const handleFinalConfirm = () => {
+  // Authoritative submission on Step 4
+  const handleFinalConfirm = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    setSubmitError(null);
+
+    const submissionPayload = {
+      questionnaire_version: 'v1.0',
+      horizon_category: selectedHorizon,
+      answers: [
+        { question_id: 'Q1', option_id: q1Option },
+        { question_id: 'Q2', option_id: q2Option },
+        { question_id: 'Q3', option_id: q3Option },
+        { question_id: 'Q4', option_id: q4Option },
+      ],
+    };
+
+    // If user has active authentication session, persist server-authoritatively
+    if (apiClient.isAuthenticated()) {
+      try {
+        const res = await apiClient.risk.submitAssessment(submissionPayload);
+        if (!res || !res.risk_band) {
+          throw new Error('Server returned an invalid or incomplete assessment response.');
+        }
+      } catch (err: any) {
+        setSubmitting(false);
+        const errorDetail =
+          err?.message ||
+          (typeof err === 'string'
+            ? err
+            : 'Unable to save risk assessment to server. Please check your connection and retry.');
+        setSubmitError(errorDetail);
+        // CRITICAL: Do NOT call onComplete() and do NOT remove draft to prevent false success
+        return;
+      }
+    }
+
+    // Success: cleanup draft and transition to authenticated workspace
     try {
       localStorage.removeItem(STORAGE_KEY);
     } catch {
       // ignore
     }
+    setSubmitting(false);
     onComplete();
   };
 
@@ -375,21 +390,41 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
               No return is guaranteed. All portfolio models on FinEx use simulated virtual capital for educational learning.
             </div>
 
+            {submitError && (
+              <div
+                role="alert"
+                style={{
+                  backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid #EF4444',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '10px 14px',
+                  marginBottom: '14px',
+                  color: '#EF4444',
+                  fontSize: '12px',
+                  lineHeight: 1.4,
+                }}
+              >
+                <strong>Unable to save profile:</strong> {submitError}
+              </div>
+            )}
+
             {/* Primary Action Button */}
             <button
               type="button"
               onClick={handleFinalConfirm}
+              disabled={submitting}
               className="btn btn-action"
               style={{
                 width: '100%',
                 padding: '12px 20px',
                 fontSize: '14px',
                 fontWeight: 700,
-                cursor: 'pointer',
+                cursor: submitting ? 'wait' : 'pointer',
                 borderRadius: 'var(--radius-sm)',
+                opacity: submitting ? 0.7 : 1,
               }}
             >
-              Confirm profile →
+              {submitting ? 'Saving Profile...' : submitError ? 'Retry Confirm Profile →' : 'Confirm profile →'}
             </button>
           </div>
 
@@ -512,12 +547,46 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }
               {evaluatedProfile.citation}
             </div>
 
+            {submitError && (
+              <div
+                role="alert"
+                style={{
+                  marginTop: '16px',
+                  backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid #EF4444',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '10px 14px',
+                  color: '#EF4444',
+                  fontSize: '12px',
+                  lineHeight: 1.4,
+                }}
+              >
+                <strong>Submission Error:</strong> {submitError}
+              </div>
+            )}
+
             <div style={{ marginTop: '28px', display: 'flex', gap: '12px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-              <button type="button" onClick={() => setStep(3)} className="btn btn-secondary" style={{ flex: '1 1 auto' }}>
+              <button
+                type="button"
+                onClick={() => setStep(3)}
+                disabled={submitting}
+                className="btn btn-secondary"
+                style={{ flex: '1 1 auto' }}
+              >
                 Review answers
               </button>
-              <button type="button" onClick={handleFinalConfirm} className="btn btn-action" style={{ flex: '1 1 auto' }}>
-                Confirm profile →
+              <button
+                type="button"
+                onClick={handleFinalConfirm}
+                disabled={submitting}
+                className="btn btn-action"
+                style={{
+                  flex: '1 1 auto',
+                  cursor: submitting ? 'wait' : 'pointer',
+                  opacity: submitting ? 0.7 : 1,
+                }}
+              >
+                {submitting ? 'Saving...' : submitError ? 'Retry Confirm →' : 'Confirm profile →'}
               </button>
             </div>
           </div>
