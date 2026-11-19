@@ -504,7 +504,7 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
                     <tr>
                       <td colSpan={8} style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted)' }}>
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
-                          <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%', border: '2px solid var(--accent)', borderTopColor: 'transparent', animation: 'spin 1s linear infinite' }}></span>
+                          <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%', border: '2px solid var(--color-action)', borderTopColor: 'transparent', animation: 'spin 1s linear infinite' }}></span>
                           Syncing holdings with server...
                         </div>
                       </td>
@@ -524,9 +524,9 @@ export const PortfolioScreen: React.FC<PortfolioScreenProps> = ({ onNavigate }) 
                             style={{
                               marginTop: '8px',
                               padding: '6px 14px',
-                              background: 'var(--color-primary-bg)',
-                              color: 'var(--color-primary)',
-                              border: '1px solid rgba(59, 130, 246, 0.3)',
+                              background: 'var(--color-action-bg)',
+                              color: 'var(--color-action)',
+                              border: '1px solid var(--color-action-border)',
                               borderRadius: '6px',
                               fontSize: '12px',
                               fontWeight: 500,

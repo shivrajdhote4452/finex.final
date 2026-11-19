@@ -196,7 +196,7 @@ export const PrivacyPolicyScreen: React.FC<PrivacyPolicyScreenProps> = ({ onBack
 
             {/* Paper Trading & Simulation Data */}
             <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '6px', padding: '18px' }}>
-              <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-success)', marginBottom: '6px' }}>
+              <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--color-profit)', marginBottom: '6px' }}>
                 B. Simulated Paper Trading &amp; Portfolio Data
               </div>
               <p style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.6, margin: '0 0 8px 0' }}>

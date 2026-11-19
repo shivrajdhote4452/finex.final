@@ -195,7 +195,7 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({ onNavigate }) =>
 
         {/* Risk Profile */}
         <div className="glass-card" style={{ padding: '24px' }}>
-          <span style={{ fontSize: '11px', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-muted)', fontWeight: 600, display: 'block', marginBottom: '8px' }}>
+          <span style={{ fontSize: '11px', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 600, display: 'block', marginBottom: '8px' }}>
             Deterministic Risk
           </span>
           <div style={{ fontSize: '28px', fontWeight: 700, color: 'var(--color-primary)', lineHeight: 1.1 }}>

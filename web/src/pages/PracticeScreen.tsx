@@ -247,9 +247,9 @@ export const PracticeScreen: React.FC = () => {
                     fontWeight: 600,
                     borderRadius: 'var(--radius-xs)',
                     cursor: 'pointer',
-                    border: orderType === t ? '1px solid var(--color-primary)' : '1px solid var(--border-subtle)',
-                    background: orderType === t ? 'var(--color-primary-bg)' : 'var(--bg-subtle)',
-                    color: orderType === t ? 'var(--color-primary)' : 'var(--text-muted)',
+                    border: orderType === t ? '1px solid var(--color-action)' : '1px solid var(--border-subtle)',
+                    background: orderType === t ? 'var(--color-action-bg)' : 'var(--bg-subtle)',
+                    color: orderType === t ? 'var(--color-action)' : 'var(--text-muted)',
                   }}
                 >
                   {t}

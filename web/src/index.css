@@ -50,6 +50,21 @@
   --color-accent-cyan: #4DD5AD;
   --color-accent-cyan-glow: rgba(77, 213, 173, 0.25);
 
+  /* Semantic Aliases & State Fallbacks (Dark OLED) */
+  --color-success: #4DD5AD;
+  --color-success-bg: rgba(77, 213, 173, 0.12);
+  --color-success-border: rgba(77, 213, 173, 0.3);
+  --color-profit-contrast: #000000;
+
+  --color-danger: #F48C7B;
+  --color-danger-bg: rgba(244, 140, 123, 0.12);
+  --color-danger-border: rgba(244, 140, 123, 0.3);
+  --color-loss-contrast: #000000;
+
+  --color-primary-bg: rgba(242, 154, 96, 0.12);
+  --color-muted: #8E8E93;
+  --accent: #F29A60;
+
   /* Typography Colors */
   --text-main: #FFFFFF;
   --text-primary: #F4F4F5;
@@ -122,6 +137,21 @@
 
   --color-accent-cyan: #059669;
   --color-accent-cyan-glow: rgba(5, 150, 105, 0.2);
+
+  /* Semantic Aliases & State Fallbacks (Crisp Light Contrast) */
+  --color-success: #059669;
+  --color-success-bg: rgba(5, 150, 105, 0.1);
+  --color-success-border: rgba(5, 150, 105, 0.25);
+  --color-profit-contrast: #FFFFFF;
+
+  --color-danger: #DC2626;
+  --color-danger-bg: rgba(220, 38, 38, 0.1);
+  --color-danger-border: rgba(220, 38, 38, 0.25);
+  --color-loss-contrast: #FFFFFF;
+
+  --color-primary-bg: rgba(217, 107, 39, 0.12);
+  --color-muted: #64748B;
+  --accent: #D96B27;
 
   /* Typography Colors */
   --text-main: #0F172A;

@@ -270,9 +270,9 @@ export const SpendingScreen: React.FC = () => {
               style={{
                 padding: '7px 14px',
                 borderRadius: 'var(--radius-sm)',
-                border: activeCategory === c ? '1px solid var(--color-primary)' : '1px solid transparent',
-                background: activeCategory === c ? 'var(--color-primary-bg)' : 'transparent',
-                color: activeCategory === c ? 'var(--color-primary)' : 'var(--text-muted)',
+                border: activeCategory === c ? '1px solid var(--color-action)' : '1px solid transparent',
+                background: activeCategory === c ? 'var(--color-action-bg)' : 'transparent',
+                color: activeCategory === c ? 'var(--color-action)' : 'var(--text-muted)',
                 fontSize: '12px',
                 fontWeight: activeCategory === c ? 600 : 500,
                 cursor: 'pointer',

@@ -176,7 +176,7 @@ export const TermsOfServiceScreen: React.FC<TermsOfServiceScreenProps> = ({ onBa
             </div>
 
             <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: '6px', padding: '16px' }}>
-              <strong style={{ fontSize: '13.5px', color: 'var(--color-success)' }}>B. No Brokerage or Clearing Affiliation</strong>
+              <strong style={{ fontSize: '13.5px', color: 'var(--color-profit)' }}>B. No Brokerage or Clearing Affiliation</strong>
               <p style={{ fontSize: '13px', color: 'var(--text-muted)', lineHeight: 1.6, marginTop: '4px', margin: 0 }}>
                 FinEx is NOT a registered stockbroker, clearing member, or depository participant under the Securities and Exchange Board of India (SEBI) or any other financial authority. FinEx does not connect to Demat accounts, does not hold investor securities, and does not route orders to live stock exchange order books.
               </p>

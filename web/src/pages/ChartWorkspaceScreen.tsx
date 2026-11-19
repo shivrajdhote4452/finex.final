@@ -1067,9 +1067,9 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
             <button
               onClick={() => setIsBottomCollapsed(!isBottomCollapsed)}
               style={{
-                background: !isBottomCollapsed ? 'var(--color-success)' : 'var(--bg-card)',
-                color: !isBottomCollapsed ? '#FFFFFF' : 'var(--color-success)',
-                border: '1px solid var(--color-success)',
+                background: !isBottomCollapsed ? 'var(--color-profit)' : 'var(--bg-card)',
+                color: !isBottomCollapsed ? '#FFFFFF' : 'var(--text-main)',
+                border: !isBottomCollapsed ? '1px solid var(--color-profit)' : '1px solid var(--border-medium)',
                 borderRadius: '4px',
                 padding: '4px 8px',
                 fontSize: '11px',
@@ -1689,8 +1689,8 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                           onClick={() => setOrderSide('BUY')}
                           style={{
                             padding: '6px 16px',
-                            backgroundColor: orderSide === 'BUY' ? 'var(--color-success)' : 'var(--bg-subtle)',
-                            color: orderSide === 'BUY' ? '#FFFFFF' : 'var(--text-muted)',
+                            backgroundColor: orderSide === 'BUY' ? 'var(--color-profit)' : 'var(--bg-subtle)',
+                            color: orderSide === 'BUY' ? 'var(--color-profit-contrast, #FFFFFF)' : 'var(--text-muted)',
                             border: orderSide === 'BUY' ? 'none' : '1px solid var(--border-subtle)',
                             borderRadius: '4px',
                             fontWeight: 700,
@@ -1704,8 +1704,8 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                           onClick={() => setOrderSide('SELL')}
                           style={{
                             padding: '6px 16px',
-                            backgroundColor: orderSide === 'SELL' ? 'var(--color-danger)' : 'var(--bg-subtle)',
-                            color: orderSide === 'SELL' ? '#FFFFFF' : 'var(--text-muted)',
+                            backgroundColor: orderSide === 'SELL' ? 'var(--color-loss)' : 'var(--bg-subtle)',
+                            color: orderSide === 'SELL' ? 'var(--color-loss-contrast, #FFFFFF)' : 'var(--text-muted)',
                             border: orderSide === 'SELL' ? 'none' : '1px solid var(--border-subtle)',
                             borderRadius: '4px',
                             fontWeight: 700,
@@ -1789,7 +1789,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                         Estimated Total: <strong style={{ color: 'var(--text-main)' }}>₹{orderEstTotal.toFixed(2)}</strong>
                       </div>
                       <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                        Virtual Cash: <span style={{ color: 'var(--color-success)' }}>₹{virtualCash.toLocaleString('en-IN')}</span>
+                        Virtual Cash: <span style={{ color: 'var(--color-profit)', fontWeight: 600 }}>₹{virtualCash.toLocaleString('en-IN')}</span>
                       </div>
                       <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                         Holding: <span style={{ color: 'var(--text-main)' }}>{ownedShares} shares</span>
@@ -1800,8 +1800,8 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                         disabled={orderExecuting}
                         style={{
                           marginTop: '6px',
-                          backgroundColor: orderSide === 'BUY' ? 'var(--color-success)' : 'var(--color-danger)',
-                          color: '#FFFFFF',
+                          backgroundColor: orderSide === 'BUY' ? 'var(--color-profit)' : 'var(--color-loss)',
+                          color: orderSide === 'BUY' ? 'var(--color-profit-contrast, #FFFFFF)' : 'var(--color-loss-contrast, #FFFFFF)',
                           border: 'none',
                           borderRadius: '4px',
                           padding: '6px 12px',
@@ -1817,7 +1817,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                         <div
                           style={{
                             fontSize: '11px',
-                            color: orderFeedback.type === 'success' ? 'var(--color-success)' : 'var(--color-danger)',
+                            color: orderFeedback.type === 'success' ? 'var(--color-profit)' : 'var(--color-loss)',
                             marginTop: '4px',
                           }}
                         >
@@ -1847,7 +1847,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                             <td style={{ padding: '6px 4px', color: 'var(--text-main)' }}>{h.shares}</td>
                             <td style={{ padding: '6px 4px', color: 'var(--text-main)' }}>₹{h.avgPrice.toFixed(2)}</td>
                             <td style={{ padding: '6px 4px', color: 'var(--text-main)' }}>₹{h.currentPrice.toFixed(2)}</td>
-                            <td style={{ padding: '6px 4px', color: 'var(--color-success)' }}>
+                            <td style={{ padding: '6px 4px', color: 'var(--color-profit)' }}>
                               ₹{(h.shares * h.currentPrice).toFixed(2)}
                             </td>
                           </tr>
@@ -1878,7 +1878,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                             <td
                               style={{
                                 padding: '6px 4px',
-                                color: l.type === 'BUY' ? 'var(--color-success)' : 'var(--color-danger)',
+                                color: l.type === 'BUY' ? 'var(--color-profit)' : 'var(--color-loss)',
                                 fontWeight: 600,
                               }}
                             >
@@ -1905,7 +1905,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                             <td style={{ padding: '6px 4px', color: 'var(--text-main)' }}>{l.shares}</td>
                             <td style={{ padding: '6px 4px', color: 'var(--text-main)' }}>₹{l.fillPrice.toFixed(2)}</td>
                             <td style={{ padding: '6px 4px', color: 'var(--text-main)' }}>₹{l.total.toFixed(2)}</td>
-                            <td style={{ padding: '6px 4px', color: 'var(--color-success)' }}>{l.status}</td>
+                            <td style={{ padding: '6px 4px', color: 'var(--color-profit)' }}>{l.status}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1982,7 +1982,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                       </div>
                       <div>
                         <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>ROE</div>
-                        <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-success)', marginTop: '2px' }}>14.8%</div>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-profit)', marginTop: '2px' }}>14.8%</div>
                       </div>
                       <div>
                         <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Div. Yield</div>
@@ -2147,7 +2147,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                                   <span>
                                     {alloc.side} {alloc.quantity}x {alloc.symbol}
                                   </span>
-                                  <span style={{ color: 'var(--color-success)' }}>
+                                  <span style={{ color: 'var(--color-profit)' }}>
                                     ₹{alloc.estimated_subtotal?.toFixed(0)}
                                   </span>
                                 </div>
@@ -2289,7 +2289,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                         <div
                           style={{
                             fontSize: '10px',
-                            color: quote.isPositive ? 'var(--color-success)' : 'var(--color-danger)',
+                            color: quote.isPositive ? 'var(--color-profit)' : 'var(--color-loss)',
                             fontWeight: 600,
                           }}
                         >
