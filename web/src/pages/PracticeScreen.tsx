@@ -172,9 +172,9 @@ export const PracticeScreen: React.FC = () => {
                 fontWeight: 700,
                 fontSize: '13px',
                 cursor: 'pointer',
-                background: orderAction === 'BUY' ? 'linear-gradient(135deg, #10B981 0%, #059669 100%)' : 'transparent',
-                color: orderAction === 'BUY' ? '#FFFFFF' : 'var(--text-muted)',
-                boxShadow: orderAction === 'BUY' ? '0 0 12px rgba(16, 185, 129, 0.3)' : 'none',
+                background: orderAction === 'BUY' ? 'var(--color-profit)' : 'transparent',
+                color: orderAction === 'BUY' ? 'var(--color-profit-contrast, #FFFFFF)' : 'var(--text-muted)',
+                boxShadow: orderAction === 'BUY' ? '0 0 12px var(--color-profit-border)' : 'none',
               }}
             >
               BUY / LONG
@@ -188,9 +188,9 @@ export const PracticeScreen: React.FC = () => {
                 fontWeight: 700,
                 fontSize: '13px',
                 cursor: 'pointer',
-                background: orderAction === 'SELL' ? 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)' : 'transparent',
-                color: orderAction === 'SELL' ? '#FFFFFF' : 'var(--text-muted)',
-                boxShadow: orderAction === 'SELL' ? '0 0 12px rgba(239, 68, 68, 0.3)' : 'none',
+                background: orderAction === 'SELL' ? 'var(--color-loss)' : 'transparent',
+                color: orderAction === 'SELL' ? 'var(--color-loss-contrast, #FFFFFF)' : 'var(--text-muted)',
+                boxShadow: orderAction === 'SELL' ? '0 0 12px var(--color-loss-border)' : 'none',
               }}
             >
               SELL / SHORT
@@ -388,7 +388,7 @@ export const PracticeScreen: React.FC = () => {
           <button
             onClick={handleExecute}
             disabled={isExecuting || (orderAction === 'BUY' && orderTotal > virtualCash) || (orderAction === 'SELL' && ownedShares < shares)}
-            className={orderAction === 'BUY' ? 'btn-emerald' : 'btn'}
+            className={orderAction === 'BUY' ? 'btn-buy' : 'btn-sell'}
             style={{
               width: '100%',
               padding: '13px',
@@ -396,7 +396,6 @@ export const PracticeScreen: React.FC = () => {
               fontWeight: 700,
               borderRadius: 'var(--radius-sm)',
               cursor: isExecuting ? 'not-allowed' : 'pointer',
-              background: orderAction === 'SELL' ? 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)' : undefined,
               opacity: (orderAction === 'BUY' && orderTotal > virtualCash) || (orderAction === 'SELL' && ownedShares < shares) ? 0.5 : 1,
             }}
           >

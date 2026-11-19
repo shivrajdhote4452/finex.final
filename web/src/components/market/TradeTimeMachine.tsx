@@ -1101,8 +1101,8 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
                 onClick={() => handleExecuteReplayTrade('BUY')}
                 disabled={isExecutingTrade || currentCandle.close * orderQty > virtualCash}
                 style={{
-                  backgroundColor: '#10B981',
-                  color: '#FFFFFF',
+                  backgroundColor: 'var(--color-profit)',
+                  color: 'var(--color-profit-contrast, #FFFFFF)',
                   border: 'none',
                   borderRadius: '6px',
                   padding: '10px 0',
@@ -1118,8 +1118,8 @@ export const TradeTimeMachine: React.FC<TradeTimeMachineProps> = ({
                 onClick={() => handleExecuteReplayTrade('SELL')}
                 disabled={isExecutingTrade}
                 style={{
-                  backgroundColor: '#EF4444',
-                  color: '#FFFFFF',
+                  backgroundColor: 'var(--color-loss)',
+                  color: 'var(--color-loss-contrast, #FFFFFF)',
                   border: 'none',
                   borderRadius: '6px',
                   padding: '10px 0',

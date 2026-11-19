@@ -256,9 +256,9 @@ export const QuickTradeModal: React.FC = () => {
                   fontWeight: 700,
                   fontSize: '13px',
                   cursor: 'pointer',
-                  background: tradeType === 'BUY' ? 'linear-gradient(135deg, #10B981 0%, #059669 100%)' : 'transparent',
-                  color: tradeType === 'BUY' ? '#FFFFFF' : 'var(--text-muted)',
-                  boxShadow: tradeType === 'BUY' ? '0 0 14px rgba(16, 185, 129, 0.35)' : 'none',
+                  background: tradeType === 'BUY' ? 'var(--color-profit)' : 'transparent',
+                  color: tradeType === 'BUY' ? 'var(--color-profit-contrast, #FFFFFF)' : 'var(--text-muted)',
+                  boxShadow: tradeType === 'BUY' ? '0 0 14px var(--color-profit-border)' : 'none',
                   transition: 'all 0.15s ease',
                 }}
               >
@@ -273,9 +273,9 @@ export const QuickTradeModal: React.FC = () => {
                   fontWeight: 700,
                   fontSize: '13px',
                   cursor: 'pointer',
-                  background: tradeType === 'SELL' ? 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)' : 'transparent',
-                  color: tradeType === 'SELL' ? '#FFFFFF' : 'var(--text-muted)',
-                  boxShadow: tradeType === 'SELL' ? '0 0 14px rgba(239, 68, 68, 0.35)' : 'none',
+                  background: tradeType === 'SELL' ? 'var(--color-loss)' : 'transparent',
+                  color: tradeType === 'SELL' ? 'var(--color-loss-contrast, #FFFFFF)' : 'var(--text-muted)',
+                  boxShadow: tradeType === 'SELL' ? '0 0 14px var(--color-loss-border)' : 'none',
                   transition: 'all 0.15s ease',
                 }}
               >
@@ -512,14 +512,13 @@ export const QuickTradeModal: React.FC = () => {
             <button
               onClick={handleSubmit}
               disabled={isSubmitting}
-              className={tradeType === 'BUY' ? 'btn-emerald' : 'btn'}
+              className={tradeType === 'BUY' ? 'btn-buy' : 'btn-sell'}
               style={{
                 width: '100%',
                 padding: '14px',
                 fontSize: '14px',
                 borderRadius: 'var(--radius-sm)',
                 cursor: 'pointer',
-                background: tradeType === 'SELL' ? 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)' : undefined,
               }}
             >
               {isSubmitting

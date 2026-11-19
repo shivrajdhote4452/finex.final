@@ -121,32 +121,32 @@
   --color-primary-hover: #BF5617;
   --color-primary-glow: rgba(217, 107, 39, 0.25);
 
-  --color-positive: #059669;       /* Deep Emerald / Mint */
-  --color-profit: #059669;
-  --color-profit-bg: rgba(5, 150, 105, 0.1);
-  --color-profit-border: rgba(5, 150, 105, 0.25);
+  --color-positive: #047857;       /* Deep Emerald / Mint (WCAG AA 5.48:1) */
+  --color-profit: #047857;
+  --color-profit-bg: rgba(4, 120, 87, 0.1);
+  --color-profit-border: rgba(4, 120, 87, 0.25);
 
-  --color-negative: #DC2626;       /* Crisp Crimson Red */
-  --color-loss: #DC2626;
-  --color-loss-bg: rgba(220, 38, 38, 0.1);
-  --color-loss-border: rgba(220, 38, 38, 0.25);
+  --color-negative: #B91C1C;       /* Crisp Crimson Red (WCAG AA 6.47:1) */
+  --color-loss: #B91C1C;
+  --color-loss-bg: rgba(185, 28, 28, 0.1);
+  --color-loss-border: rgba(185, 28, 28, 0.25);
 
   --color-virtual: #D96B27;
   --color-virtual-bg: rgba(217, 107, 39, 0.12);
   --color-virtual-border: rgba(217, 107, 39, 0.3);
 
-  --color-accent-cyan: #059669;
-  --color-accent-cyan-glow: rgba(5, 150, 105, 0.2);
+  --color-accent-cyan: #047857;
+  --color-accent-cyan-glow: rgba(4, 120, 87, 0.2);
 
   /* Semantic Aliases & State Fallbacks (Crisp Light Contrast) */
-  --color-success: #059669;
-  --color-success-bg: rgba(5, 150, 105, 0.1);
-  --color-success-border: rgba(5, 150, 105, 0.25);
+  --color-success: #047857;
+  --color-success-bg: rgba(4, 120, 87, 0.1);
+  --color-success-border: rgba(4, 120, 87, 0.25);
   --color-profit-contrast: #FFFFFF;
 
-  --color-danger: #DC2626;
-  --color-danger-bg: rgba(220, 38, 38, 0.1);
-  --color-danger-border: rgba(220, 38, 38, 0.25);
+  --color-danger: #B91C1C;
+  --color-danger-bg: rgba(185, 28, 28, 0.1);
+  --color-danger-border: rgba(185, 28, 28, 0.25);
   --color-loss-contrast: #FFFFFF;
 
   --color-primary-bg: rgba(217, 107, 39, 0.12);
@@ -279,6 +279,31 @@ body {
 .btn-emerald:hover {
   background: var(--color-action-hover);
   border-color: var(--color-action-hover);
+}
+
+/* High-Contrast Buy & Sell Action Buttons */
+.btn-buy {
+  background: var(--color-profit);
+  color: var(--color-profit-contrast, #FFFFFF);
+  font-weight: 700;
+  border: 1px solid var(--color-profit);
+  transition: var(--transition-fast);
+}
+
+.btn-buy:hover {
+  filter: brightness(1.08);
+}
+
+.btn-sell {
+  background: var(--color-loss);
+  color: var(--color-loss-contrast, #FFFFFF);
+  font-weight: 700;
+  border: 1px solid var(--color-loss);
+  transition: var(--transition-fast);
+}
+
+.btn-sell:hover {
+  filter: brightness(1.08);
 }
 
 /* Secondary Button */
