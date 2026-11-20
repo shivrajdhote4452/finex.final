@@ -202,6 +202,9 @@ class ApiClient {
       localStorage.setItem('finex_access_token', token);
     } else {
       localStorage.removeItem('finex_access_token');
+      try {
+        localStorage.removeItem('finex_active_tab');
+      } catch {}
     }
     if (prev !== token) {
       this.notifyAuthStateListeners();
