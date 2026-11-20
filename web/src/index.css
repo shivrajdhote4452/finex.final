@@ -8,6 +8,7 @@
 [data-theme="dark"] {
   /* Canvas & Pure Black Surface Layers (Zero Green Tint) */
   --bg-app: #000000;
+  --bg-main: #000000;
   --bg-sidebar: #080808;
   --bg-card: #111111;
   --bg-card-hover: #181818;
@@ -96,6 +97,7 @@
 [data-theme="light"] {
   /* Canvas & Clean High-Contrast Light Surface Layers */
   --bg-app: #F8F9FA;
+  --bg-main: #F8F9FA;
   --bg-sidebar: #FFFFFF;
   --bg-card: #FFFFFF;
   --bg-card-hover: #F1F3F5;
@@ -2019,6 +2021,22 @@ body,
 @media (max-width: 768px) {
   .theme-toggle-label {
     display: none;
+  }
+}
+
+/* Admin Portal header link responsiveness */
+.investor-link-full {
+  display: inline;
+}
+.investor-link-short {
+  display: none;
+}
+@media (max-width: 480px) {
+  .investor-link-full {
+    display: none;
+  }
+  .investor-link-short {
+    display: inline;
   }
 }
 
