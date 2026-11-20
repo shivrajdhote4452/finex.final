@@ -221,9 +221,7 @@ async def test_admin_users_search_and_filters(app, owner_headers):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         # Search by email prefix
-        res_search = await client.get(
-            "/api/v1/admin/users?search=shivraj&limit=5", headers=owner_headers
-        )
+        res_search = await client.get("/api/v1/admin/users?search=shivraj&limit=5", headers=owner_headers)
         assert res_search.status_code == 200
         search_data = res_search.json()["data"]
         for u in search_data["users"]:
@@ -235,9 +233,7 @@ async def test_admin_users_search_and_filters(app, owner_headers):
             assert matches
 
         # Filter by active
-        res_active = await client.get(
-            "/api/v1/admin/users?is_active=true&limit=5", headers=owner_headers
-        )
+        res_active = await client.get("/api/v1/admin/users?is_active=true&limit=5", headers=owner_headers)
         assert res_active.status_code == 200
 
 
@@ -283,9 +279,7 @@ async def test_admin_orders_filter_by_status_and_symbol(app, owner_headers):
     """Orders can be filtered by status and ticker symbol."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        res_status = await client.get(
-            "/api/v1/admin/orders?status=REJECTED&limit=5", headers=owner_headers
-        )
+        res_status = await client.get("/api/v1/admin/orders?status=REJECTED&limit=5", headers=owner_headers)
         assert res_status.status_code == 200
         orders = res_status.json()["data"]["orders"]
         for o in orders:

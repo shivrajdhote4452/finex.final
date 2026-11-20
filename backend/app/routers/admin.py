@@ -124,9 +124,7 @@ async def get_admin_overview(
     total_users = total_users_res.scalar() or 0
 
     verified_users_res = await db.execute(
-        select(func.count(User.id)).where(
-            (User.email_verified.is_(True)) | (User.is_verified.is_(True))
-        )
+        select(func.count(User.id)).where((User.email_verified.is_(True)) | (User.is_verified.is_(True)))
     )
     verified_users = verified_users_res.scalar() or 0
     unverified_users = max(0, total_users - verified_users)
