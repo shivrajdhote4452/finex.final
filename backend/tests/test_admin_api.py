@@ -141,17 +141,15 @@ async def test_admin_endpoints_refuse_inactive_owner(app):
 
     settings = get_settings()
     owner_email = settings.OWNER_EMAIL or "shivrajdhote4452@gmail.com"
-    inactive_uid = "usr-inactive-owner-test"
-    was_created = False
+    owner_uid = "usr-shivraj-001"
 
-    # Ensure owner user exists in DB and is marked inactive
+    # Ensure canonical owner user exists in DB and is marked inactive
     async with AsyncSessionLocal() as session:
-        res = await session.execute(select(User).where(User.email == owner_email))
+        res = await session.execute(select(User).where(User.id == owner_uid))
         u = res.scalars().first()
         if not u:
-            was_created = True
             u = User(
-                id=inactive_uid,
+                id=owner_uid,
                 email=owner_email,
                 provider="google",
                 provider_subject="google-sub-shivraj-primary",
@@ -163,12 +161,12 @@ async def test_admin_endpoints_refuse_inactive_owner(app):
             session.add(u)
         else:
             u.is_active = False
-            inactive_uid = u.id
+            u.google_subject = "google-sub-shivraj-primary"
         await session.commit()
 
     try:
         token = create_access_token(
-            user_id=inactive_uid,
+            user_id=owner_uid,
             email=owner_email,
             name="Shivraj Dhote",
             provider="google",
@@ -182,15 +180,13 @@ async def test_admin_endpoints_refuse_inactive_owner(app):
                 "inactive" in res.json().get("detail", "").lower() or "disabled" in res.json().get("detail", "").lower()
             )
     finally:
-        # Restore active state or delete created test record
+        # Restore active state and canonical google_subject
         async with AsyncSessionLocal() as session:
-            res = await session.execute(select(User).where(User.email == owner_email))
+            res = await session.execute(select(User).where(User.id == owner_uid))
             u = res.scalars().first()
             if u:
-                if was_created:
-                    await session.delete(u)
-                else:
-                    u.is_active = True
+                u.is_active = True
+                u.google_subject = "google-sub-shivraj-primary"
                 await session.commit()
 
 
