@@ -210,6 +210,7 @@ async def test_owner_login_has_sandbox_access(app):
         "email": "shivrajdhote4452@gmail.com",
         "name": "Shivraj Dhote",
         "iss": "https://accounts.google.com",
+        "email_verified": True,
     }
     with patch("google.oauth2.id_token.verify_oauth2_token", return_value=mock_id_info):
         transport = ASGITransport(app=app)

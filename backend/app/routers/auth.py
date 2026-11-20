@@ -207,25 +207,64 @@ async def require_owner(
     db: Optional[AsyncSession] = Depends(get_db),
 ) -> dict:
     """FastAPI dependency to enforce owner-only access. Refuses non-owners with HTTP 403."""
+    # 1. Token claims must declare google provider and match configured owner email
     if current_user.get("provider") != "google" or not is_owner(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Forbidden: Sandbox controls and accounts are restricted to the platform owner.",
         )
+
     uid = current_user.get("sub")
-    if uid:
-        user = await user_store.get_user_by_id_db(uid, db=db)
-        if user:
-            if not user.is_active:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Forbidden: Account is inactive or disabled.",
-                )
-            if not user.email_verified and not user.is_verified:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Forbidden: Account identity is unverified.",
-                )
+    if not uid:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Token subject identifier is missing.",
+        )
+
+    # 2. Database identity must exist
+    user = await user_store.get_user_by_id_db(uid, db=db)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Owner user account not found in database.",
+        )
+
+    # 3. Database identity must correspond to the token and configured owner
+    settings = get_settings()
+    owner_email = (getattr(settings, "OWNER_EMAIL", None) or "").strip().lower()
+    if not owner_email or not user.email or user.email.strip().lower() != owner_email:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Database identity does not match configured owner email.",
+        )
+
+    token_email = (current_user.get("email") or "").strip().lower()
+    if token_email != user.email.strip().lower():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Token email does not match database user email.",
+        )
+
+    if user.provider != "google":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Database identity provider must be google.",
+        )
+
+    # 4. Database identity must be active
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Account is inactive or disabled.",
+        )
+
+    # 5. Database identity must meet verification requirements
+    if not user.email_verified and not user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Account identity is unverified.",
+        )
+
     return current_user
 
 
@@ -267,9 +306,11 @@ async def google_auth_callback(
         email = id_info.get("email") or f"{google_sub}@google.user"
         name = id_info.get("name") or "Investor"
         raw_email_verified = id_info.get("email_verified")
-        google_email_verified = (
-            False if (raw_email_verified is False or str(raw_email_verified).lower() == "false") else True
+        # Explicit confirmation: strictly boolean True or string "true"
+        is_explicitly_verified = (raw_email_verified is True) or (
+            isinstance(raw_email_verified, str) and raw_email_verified.strip().lower() == "true"
         )
+        google_email_verified = bool(is_explicitly_verified)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -277,10 +318,11 @@ async def google_auth_callback(
             headers={"WWW-Authenticate": "Bearer"},
         ) from None
 
-    if is_owner({"email": email, "provider": "google"}) and not google_email_verified:
+    # Owner/Admin security gate: fail closed before any persistence or linking
+    if is_owner({"email": email, "provider": "google"}) and not is_explicitly_verified:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Owner access requires a verified Google account.",
+            detail="Owner access requires a verified Google account with confirmed email verification.",
         )
 
     # Persist user in PostgreSQL using verified unique provider and subject
