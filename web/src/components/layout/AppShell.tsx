@@ -25,7 +25,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
     displayName: contextDisplayName,
   } = useFinancial();
 
-  const displayName = contextDisplayName || (isOwner ? 'Admin' : 'Investor');
+  const displayName = contextDisplayName || 'Investor';
   const initialLetter = (displayName[0] || 'I').toUpperCase();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -46,7 +46,6 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
     { id: 'alerts', label: 'Alerts', badge: unreadAlerts > 0 ? unreadAlerts : undefined },
     { id: 'goals', label: 'Goals' },
     { id: 'spending', label: 'Spending' },
-    ...(isOwner ? [{ id: 'admin' as const, label: 'Admin Panel', badge: 'Owner' }] : []),
   ];
 
   return (

@@ -16,6 +16,8 @@ Validates:
 8. System health diagnostics safely expose integration states without revealing credentials.
 """
 
+from unittest.mock import patch
+
 import pytest
 from backend.app.config import get_settings
 from backend.app.database import engine
@@ -767,3 +769,97 @@ async def test_legitimate_google_and_email_login_flows(app):
         )
         assert login_res.status_code == 200
         assert "access_token" in login_res.json()["data"]
+
+
+@pytest.mark.asyncio
+async def test_admin_google_login_truth_table_and_enforcement(app):
+    """Verifies POST /api/v1/auth/admin-google strictly authorizes only the verified owner."""
+    settings = get_settings()
+    owner_email = (settings.OWNER_EMAIL or "shivrajdhote4452@gmail.com").strip().lower()
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # 1. Non-owner Google login must fail closed with 403 Forbidden
+        with patch("google.oauth2.id_token.verify_oauth2_token") as mock_verify:
+            mock_verify.return_value = {
+                "iss": "https://accounts.google.com",
+                "sub": "non-owner-google-sub-999",
+                "email": "intruder@gmail.com",
+                "name": "Intruder User",
+                "email_verified": True,
+            }
+            res_intruder = await client.post(
+                "/api/v1/auth/admin-google",
+                json={"id_token": "mock-intruder-id-token"},
+            )
+            assert res_intruder.status_code == 403
+            assert "restricted to the platform owner" in res_intruder.json()["detail"]
+
+        # 2. Owner with unverified email must fail closed with 403 Forbidden
+        with patch("google.oauth2.id_token.verify_oauth2_token") as mock_verify:
+            mock_verify.return_value = {
+                "iss": "https://accounts.google.com",
+                "sub": "owner-google-sub-unverified",
+                "email": owner_email,
+                "name": "Shivraj Dhote",
+                "email_verified": False,
+            }
+            res_unverified = await client.post(
+                "/api/v1/auth/admin-google",
+                json={"id_token": "mock-unverified-id-token"},
+            )
+            assert res_unverified.status_code == 403
+            assert "Owner access requires a verified Google account" in res_unverified.json()["detail"]
+
+        # 3. Legitimate verified owner Google login succeeds with 200 OK
+        with patch("google.oauth2.id_token.verify_oauth2_token") as mock_verify:
+            mock_verify.return_value = {
+                "iss": "https://accounts.google.com",
+                "sub": "owner-google-sub-authorized",
+                "email": owner_email,
+                "name": "Shivraj Dhote",
+                "email_verified": True,
+            }
+            res_owner = await client.post(
+                "/api/v1/auth/admin-google",
+                json={"id_token": "mock-authorized-id-token"},
+            )
+            assert res_owner.status_code == 200
+            data = res_owner.json()["data"]
+            assert data["email"] == owner_email
+            assert "access_token" in data
+
+
+@pytest.mark.asyncio
+async def test_admin_me_endpoint(app, owner_headers):
+    """Verifies GET /api/v1/admin/me returns owner details and rejects non-owners."""
+    transport = ASGITransport(app=app)
+    settings = get_settings()
+    owner_email = (settings.OWNER_EMAIL or "shivrajdhote4452@gmail.com").strip().lower()
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # 1. Unauthenticated -> 401
+        res_unauth = await client.get("/api/v1/admin/me")
+        assert res_unauth.status_code == 401
+
+        # 2. Non-owner -> 403
+        non_owner_token = create_access_token(
+            user_id="usr-regular-001",
+            email="regular@finex.internal",
+            name="Regular User",
+            provider="google",
+        )
+        res_non_owner = await client.get(
+            "/api/v1/admin/me",
+            headers={"Authorization": f"Bearer {non_owner_token}"},
+        )
+        assert res_non_owner.status_code == 403
+
+        # 3. Authorized Owner -> 200 OK
+        res_owner = await client.get("/api/v1/admin/me", headers=owner_headers)
+        assert res_owner.status_code == 200
+        data = res_owner.json()["data"]
+        assert data["email"] == owner_email
+        assert data["role"] == "owner"
+        assert data["is_active"] is True
+        assert data["email_verified"] is True

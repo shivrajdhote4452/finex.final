@@ -361,6 +361,118 @@ async def google_auth_callback(
     return create_response_envelope(data.model_dump(), correlation_id=cid)
 
 
+@router.post(
+    "/admin-google",
+    summary="Admin Google OAuth Authentication",
+    description="Authenticates the platform owner via Google ID Token for the Admin Portal. Strictly rejects non-owners with HTTP 403 Forbidden.",
+)
+async def admin_google_auth(
+    request: Request,
+    payload: GoogleLoginRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    cid = getattr(request.state, "correlation_id", "none")
+    settings = get_settings()
+    raw_token = payload.id_token.strip()
+
+    # Determine permitted audiences - accepts configured client ID and standard FinEx web client ID
+    KNOWN_WEB_CLIENT_ID = "71626572471-2333p55kgim64b3738oabca9l9ss9th0.apps.googleusercontent.com"
+    allowed_audiences = [KNOWN_WEB_CLIENT_ID]
+
+    configured_aud = settings.GOOGLE_CLIENT_ID
+    if configured_aud and configured_aud not in ["placeholder-google-client-id", "finex-dev-client-id"]:
+        if configured_aud not in allowed_audiences:
+            allowed_audiences.append(configured_aud)
+
+    # 1. Verify Google ID token cryptographically
+    try:
+        id_info = google_id_token.verify_oauth2_token(
+            raw_token,
+            google_requests.Request(),
+            audience=allowed_audiences if len(allowed_audiences) > 1 else allowed_audiences[0],
+        )
+        iss = id_info.get("iss", "")
+        if iss not in ["accounts.google.com", "https://accounts.google.com"]:
+            raise ValueError(f"Untrusted token issuer: {iss}")
+
+        google_sub = id_info["sub"]
+        email = id_info.get("email") or f"{google_sub}@google.user"
+        name = id_info.get("name") or "Platform Owner"
+        raw_email_verified = id_info.get("email_verified")
+        # Explicit confirmation: strictly boolean True or string "true"
+        is_explicitly_verified = (raw_email_verified is True) or (
+            isinstance(raw_email_verified, str) and raw_email_verified.strip().lower() == "true"
+        )
+        google_email_verified = bool(is_explicitly_verified)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Google ID token verification failed: {str(e)}",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from None
+
+    # 2. Server-side authorization check: Strictly owner only!
+    if not is_owner({"email": email, "provider": "google"}):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Admin portal access is strictly restricted to the platform owner.",
+        )
+
+    # 3. Explicit Google email verification check: fail closed
+    if not is_explicitly_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Owner access requires a verified Google account with confirmed email verification.",
+        )
+
+    # 4. Fetch or persist owner user in PostgreSQL
+    try:
+        user = await user_store.get_or_create_user_db(
+            provider="google",
+            provider_subject=google_sub,
+            email=email,
+            name=name,
+            google_email_verified=google_email_verified,
+            db=db,
+        )
+    except ValueError as e:
+        if "already linked to a different Google account" in str(e):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(e),
+            )
+        raise
+
+    # 5. Fail closed if disabled or unverified
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Owner account is disabled.",
+        )
+
+    if not user.email_verified and not user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Owner account identity is unverified.",
+        )
+
+    token = create_access_token(
+        user_id=user.id,
+        email=user.email,
+        name=user.name,
+        provider="google",
+    )
+
+    data = TokenResponse(
+        access_token=token,
+        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        user_id=user.id,
+        email=user.email,
+        name=user.name,
+    )
+    return create_response_envelope(data.model_dump(), correlation_id=cid)
+
+
 @router.post("/signup")
 async def signup_with_email(
     request: Request,

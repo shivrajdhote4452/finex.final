@@ -131,7 +131,9 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     # 1. Custom Security & Observability Middlewares (Outer to Inner)
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(RequestSizeLimitMiddleware)
-    app.add_middleware(RateLimiterMiddleware, default_limit=150, auth_limit=40)
+    rate_limit_default = 5000 if getattr(app_settings.ENVIRONMENT, "value", str(app_settings.ENVIRONMENT)) == "testing" else 150
+    rate_limit_auth = 1000 if getattr(app_settings.ENVIRONMENT, "value", str(app_settings.ENVIRONMENT)) == "testing" else 40
+    app.add_middleware(RateLimiterMiddleware, default_limit=rate_limit_default, auth_limit=rate_limit_auth)
     app.add_middleware(CorrelationIdMiddleware)
 
     # 2. CORS Middleware

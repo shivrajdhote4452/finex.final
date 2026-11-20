@@ -20,8 +20,7 @@ export type NavigationTab =
   | 'alerts'
   | 'goals'
   | 'spending'
-  | 'settings'
-  | 'admin';
+  | 'settings';
 
 export const VALID_TABS: readonly NavigationTab[] = [
   'overview',
@@ -36,13 +35,30 @@ export const VALID_TABS: readonly NavigationTab[] = [
   'goals',
   'spending',
   'settings',
-  'admin',
 ] as const;
 
 export const STORAGE_KEY_ACTIVE_TAB = 'finex_active_tab';
 
 export function isValidTab(tab: unknown): tab is NavigationTab {
   return typeof tab === 'string' && (VALID_TABS as readonly string[]).includes(tab);
+}
+
+/**
+ * Detects whether the current browser location targets the dedicated Admin Portal.
+ * Evaluates pathname (/admin, /admin/) and fallback hash (#admin, #/admin).
+ */
+export function isAdminPortalRoute(pathname = '', hash = ''): boolean {
+  const normPath = (pathname || '').toLowerCase().replace(/\/$/, '');
+  const normHash = (hash || '').toLowerCase().replace(/^#\/?/, '').trim();
+
+  return (
+    normPath === '/admin' ||
+    normPath.startsWith('/admin/') ||
+    normHash === 'admin' ||
+    normHash.startsWith('admin/') ||
+    normHash === '/admin' ||
+    normHash.startsWith('/admin/')
+  );
 }
 
 export function parseTabFromHash(hash?: string | null): NavigationTab | null {

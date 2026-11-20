@@ -1,18 +1,19 @@
 /**
- * Admin Panel & Management Verification Tests.
+ * Separate FinEx Admin Portal & Management Verification Tests.
  *
  * Validates:
- * 1. Admin tab integration in sessionNavigation and VALID_TABS.
- * 2. Hash routing and tab resolution for '#admin'.
- * 3. ApiClient admin request contract (overview, users, orders, system-health).
- * 4. Query string serialization for users and orders filters.
- * 5. Safe projection enforcement: strictly prohibits sensitive fields
+ * 1. Admin navigation item is removed from normal workspace (VALID_TABS is investor-only).
+ * 2. Dedicated Admin Portal routing: isAdminPortalRoute detects '/admin' and '#admin'.
+ * 3. Session Separation: Admin and investor tokens coexist in separate storage keys;
+ *    logout or 401 in one portal does not clobber or invalidate the other.
+ * 4. Safe projection enforcement: strictly prohibits sensitive fields
  *    (password_hash, google_subject, provider_subject, risk_assessment, tokens).
- * 6. System health diagnostics contract: integration states without secrets.
- * 7. Non-owner fail-closed behavior.
+ * 5. System health diagnostics contract: integration states without secrets.
+ * 6. Query string serialization for users and orders filters.
+ * 7. Admin API client contract: googleLogin, getMe, getOverview, getUsers, getOrders, getSystemHealth, logout.
  */
 
-import test, { describe } from 'node:test';
+import test, { describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   VALID_TABS,
@@ -20,49 +21,160 @@ import {
   parseTabFromHash,
   isWorkspaceTabHash,
   resolveLandingTab,
+  isAdminPortalRoute,
   type NavigationTab,
 } from '../src/domain/sessionNavigation.ts';
-import type {
-  AdminUserItem,
-  AdminOrderItem,
-  AdminOverviewResponse,
-  AdminSystemHealthResponse,
+import {
+  apiClient,
+  type AdminUserItem,
+  type AdminOrderItem,
+  type AdminOverviewResponse,
+  type AdminSystemHealthResponse,
+  type AdminMeResponse,
 } from '../src/api/client.ts';
 
-describe('FinEx Common Admin Panel Frontend & Domain Contract', () => {
-  // -------------------------------------------------------------
-  // 1. NAVIGATION & ROUTING DOMAIN
-  // -------------------------------------------------------------
-  test('1. Admin tab is a recognized first-class workspace navigation tab', () => {
-    assert.ok(VALID_TABS.includes('admin' as NavigationTab), 'admin tab must be present in VALID_TABS');
-    assert.strictEqual(isValidTab('admin'), true, 'isValidTab("admin") must return true');
-    assert.strictEqual(parseTabFromHash('#admin'), 'admin');
-    assert.strictEqual(parseTabFromHash('#/admin'), 'admin');
-    assert.strictEqual(isWorkspaceTabHash('#admin'), true);
+// Helper to create a cryptographically valid unexpired JWT for frontend client tests
+const createValidTestToken = (sub: string) => {
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const payload = Buffer.from(
+    JSON.stringify({ sub, exp: Math.floor(Date.now() / 1000) + 3600 })
+  ).toString('base64url');
+  return `${header}.${payload}.signature`;
+};
+
+// Mock in-memory localStorage for Node test runner
+const memoryStorage: Record<string, string> = {};
+const mockLocalStorage = {
+  getItem: (key: string) => memoryStorage[key] || null,
+  setItem: (key: string, value: string) => {
+    memoryStorage[key] = String(value);
+  },
+  removeItem: (key: string) => {
+    delete memoryStorage[key];
+  },
+  clear: () => {
+    for (const k in memoryStorage) delete memoryStorage[k];
+  },
+};
+(globalThis as any).localStorage = mockLocalStorage;
+
+describe('Separate FinEx Admin Portal Frontend & Domain Contract', () => {
+  beforeEach(() => {
+    mockLocalStorage.clear();
+    apiClient.setToken(null);
+    apiClient.setAdminToken(null);
   });
 
-  test('2. Landing tab resolution honors active session for admin hash', () => {
-    // In-session active refresh with #admin stays on admin
-    const activeAdminTab = resolveLandingTab({
+  // -------------------------------------------------------------
+  // 1. WORKSPACE ISOLATION: ADMIN REMOVED FROM NORMAL WORKSPACE
+  // -------------------------------------------------------------
+  test('1. Normal workspace navigation strictly excludes "admin" from VALID_TABS', () => {
+    assert.strictEqual(
+      VALID_TABS.includes('admin' as any),
+      false,
+      'admin must NOT be in normal workspace VALID_TABS'
+    );
+    assert.strictEqual(isValidTab('admin'), false, 'isValidTab("admin") must return false');
+    assert.strictEqual(parseTabFromHash('#admin'), null, 'parseTabFromHash("#admin") must return null');
+    assert.strictEqual(isWorkspaceTabHash('#admin'), false, 'isWorkspaceTabHash("#admin") must return false');
+  });
+
+  test('2. Landing tab resolution defaults to "overview" if hash is "#admin"', () => {
+    // Normal workspace ignores #admin and safely resolves to overview
+    const resolved = resolveLandingTab({
       hasActiveSession: true,
       locationHash: '#admin',
-      storedTab: 'admin',
+      storedTab: 'overview',
     });
-    assert.strictEqual(activeAdminTab, 'admin');
-
-    // Unauthenticated user landing with #admin defaults to overview
-    const unauthTab = resolveLandingTab({
-      hasActiveSession: false,
-      locationHash: '#admin',
-      storedTab: 'admin',
-    });
-    assert.strictEqual(unauthTab, 'overview');
+    assert.strictEqual(resolved, 'overview');
   });
 
   // -------------------------------------------------------------
-  // 2. SAFE PROJECTIONS & PROHIBITED SENSITIVE FIELDS
+  // 2. DEDICATED ADMIN PORTAL ROUTE DETECTION
   // -------------------------------------------------------------
-  test('3. AdminUserItem schema strictly excludes passwords, OAuth subjects, and private questionnaire JSON', () => {
+  test('3. Dedicated Admin Portal route detector identifies /admin and #admin', () => {
+    assert.strictEqual(isAdminPortalRoute('/admin', ''), true);
+    assert.strictEqual(isAdminPortalRoute('/admin/', ''), true);
+    assert.strictEqual(isAdminPortalRoute('/admin/users', ''), true);
+    assert.strictEqual(isAdminPortalRoute('', '#admin'), true);
+    assert.strictEqual(isAdminPortalRoute('', '#/admin'), true);
+    assert.strictEqual(isAdminPortalRoute('', '#/admin/overview'), true);
+
+    // Investor routes must NOT be detected as admin portal
+    assert.strictEqual(isAdminPortalRoute('/', ''), false);
+    assert.strictEqual(isAdminPortalRoute('/overview', ''), false);
+    assert.strictEqual(isAdminPortalRoute('', '#overview'), false);
+    assert.strictEqual(isAdminPortalRoute('/privacy', ''), false);
+    assert.strictEqual(isAdminPortalRoute('/terms', ''), false);
+  });
+
+  // -------------------------------------------------------------
+  // 3. SESSION SEPARATION & TOKEN ISOLATION IN APICLIENT
+  // -------------------------------------------------------------
+  test('4. Admin and Investor tokens are stored in separate keys and coexist independently', () => {
+    const investorToken = createValidTestToken('usr-investor-001');
+    const adminToken = createValidTestToken('usr-owner-001');
+
+    apiClient.setToken(investorToken);
+    apiClient.setAdminToken(adminToken);
+
+    // Verify separate storage keys
+    assert.strictEqual(mockLocalStorage.getItem('finex_access_token'), investorToken);
+    assert.strictEqual(mockLocalStorage.getItem('finex_admin_access_token'), adminToken);
+
+    // Verify getter isolation
+    assert.strictEqual(apiClient.getToken(), investorToken);
+    assert.strictEqual(apiClient.getAdminToken(), adminToken);
+    assert.strictEqual(apiClient.isAuthenticated(), true);
+    assert.strictEqual(apiClient.isAdminAuthenticated(), true);
+  });
+
+  test('5. Admin logout clears ONLY the admin session and leaves investor session intact', async () => {
+    const investorToken = createValidTestToken('usr-investor-001');
+    const adminToken = createValidTestToken('usr-owner-001');
+
+    apiClient.setToken(investorToken);
+    apiClient.setAdminToken(adminToken);
+
+    // Admin logout
+    await apiClient.admin.logout();
+
+    // Admin token cleared
+    assert.strictEqual(apiClient.getAdminToken(), null);
+    assert.strictEqual(mockLocalStorage.getItem('finex_admin_access_token'), null);
+    assert.strictEqual(apiClient.isAdminAuthenticated(), false);
+
+    // Investor token PRESERVED
+    assert.strictEqual(apiClient.getToken(), investorToken);
+    assert.strictEqual(mockLocalStorage.getItem('finex_access_token'), investorToken);
+    assert.strictEqual(apiClient.isAuthenticated(), true);
+  });
+
+  test('6. Investor logout clears ONLY the investor session and leaves admin session intact', async () => {
+    const investorToken = createValidTestToken('usr-investor-001');
+    const adminToken = createValidTestToken('usr-owner-001');
+
+    apiClient.setToken(investorToken);
+    apiClient.setAdminToken(adminToken);
+
+    // Investor logout
+    await apiClient.auth.logout();
+
+    // Investor token cleared
+    assert.strictEqual(apiClient.getToken(), null);
+    assert.strictEqual(mockLocalStorage.getItem('finex_access_token'), null);
+    assert.strictEqual(apiClient.isAuthenticated(), false);
+
+    // Admin token PRESERVED
+    assert.strictEqual(apiClient.getAdminToken(), adminToken);
+    assert.strictEqual(mockLocalStorage.getItem('finex_admin_access_token'), adminToken);
+    assert.strictEqual(apiClient.isAdminAuthenticated(), true);
+  });
+
+  // -------------------------------------------------------------
+  // 4. SAFE PROJECTIONS & PROHIBITED SENSITIVE FIELDS
+  // -------------------------------------------------------------
+  test('7. AdminUserItem schema strictly excludes passwords, OAuth subjects, and private questionnaire JSON', () => {
     const mockUser: AdminUserItem = {
       id: 'usr-001',
       email: 'investor@finex.internal',
@@ -98,7 +210,7 @@ describe('FinEx Common Admin Panel Frontend & Domain Contract', () => {
     }
   });
 
-  test('4. AdminOrderItem schema excludes execution traces and private financial accounts', () => {
+  test('8. AdminOrderItem schema excludes execution traces and private financial accounts', () => {
     const mockOrder: AdminOrderItem = {
       id: 'ord-001',
       user_id: 'usr-001',
@@ -132,32 +244,26 @@ describe('FinEx Common Admin Panel Frontend & Domain Contract', () => {
     }
   });
 
-  // -------------------------------------------------------------
-  // 3. OVERVIEW & HEALTH CONTRACTS
-  // -------------------------------------------------------------
-  test('5. AdminOverviewResponse contract structure', () => {
-    const mockOverview: AdminOverviewResponse = {
-      total_users: 150,
-      verified_users: 120,
-      unverified_users: 30,
-      onboarding_completed_users: 95,
-      total_orders: 540,
-      orders_by_status: {
-        FILLED: 480,
-        REJECTED: 45,
-        PENDING: 10,
-        CANCELLED: 5,
-      },
-      recent_rejected_orders: [],
+  test('9. AdminMeResponse schema exposes safe owner projection', () => {
+    const mockMe: AdminMeResponse = {
+      user_id: 'usr-shivraj-001',
+      email: 'owner@finexai.tech',
+      display_name: 'Platform Owner',
+      role: 'owner',
+      is_active: true,
+      email_verified: true,
     };
 
-    assert.strictEqual(mockOverview.total_users, 150);
-    assert.strictEqual(mockOverview.verified_users + mockOverview.unverified_users, mockOverview.total_users);
-    assert.strictEqual(mockOverview.orders_by_status.FILLED, 480);
-    assert.strictEqual(mockOverview.orders_by_status.REJECTED, 45);
+    assert.strictEqual(mockMe.user_id, 'usr-shivraj-001');
+    assert.strictEqual(mockMe.role, 'owner');
+    assert.strictEqual(mockMe.is_active, true);
+    assert.strictEqual((mockMe as any).password, undefined);
   });
 
-  test('6. AdminSystemHealthResponse diagnostics strictly excludes secrets', () => {
+  // -------------------------------------------------------------
+  // 5. SYSTEM HEALTH DIAGNOSTICS CONTRACT
+  // -------------------------------------------------------------
+  test('10. AdminSystemHealthResponse diagnostics strictly excludes secrets', () => {
     const mockHealth: AdminSystemHealthResponse = {
       backend: {
         status: 'ok',
@@ -188,12 +294,10 @@ describe('FinEx Common Admin Panel Frontend & Domain Contract', () => {
       },
     };
 
-    // Verify presence of operational indicators
     assert.strictEqual(mockHealth.backend.status, 'ok');
     assert.strictEqual(mockHealth.database.status, 'ok');
     assert.strictEqual(mockHealth.angel_one.is_circuit_open, false);
 
-    // Verify absence of sensitive credentials in diagnostics
     const forbiddenSecrets = [
       'api_key',
       'client_id',
@@ -219,9 +323,9 @@ describe('FinEx Common Admin Panel Frontend & Domain Contract', () => {
   });
 
   // -------------------------------------------------------------
-  // 4. API QUERY STRING SERIALIZATION
+  // 6. API QUERY STRING SERIALIZATION
   // -------------------------------------------------------------
-  test('7. Admin query parameter builder builds correct query strings', () => {
+  test('11. Admin query parameter builder builds correct query strings', () => {
     const buildUserParams = (params: {
       page?: number;
       limit?: number;
