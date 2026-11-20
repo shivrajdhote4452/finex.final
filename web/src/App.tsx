@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ThemeProvider } from './context/ThemeContext';
 import { FinancialProvider } from './context/FinancialContext';
 import { ToastProvider } from './context/ToastContext';
-import { AppShell, NavigationTab } from './components/layout/AppShell';
+import { AppShell } from './components/layout/AppShell';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { WelcomeScreen } from './pages/WelcomeScreen';
 import { OnboardingScreen } from './pages/OnboardingScreen';
@@ -20,69 +20,40 @@ import { SettingsScreen } from './pages/SettingsScreen';
 import { PrivacyPolicyScreen } from './pages/PrivacyPolicyScreen';
 import { TermsOfServiceScreen } from './pages/TermsOfServiceScreen';
 import { apiClient } from './api/client';
+import {
+  VALID_TABS,
+  NavigationTab,
+  STORAGE_KEY_ACTIVE_TAB,
+  resolveLandingTab,
+  detectPublicPage,
+  isWorkspaceTabHash,
+  PublicPage,
+} from './domain/sessionNavigation';
 
-const VALID_TABS: NavigationTab[] = [
-  'overview',
-  'markets',
-  'indices',
-  'charts',
-  'portfolio',
-  'transactions',
-  'ask-finex',
-  'practice',
-  'alerts',
-  'goals',
-  'spending',
-  'settings',
-];
+export { VALID_TABS };
+export type { NavigationTab };
 
-const getSavedTab = (): NavigationTab => {
+export const getSavedTab = (): NavigationTab => {
   try {
-    const hash = window.location.hash.replace('#', '').trim() as NavigationTab;
-    if (VALID_TABS.includes(hash)) {
-      return hash;
-    }
-    const saved = localStorage.getItem('finex_active_tab') as NavigationTab;
-    if (VALID_TABS.includes(saved)) {
-      return saved;
-    }
+    const token = apiClient.getToken();
+    const hasActiveSession = Boolean(token && !apiClient.isTokenExpired(token));
+    const locationHash = typeof window !== 'undefined' ? window.location.hash : '';
+    const storedTab = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY_ACTIVE_TAB) : null;
+    return resolveLandingTab({ hasActiveSession, locationHash, storedTab });
   } catch {
-    // Fallback if storage access is restricted
+    return 'overview';
   }
-  return 'overview';
 };
 
-type PublicPage = 'privacy' | 'terms' | null;
-
-const detectPublicPage = (): PublicPage => {
+const detectCurrentPublicPage = (): PublicPage => {
   if (typeof window === 'undefined') return null;
-  const path = window.location.pathname.toLowerCase().replace(/\/$/, '');
-  const hash = window.location.hash.toLowerCase().replace('#', '').trim();
-  if (
-    path === '/privacy' ||
-    path === '/privacy-policy' ||
-    path === '/privacy.html' ||
-    hash === 'privacy' ||
-    hash === '/privacy'
-  ) {
-    return 'privacy';
-  }
-  if (
-    path === '/terms' ||
-    path === '/terms-of-service' ||
-    path === '/terms.html' ||
-    hash === 'terms' ||
-    hash === '/terms'
-  ) {
-    return 'terms';
-  }
-  return null;
+  return detectPublicPage(window.location.pathname, window.location.hash);
 };
 
 export const AppContent: React.FC = () => {
   const [authState, setAuthState] = useState<'checking' | 'welcome' | 'onboarding' | 'authenticated'>('checking');
   const [currentTab, setCurrentTab] = useState<NavigationTab>(getSavedTab);
-  const [publicPage, setPublicPage] = useState<PublicPage>(detectPublicPage);
+  const [publicPage, setPublicPage] = useState<PublicPage>(detectCurrentPublicPage);
 
   const openPrivacy = () => {
     window.history.pushState(null, '', '/privacy');
@@ -139,6 +110,11 @@ export const AppContent: React.FC = () => {
 
   // Sync hash changes (e.g., browser back/forward or manual hash updates)
   useEffect(() => {
+    // Only synchronize workspace tabs when user is actively authenticated
+    if (authState !== 'authenticated') {
+      return;
+    }
+
     const handleHashChange = () => {
       const hash = window.location.hash.replace('#', '').trim() as NavigationTab;
       if (VALID_TABS.includes(hash) && hash !== currentTab) {
@@ -154,7 +130,7 @@ export const AppContent: React.FC = () => {
       window.location.hash = currentTab;
     }
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [currentTab]);
+  }, [authState, currentTab]);
 
   // Fail-closed initial session check against FastAPI /users/me
   useEffect(() => {
@@ -167,6 +143,14 @@ export const AppContent: React.FC = () => {
           if (hash.includes('onboarding') || hash.includes('step=')) {
             if (isMounted) setAuthState('onboarding');
             return;
+          }
+          // Remove any stale workspace tab hash from unauthenticated URL
+          if (isWorkspaceTabHash(window.location.hash)) {
+            try {
+              window.history.replaceState(null, '', window.location.pathname + window.location.search);
+            } catch {
+              window.location.hash = '';
+            }
           }
         }
         if (isMounted) setAuthState('welcome');
@@ -186,6 +170,19 @@ export const AppContent: React.FC = () => {
         // If 401 Unauthorized, session has been revoked or invalidated by server
         if (err?.status === 401) {
           apiClient.setToken(null);
+          setCurrentTab('overview');
+          try {
+            localStorage.removeItem(STORAGE_KEY_ACTIVE_TAB);
+          } catch {}
+          if (typeof window !== 'undefined') {
+            if (isWorkspaceTabHash(window.location.hash)) {
+              try {
+                window.history.replaceState(null, '', window.location.pathname + window.location.search);
+              } catch {
+                window.location.hash = '';
+              }
+            }
+          }
           setAuthState('welcome');
           return;
         }
@@ -214,6 +211,51 @@ export const AppContent: React.FC = () => {
       window.removeEventListener('hashchange', handleHash);
     };
   }, []);
+
+  const handleSignOut = async () => {
+    try {
+      await apiClient.auth.logout();
+    } catch {
+      // Ignore logout errors
+    }
+    setCurrentTab('overview');
+    try {
+      localStorage.removeItem(STORAGE_KEY_ACTIVE_TAB);
+    } catch {}
+    if (typeof window !== 'undefined') {
+      if (isWorkspaceTabHash(window.location.hash)) {
+        try {
+          window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        } catch {
+          window.location.hash = '';
+        }
+      }
+    }
+    setAuthState('welcome');
+  };
+
+  const handleLoginSuccess = async () => {
+    // A fresh/new login must always land on Overview regardless of stale storage or hash
+    setCurrentTab('overview');
+    try {
+      localStorage.setItem(STORAGE_KEY_ACTIVE_TAB, 'overview');
+    } catch {}
+    if (typeof window !== 'undefined') {
+      window.location.hash = 'overview';
+    }
+
+    try {
+      const user = await apiClient.auth.getMe();
+      if (user && user.onboarding_completed) {
+        setAuthState('authenticated');
+      } else {
+        setAuthState('onboarding');
+      }
+    } catch {
+      // When backend is offline or static Vercel deployment, grant entry to authenticated dashboard
+      setAuthState('authenticated');
+    }
+  };
 
   // Priority: If viewing a public legal page, render immediately without requiring auth
   if (publicPage === 'privacy') {
@@ -254,25 +296,26 @@ export const AppContent: React.FC = () => {
       <WelcomeScreen
         onOpenPrivacy={openPrivacy}
         onOpenTerms={openTerms}
-        onLoginSuccess={async () => {
-          try {
-            const user = await apiClient.auth.getMe();
-            if (user && user.onboarding_completed) {
-              setAuthState('authenticated');
-            } else {
-              setAuthState('onboarding');
-            }
-          } catch {
-            // When backend is offline or static Vercel deployment, grant entry to authenticated dashboard
-            setAuthState('authenticated');
-          }
-        }}
+        onLoginSuccess={handleLoginSuccess}
       />
     );
   }
 
   if (authState === 'onboarding') {
-    return <OnboardingScreen onComplete={() => setAuthState('authenticated')} />;
+    return (
+      <OnboardingScreen
+        onComplete={() => {
+          setCurrentTab('overview');
+          try {
+            localStorage.setItem(STORAGE_KEY_ACTIVE_TAB, 'overview');
+          } catch {}
+          if (typeof window !== 'undefined') {
+            window.location.hash = 'overview';
+          }
+          setAuthState('authenticated');
+        }}
+      />
+    );
   }
 
   return (
@@ -289,14 +332,7 @@ export const AppContent: React.FC = () => {
         {currentTab === 'alerts' && <AlertsScreen />}
         {currentTab === 'goals' && <GoalsScreen />}
         {currentTab === 'spending' && <SpendingScreen />}
-        {currentTab === 'settings' && (
-          <SettingsScreen
-            onSignOut={async () => {
-              await apiClient.auth.logout();
-              setAuthState('welcome');
-            }}
-          />
-        )}
+        {currentTab === 'settings' && <SettingsScreen onSignOut={handleSignOut} />}
       </ErrorBoundary>
     </AppShell>
   );
