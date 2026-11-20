@@ -405,7 +405,14 @@ async def get_admin_system_health(request: Request):
     settings = get_settings()
 
     # 1. Database readiness
-    db_status = await check_db_ready()
+    try:
+        import asyncio
+
+        db_status = await asyncio.wait_for(check_db_ready(), timeout=5.0)
+    except asyncio.TimeoutError:
+        db_status = {"status": "down", "error": "Database health check timed out after 5.0s"}
+    except Exception as e:
+        db_status = {"status": "down", "error": f"{type(e).__name__}: Database check failed"}
 
     # 2. Market feed diagnostics
     try:

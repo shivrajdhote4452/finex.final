@@ -202,13 +202,30 @@ async def get_current_user_id(
         ) from None
 
 
-async def require_owner(current_user: dict = Depends(get_current_user_id)) -> dict:
+async def require_owner(
+    current_user: dict = Depends(get_current_user_id),
+    db: Optional[AsyncSession] = Depends(get_db),
+) -> dict:
     """FastAPI dependency to enforce owner-only access. Refuses non-owners with HTTP 403."""
     if current_user.get("provider") != "google" or not is_owner(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Forbidden: Sandbox controls and accounts are restricted to the platform owner.",
         )
+    uid = current_user.get("sub")
+    if uid:
+        user = await user_store.get_user_by_id_db(uid, db=db)
+        if user:
+            if not user.is_active:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Forbidden: Account is inactive or disabled.",
+                )
+            if not user.email_verified and not user.is_verified:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Forbidden: Account identity is unverified.",
+                )
     return current_user
 
 
@@ -274,6 +291,18 @@ async def google_auth_callback(
                 detail=str(e),
             )
         raise
+
+    if is_owner({"email": email, "provider": "google"}) and not google_email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Owner access requires a verified Google account.",
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is disabled. Please contact support.",
+        )
 
     token = create_access_token(user_id=user.id, email=user.email, name=user.name, provider="google")
 

@@ -132,6 +132,139 @@ async def test_admin_endpoints_refuse_non_google_provider_sessions(app, non_goog
             assert res.status_code == 403, f"Expected 403 for {path}, got {res.status_code}"
 
 
+@pytest.mark.asyncio
+async def test_admin_endpoints_refuse_inactive_owner(app):
+    """Inactive owner account in database is refused with HTTP 403 Forbidden."""
+    from backend.app.database import AsyncSessionLocal
+    from backend.app.models.core import User
+    from sqlalchemy import select
+
+    settings = get_settings()
+    owner_email = settings.OWNER_EMAIL or "shivrajdhote4452@gmail.com"
+
+    # Mark owner user inactive in DB
+    async with AsyncSessionLocal() as session:
+        res = await session.execute(select(User).where(User.email == owner_email))
+        u = res.scalars().first()
+        if u:
+            u.is_active = False
+            await session.commit()
+
+    try:
+        token = create_access_token(
+            user_id="usr-shivraj-001",
+            email=owner_email,
+            name="Shivraj Dhote",
+            provider="google",
+        )
+        headers = {"Authorization": f"Bearer {token}"}
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            res = await client.get("/api/v1/admin/overview", headers=headers)
+            assert res.status_code == 403
+            assert (
+                "inactive" in res.json().get("detail", "").lower() or "disabled" in res.json().get("detail", "").lower()
+            )
+    finally:
+        # Restore active state
+        async with AsyncSessionLocal() as session:
+            res = await session.execute(select(User).where(User.email == owner_email))
+            u = res.scalars().first()
+            if u:
+                u.is_active = True
+                await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_admin_endpoints_refuse_when_owner_email_is_unset(app, owner_headers, monkeypatch):
+    """When OWNER_EMAIL is empty or unset, all admin requests fail closed with HTTP 403."""
+    monkeypatch.setenv("OWNER_EMAIL", "")
+    get_settings.cache_clear()
+
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            res = await client.get("/api/v1/admin/overview", headers=owner_headers)
+            assert res.status_code == 403
+    finally:
+        monkeypatch.undo()
+        get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_admin_endpoints_refuse_forged_expired_or_revoked_token(app):
+    """Forged signature, expired token, or revoked token are rejected with HTTP 401."""
+    from datetime import datetime, timedelta, timezone
+
+    import jwt
+    from backend.app.domain.user_store import user_store
+
+    settings = get_settings()
+    owner_email = settings.OWNER_EMAIL or "shivrajdhote4452@gmail.com"
+
+    # 1. Forged token with invalid secret
+    forged_token = jwt.encode(
+        {"sub": "usr-shivraj-001", "email": owner_email, "provider": "google"},
+        "wrong-secret-key-32-characters-minimum",
+        algorithm="HS256",
+    )
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.get("/api/v1/admin/overview", headers={"Authorization": f"Bearer {forged_token}"})
+        assert res.status_code == 401
+
+        # 2. Expired token
+        expired_token = jwt.encode(
+            {
+                "sub": "usr-shivraj-001",
+                "email": owner_email,
+                "provider": "google",
+                "exp": datetime.now(timezone.utc) - timedelta(hours=1),
+            },
+            settings.JWT_SECRET_KEY,
+            algorithm=settings.JWT_ALGORITHM,
+        )
+        res_exp = await client.get("/api/v1/admin/overview", headers={"Authorization": f"Bearer {expired_token}"})
+        assert res_exp.status_code == 401
+
+        # 3. Revoked token
+        valid_token = create_access_token(
+            user_id="usr-shivraj-001",
+            email=owner_email,
+            name="Shivraj Dhote",
+            provider="google",
+        )
+        await user_store.revoke_token_db(valid_token)
+        res_rev = await client.get("/api/v1/admin/overview", headers={"Authorization": f"Bearer {valid_token}"})
+        assert res_rev.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_google_login_refuses_unverified_owner_identity(app):
+    """Google OAuth login callback refuses unverified owner email with HTTP 403."""
+    from unittest.mock import patch
+
+    settings = get_settings()
+    owner_email = settings.OWNER_EMAIL or "shivrajdhote4452@gmail.com"
+
+    unverified_id_info = {
+        "sub": "google-sub-unverified-attacker",
+        "email": owner_email,
+        "name": "Attacker",
+        "iss": "https://accounts.google.com",
+        "email_verified": False,
+    }
+    with patch("google.oauth2.id_token.verify_oauth2_token", return_value=unverified_id_info):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            res = await client.post(
+                "/api/v1/auth/google",
+                json={"id_token": "mock-unverified-google-token"},
+            )
+            assert res.status_code == 403
+            assert "verified" in res.json().get("detail", "").lower()
+
+
 # =============================================================================
 # Operational Overview Endpoint Tests
 # =============================================================================

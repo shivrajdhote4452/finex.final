@@ -28,14 +28,21 @@ async def check_db_ready() -> Dict[str, Any]:
             return {"status": "down", "error": str(e)}
 
     try:
+        import asyncio
+
         from backend.app.database import engine
         from sqlalchemy import text
 
-        async with engine.connect() as conn:
-            await conn.execute(text("SELECT 1"))
+        async def _ping_db():
+            async with engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+
+        await asyncio.wait_for(_ping_db(), timeout=5.0)
         return {"status": "ok", "message": "Database ping succeeded"}
+    except asyncio.TimeoutError:
+        return {"status": "down", "error": "Database connection timed out after 5.0s"}
     except Exception as e:
-        return {"status": "down", "error": f"{type(e).__name__}: {str(e)}"}
+        return {"status": "down", "error": f"{type(e).__name__}: Database connection failed"}
 
 
 class LivenessData(BaseModel):
