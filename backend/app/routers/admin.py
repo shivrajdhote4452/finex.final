@@ -18,11 +18,12 @@ from backend.app.config import get_settings
 from backend.app.core.envelope import create_response_envelope
 from backend.app.database import get_db
 from backend.app.dependencies import get_angel_adapter
+from backend.app.domain.user_store import user_store
 from backend.app.models.core import User, UserProfile
 from backend.app.models.paper_trading import PaperOrder
 from backend.app.routers.auth import require_owner
 from backend.app.routers.health import check_db_ready
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -101,6 +102,15 @@ class AdminSystemHealthResponse(BaseModel):
     market_data: Dict[str, Any]
     angel_one: Dict[str, Any]
     email: Dict[str, Any]
+
+
+class AdminMeResponse(BaseModel):
+    user_id: str
+    email: str
+    display_name: str
+    role: str = "owner"
+    is_active: bool = True
+    email_verified: bool = True
 
 
 # =============================================================================
@@ -460,3 +470,30 @@ async def get_admin_system_health(request: Request):
         email=email_diag,
     )
     return create_response_envelope(response_data.model_dump(), correlation_id=cid)
+
+
+@router.get(
+    "/me",
+    summary="Admin Current Identity",
+    description="Returns authenticated owner profile and permissions.",
+)
+async def get_admin_me(
+    request: Request,
+    current_user: dict = Depends(require_owner),
+    db: AsyncSession = Depends(get_db),
+):
+    cid = getattr(request.state, "correlation_id", "none")
+    uid = current_user.get("sub")
+    user = await user_store.get_user_by_id_db(uid, db=db)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden: Owner user not found.")
+
+    me_data = AdminMeResponse(
+        user_id=user.id,
+        email=user.email,
+        display_name=user.name or "Platform Owner",
+        role="owner",
+        is_active=user.is_active,
+        email_verified=bool(user.email_verified or user.is_verified),
+    )
+    return create_response_envelope(me_data.model_dump(), correlation_id=cid)

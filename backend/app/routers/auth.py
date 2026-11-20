@@ -15,7 +15,7 @@ import jwt
 from backend.app.config import get_settings
 from backend.app.core.envelope import create_response_envelope
 from backend.app.database import get_db
-from backend.app.domain.user_store import user_store
+from backend.app.domain.user_store import is_placeholder_google_subject, user_store
 from backend.app.services.email_service import email_service
 from backend.app.services.password_service import (
     auth_rate_limiter,
@@ -357,6 +357,147 @@ async def google_auth_callback(
         user_id=user.id,
         email=user.email,
         name=user.name,
+    )
+    return create_response_envelope(data.model_dump(), correlation_id=cid)
+
+
+@router.post(
+    "/admin-google",
+    summary="Admin Google OAuth Authentication",
+    description="Authenticates the platform owner via Google ID Token for the Admin Portal. Strictly rejects non-owners with HTTP 403 Forbidden.",
+)
+async def admin_google_auth(
+    request: Request,
+    payload: GoogleLoginRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    cid = getattr(request.state, "correlation_id", "none")
+    settings = get_settings()
+    raw_token = payload.id_token.strip()
+
+    # Determine permitted audiences - accepts configured client ID and standard FinEx web client ID
+    KNOWN_WEB_CLIENT_ID = "71626572471-2333p55kgim64b3738oabca9l9ss9th0.apps.googleusercontent.com"
+    allowed_audiences = [KNOWN_WEB_CLIENT_ID]
+
+    configured_aud = settings.GOOGLE_CLIENT_ID
+    if configured_aud and configured_aud not in ["placeholder-google-client-id", "finex-dev-client-id"]:
+        if configured_aud not in allowed_audiences:
+            allowed_audiences.append(configured_aud)
+
+    # 1. Verify Google ID token cryptographically
+    try:
+        id_info = google_id_token.verify_oauth2_token(
+            raw_token,
+            google_requests.Request(),
+            audience=allowed_audiences if len(allowed_audiences) > 1 else allowed_audiences[0],
+        )
+        iss = id_info.get("iss", "")
+        if iss not in ["accounts.google.com", "https://accounts.google.com"]:
+            raise ValueError(f"Untrusted token issuer: {iss}")
+
+        google_sub = id_info["sub"]
+        email = id_info.get("email") or f"{google_sub}@google.user"
+        name = id_info.get("name") or "Platform Owner"
+        raw_email_verified = id_info.get("email_verified")
+        # Explicit confirmation: strictly boolean True or string "true"
+        is_explicitly_verified = (raw_email_verified is True) or (
+            isinstance(raw_email_verified, str) and raw_email_verified.strip().lower() == "true"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Google ID token verification failed: {str(e)}",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from None
+
+    # 2. Server-side authorization check: Strictly owner only!
+    if not is_owner({"email": email, "provider": "google"}):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Admin portal access is strictly restricted to the platform owner.",
+        )
+
+    # 3. Explicit Google email verification check: fail closed
+    if not is_explicitly_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Owner access requires a verified Google account with confirmed email verification.",
+        )
+
+    # 4. Strict Read-Only Owner Lookup (Fail closed: No user creation, no relinking, no writes)
+    clean_email = email.strip().lower()
+    user = await user_store.get_user_by_email_db(clean_email, db=db)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Configured owner account not found in database.",
+        )
+
+    # 5. Verify configured owner email and database identity consistency
+    configured_owner_email = (settings.OWNER_EMAIL or "").strip().lower()
+    if (
+        not configured_owner_email
+        or user.email.strip().lower() != configured_owner_email
+        or clean_email != configured_owner_email
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Database owner identity mismatch.",
+        )
+
+    # 6. Verify Google subject consistency: strictly fail closed unless owner account has a
+    # real, non-placeholder Google subject that exactly matches the verified Google ID token.
+    existing_google_sub = user.google_subject or (user.provider_subject if user.provider == "google" else None)
+    if not existing_google_sub:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Owner account is not bound to a Google identity. A verified Google subject is required.",
+        )
+    if is_placeholder_google_subject(existing_google_sub):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Owner account has a placeholder Google identity. Setup required before admin access.",
+        )
+    if existing_google_sub != google_sub:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Google subject mismatch for platform owner.",
+        )
+
+    # 7. Fail closed if disabled or unverified
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Owner account is disabled.",
+        )
+
+    if not user.email_verified and not user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Owner account identity is unverified.",
+        )
+
+    user_name = name or (user.email.split("@")[0] if user.email else "Platform Owner")
+    try:
+        profile = await user_store.get_profile_db(user.id, db=db)
+        if profile and profile.full_name:
+            user_name = profile.full_name
+    except Exception:
+        pass
+
+    token = create_access_token(
+        user_id=user.id,
+        email=user.email,
+        name=user_name,
+        provider="google",
+    )
+
+    data = TokenResponse(
+        access_token=token,
+        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        user_id=user.id,
+        email=user.email,
+        name=user_name,
     )
     return create_response_envelope(data.model_dump(), correlation_id=cid)
 

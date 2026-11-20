@@ -218,6 +218,15 @@ export interface AdminSystemHealthResponse {
   };
 }
 
+export interface AdminMeResponse {
+  user_id: string;
+  email: string;
+  display_name: string;
+  role: string;
+  is_active: boolean;
+  email_verified: boolean;
+}
+
 class ApiError extends Error {
   code: string;
   status: number;
@@ -234,12 +243,17 @@ class ApiError extends Error {
 
 class ApiClient {
   private token: string | null = null;
-
-  constructor() {
-    this.token = localStorage.getItem('finex_access_token');
-  }
+  private adminToken: string | null = null;
 
   private authStateListeners: Set<(isAuthenticated: boolean) => void> = new Set();
+  private adminAuthStateListeners: Set<(isAdminAuthenticated: boolean) => void> = new Set();
+
+  constructor() {
+    if (typeof localStorage !== 'undefined') {
+      this.token = localStorage.getItem('finex_access_token');
+      this.adminToken = localStorage.getItem('finex_admin_access_token');
+    }
+  }
 
   public onAuthStateChange(listener: (isAuthenticated: boolean) => void): () => void {
     this.authStateListeners.add(listener);
@@ -260,13 +274,35 @@ class ApiClient {
     }
   }
 
+  public onAdminAuthStateChange(listener: (isAdminAuthenticated: boolean) => void): () => void {
+    this.adminAuthStateListeners.add(listener);
+    listener(this.isAdminAuthenticated());
+    return () => {
+      this.adminAuthStateListeners.delete(listener);
+    };
+  }
+
+  private notifyAdminAuthStateListeners(): void {
+    const isAuth = this.isAdminAuthenticated();
+    for (const listener of this.adminAuthStateListeners) {
+      try {
+        listener(isAuth);
+      } catch (err) {
+        console.error('Error in admin auth state listener', err);
+      }
+    }
+  }
+
   public isTokenExpired(token?: string | null): boolean {
-    const t = token ?? this.token ?? localStorage.getItem('finex_access_token');
+    const t = token ?? this.token ?? (typeof localStorage !== 'undefined' ? localStorage.getItem('finex_access_token') : null);
     if (!t) return true;
     try {
       const parts = t.split('.');
       if (parts.length !== 3) return true;
-      const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      while (base64.length % 4 !== 0) {
+        base64 += '=';
+      }
       const json = JSON.parse(atob(base64));
       if (typeof json.exp === 'number') {
         // Expired if current time in seconds is >= exp (with 30s grace window)
@@ -284,7 +320,10 @@ class ApiClient {
     try {
       const parts = t.split('.');
       if (parts.length !== 3) return null;
-      const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      while (base64.length % 4 !== 0) {
+        base64 += '=';
+      }
       return JSON.parse(atob(base64));
     } catch {
       return null;
@@ -294,13 +333,15 @@ class ApiClient {
   public setToken(token: string | null): void {
     const prev = this.token;
     this.token = token;
-    if (token) {
-      localStorage.setItem('finex_access_token', token);
-    } else {
-      localStorage.removeItem('finex_access_token');
-      try {
-        localStorage.removeItem('finex_active_tab');
-      } catch {}
+    if (typeof localStorage !== 'undefined') {
+      if (token) {
+        localStorage.setItem('finex_access_token', token);
+      } else {
+        localStorage.removeItem('finex_access_token');
+        try {
+          localStorage.removeItem('finex_active_tab');
+        } catch {}
+      }
     }
     if (prev !== token) {
       this.notifyAuthStateListeners();
@@ -308,18 +349,53 @@ class ApiClient {
   }
 
   public getToken(): string | null {
-    if (!this.token) {
+    if (!this.token && typeof localStorage !== 'undefined') {
       this.token = localStorage.getItem('finex_access_token');
     }
     if (this.token && this.isTokenExpired(this.token)) {
       this.token = null;
-      localStorage.removeItem('finex_access_token');
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('finex_access_token');
+      }
     }
     return this.token;
   }
 
   public isAuthenticated(): boolean {
     const t = this.getToken();
+    return Boolean(t && !this.isTokenExpired(t));
+  }
+
+  public setAdminToken(token: string | null): void {
+    const prev = this.adminToken;
+    this.adminToken = token;
+    if (typeof localStorage !== 'undefined') {
+      if (token) {
+        localStorage.setItem('finex_admin_access_token', token);
+      } else {
+        localStorage.removeItem('finex_admin_access_token');
+      }
+    }
+    if (prev !== token) {
+      this.notifyAdminAuthStateListeners();
+    }
+  }
+
+  public getAdminToken(): string | null {
+    if (!this.adminToken && typeof localStorage !== 'undefined') {
+      this.adminToken = localStorage.getItem('finex_admin_access_token');
+    }
+    if (this.adminToken && this.isTokenExpired(this.adminToken)) {
+      this.adminToken = null;
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('finex_admin_access_token');
+      }
+    }
+    return this.adminToken;
+  }
+
+  public isAdminAuthenticated(): boolean {
+    const t = this.getAdminToken();
     return Boolean(t && !this.isTokenExpired(t));
   }
 
@@ -334,9 +410,11 @@ class ApiClient {
       ...(options.headers as Record<string, string>),
     };
 
-    const token = this.getToken();
-    if (token && !headers['Authorization']) {
-      headers['Authorization'] = `Bearer ${token}`;
+    const isAdminEndpoint = endpoint.startsWith('/admin') || endpoint === '/auth/admin-google';
+    const activeToken = isAdminEndpoint ? this.getAdminToken() : this.getToken();
+
+    if (activeToken && !headers['Authorization']) {
+      headers['Authorization'] = `Bearer ${activeToken}`;
     }
 
     const controller = new AbortController();
@@ -365,11 +443,16 @@ class ApiClient {
       clearTimeout(timeoutId);
     }
 
-    // Handle 401 Unauthorized globally for protected routes (exclude public auth endpoints)
+    // Handle 401 Unauthorized globally for protected routes with complete session isolation
     if (response.status === 401) {
       if (!endpoint.includes('/auth/')) {
-        this.setToken(null);
-        throw new ApiError('Authentication required or session expired', 401, 'UNAUTHORIZED');
+        if (isAdminEndpoint) {
+          this.setAdminToken(null);
+          throw new ApiError('Admin authorization required or session expired', 401, 'UNAUTHORIZED');
+        } else {
+          this.setToken(null);
+          throw new ApiError('Authentication required or session expired', 401, 'UNAUTHORIZED');
+        }
       }
     }
 
@@ -1556,6 +1639,26 @@ class ApiClient {
   };
 
   public admin = {
+    googleLogin: async (idToken: string) => {
+      const res = await this.request<{
+        access_token: string;
+        token_type: string;
+        expires_in: number;
+        user_id: string;
+        email: string;
+        name: string;
+      }>('/auth/admin-google', {
+        method: 'POST',
+        body: JSON.stringify({ id_token: idToken }),
+      });
+      this.setAdminToken(res.access_token);
+      return res;
+    },
+
+    getMe: async () => {
+      return this.request<AdminMeResponse>('/admin/me');
+    },
+
     getOverview: async () => {
       return this.request<AdminOverviewResponse>('/admin/overview');
     },
@@ -1600,6 +1703,23 @@ class ApiClient {
 
     getSystemHealth: async () => {
       return this.request<AdminSystemHealthResponse>('/admin/system-health');
+    },
+
+    logout: async () => {
+      try {
+        const token = this.getAdminToken();
+        if (token) {
+          await this.request('/auth/revoke', {
+            method: 'POST',
+            body: JSON.stringify({ token }),
+            headers: { Authorization: `Bearer ${token}` },
+          });
+        }
+      } catch {
+        // ignore logout errors
+      } finally {
+        this.setAdminToken(null);
+      }
     },
   };
 

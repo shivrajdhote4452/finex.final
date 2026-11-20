@@ -17,7 +17,7 @@ import { AlertsScreen } from './pages/AlertsScreen';
 import { GoalsScreen } from './pages/GoalsScreen';
 import { SpendingScreen } from './pages/SpendingScreen';
 import { SettingsScreen } from './pages/SettingsScreen';
-import { AdminScreen } from './pages/AdminScreen';
+import { AdminPortal } from './pages/AdminPortal';
 import { PrivacyPolicyScreen } from './pages/PrivacyPolicyScreen';
 import { TermsOfServiceScreen } from './pages/TermsOfServiceScreen';
 import { apiClient } from './api/client';
@@ -27,6 +27,7 @@ import {
   STORAGE_KEY_ACTIVE_TAB,
   resolveLandingTab,
   detectPublicPage,
+  isAdminPortalRoute,
   isWorkspaceTabHash,
   PublicPage,
 } from './domain/sessionNavigation';
@@ -51,10 +52,16 @@ const detectCurrentPublicPage = (): PublicPage => {
   return detectPublicPage(window.location.pathname, window.location.hash);
 };
 
+const detectIsAdminPortal = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  return isAdminPortalRoute(window.location.pathname, window.location.hash);
+};
+
 export const AppContent: React.FC = () => {
   const [authState, setAuthState] = useState<'checking' | 'welcome' | 'onboarding' | 'authenticated'>('checking');
   const [currentTab, setCurrentTab] = useState<NavigationTab>(getSavedTab);
   const [publicPage, setPublicPage] = useState<PublicPage>(detectCurrentPublicPage);
+  const [isAdminPortal, setIsAdminPortal] = useState<boolean>(detectIsAdminPortal);
 
   const openPrivacy = () => {
     window.history.pushState(null, '', '/privacy');
@@ -85,10 +92,11 @@ export const AppContent: React.FC = () => {
     setPublicPage(null);
   };
 
-  // Listen to browser navigation (back/forward) and hash changes for public pages
+  // Listen to browser navigation (back/forward) and hash changes for public pages and admin portal
   useEffect(() => {
     const handleLocationChange = () => {
-      setPublicPage(detectPublicPage());
+      setPublicPage(detectCurrentPublicPage());
+      setIsAdminPortal(detectIsAdminPortal());
     };
 
     window.addEventListener('popstate', handleLocationChange);
@@ -258,6 +266,22 @@ export const AppContent: React.FC = () => {
     }
   };
 
+  // Priority: If viewing dedicated Admin Portal (/admin or #admin), render outside AppShell
+  if (isAdminPortal) {
+    return (
+      <AdminPortal
+        onNavigateToApp={() => {
+          if (typeof window !== 'undefined') {
+            window.history.pushState(null, '', '/');
+            window.location.hash = 'overview';
+          }
+          setIsAdminPortal(false);
+          setPublicPage(null);
+        }}
+      />
+    );
+  }
+
   // Priority: If viewing a public legal page, render immediately without requiring auth
   if (publicPage === 'privacy') {
     return <PrivacyPolicyScreen onBack={closePublicPage} />;
@@ -334,7 +358,6 @@ export const AppContent: React.FC = () => {
         {currentTab === 'goals' && <GoalsScreen />}
         {currentTab === 'spending' && <SpendingScreen />}
         {currentTab === 'settings' && <SettingsScreen onSignOut={handleSignOut} />}
-        {currentTab === 'admin' && <AdminScreen onNavigate={handleNavigate} />}
       </ErrorBoundary>
     </AppShell>
   );
