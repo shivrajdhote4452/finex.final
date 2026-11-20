@@ -715,44 +715,53 @@ async def test_seed_user_placeholder_google_subject_upgraded_on_real_login():
         u.google_subject = "google-sub-shivraj-primary"
         await session.commit()
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        # Mock Google OAuth token verification returning real Google sub for the owner email
-        real_id_info = {
-            "iss": "accounts.google.com",
-            "sub": real_google_sub,
-            "email": owner_email,
-            "email_verified": True,
-            "name": "Shivraj Dhote",
-        }
-        with patch("backend.app.routers.auth.google_id_token.verify_oauth2_token", return_value=real_id_info):
-            resp = await client.post("/api/v1/auth/google", json={"id_token": "token-real-google"})
-            assert resp.status_code == 200, f"Expected 200 but got {resp.status_code}: {resp.text}"
-            data = resp.json()["data"]
-            assert data["user_id"] == "usr-shivraj-001"
-            assert data["email"] == owner_email
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            # Mock Google OAuth token verification returning real Google sub for the owner email
+            real_id_info = {
+                "iss": "accounts.google.com",
+                "sub": real_google_sub,
+                "email": owner_email,
+                "email_verified": True,
+                "name": "Shivraj Dhote",
+            }
+            with patch("backend.app.routers.auth.google_id_token.verify_oauth2_token", return_value=real_id_info):
+                resp = await client.post("/api/v1/auth/google", json={"id_token": "token-real-google"})
+                assert resp.status_code == 200, f"Expected 200 but got {resp.status_code}: {resp.text}"
+                data = resp.json()["data"]
+                assert data["user_id"] == "usr-shivraj-001"
+                assert data["email"] == owner_email
 
-        # Second login with the same real Google sub succeeds directly
-        with patch("backend.app.routers.auth.google_id_token.verify_oauth2_token", return_value=real_id_info):
-            resp_again = await client.post("/api/v1/auth/google", json={"id_token": "token-real-google-2"})
-            assert resp_again.status_code == 200
-            assert resp_again.json()["data"]["user_id"] == "usr-shivraj-001"
+            # Second login with the same real Google sub succeeds directly
+            with patch("backend.app.routers.auth.google_id_token.verify_oauth2_token", return_value=real_id_info):
+                resp_again = await client.post("/api/v1/auth/google", json={"id_token": "token-real-google-2"})
+                assert resp_again.status_code == 200
+                assert resp_again.json()["data"]["user_id"] == "usr-shivraj-001"
 
-        # An impostor with a different real Google sub trying to claim the same email is rejected with 409
-        impostor_info = {
-            "iss": "accounts.google.com",
-            "sub": "209482710492817294819",
-            "email": owner_email,
-            "email_verified": True,
-            "name": "Impostor",
-        }
-        with patch("backend.app.routers.auth.google_id_token.verify_oauth2_token", return_value=impostor_info):
-            resp_impostor = await client.post("/api/v1/auth/google", json={"id_token": "token-impostor"})
-            assert resp_impostor.status_code == 409
-            # Verify both detail and error.message exist and explain conflict clearly
-            resp_json = resp_impostor.json()
-            assert "detail" in resp_json
-            assert "already linked to a different Google account" in resp_json["detail"]
-            assert resp_json.get("error", {}).get("message") is not None
+            # An impostor with a different real Google sub trying to claim the same email is rejected with 409
+            impostor_info = {
+                "iss": "accounts.google.com",
+                "sub": "209482710492817294819",
+                "email": owner_email,
+                "email_verified": True,
+                "name": "Impostor",
+            }
+            with patch("backend.app.routers.auth.google_id_token.verify_oauth2_token", return_value=impostor_info):
+                resp_impostor = await client.post("/api/v1/auth/google", json={"id_token": "token-impostor"})
+                assert resp_impostor.status_code == 409
+                # Verify both detail and error.message exist and explain conflict clearly
+                resp_json = resp_impostor.json()
+                assert "detail" in resp_json
+                assert "already linked to a different Google account" in resp_json["detail"]
+                assert resp_json.get("error", {}).get("message") is not None
+    finally:
+        # Restore placeholder google_subject for subsequent tests
+        async with AsyncSessionLocal() as session:
+            res = await session.execute(select(User).where(User.id == "usr-shivraj-001"))
+            u = res.scalars().first()
+            if u:
+                u.google_subject = "google-sub-shivraj-primary"
+                await session.commit()
 
 
 @pytest.mark.asyncio

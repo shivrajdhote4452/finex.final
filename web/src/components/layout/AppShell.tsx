@@ -2,20 +2,9 @@ import React, { useState } from 'react';
 import { useFinancial } from '../../context/FinancialContext';
 import { QuickTradeModal } from '../trading/QuickTradeModal';
 import { ThemeToggle } from '../common/ThemeToggle';
+import { NavigationTab } from '../../domain/sessionNavigation';
 
-export type NavigationTab =
-  | 'overview'
-  | 'markets'
-  | 'indices'
-  | 'charts'
-  | 'portfolio'
-  | 'transactions'
-  | 'ask-finex'
-  | 'practice'
-  | 'alerts'
-  | 'goals'
-  | 'spending'
-  | 'settings';
+export type { NavigationTab };
 
 interface AppShellProps {
   currentTab: NavigationTab;
@@ -57,6 +46,7 @@ export const AppShell: React.FC<AppShellProps> = ({ currentTab, onNavigate, chil
     { id: 'alerts', label: 'Alerts', badge: unreadAlerts > 0 ? unreadAlerts : undefined },
     { id: 'goals', label: 'Goals' },
     { id: 'spending', label: 'Spending' },
+    ...(isOwner ? [{ id: 'admin' as const, label: 'Admin Panel', badge: 'Owner' }] : []),
   ];
 
   return (

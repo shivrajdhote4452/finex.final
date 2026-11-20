@@ -149,8 +149,8 @@ describe('FinEx Login Landing Page & Tab Routing Logic', () => {
   // 5. IN-SESSION BROWSER BACK/FORWARD AND TAB NAVIGATION
   // -------------------------------------------------------------
   test('5. In-session navigation and browser Back/Forward between valid tabs', () => {
-    // Verify all 12 navigation tabs are recognized
-    assert.equal(VALID_TABS.length, 12);
+    // Verify all 13 navigation tabs are recognized (including admin panel)
+    assert.equal(VALID_TABS.length, 13);
     for (const tab of VALID_TABS) {
       assert.ok(isValidTab(tab), `Tab ${tab} must be a valid tab`);
       assert.equal(parseTabFromHash(`#${tab}`), tab);
