@@ -141,18 +141,34 @@ async def test_admin_endpoints_refuse_inactive_owner(app):
 
     settings = get_settings()
     owner_email = settings.OWNER_EMAIL or "shivrajdhote4452@gmail.com"
+    inactive_uid = "usr-inactive-owner-test"
+    was_created = False
 
-    # Mark owner user inactive in DB
+    # Ensure owner user exists in DB and is marked inactive
     async with AsyncSessionLocal() as session:
         res = await session.execute(select(User).where(User.email == owner_email))
         u = res.scalars().first()
-        if u:
+        if not u:
+            was_created = True
+            u = User(
+                id=inactive_uid,
+                email=owner_email,
+                provider="google",
+                provider_subject="google-sub-shivraj-primary",
+                google_subject="google-sub-shivraj-primary",
+                is_active=False,
+                is_verified=True,
+                email_verified=True,
+            )
+            session.add(u)
+        else:
             u.is_active = False
-            await session.commit()
+            inactive_uid = u.id
+        await session.commit()
 
     try:
         token = create_access_token(
-            user_id="usr-shivraj-001",
+            user_id=inactive_uid,
             email=owner_email,
             name="Shivraj Dhote",
             provider="google",
@@ -166,12 +182,15 @@ async def test_admin_endpoints_refuse_inactive_owner(app):
                 "inactive" in res.json().get("detail", "").lower() or "disabled" in res.json().get("detail", "").lower()
             )
     finally:
-        # Restore active state
+        # Restore active state or delete created test record
         async with AsyncSessionLocal() as session:
             res = await session.execute(select(User).where(User.email == owner_email))
             u = res.scalars().first()
             if u:
-                u.is_active = True
+                if was_created:
+                    await session.delete(u)
+                else:
+                    u.is_active = True
                 await session.commit()
 
 

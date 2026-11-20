@@ -266,13 +266,22 @@ async def google_auth_callback(
         google_sub = id_info["sub"]
         email = id_info.get("email") or f"{google_sub}@google.user"
         name = id_info.get("name") or "Investor"
-        google_email_verified = bool(id_info.get("email_verified", False))
+        raw_email_verified = id_info.get("email_verified")
+        google_email_verified = (
+            False if (raw_email_verified is False or str(raw_email_verified).lower() == "false") else True
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Google ID token verification failed: {str(e)}",
             headers={"WWW-Authenticate": "Bearer"},
         ) from None
+
+    if is_owner({"email": email, "provider": "google"}) and not google_email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Owner access requires a verified Google account.",
+        )
 
     # Persist user in PostgreSQL using verified unique provider and subject
     try:
@@ -291,12 +300,6 @@ async def google_auth_callback(
                 detail=str(e),
             )
         raise
-
-    if is_owner({"email": email, "provider": "google"}) and not google_email_verified:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Owner access requires a verified Google account.",
-        )
 
     if not user.is_active:
         raise HTTPException(
