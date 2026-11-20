@@ -20,7 +20,8 @@ export type NavigationTab =
   | 'alerts'
   | 'goals'
   | 'spending'
-  | 'settings';
+  | 'settings'
+  | 'admin';
 
 export const VALID_TABS: readonly NavigationTab[] = [
   'overview',
@@ -35,6 +36,7 @@ export const VALID_TABS: readonly NavigationTab[] = [
   'goals',
   'spending',
   'settings',
+  'admin',
 ] as const;
 
 export const STORAGE_KEY_ACTIVE_TAB = 'finex_active_tab';

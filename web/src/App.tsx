@@ -17,6 +17,7 @@ import { AlertsScreen } from './pages/AlertsScreen';
 import { GoalsScreen } from './pages/GoalsScreen';
 import { SpendingScreen } from './pages/SpendingScreen';
 import { SettingsScreen } from './pages/SettingsScreen';
+import { AdminScreen } from './pages/AdminScreen';
 import { PrivacyPolicyScreen } from './pages/PrivacyPolicyScreen';
 import { TermsOfServiceScreen } from './pages/TermsOfServiceScreen';
 import { apiClient } from './api/client';
@@ -333,6 +334,7 @@ export const AppContent: React.FC = () => {
         {currentTab === 'goals' && <GoalsScreen />}
         {currentTab === 'spending' && <SpendingScreen />}
         {currentTab === 'settings' && <SettingsScreen onSignOut={handleSignOut} />}
+        {currentTab === 'admin' && <AdminScreen onNavigate={handleNavigate} />}
       </ErrorBoundary>
     </AppShell>
   );

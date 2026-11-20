@@ -122,6 +122,102 @@ export interface OptionPositionItem {
   underlying_spot: number;
 }
 
+export interface AdminUserItem {
+  id: string;
+  email: string;
+  display_name?: string | null;
+  full_name?: string | null;
+  country?: string;
+  is_active: boolean;
+  email_verified: boolean;
+  onboarding_completed: boolean;
+  risk_band?: string | null;
+  experience_level?: string | null;
+  created_at?: string | null;
+}
+
+export interface AdminUsersResponse {
+  users: AdminUserItem[];
+  total: number;
+  page: number;
+  limit: number;
+  total_pages: number;
+}
+
+export interface AdminOrderItem {
+  id: string;
+  user_id: string;
+  user_email?: string | null;
+  symbol: string;
+  side: string;
+  order_type: string;
+  quantity: number;
+  limit_price?: number | null;
+  fill_price?: number | null;
+  fee: number;
+  status: string;
+  rejection_reason?: string | null;
+  created_at?: string | null;
+}
+
+export interface AdminOrdersResponse {
+  orders: AdminOrderItem[];
+  total: number;
+  page: number;
+  limit: number;
+  total_pages: number;
+}
+
+export interface AdminOverviewResponse {
+  total_users: number;
+  verified_users: number;
+  unverified_users: number;
+  onboarding_completed_users: number;
+  total_orders: number;
+  orders_by_status: Record<string, number>;
+  recent_rejected_orders: AdminOrderItem[];
+}
+
+export interface AdminSystemHealthResponse {
+  backend: {
+    status: string;
+    app: string;
+    environment: string;
+    version: string;
+  };
+  database: {
+    status: string;
+    message?: string;
+    error?: string;
+    details?: any;
+  };
+  market_data: {
+    mode: string;
+    allow_fixtures: boolean;
+    enable_demo_simulation: boolean;
+  };
+  angel_one: {
+    is_configured: boolean;
+    missing_fields?: string[];
+    has_api_key?: boolean;
+    has_client_id?: boolean;
+    has_mpin?: boolean;
+    has_totp_secret?: boolean;
+    smartapi_library_available?: boolean;
+    is_circuit_open?: boolean;
+    has_active_session?: boolean;
+    error?: string;
+    status?: string;
+  };
+  email: {
+    is_configured: boolean;
+    host: string;
+    port?: number | null;
+    use_tls?: boolean | null;
+    from_email: string;
+  };
+}
+
 class ApiError extends Error {
   code: string;
   status: number;
@@ -1456,6 +1552,54 @@ class ApiClient {
         has_live_groq?: boolean;
         has_live_llm?: boolean;
       }>('/ai/assistant/status');
+    },
+  };
+
+  public admin = {
+    getOverview: async () => {
+      return this.request<AdminOverviewResponse>('/admin/overview');
+    },
+
+    getUsers: async (params?: {
+      page?: number;
+      limit?: number;
+      search?: string;
+      is_active?: boolean;
+      email_verified?: boolean;
+      onboarding_completed?: boolean;
+    }) => {
+      const q = new URLSearchParams();
+      if (params?.page) q.set('page', String(params.page));
+      if (params?.limit) q.set('limit', String(params.limit));
+      if (params?.search) q.set('search', params.search);
+      if (params?.is_active !== undefined) q.set('is_active', String(params.is_active));
+      if (params?.email_verified !== undefined) q.set('email_verified', String(params.email_verified));
+      if (params?.onboarding_completed !== undefined) q.set('onboarding_completed', String(params.onboarding_completed));
+      const qs = q.toString() ? `?${q.toString()}` : '';
+      return this.request<AdminUsersResponse>(`/admin/users${qs}`);
+    },
+
+    getOrders: async (params?: {
+      page?: number;
+      limit?: number;
+      symbol?: string;
+      side?: string;
+      status?: string;
+      search?: string;
+    }) => {
+      const q = new URLSearchParams();
+      if (params?.page) q.set('page', String(params.page));
+      if (params?.limit) q.set('limit', String(params.limit));
+      if (params?.symbol) q.set('symbol', params.symbol);
+      if (params?.side) q.set('side', params.side);
+      if (params?.status) q.set('status', params.status);
+      if (params?.search) q.set('search', params.search);
+      const qs = q.toString() ? `?${q.toString()}` : '';
+      return this.request<AdminOrdersResponse>(`/admin/orders${qs}`);
+    },
+
+    getSystemHealth: async () => {
+      return this.request<AdminSystemHealthResponse>('/admin/system-health');
     },
   };
 

@@ -14,6 +14,7 @@ from backend.app.core.middleware import (
     RequestSizeLimitMiddleware,
     SecurityHeadersMiddleware,
 )
+from backend.app.routers.admin import router as admin_router
 from backend.app.routers.ai_chat import router as ai_chat_router
 from backend.app.routers.ai_portfolio import router as ai_portfolio_router
 from backend.app.routers.alerts import router as alerts_router
@@ -177,6 +178,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     app.include_router(charts_router, prefix=v1_prefix)
     app.include_router(spending_router, prefix=v1_prefix)
     app.include_router(sample_router, prefix=v1_prefix)
+    app.include_router(admin_router, prefix=v1_prefix)
 
     @app.get("/", include_in_schema=False)
     async def root_redirect():
