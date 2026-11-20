@@ -845,13 +845,75 @@ async def test_admin_google_login_truth_table_and_enforcement(app):
                     )
                     assert res_chk.scalar_one_or_none() is None
 
-        # 4. Mismatched Google subject fails closed with 403 without modifying account
+        # 4. Missing Google subject on DB owner fails closed with 403
+        async with AsyncSessionLocal() as session:
+            res_u = await session.execute(select(User).where(User.email == owner_email))
+            owner_u = res_u.scalar_one_or_none()
+            assert owner_u is not None
+            owner_u.google_subject = None
+            owner_u.provider = "email"
+            owner_u.provider_subject = "owner-email-provider-sub-123"
+            await session.commit()
+
+        with patch("google.oauth2.id_token.verify_oauth2_token") as mock_verify:
+            mock_verify.return_value = {
+                "iss": "https://accounts.google.com",
+                "sub": "real-persistent-owner-google-sub-123",
+                "email": owner_email,
+                "name": "Shivraj Dhote",
+                "email_verified": True,
+            }
+            res_missing_sub = await client.post(
+                "/api/v1/auth/admin-google",
+                json={"id_token": "mock-real-token"},
+            )
+            assert res_missing_sub.status_code == 403
+            assert "not bound to a Google identity" in res_missing_sub.json()["detail"]
+
+            # Verify google_subject in DB was NOT set or relinked
+            async with AsyncSessionLocal() as session:
+                res_chk = await session.execute(select(User).where(User.email == owner_email))
+                chk_u = res_chk.scalar_one_or_none()
+                assert chk_u.google_subject is None
+
+        # 5. Placeholder Google subject on DB owner fails closed with 403
+        async with AsyncSessionLocal() as session:
+            res_u = await session.execute(select(User).where(User.email == owner_email))
+            owner_u = res_u.scalar_one_or_none()
+            owner_u.google_subject = "placeholder-google-sub-shivraj"
+            owner_u.provider = "google"
+            owner_u.provider_subject = "placeholder-google-sub-shivraj"
+            await session.commit()
+
+        with patch("google.oauth2.id_token.verify_oauth2_token") as mock_verify:
+            mock_verify.return_value = {
+                "iss": "https://accounts.google.com",
+                "sub": "real-persistent-owner-google-sub-123",
+                "email": owner_email,
+                "name": "Shivraj Dhote",
+                "email_verified": True,
+            }
+            res_placeholder = await client.post(
+                "/api/v1/auth/admin-google",
+                json={"id_token": "mock-real-token"},
+            )
+            assert res_placeholder.status_code == 403
+            assert "placeholder Google identity" in res_placeholder.json()["detail"]
+
+            # Verify google_subject in DB was NOT overwritten or relinked
+            async with AsyncSessionLocal() as session:
+                res_chk = await session.execute(select(User).where(User.email == owner_email))
+                chk_u = res_chk.scalar_one_or_none()
+                assert chk_u.google_subject == "placeholder-google-sub-shivraj"
+
+        # 6. Mismatched Google subject fails closed with 403 without modifying account
         async with AsyncSessionLocal() as session:
             res_u = await session.execute(select(User).where(User.email == owner_email))
             owner_u = res_u.scalar_one_or_none()
             assert owner_u is not None
             # Set a persistent real Google subject
             owner_u.google_subject = "real-persistent-owner-google-sub-123"
+            owner_u.provider_subject = "real-persistent-owner-google-sub-123"
             await session.commit()
 
         with patch("google.oauth2.id_token.verify_oauth2_token") as mock_verify:
@@ -875,7 +937,7 @@ async def test_admin_google_login_truth_table_and_enforcement(app):
                 chk_u = res_chk.scalar_one_or_none()
                 assert chk_u.google_subject == "real-persistent-owner-google-sub-123"
 
-        # 5. Inactive owner in DB fails closed with 403
+        # 7. Inactive owner in DB fails closed with 403
         async with AsyncSessionLocal() as session:
             res_u = await session.execute(select(User).where(User.email == owner_email))
             owner_u = res_u.scalar_one_or_none()
@@ -897,7 +959,7 @@ async def test_admin_google_login_truth_table_and_enforcement(app):
             assert res_inactive.status_code == 403
             assert "disabled" in res_inactive.json()["detail"]
 
-        # 6. Unverified owner in DB fails closed with 403
+        # 8. Unverified owner in DB fails closed with 403
         async with AsyncSessionLocal() as session:
             res_u = await session.execute(select(User).where(User.email == owner_email))
             owner_u = res_u.scalar_one_or_none()
@@ -931,7 +993,7 @@ async def test_admin_google_login_truth_table_and_enforcement(app):
             owner_u.google_subject = "real-persistent-owner-google-sub-123"
             await session.commit()
 
-        # 7. Legitimate verified owner Google login succeeds with 200 OK
+        # 9. Legitimate verified owner with matching real Google subject succeeds with 200 OK
         with patch("google.oauth2.id_token.verify_oauth2_token") as mock_verify:
             mock_verify.return_value = {
                 "iss": "https://accounts.google.com",
@@ -948,6 +1010,36 @@ async def test_admin_google_login_truth_table_and_enforcement(app):
             data = res_owner.json()["data"]
             assert data["email"] == owner_email
             assert "access_token" in data
+            admin_token = data["access_token"]
+
+            # 10. Access ALL admin endpoints using the issued admin token
+            admin_headers = {"Authorization": f"Bearer {admin_token}"}
+
+            # /admin/me
+            res_me = await client.get("/api/v1/admin/me", headers=admin_headers)
+            assert res_me.status_code == 200
+            assert res_me.json()["data"]["email"] == owner_email
+            assert res_me.json()["data"]["role"] == "owner"
+
+            # /admin/overview
+            res_ov = await client.get("/api/v1/admin/overview", headers=admin_headers)
+            assert res_ov.status_code == 200
+            assert "total_users" in res_ov.json()["data"]
+
+            # /admin/users
+            res_usr = await client.get("/api/v1/admin/users", headers=admin_headers)
+            assert res_usr.status_code == 200
+            assert "users" in res_usr.json()["data"]
+
+            # /admin/orders
+            res_ord = await client.get("/api/v1/admin/orders", headers=admin_headers)
+            assert res_ord.status_code == 200
+            assert "orders" in res_ord.json()["data"]
+
+            # /admin/system-health
+            res_hlth = await client.get("/api/v1/admin/system-health", headers=admin_headers)
+            assert res_hlth.status_code == 200
+            assert "database" in res_hlth.json()["data"]
 
 
 @pytest.mark.asyncio

@@ -435,20 +435,34 @@ async def admin_google_auth(
 
     # 5. Verify configured owner email and database identity consistency
     configured_owner_email = (settings.OWNER_EMAIL or "").strip().lower()
-    if not configured_owner_email or user.email.strip().lower() != configured_owner_email:
+    if (
+        not configured_owner_email
+        or user.email.strip().lower() != configured_owner_email
+        or clean_email != configured_owner_email
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Forbidden: Database owner identity mismatch.",
         )
 
-    # 6. Verify Google subject consistency (strictly rejects mismatched Google identity)
+    # 6. Verify Google subject consistency: strictly fail closed unless owner account has a
+    # real, non-placeholder Google subject that exactly matches the verified Google ID token.
     existing_google_sub = user.google_subject or (user.provider_subject if user.provider == "google" else None)
-    if existing_google_sub and not is_placeholder_google_subject(existing_google_sub):
-        if existing_google_sub != google_sub:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Forbidden: Google subject mismatch for platform owner.",
-            )
+    if not existing_google_sub:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Owner account is not bound to a Google identity. A verified Google subject is required.",
+        )
+    if is_placeholder_google_subject(existing_google_sub):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Owner account has a placeholder Google identity. Setup required before admin access.",
+        )
+    if existing_google_sub != google_sub:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Google subject mismatch for platform owner.",
+        )
 
     # 7. Fail closed if disabled or unverified
     if not user.is_active:
