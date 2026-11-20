@@ -20,12 +20,22 @@ from unittest.mock import patch
 
 import pytest
 from backend.app.config import get_settings
-from backend.app.database import engine
+from backend.app.database import AsyncSessionLocal, engine
 from backend.app.factory import create_app
 from backend.app.models.core import Base as CoreBase
-from backend.app.models.paper_trading import Base as PaperBase
+from backend.app.models.core import User
+from backend.app.models.paper_trading import (
+    Base as PaperBase,
+)
+from backend.app.models.paper_trading import (
+    PaperAccount,
+    PaperCashLedger,
+    PaperOrder,
+    PaperPosition,
+)
 from backend.app.routers.auth import create_access_token
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import delete, select
 
 
 @pytest.fixture
@@ -729,7 +739,7 @@ async def test_legitimate_google_and_email_login_flows(app):
         }
         with patch("google.oauth2.id_token.verify_oauth2_token", return_value=owner_id_info):
             res_owner = await client.post("/api/v1/auth/google", json={"id_token": "token-valid-owner"})
-            assert res_owner.status_code == 200
+            assert res_owner.status_code == 200, f"res_owner status={res_owner.status_code}, body={res_owner.text}"
             owner_data = res_owner.json()["data"]
             assert owner_data["email"] == owner_email
             assert "access_token" in owner_data
@@ -811,11 +821,121 @@ async def test_admin_google_login_truth_table_and_enforcement(app):
             assert res_unverified.status_code == 403
             assert "Owner access requires a verified Google account" in res_unverified.json()["detail"]
 
-        # 3. Legitimate verified owner Google login succeeds with 200 OK
+        # 3. Missing owner account in DB fails closed with 403 without creating a user
+        with patch.object(settings, "OWNER_EMAIL", "nonexistent_owner@finex.internal"):
+            with patch("google.oauth2.id_token.verify_oauth2_token") as mock_verify:
+                mock_verify.return_value = {
+                    "iss": "https://accounts.google.com",
+                    "sub": "nonexistent-google-sub-123",
+                    "email": "nonexistent_owner@finex.internal",
+                    "name": "Missing Owner",
+                    "email_verified": True,
+                }
+                res_missing = await client.post(
+                    "/api/v1/auth/admin-google",
+                    json={"id_token": "mock-missing-owner-token"},
+                )
+                assert res_missing.status_code == 403
+                assert "not found in database" in res_missing.json()["detail"]
+
+                # Verify NO user was inserted into DB for nonexistent_owner@finex.internal
+                async with AsyncSessionLocal() as session:
+                    res_chk = await session.execute(
+                        select(User).where(User.email == "nonexistent_owner@finex.internal")
+                    )
+                    assert res_chk.scalar_one_or_none() is None
+
+        # 4. Mismatched Google subject fails closed with 403 without modifying account
+        async with AsyncSessionLocal() as session:
+            res_u = await session.execute(select(User).where(User.email == owner_email))
+            owner_u = res_u.scalar_one_or_none()
+            assert owner_u is not None
+            # Set a persistent real Google subject
+            owner_u.google_subject = "real-persistent-owner-google-sub-123"
+            await session.commit()
+
         with patch("google.oauth2.id_token.verify_oauth2_token") as mock_verify:
             mock_verify.return_value = {
                 "iss": "https://accounts.google.com",
-                "sub": "owner-google-sub-authorized",
+                "sub": "attacker-mismatched-google-sub-999",
+                "email": owner_email,
+                "name": "Shivraj Dhote",
+                "email_verified": True,
+            }
+            res_mismatch = await client.post(
+                "/api/v1/auth/admin-google",
+                json={"id_token": "mock-mismatched-token"},
+            )
+            assert res_mismatch.status_code == 403
+            assert "Google subject mismatch" in res_mismatch.json()["detail"]
+
+            # Verify google_subject in DB was NOT updated or relinked
+            async with AsyncSessionLocal() as session:
+                res_chk = await session.execute(select(User).where(User.email == owner_email))
+                chk_u = res_chk.scalar_one_or_none()
+                assert chk_u.google_subject == "real-persistent-owner-google-sub-123"
+
+        # 5. Inactive owner in DB fails closed with 403
+        async with AsyncSessionLocal() as session:
+            res_u = await session.execute(select(User).where(User.email == owner_email))
+            owner_u = res_u.scalar_one_or_none()
+            owner_u.is_active = False
+            await session.commit()
+
+        with patch("google.oauth2.id_token.verify_oauth2_token") as mock_verify:
+            mock_verify.return_value = {
+                "iss": "https://accounts.google.com",
+                "sub": "real-persistent-owner-google-sub-123",
+                "email": owner_email,
+                "name": "Shivraj Dhote",
+                "email_verified": True,
+            }
+            res_inactive = await client.post(
+                "/api/v1/auth/admin-google",
+                json={"id_token": "mock-owner-token"},
+            )
+            assert res_inactive.status_code == 403
+            assert "disabled" in res_inactive.json()["detail"]
+
+        # 6. Unverified owner in DB fails closed with 403
+        async with AsyncSessionLocal() as session:
+            res_u = await session.execute(select(User).where(User.email == owner_email))
+            owner_u = res_u.scalar_one_or_none()
+            owner_u.is_active = True
+            owner_u.is_verified = False
+            owner_u.email_verified = False
+            await session.commit()
+
+        with patch("google.oauth2.id_token.verify_oauth2_token") as mock_verify:
+            mock_verify.return_value = {
+                "iss": "https://accounts.google.com",
+                "sub": "real-persistent-owner-google-sub-123",
+                "email": owner_email,
+                "name": "Shivraj Dhote",
+                "email_verified": True,
+            }
+            res_unver_db = await client.post(
+                "/api/v1/auth/admin-google",
+                json={"id_token": "mock-owner-token"},
+            )
+            assert res_unver_db.status_code == 403
+            assert "unverified" in res_unver_db.json()["detail"]
+
+        # Restore verified active owner state for authorized test
+        async with AsyncSessionLocal() as session:
+            res_u = await session.execute(select(User).where(User.email == owner_email))
+            owner_u = res_u.scalar_one_or_none()
+            owner_u.is_active = True
+            owner_u.is_verified = True
+            owner_u.email_verified = True
+            owner_u.google_subject = "real-persistent-owner-google-sub-123"
+            await session.commit()
+
+        # 7. Legitimate verified owner Google login succeeds with 200 OK
+        with patch("google.oauth2.id_token.verify_oauth2_token") as mock_verify:
+            mock_verify.return_value = {
+                "iss": "https://accounts.google.com",
+                "sub": "real-persistent-owner-google-sub-123",
                 "email": owner_email,
                 "name": "Shivraj Dhote",
                 "email_verified": True,
@@ -824,7 +944,7 @@ async def test_admin_google_login_truth_table_and_enforcement(app):
                 "/api/v1/auth/admin-google",
                 json={"id_token": "mock-authorized-id-token"},
             )
-            assert res_owner.status_code == 200
+            assert res_owner.status_code == 200, f"res_owner status={res_owner.status_code}, body={res_owner.text}"
             data = res_owner.json()["data"]
             assert data["email"] == owner_email
             assert "access_token" in data
@@ -863,3 +983,250 @@ async def test_admin_me_endpoint(app, owner_headers):
         assert data["role"] == "owner"
         assert data["is_active"] is True
         assert data["email_verified"] is True
+
+
+@pytest.mark.asyncio
+async def test_admin_login_logout_preserves_owner_portfolio_and_investor_session(app):
+    """Verifies admin login/logout strictly preserves owner portfolio, orders, ledger, and investor session."""
+    import uuid
+
+    settings = get_settings()
+    owner_email = (settings.OWNER_EMAIL or "shivrajdhote4452@gmail.com").strip().lower()
+    owner_uid = "usr-shivraj-001"
+    transport = ASGITransport(app=app)
+
+    # 1. Setup known portfolio, order, and ledger in isolated test database
+    async with AsyncSessionLocal() as session:
+        # Ensure user exists
+        res_u = await session.execute(select(User).where(User.id == owner_uid))
+        u = res_u.scalar_one_or_none()
+        if not u:
+            u = User(
+                id=owner_uid,
+                email=owner_email,
+                name="Shivraj Dhote",
+                provider="google",
+                provider_subject="owner-google-sub-authorized",
+                google_subject="owner-google-sub-authorized",
+                is_active=True,
+                is_verified=True,
+                email_verified=True,
+            )
+            session.add(u)
+            await session.flush()
+        else:
+            u.is_active = True
+            u.is_verified = True
+            u.email_verified = True
+            u.google_subject = "owner-google-sub-authorized"
+            await session.flush()
+
+        # Ensure paper account exists with known cash balance
+        res_acc = await session.execute(select(PaperAccount).where(PaperAccount.user_id == owner_uid))
+        acc = res_acc.scalar_one_or_none()
+        if not acc:
+            acc = PaperAccount(
+                id=f"acc-{uuid.uuid4().hex[:12]}",
+                user_id=owner_uid,
+                account_number="ACC-OWNER-TEST",
+                current_cash=85000.0,
+                currency="INR",
+            )
+            session.add(acc)
+            await session.flush()
+        else:
+            acc.current_cash = 85000.0
+            await session.flush()
+
+        # Clean old test positions, orders, ledger for deterministic assertion
+        await session.execute(delete(PaperPosition).where(PaperPosition.account_id == acc.id))
+        await session.execute(delete(PaperOrder).where(PaperOrder.account_id == acc.id))
+        await session.execute(delete(PaperCashLedger).where(PaperCashLedger.account_id == acc.id))
+        await session.commit()
+
+        # Seed 2 known holdings
+        pos1 = PaperPosition(
+            id=f"pos-{uuid.uuid4().hex[:12]}",
+            account_id=acc.id,
+            symbol="RELIANCE",
+            quantity=10,
+            average_buy_price=2450.0,
+            total_cost_basis=24500.0,
+        )
+        pos2 = PaperPosition(
+            id=f"pos-{uuid.uuid4().hex[:12]}",
+            account_id=acc.id,
+            symbol="TCS",
+            quantity=5,
+            average_buy_price=3500.0,
+            total_cost_basis=17500.0,
+        )
+        session.add(pos1)
+        session.add(pos2)
+
+        # Seed 1 order
+        ord1 = PaperOrder(
+            id=f"ord-{uuid.uuid4().hex[:12]}",
+            account_id=acc.id,
+            user_id=owner_uid,
+            symbol="RELIANCE",
+            side="BUY",
+            order_type="MARKET",
+            quantity=10,
+            status="FILLED",
+            fill_price=2450.0,
+            idempotency_key=f"idemp-{uuid.uuid4().hex[:12]}",
+        )
+        session.add(ord1)
+
+        # Seed 1 ledger entry
+        led1 = PaperCashLedger(
+            id=f"led-{uuid.uuid4().hex[:12]}",
+            account_id=acc.id,
+            entry_type="BUY",
+            amount=-24500.0,
+            balance_after=85000.0,
+            description="Buy 10 RELIANCE shares",
+        )
+        session.add(led1)
+        await session.commit()
+
+    # 2. Issue owner investor access token
+    investor_token = create_access_token(
+        user_id=owner_uid,
+        email=owner_email,
+        name="Shivraj Dhote",
+        provider="google",
+    )
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Verify investor token successfully reads portfolio before admin login
+        inv_res = await client.get(
+            "/api/v1/paper-trading/account",
+            headers={"Authorization": f"Bearer {investor_token}"},
+        )
+        assert inv_res.status_code == 200
+        inv_data = inv_res.json()["data"]
+        assert float(inv_data["cash_balance"]) == 85000.0
+
+        # Snapshot exact database state before admin operations
+        async with AsyncSessionLocal() as session:
+            res_u_before = await session.execute(select(User).where(User.id == owner_uid))
+            u_before = res_u_before.scalar_one()
+            snapshot_user = {
+                "id": u_before.id,
+                "email": u_before.email,
+                "provider": u_before.provider,
+                "provider_subject": u_before.provider_subject,
+                "password_hash": u_before.password_hash,
+                "google_subject": u_before.google_subject,
+                "is_active": u_before.is_active,
+                "email_verified": u_before.email_verified,
+            }
+
+            res_acc_before = await session.execute(select(PaperAccount).where(PaperAccount.user_id == owner_uid))
+            acc_before = res_acc_before.scalar_one()
+            snapshot_balance = float(acc_before.current_cash)
+
+            res_pos_before = await session.execute(
+                select(PaperPosition).where(PaperPosition.account_id == acc_before.id).order_by(PaperPosition.symbol)
+            )
+            snapshot_positions = [
+                {"symbol": p.symbol, "qty": p.quantity, "avg_price": float(p.average_buy_price)}
+                for p in res_pos_before.scalars().all()
+            ]
+
+            res_ord_before = await session.execute(select(PaperOrder).where(PaperOrder.account_id == acc_before.id))
+            snapshot_orders = [(o.id, o.symbol, o.status, o.quantity) for o in res_ord_before.scalars().all()]
+
+            res_led_before = await session.execute(
+                select(PaperCashLedger).where(PaperCashLedger.account_id == acc_before.id)
+            )
+            snapshot_ledger = [(led.id, led.entry_type, float(led.amount)) for led in res_led_before.scalars().all()]
+
+        # 3. Perform Admin Google Login
+        with patch("google.oauth2.id_token.verify_oauth2_token") as mock_verify:
+            mock_verify.return_value = {
+                "iss": "https://accounts.google.com",
+                "sub": "owner-google-sub-authorized",
+                "email": owner_email,
+                "name": "Shivraj Dhote",
+                "email_verified": True,
+            }
+            res_admin_login = await client.post(
+                "/api/v1/auth/admin-google",
+                json={"id_token": "mock-authorized-id-token"},
+            )
+            assert res_admin_login.status_code == 200
+            admin_token = res_admin_login.json()["data"]["access_token"]
+
+        # 4. Perform Read-Only Admin Operations using admin token
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+        res_me = await client.get("/api/v1/admin/me", headers=admin_headers)
+        assert res_me.status_code == 200
+
+        res_overview = await client.get("/api/v1/admin/overview", headers=admin_headers)
+        assert res_overview.status_code == 200
+
+        res_users = await client.get("/api/v1/admin/users", headers=admin_headers)
+        assert res_users.status_code == 200
+
+        res_orders = await client.get("/api/v1/admin/orders", headers=admin_headers)
+        assert res_orders.status_code == 200
+
+        # 5. Perform Admin Logout (Revoke admin token)
+        res_logout = await client.post(
+            "/api/v1/auth/revoke",
+            json={"token": admin_token},
+            headers=admin_headers,
+        )
+        assert res_logout.status_code == 200
+
+        # Verify admin token is revoked
+        res_admin_check = await client.get("/api/v1/admin/me", headers=admin_headers)
+        assert res_admin_check.status_code == 401
+
+        # 6. Verify Owner Investor Session Remains Valid and Operational
+        res_inv_after = await client.get(
+            "/api/v1/paper-trading/account",
+            headers={"Authorization": f"Bearer {investor_token}"},
+        )
+        assert res_inv_after.status_code == 200
+        inv_after_data = res_inv_after.json()["data"]
+        assert float(inv_after_data["cash_balance"]) == snapshot_balance
+
+        # 7. Verify Database State Integrity: 100% Unchanged
+        async with AsyncSessionLocal() as session:
+            res_u_after = await session.execute(select(User).where(User.id == owner_uid))
+            u_after = res_u_after.scalar_one()
+            assert u_after.id == snapshot_user["id"]
+            assert u_after.email == snapshot_user["email"]
+            assert u_after.provider == snapshot_user["provider"]
+            assert u_after.provider_subject == snapshot_user["provider_subject"]
+            assert u_after.password_hash == snapshot_user["password_hash"]
+            assert u_after.google_subject == snapshot_user["google_subject"]
+            assert u_after.is_active == snapshot_user["is_active"]
+            assert u_after.email_verified == snapshot_user["email_verified"]
+
+            res_acc_after = await session.execute(select(PaperAccount).where(PaperAccount.user_id == owner_uid))
+            acc_after = res_acc_after.scalar_one()
+            assert float(acc_after.current_cash) == snapshot_balance
+
+            res_pos_after = await session.execute(
+                select(PaperPosition).where(PaperPosition.account_id == acc_after.id).order_by(PaperPosition.symbol)
+            )
+            positions_after = [
+                {"symbol": p.symbol, "qty": p.quantity, "avg_price": float(p.average_buy_price)}
+                for p in res_pos_after.scalars().all()
+            ]
+            assert positions_after == snapshot_positions
+
+            res_ord_after = await session.execute(select(PaperOrder).where(PaperOrder.account_id == acc_after.id))
+            orders_after = [(o.id, o.symbol, o.status, o.quantity) for o in res_ord_after.scalars().all()]
+            assert orders_after == snapshot_orders
+
+            res_led_after = await session.execute(
+                select(PaperCashLedger).where(PaperCashLedger.account_id == acc_after.id)
+            )
+            ledger_after = [(led.id, led.entry_type, float(led.amount)) for led in res_led_after.scalars().all()]
+            assert ledger_after == snapshot_ledger

@@ -15,7 +15,7 @@ import jwt
 from backend.app.config import get_settings
 from backend.app.core.envelope import create_response_envelope
 from backend.app.database import get_db
-from backend.app.domain.user_store import user_store
+from backend.app.domain.user_store import is_placeholder_google_subject, user_store
 from backend.app.services.email_service import email_service
 from backend.app.services.password_service import (
     auth_rate_limiter,
@@ -403,7 +403,6 @@ async def admin_google_auth(
         is_explicitly_verified = (raw_email_verified is True) or (
             isinstance(raw_email_verified, str) and raw_email_verified.strip().lower() == "true"
         )
-        google_email_verified = bool(is_explicitly_verified)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -425,25 +424,33 @@ async def admin_google_auth(
             detail="Owner access requires a verified Google account with confirmed email verification.",
         )
 
-    # 4. Fetch or persist owner user in PostgreSQL
-    try:
-        user = await user_store.get_or_create_user_db(
-            provider="google",
-            provider_subject=google_sub,
-            email=email,
-            name=name,
-            google_email_verified=google_email_verified,
-            db=db,
+    # 4. Strict Read-Only Owner Lookup (Fail closed: No user creation, no relinking, no writes)
+    clean_email = email.strip().lower()
+    user = await user_store.get_user_by_email_db(clean_email, db=db)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Configured owner account not found in database.",
         )
-    except ValueError as e:
-        if "already linked to a different Google account" in str(e):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=str(e),
-            )
-        raise
 
-    # 5. Fail closed if disabled or unverified
+    # 5. Verify configured owner email and database identity consistency
+    configured_owner_email = (settings.OWNER_EMAIL or "").strip().lower()
+    if not configured_owner_email or user.email.strip().lower() != configured_owner_email:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Database owner identity mismatch.",
+        )
+
+    # 6. Verify Google subject consistency (strictly rejects mismatched Google identity)
+    existing_google_sub = user.google_subject or (user.provider_subject if user.provider == "google" else None)
+    if existing_google_sub and not is_placeholder_google_subject(existing_google_sub):
+        if existing_google_sub != google_sub:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Forbidden: Google subject mismatch for platform owner.",
+            )
+
+    # 7. Fail closed if disabled or unverified
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -456,10 +463,18 @@ async def admin_google_auth(
             detail="Forbidden: Owner account identity is unverified.",
         )
 
+    user_name = name or (user.email.split("@")[0] if user.email else "Platform Owner")
+    try:
+        profile = await user_store.get_profile_db(user.id, db=db)
+        if profile and profile.full_name:
+            user_name = profile.full_name
+    except Exception:
+        pass
+
     token = create_access_token(
         user_id=user.id,
         email=user.email,
-        name=user.name,
+        name=user_name,
         provider="google",
     )
 
@@ -468,7 +483,7 @@ async def admin_google_auth(
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         user_id=user.id,
         email=user.email,
-        name=user.name,
+        name=user_name,
     )
     return create_response_envelope(data.model_dump(), correlation_id=cid)
 
