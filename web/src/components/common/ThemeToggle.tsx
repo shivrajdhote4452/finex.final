@@ -70,6 +70,7 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({ variant = 'segmented',
             <button
               key={opt.id}
               type="button"
+              className={`theme-toggle-btn ${isSelected ? 'active' : ''}`}
               onClick={() => setThemeMode(opt.id)}
               title={opt.description}
               style={{
@@ -302,6 +303,7 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({ variant = 'segmented',
           <button
             key={opt.id}
             type="button"
+            className={`theme-toggle-btn ${isSelected ? 'active' : ''}`}
             onClick={() => setThemeMode(opt.id)}
             title={opt.description}
             style={{
