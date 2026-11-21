@@ -1207,17 +1207,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onNavigateToApp }) => 
               <span className="admin-badge-full">Admin Portal</span>
               <span className="admin-badge-short">Admin</span>
             </span>
-            <span
-              style={{
-                fontSize: '10px',
-                padding: '2px 6px',
-                borderRadius: 'var(--radius-xs)',
-                backgroundColor: 'rgba(5, 150, 105, 0.12)',
-                color: 'var(--color-profit, #059669)',
-                fontWeight: 600,
-                whiteSpace: 'nowrap',
-              }}
-            >
+            <span className="admin-readonly-pill">
               Read-Only
             </span>
           </div>
@@ -1277,17 +1267,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onNavigateToApp }) => 
 
             <button
               onClick={handleSignOut}
-              style={{
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-                borderRadius: 'var(--radius-xs, 4px)',
-                color: 'var(--color-loss, #EF4444)',
-                padding: '5px 10px',
-                fontSize: '11.5px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-              }}
+              className="admin-signout-btn"
+              title="Sign out of Admin Portal"
             >
               Sign Out
             </button>
