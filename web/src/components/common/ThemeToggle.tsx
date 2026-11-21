@@ -70,6 +70,7 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({ variant = 'segmented',
             <button
               key={opt.id}
               type="button"
+              className={`theme-toggle-btn ${isSelected ? 'active' : ''}`}
               onClick={() => setThemeMode(opt.id)}
               title={opt.description}
               style={{
@@ -98,9 +99,10 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({ variant = 'segmented',
     );
   }
 
-  // 2. Dropdown popup variant
-  if (variant === 'dropdown') {
+  // 2. Dropdown popup or compact icon-button variant
+  if (variant === 'dropdown' || variant === 'icon-button') {
     const currentOpt = options.find((o) => o.id === themeMode) || options[0];
+    const isIconButton = variant === 'icon-button';
     return (
       <div ref={dropdownRef} style={{ position: 'relative', display: 'inline-block' }} className={className}>
         <button
@@ -109,8 +111,8 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({ variant = 'segmented',
           style={{
             display: 'inline-flex',
             alignItems: 'center',
-            gap: '6px',
-            padding: '5px 10px',
+            gap: isIconButton ? '5px' : '6px',
+            padding: isIconButton ? '4px 8px' : '5px 10px',
             backgroundColor: 'var(--bg-input)',
             border: '1px solid var(--border-subtle)',
             borderRadius: 'var(--radius-xs)',
@@ -118,12 +120,15 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({ variant = 'segmented',
             fontSize: '12px',
             cursor: 'pointer',
             transition: 'border-color var(--transition-fast)',
+            outline: 'none',
           }}
           aria-expanded={isOpen}
           aria-haspopup="listbox"
+          aria-label={`Current theme: ${currentOpt.label}. Click to change theme.`}
         >
-          <span>{currentOpt.icon}</span>
-          <span style={{ fontWeight: 600 }}>{currentOpt.label}</span>
+          <span style={{ fontSize: '13px', lineHeight: 1 }}>{currentOpt.icon}</span>
+          {!isIconButton && <span style={{ fontWeight: 600 }}>{currentOpt.label}</span>}
+          {isIconButton && <span className="theme-toggle-label" style={{ fontWeight: 600, fontSize: '11px' }}>{currentOpt.label}</span>}
           <span style={{ fontSize: '9px', color: 'var(--text-muted)' }}>{isOpen ? '▲' : '▼'}</span>
         </button>
 
@@ -133,7 +138,7 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({ variant = 'segmented',
               position: 'absolute',
               top: 'calc(100% + 6px)',
               right: 0,
-              width: '210px',
+              width: '200px',
               backgroundColor: 'var(--bg-dropdown, var(--bg-card))',
               border: '1px solid var(--border-subtle)',
               borderRadius: 'var(--radius-md)',
@@ -173,7 +178,7 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({ variant = 'segmented',
                   role="option"
                   aria-selected={isSelected}
                 >
-                  <span style={{ fontSize: '15px' }}>{opt.icon}</span>
+                  <span style={{ fontSize: '14px' }}>{opt.icon}</span>
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
                     <span style={{ fontWeight: isSelected ? 700 : 500 }}>{opt.label}</span>
                     <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
@@ -192,83 +197,135 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({ variant = 'segmented',
     );
   }
 
-  // 3. Settings Cards variant (Detailed options with preview)
+  // 3. Settings Cards variant (Detailed options with preview) - ONLY when explicitly requested
+  if (variant === 'cards') {
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }} className={className}>
+        {options.map((opt) => {
+          const isSelected = themeMode === opt.id;
+          return (
+            <div
+              key={opt.id}
+              onClick={() => setThemeMode(opt.id)}
+              className="glass-card"
+              style={{
+                padding: '16px',
+                cursor: 'pointer',
+                border: isSelected ? '2px solid var(--color-action)' : '1px solid var(--border-subtle)',
+                backgroundColor: isSelected ? 'var(--color-action-bg)' : 'var(--bg-card)',
+                boxShadow: isSelected ? 'var(--border-glow)' : 'none',
+                transition: 'all var(--transition-fast)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '20px' }}>{opt.icon}</span>
+                  <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)' }}>{opt.label}</span>
+                </div>
+                <div
+                  style={{
+                    width: '18px',
+                    height: '18px',
+                    borderRadius: '50%',
+                    border: isSelected ? '5px solid var(--color-action)' : '2px solid var(--border-medium)',
+                    backgroundColor: isSelected ? '#FFFFFF' : 'transparent',
+                    transition: 'all var(--transition-fast)',
+                  }}
+                />
+              </div>
+
+              <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0, lineHeight: 1.4 }}>
+                {opt.description}
+              </p>
+
+              {/* Mini Color Palette Bar Preview */}
+              <div
+                style={{
+                  display: 'flex',
+                  height: '8px',
+                  borderRadius: 'var(--radius-xs)',
+                  overflow: 'hidden',
+                  border: '1px solid var(--border-subtle)',
+                  marginTop: '4px',
+                }}
+              >
+                {opt.id === 'light' ? (
+                  <>
+                    <div style={{ flex: 2, backgroundColor: '#F8F9FA' }} />
+                    <div style={{ flex: 1, backgroundColor: '#D96B27' }} />
+                    <div style={{ flex: 1, backgroundColor: '#059669' }} />
+                    <div style={{ flex: 1, backgroundColor: '#111827' }} />
+                  </>
+                ) : opt.id === 'dark' ? (
+                  <>
+                    <div style={{ flex: 2, backgroundColor: '#000000' }} />
+                    <div style={{ flex: 1, backgroundColor: '#F29A60' }} />
+                    <div style={{ flex: 1, backgroundColor: '#4DD5AD' }} />
+                    <div style={{ flex: 1, backgroundColor: '#FFFFFF' }} />
+                  </>
+                ) : (
+                  <>
+                    <div style={{ flex: 2, background: 'linear-gradient(90deg, #F8F9FA 50%, #000000 50%)' }} />
+                    <div style={{ flex: 1, backgroundColor: 'var(--color-action)' }} />
+                    <div style={{ flex: 1, backgroundColor: 'var(--color-positive)' }} />
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // 4. Fallthrough default: return segmented pill (clean and compact)
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }} className={className}>
+    <div
+      className={`theme-toggle-segmented ${className}`}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        backgroundColor: 'var(--bg-input)',
+        border: '1px solid var(--border-subtle)',
+        borderRadius: 'var(--radius-sm)',
+        padding: '2px',
+        gap: '2px',
+      }}
+      role="group"
+      aria-label="Theme selection"
+    >
       {options.map((opt) => {
         const isSelected = themeMode === opt.id;
         return (
-          <div
+          <button
             key={opt.id}
+            type="button"
+            className={`theme-toggle-btn ${isSelected ? 'active' : ''}`}
             onClick={() => setThemeMode(opt.id)}
-            className="glass-card"
+            title={opt.description}
             style={{
-              padding: '16px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '5px',
+              padding: '4px 8px',
+              fontSize: '11px',
+              fontWeight: isSelected ? 700 : 500,
+              color: isSelected ? 'var(--color-action)' : 'var(--text-muted)',
+              backgroundColor: isSelected ? 'var(--color-action-bg)' : 'transparent',
+              border: isSelected ? '1px solid var(--color-action-border)' : '1px solid transparent',
+              borderRadius: 'var(--radius-xs)',
               cursor: 'pointer',
-              border: isSelected ? '2px solid var(--color-action)' : '1px solid var(--border-subtle)',
-              backgroundColor: isSelected ? 'var(--color-action-bg)' : 'var(--bg-card)',
-              boxShadow: isSelected ? 'var(--border-glow)' : 'none',
               transition: 'all var(--transition-fast)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '10px',
+              fontFamily: 'var(--font-sans)',
+              outline: 'none',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '20px' }}>{opt.icon}</span>
-                <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-main)' }}>{opt.label}</span>
-              </div>
-              <div
-                style={{
-                  width: '18px',
-                  height: '18px',
-                  borderRadius: '50%',
-                  border: isSelected ? '5px solid var(--color-action)' : '2px solid var(--border-medium)',
-                  backgroundColor: isSelected ? '#FFFFFF' : 'transparent',
-                  transition: 'all var(--transition-fast)',
-                }}
-              />
-            </div>
-
-            <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0, lineHeight: 1.4 }}>
-              {opt.description}
-            </p>
-
-            {/* Mini Color Palette Bar Preview */}
-            <div
-              style={{
-                display: 'flex',
-                height: '8px',
-                borderRadius: 'var(--radius-xs)',
-                overflow: 'hidden',
-                border: '1px solid var(--border-subtle)',
-                marginTop: '4px',
-              }}
-            >
-              {opt.id === 'light' ? (
-                <>
-                  <div style={{ flex: 2, backgroundColor: '#F8F9FA' }} />
-                  <div style={{ flex: 1, backgroundColor: '#D96B27' }} />
-                  <div style={{ flex: 1, backgroundColor: '#059669' }} />
-                  <div style={{ flex: 1, backgroundColor: '#111827' }} />
-                </>
-              ) : opt.id === 'dark' ? (
-                <>
-                  <div style={{ flex: 2, backgroundColor: '#000000' }} />
-                  <div style={{ flex: 1, backgroundColor: '#F29A60' }} />
-                  <div style={{ flex: 1, backgroundColor: '#4DD5AD' }} />
-                  <div style={{ flex: 1, backgroundColor: '#FFFFFF' }} />
-                </>
-              ) : (
-                <>
-                  <div style={{ flex: 2, background: 'linear-gradient(90deg, #F8F9FA 50%, #000000 50%)' }} />
-                  <div style={{ flex: 1, backgroundColor: 'var(--color-action)' }} />
-                  <div style={{ flex: 1, backgroundColor: 'var(--color-positive)' }} />
-                </>
-              )}
-            </div>
-          </div>
+            <span style={{ fontSize: '12px', lineHeight: 1 }}>{opt.icon}</span>
+            <span className="theme-toggle-label">{opt.label}</span>
+          </button>
         );
       })}
     </div>

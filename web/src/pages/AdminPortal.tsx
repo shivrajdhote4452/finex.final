@@ -342,50 +342,28 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onNavigateToApp }) => 
         }}
       >
         {/* Top Navbar */}
-        <header
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '16px 24px',
-            borderBottom: '1px solid var(--border-subtle, rgba(255,255,255,0.08))',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
-            <span style={{ fontSize: '22px', fontWeight: 900, color: 'var(--text-main, #FFFFFF)', letterSpacing: '-0.03em' }}>Fin</span>
-            <span style={{ fontSize: '22px', fontWeight: 900, color: 'var(--color-action, #3B82F6)', letterSpacing: '-0.03em' }}>Ex</span>
-            <span
-              style={{
-                marginLeft: '8px',
-                fontSize: '11px',
-                fontWeight: 700,
-                padding: '2px 8px',
-                borderRadius: '4px',
-                backgroundColor: 'rgba(59, 130, 246, 0.15)',
-                color: 'var(--color-action, #3B82F6)',
-                textTransform: 'uppercase',
-                letterSpacing: '0.06em',
-              }}
-            >
-              Admin Portal
+        <header className="admin-portal-header">
+          <div className="admin-header-brand-group">
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '2px', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: '20px', fontWeight: 900, color: 'var(--text-main, #FFFFFF)', letterSpacing: '-0.03em' }}>Fin</span>
+              <span style={{ fontSize: '20px', fontWeight: 900, color: 'var(--color-action, #3B82F6)', letterSpacing: '-0.03em' }}>Ex</span>
+            </div>
+            <span className="admin-header-badge">
+              <span className="admin-badge-full">Admin Portal</span>
+              <span className="admin-badge-short">Admin</span>
             </span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <ThemeToggle variant="icon-button" />
+          <div className="admin-header-actions-group">
+            <ThemeToggle variant="segmented" />
             <button
               onClick={handleNavigateToInvestor}
-              style={{
-                backgroundColor: 'transparent',
-                border: '1px solid var(--border-subtle, rgba(255,255,255,0.12))',
-                borderRadius: 'var(--radius-xs, 4px)',
-                color: 'var(--text-muted, #8E8E93)',
-                padding: '6px 12px',
-                fontSize: '12px',
-                cursor: 'pointer',
-              }}
+              className="admin-investor-btn"
+              title="Open Investor Workspace"
             >
-              Investor Workspace ↗
+              <span className="investor-link-full">Investor Workspace ↗</span>
+              <span className="investor-link-short">Investor ↗</span>
+              <span className="investor-link-mini">App ↗</span>
             </button>
           </div>
         </header>
@@ -397,42 +375,35 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onNavigateToApp }) => 
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: '32px 16px',
+            padding: '24px 12px',
+            boxSizing: 'border-box',
+            width: '100%',
+            maxWidth: '100vw',
+            overflowX: 'hidden',
           }}
         >
-          <div
-            style={{
-              width: '100%',
-              maxWidth: '440px',
-              backgroundColor: 'var(--bg-card, #141418)',
-              border: '1px solid var(--border-subtle, rgba(255,255,255,0.1))',
-              borderRadius: 'var(--radius-sm, 8px)',
-              padding: '36px 28px',
-              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.25)',
-              textAlign: 'center',
-            }}
-          >
+          <div className="admin-login-card">
             <div
               style={{
-                width: '52px',
-                height: '52px',
+                width: '46px',
+                height: '46px',
                 borderRadius: '50%',
                 backgroundColor: 'rgba(59, 130, 246, 0.12)',
                 color: 'var(--color-action, #3B82F6)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: '22px',
-                margin: '0 auto 16px auto',
+                fontSize: '20px',
+                margin: '0 auto 14px auto',
               }}
             >
               🛡️
             </div>
 
-            <h1 style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-main, #FFFFFF)', margin: '0 0 8px 0' }}>
+            <h1 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-main, #FFFFFF)', margin: '0 0 6px 0', letterSpacing: '-0.02em' }}>
               Platform Administration
             </h1>
-            <p style={{ fontSize: '13px', color: 'var(--text-muted, #8E8E93)', margin: '0 0 24px 0', lineHeight: 1.5 }}>
+            <p style={{ fontSize: '13px', color: 'var(--text-muted, #8E8E93)', margin: '0 0 20px 0', lineHeight: 1.5 }}>
               Dedicated operational portal for platform diagnostics, user oversight, and paper order verification.
             </p>
 
@@ -442,9 +413,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onNavigateToApp }) => 
                   backgroundColor: 'rgba(239, 68, 68, 0.1)',
                   border: '1px solid var(--color-loss, #EF4444)',
                   borderRadius: 'var(--radius-xs, 4px)',
-                  padding: '12px',
-                  marginBottom: '20px',
-                  fontSize: '13px',
+                  padding: '10px 12px',
+                  marginBottom: '16px',
+                  fontSize: '12px',
                   color: 'var(--color-loss, #EF4444)',
                   textAlign: 'left',
                   lineHeight: 1.4,
@@ -454,7 +425,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onNavigateToApp }) => 
               </div>
             )}
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', alignItems: 'center' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
               {/* Google GIS rendered button container */}
               <div id="admin-google-btn-container" ref={googleBtnContainerRef} style={{ display: 'none' }} />
 
@@ -463,21 +434,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onNavigateToApp }) => 
                 type="button"
                 onClick={handleGoogleSignInClick}
                 disabled={loginLoading}
+                className="auth-google-btn"
                 style={{
                   width: '100%',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: '12px',
-                  padding: '12px 20px',
-                  backgroundColor: 'var(--bg-main, #0A0A0C)',
-                  border: '1px solid var(--border-subtle, rgba(255,255,255,0.18))',
+                  gap: '10px',
+                  padding: '11px 18px',
                   borderRadius: 'var(--radius-xs, 4px)',
-                  color: 'var(--text-main, #FFFFFF)',
-                  fontSize: '14px',
+                  fontSize: '13px',
                   fontWeight: 600,
                   cursor: loginLoading ? 'wait' : 'pointer',
-                  transition: 'background 0.2s ease',
+                  transition: 'background 0.2s ease, border-color 0.2s ease',
                 }}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
@@ -574,7 +543,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onNavigateToApp }) => 
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(200px, 100%), 1fr))',
             gap: '16px',
           }}
         >
@@ -1095,7 +1064,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onNavigateToApp }) => 
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(260px, 100%), 1fr))', gap: '16px' }}>
           {/* Backend Process */}
           <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
@@ -1221,65 +1190,30 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onNavigateToApp }) => 
           position: 'sticky',
           top: 0,
           zIndex: 100,
+          width: '100%',
+          maxWidth: '100vw',
+          overflowX: 'hidden',
+          boxSizing: 'border-box',
         }}
       >
-        <div
-          style={{
-            maxWidth: '1380px',
-            margin: '0 auto',
-            padding: '12px 24px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '12px',
-          }}
-        >
+        <div className="admin-signedin-header-inner">
           {/* Brand + Admin Tag */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '3px' }}>
-              <span style={{ fontSize: '22px', fontWeight: 900, color: 'var(--text-main)', letterSpacing: '-0.03em' }}>Fin</span>
-              <span style={{ fontSize: '22px', fontWeight: 900, color: 'var(--color-action, #3B82F6)', letterSpacing: '-0.03em' }}>Ex</span>
+          <div className="admin-header-brand-group">
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '3px', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: '20px', fontWeight: 900, color: 'var(--text-main)', letterSpacing: '-0.03em' }}>Fin</span>
+              <span style={{ fontSize: '20px', fontWeight: 900, color: 'var(--color-action, #3B82F6)', letterSpacing: '-0.03em' }}>Ex</span>
             </div>
-            <span
-              style={{
-                fontSize: '11px',
-                fontWeight: 700,
-                padding: '2px 8px',
-                borderRadius: '4px',
-                backgroundColor: 'rgba(59, 130, 246, 0.15)',
-                color: 'var(--color-action, #3B82F6)',
-                textTransform: 'uppercase',
-                letterSpacing: '0.06em',
-              }}
-            >
-              Admin Portal
+            <span className="admin-header-badge">
+              <span className="admin-badge-full">Admin Portal</span>
+              <span className="admin-badge-short">Admin</span>
             </span>
-            <span
-              style={{
-                fontSize: '11px',
-                padding: '2px 8px',
-                borderRadius: 'var(--radius-xs)',
-                backgroundColor: 'rgba(5, 150, 105, 0.12)',
-                color: 'var(--color-profit, #059669)',
-                fontWeight: 600,
-              }}
-            >
+            <span className="admin-readonly-pill">
               Read-Only
             </span>
           </div>
 
-          {/* Desktop Navigation Tabs */}
-          <nav
-            style={{
-              display: 'flex',
-              gap: '4px',
-              backgroundColor: 'var(--bg-main, #0A0A0C)',
-              padding: '4px',
-              borderRadius: 'var(--radius-xs, 4px)',
-              border: '1px solid var(--border-subtle, rgba(255,255,255,0.06))',
-            }}
-          >
+          {/* Navigation Tabs */}
+          <nav className="admin-signedin-nav">
             {[
               { id: 'overview' as const, label: 'Overview' },
               { id: 'users' as const, label: 'Users' },
@@ -1292,7 +1226,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onNavigateToApp }) => 
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   style={{
-                    padding: '6px 14px',
+                    padding: '6px 12px',
                     fontSize: '12px',
                     fontWeight: isActive ? 700 : 500,
                     borderRadius: 'var(--radius-xs, 4px)',
@@ -1310,57 +1244,31 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onNavigateToApp }) => 
           </nav>
 
           {/* Right Actions: Theme, Owner Pill, Investor Link, Sign Out */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <ThemeToggle variant="icon-button" />
+          <div className="admin-header-actions-group">
+            <ThemeToggle variant="segmented" />
 
             {adminUser && (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '4px 10px',
-                  borderRadius: 'var(--radius-xs, 4px)',
-                  backgroundColor: 'rgba(255,255,255,0.05)',
-                  border: '1px solid var(--border-subtle, rgba(255,255,255,0.08))',
-                  fontSize: '12px',
-                  color: 'var(--text-muted, #8E8E93)',
-                }}
-              >
+              <div className="admin-owner-pill">
                 <span style={{ color: 'var(--color-profit, #059669)' }}>●</span>
                 <span style={{ color: 'var(--text-main, #FFFFFF)', fontWeight: 600 }}>{adminUser.display_name}</span>
-                <span style={{ fontSize: '11px', color: 'var(--color-action, #3B82F6)' }}>(Google Verified)</span>
+                <span className="admin-owner-verified-tag" style={{ fontSize: '11px', color: 'var(--color-action, #3B82F6)' }}>(Google Verified)</span>
               </div>
             )}
 
             <button
               onClick={handleNavigateToInvestor}
-              style={{
-                backgroundColor: 'transparent',
-                border: '1px solid var(--border-subtle, rgba(255,255,255,0.12))',
-                borderRadius: 'var(--radius-xs, 4px)',
-                color: 'var(--text-muted, #8E8E93)',
-                padding: '6px 12px',
-                fontSize: '12px',
-                cursor: 'pointer',
-              }}
+              className="admin-investor-btn"
               title="Open investor workspace without terminating admin session"
             >
-              Investor Workspace ↗
+              <span className="investor-link-full">Investor Workspace ↗</span>
+              <span className="investor-link-short">Investor ↗</span>
+              <span className="investor-link-mini">App ↗</span>
             </button>
 
             <button
               onClick={handleSignOut}
-              style={{
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-                borderRadius: 'var(--radius-xs, 4px)',
-                color: 'var(--color-loss, #EF4444)',
-                padding: '6px 12px',
-                fontSize: '12px',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
+              className="admin-signout-btn"
+              title="Sign out of Admin Portal"
             >
               Sign Out
             </button>
@@ -1369,16 +1277,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onNavigateToApp }) => 
       </header>
 
       {/* Main Content Area */}
-      <main
-        style={{
-          flex: 1,
-          maxWidth: '1380px',
-          margin: '0 auto',
-          width: '100%',
-          padding: '24px',
-          boxSizing: 'border-box',
-        }}
-      >
+      <main className="admin-main-container">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
           <div>
             <h1 style={{ fontSize: '24px', fontWeight: 800, margin: 0, letterSpacing: '-0.02em' }}>
