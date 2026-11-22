@@ -208,6 +208,7 @@ export interface AdminSystemHealthResponse {
     has_active_session?: boolean;
     error?: string;
     status?: string;
+    verification_note?: string;
   };
   email: {
     is_configured: boolean;
@@ -215,6 +216,7 @@ export interface AdminSystemHealthResponse {
     port?: number | null;
     use_tls?: boolean | null;
     from_email: string;
+    verification_note?: string;
   };
 }
 

@@ -535,7 +535,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onNavigateToApp }) => 
     const totalOrders = overviewData.total_orders || 0;
     const filledOrders = overviewData.orders_by_status?.FILLED || 0;
     const rejectedOrders = overviewData.orders_by_status?.REJECTED || 0;
-    const successRate = totalOrders > 0 ? ((filledOrders / totalOrders) * 100).toFixed(1) : '100.0';
+    const hasOrders = totalOrders > 0;
+    const successRateText = hasOrders ? `${((filledOrders / totalOrders) * 100).toFixed(1)}%` : 'No orders yet';
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -569,8 +570,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onNavigateToApp }) => 
 
           <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '20px' }}>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Order Success Rate</div>
-            <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--color-profit)', marginTop: '4px' }}>{successRate}%</div>
-            <div style={{ fontSize: '11px', color: 'var(--color-loss)', marginTop: '4px' }}>{rejectedOrders} rejected</div>
+            <div
+              style={{
+                fontSize: hasOrders ? '28px' : '20px',
+                fontWeight: 800,
+                color: hasOrders ? 'var(--color-profit)' : 'var(--text-muted)',
+                marginTop: '4px',
+              }}
+            >
+              {successRateText}
+            </div>
+            <div style={{ fontSize: '11px', color: hasOrders && rejectedOrders > 0 ? 'var(--color-loss)' : 'var(--text-muted)', marginTop: '4px' }}>
+              {hasOrders ? `${rejectedOrders} rejected` : 'Awaiting initial simulated trade'}
+            </div>
           </div>
         </div>
 
@@ -591,7 +603,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onNavigateToApp }) => 
 
           {overviewData.recent_rejected_orders.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text-muted)', fontSize: '13px' }}>
-              Zero rejected orders on record. All simulated orders executed cleanly.
+              No rejected orders recorded.
             </div>
           ) : (
             <div style={{ overflowX: 'auto' }}>
@@ -1124,20 +1136,24 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onNavigateToApp }) => 
                   fontSize: '11px',
                   padding: '2px 8px',
                   borderRadius: 'var(--radius-xs)',
-                  backgroundColor: healthData.angel_one.is_configured ? 'rgba(5, 150, 105, 0.12)' : 'rgba(59, 130, 246, 0.12)',
-                  color: healthData.angel_one.is_configured ? 'var(--color-profit)' : 'var(--color-action)',
+                  backgroundColor: healthData.angel_one.is_configured ? 'rgba(59, 130, 246, 0.12)' : 'rgba(255, 255, 255, 0.08)',
+                  color: healthData.angel_one.is_configured ? 'var(--color-action)' : 'var(--text-muted)',
                   fontWeight: 600,
                 }}
               >
-                {healthData.angel_one.is_configured ? 'LIVE CONFIG' : 'SIMULATED'}
+                {healthData.angel_one.is_configured ? 'CONFIGURED (UNVERIFIED LIVE)' : 'SIMULATED / UNCONFIGURED'}
               </span>
             </div>
             <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <div>Mode: <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>{healthData.market_data.mode}</span></div>
+              <div>Credentials: <span style={{ color: healthData.angel_one.is_configured ? 'var(--color-action)' : 'var(--text-muted)', fontWeight: 600 }}>{healthData.angel_one.is_configured ? 'Configured (Live stream unverified)' : 'Unconfigured'}</span></div>
               <div>Demo Simulation: <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>{healthData.market_data.enable_demo_simulation ? 'Enabled' : 'Disabled'}</span></div>
               <div>Circuit Breaker: <span style={{ color: healthData.angel_one.is_circuit_open ? 'var(--color-loss)' : 'var(--color-profit)', fontWeight: 600 }}>
-                {healthData.angel_one.is_circuit_open ? 'TRIPPED' : 'CLOSED (HEALTHY)'}
+                {healthData.angel_one.is_circuit_open ? 'TRIPPED' : 'CLOSED (NORMAL)'}
               </span></div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px', padding: '6px 8px', backgroundColor: 'rgba(255, 255, 255, 0.03)', borderRadius: 'var(--radius-xs)', borderLeft: '2px solid var(--color-action)' }}>
+                ℹ️ <strong>Operational Notice:</strong> Configuration reflects present environment credentials. It does not prove that live market data or exchange streaming is working.
+              </div>
             </div>
           </div>
 
@@ -1150,18 +1166,21 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onNavigateToApp }) => 
                   fontSize: '11px',
                   padding: '2px 8px',
                   borderRadius: 'var(--radius-xs)',
-                  backgroundColor: healthData.email.is_configured ? 'rgba(5, 150, 105, 0.12)' : 'rgba(255, 255, 255, 0.08)',
-                  color: healthData.email.is_configured ? 'var(--color-profit)' : 'var(--text-muted)',
+                  backgroundColor: healthData.email.is_configured ? 'rgba(59, 130, 246, 0.12)' : 'rgba(255, 255, 255, 0.08)',
+                  color: healthData.email.is_configured ? 'var(--color-action)' : 'var(--text-muted)',
                   fontWeight: 600,
                 }}
               >
-                {healthData.email.is_configured ? 'CONFIGURED' : 'DEV MODE'}
+                {healthData.email.is_configured ? 'CONFIGURED (DELIVERY UNVERIFIED)' : 'DEV MODE (UNCONFIGURED)'}
               </span>
             </div>
             <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <div>Host: <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>{healthData.email.host}</span></div>
               <div>From Address: <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>{healthData.email.from_email}</span></div>
               <div>TLS: <span style={{ color: 'var(--text-main)', fontWeight: 600 }}>{healthData.email.use_tls ? 'Active' : 'Disabled'}</span></div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px', padding: '6px 8px', backgroundColor: 'rgba(255, 255, 255, 0.03)', borderRadius: 'var(--radius-xs)', borderLeft: '2px solid var(--color-action)' }}>
+                ℹ️ <strong>Operational Notice:</strong> SMTP host configuration detected. It does not prove that email delivery to recipient inboxes is working.
+              </div>
             </div>
           </div>
         </div>

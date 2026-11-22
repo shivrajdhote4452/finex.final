@@ -539,6 +539,30 @@ async def test_admin_overview_returns_metrics(app, owner_headers):
         assert isinstance(data["recent_rejected_orders"], list)
 
 
+@pytest.mark.asyncio
+async def test_admin_overview_metrics_zero_orders_and_rejections(app, owner_headers):
+    """When no paper orders exist, total_orders is 0 and recent_rejected_orders is empty."""
+    from backend.app.database import AsyncSessionLocal
+    from backend.app.models.paper_trading import PaperOrder
+    from sqlalchemy import delete
+
+    # Clear paper orders in test database to verify pure zero-order state
+    async with AsyncSessionLocal() as session:
+        await session.execute(delete(PaperOrder))
+        await session.commit()
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.get("/api/v1/admin/overview", headers=owner_headers)
+        assert res.status_code == 200
+        data = res.json()["data"]
+
+        assert data["total_orders"] == 0
+        assert data["orders_by_status"]["FILLED"] == 0
+        assert data["orders_by_status"]["REJECTED"] == 0
+        assert len(data["recent_rejected_orders"]) == 0
+
+
 # =============================================================================
 # User Directory Endpoint Tests & Safe Projections
 # =============================================================================
@@ -684,6 +708,9 @@ async def test_admin_system_health_diagnostics(app, owner_headers):
         assert "angel_one" in data
         angel = data["angel_one"]
         assert "is_configured" in angel
+        # Verification caveat must clearly document that configuration != live data working
+        assert "verification_note" in angel
+        assert "live market data" in angel["verification_note"].lower()
         # Ensure raw secrets are NEVER in angel diagnostics
         assert "api_key" not in angel
         assert "client_id" not in angel
@@ -694,6 +721,9 @@ async def test_admin_system_health_diagnostics(app, owner_headers):
         assert "email" in data
         email = data["email"]
         assert "is_configured" in email
+        # Verification caveat must clearly document that configuration != email delivery working
+        assert "verification_note" in email
+        assert "email delivery" in email["verification_note"].lower()
         assert "password" not in email
         assert "smtp_password" not in email
 

@@ -428,11 +428,19 @@ async def get_admin_system_health(request: Request):
     try:
         angel = get_angel_adapter()
         angel_diag = angel.get_configuration_status()
+        angel_diag["verification_note"] = (
+            "Configuration reflects present environment credentials. "
+            "It does not prove that live market data or exchange streaming is working."
+        )
     except Exception as e:
         angel_diag = {
             "is_configured": False,
             "error": str(e),
             "status": "unavailable",
+            "verification_note": (
+                "Configuration reflects present environment credentials. "
+                "It does not prove that live market data or exchange streaming is working."
+            ),
         }
 
     # 3. Email diagnostics
@@ -443,6 +451,10 @@ async def get_admin_system_health(request: Request):
         "port": getattr(settings, "SMTP_PORT", 587) if smtp_configured else None,
         "use_tls": getattr(settings, "SMTP_USE_TLS", True) if smtp_configured else None,
         "from_email": getattr(settings, "EMAILS_FROM_EMAIL", "noreply@finexai.tech"),
+        "verification_note": (
+            "SMTP host configuration detected. "
+            "It does not prove that email delivery to recipient inboxes is working."
+        ),
     }
 
     # 4. Market configuration
