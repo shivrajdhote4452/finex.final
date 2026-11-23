@@ -33,8 +33,20 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
             response.headers["X-Request-ID"] = cid
             response.headers["X-Response-Time-Ms"] = f"{elapsed_ms:.2f}"
             return response
-        except Exception:
+        except Exception as unhandled_mw_exc:
             elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+            try:
+                from backend.app.services.error_recorder import record_error_event
+
+                await record_error_event(
+                    request=request,
+                    exc=unhandled_mw_exc,
+                    status_code=500,
+                    message=f"{type(unhandled_mw_exc).__name__}: {str(unhandled_mw_exc)}",
+                    correlation_id=cid,
+                )
+            except Exception:
+                pass
             response = build_error_response(
                 status_code=500,
                 code="INTERNAL_SERVER_ERROR",

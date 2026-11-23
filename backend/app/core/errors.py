@@ -161,6 +161,20 @@ async def finex_exception_handler(request: Request, exc: FinExException) -> JSON
     logger.warning(
         f"FinExException [{exc.code}] on {request.method} {request.url.path}: {exc.message} (cid: {correlation_id})"
     )
+    if exc.status_code >= 400:
+        try:
+            from backend.app.services.error_recorder import record_error_event
+
+            await record_error_event(
+                request=request,
+                exc=exc,
+                status_code=exc.status_code,
+                message=exc.message,
+                correlation_id=correlation_id,
+            )
+        except Exception as rec_err:
+            logger.warning(f"Failed to record FinExException event: {rec_err}")
+
     headers = getattr(exc, "headers", None)
     if not headers and hasattr(exc, "retry_after"):
         headers = {"Retry-After": str(exc.retry_after)}
@@ -184,6 +198,21 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     logger.info(
         f"Validation error on {request.method} {request.url.path}: {len(details)} errors (cid: {correlation_id})"
     )
+
+    try:
+        from backend.app.services.error_recorder import record_error_event
+
+        summary_issue = "; ".join(f"{d.field}: {d.issue}" for d in details[:3])
+        await record_error_event(
+            request=request,
+            exc=exc,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            message=f"Validation error: {summary_issue}",
+            correlation_id=correlation_id,
+        )
+    except Exception as rec_err:
+        logger.warning(f"Failed to record validation error event: {rec_err}")
+
     return build_error_response(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         code="VALIDATION_ERROR",
@@ -199,6 +228,20 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
         logger.warning(
             f"HTTPException [{exc.status_code}] on {request.method} {request.url.path}: {exc.detail} (cid: {correlation_id})"
         )
+        if exc.status_code >= 400 and exc.status_code != 404:
+            try:
+                from backend.app.services.error_recorder import record_error_event
+
+                await record_error_event(
+                    request=request,
+                    exc=exc,
+                    status_code=exc.status_code,
+                    message=str(exc.detail),
+                    correlation_id=correlation_id,
+                )
+            except Exception as rec_err:
+                logger.warning(f"Failed to record HTTPException event: {rec_err}")
+
         return build_error_response(
             status_code=exc.status_code,
             code="HTTP_EXCEPTION",
@@ -211,6 +254,20 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
         f"Unhandled server error on {request.method} {request.url.path}: {str(exc)} (cid: {correlation_id})",
         exc_info=True,
     )
+
+    try:
+        from backend.app.services.error_recorder import record_error_event
+
+        await record_error_event(
+            request=request,
+            exc=exc,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=f"{type(exc).__name__}: {str(exc)}",
+            correlation_id=correlation_id,
+        )
+    except Exception as rec_err:
+        logger.warning(f"Failed to record unhandled server error event: {rec_err}")
+
     return build_error_response(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         code="INTERNAL_SERVER_ERROR",

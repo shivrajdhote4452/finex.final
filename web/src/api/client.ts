@@ -229,6 +229,39 @@ export interface AdminMeResponse {
   email_verified: boolean;
 }
 
+export interface AdminErrorItem {
+  id: string;
+  correlation_id?: string | null;
+  endpoint: string;
+  method: string;
+  status_code: number;
+  error_type: string;
+  category: string;
+  feature_area: string;
+  sanitized_message: string;
+  user_id?: string | null;
+  created_at?: string | null;
+}
+
+export interface AdminErrorsResponse {
+  errors: AdminErrorItem[];
+  total: number;
+  page: number;
+  limit: number;
+  total_pages: number;
+  scope_notice?: string;
+}
+
+export interface AdminErrorSummaryResponse {
+  total_errors: number;
+  server_errors_5xx: number;
+  client_errors_4xx: number;
+  last_24h_errors: number;
+  errors_by_category: Record<string, number>;
+  errors_by_feature: Record<string, number>;
+  scope_notice?: string;
+}
+
 class ApiError extends Error {
   code: string;
   status: number;
@@ -1705,6 +1738,29 @@ class ApiClient {
 
     getSystemHealth: async () => {
       return this.request<AdminSystemHealthResponse>('/admin/system-health');
+    },
+
+    getErrors: async (params?: {
+      page?: number;
+      limit?: number;
+      status_code?: number;
+      category?: string;
+      feature_area?: string;
+      search?: string;
+    }) => {
+      const q = new URLSearchParams();
+      if (params?.page) q.set('page', String(params.page));
+      if (params?.limit) q.set('limit', String(params.limit));
+      if (params?.status_code) q.set('status_code', String(params.status_code));
+      if (params?.category) q.set('category', params.category);
+      if (params?.feature_area) q.set('feature_area', params.feature_area);
+      if (params?.search) q.set('search', params.search);
+      const qs = q.toString() ? `?${q.toString()}` : '';
+      return this.request<AdminErrorsResponse>(`/admin/errors${qs}`);
+    },
+
+    getErrorsSummary: async () => {
+      return this.request<AdminErrorSummaryResponse>('/admin/errors/summary');
     },
 
     logout: async () => {
