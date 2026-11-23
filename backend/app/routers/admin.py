@@ -452,8 +452,7 @@ async def get_admin_system_health(request: Request):
         "use_tls": getattr(settings, "SMTP_USE_TLS", True) if smtp_configured else None,
         "from_email": getattr(settings, "EMAILS_FROM_EMAIL", "noreply@finexai.tech"),
         "verification_note": (
-            "SMTP host configuration detected. "
-            "It does not prove that email delivery to recipient inboxes is working."
+            "SMTP host configuration detected. It does not prove that email delivery to recipient inboxes is working."
         ),
     }
 
