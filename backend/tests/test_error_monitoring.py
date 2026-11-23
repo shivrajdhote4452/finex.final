@@ -25,6 +25,7 @@ Validates:
 """
 
 import asyncio
+import re
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -264,7 +265,7 @@ def test_categorize_error_mapping():
 @pytest.mark.asyncio
 async def test_record_and_query_error_event(app, owner_headers):
     """Verify that an error event is durably recorded and retrievable with correlation ID."""
-    test_corr_id = f"test-cid-{uuid.uuid4().hex[:12]}"
+    test_corr_id = f"cid-{uuid.uuid4().hex[:16]}"
     test_msg = "Database connection timed out for user_id=usr-test with password=superSecretPassword!"
 
     # Record event
@@ -310,11 +311,11 @@ async def test_record_and_query_error_event(app, owner_headers):
 @pytest.mark.asyncio
 async def test_errors_filtering_and_pagination(app, owner_headers):
     """Verify filtering by status_code, category, and pagination mechanics."""
-    tag = uuid.uuid4().hex[:8]
+    tag = uuid.uuid4().hex[:12]
 
     # Create 3 distinct events with unique searchable tag
     await record_error_event(
-        correlation_id=f"c1-{tag}",
+        correlation_id=f"cid-{tag}0001",
         endpoint="/api/v1/auth/google",
         method="POST",
         status_code=500,
@@ -322,7 +323,7 @@ async def test_errors_filtering_and_pagination(app, owner_headers):
         raw_message=f"Google OAuth token verification failed tag={tag}",
     )
     await record_error_event(
-        correlation_id=f"c2-{tag}",
+        correlation_id=f"cid-{tag}0002",
         endpoint="/api/v1/orders/paper",
         method="POST",
         status_code=422,
@@ -330,7 +331,7 @@ async def test_errors_filtering_and_pagination(app, owner_headers):
         raw_message=f"Invalid order quantity specified tag={tag}",
     )
     await record_error_event(
-        correlation_id=f"c3-{tag}",
+        correlation_id=f"cid-{tag}0003",
         endpoint="/api/v1/market/live",
         method="GET",
         status_code=429,
@@ -527,9 +528,15 @@ def test_unmatched_route_anonymizes_sensitive_path_segments():
 
 def test_metadata_validation_and_bounding():
     """Verify correlation ID, user ID, and HTTP method validation and length bounding."""
-    # Correlation ID
-    assert sanitize_correlation_id("cid-valid-123.45:67") == "cid-valid-123.45:67"
-    # Malicious correlation ID replaced with safe UUID
+    # Correlation ID: Valid trusted formats (canonical UUID, hex trace IDs, cid-/req- prefixed hex)
+    assert sanitize_correlation_id("12345678-1234-4234-8234-123456789abc") == "12345678-1234-4234-8234-123456789abc"
+    assert sanitize_correlation_id("4B2E8A1D-7F3C-4E89-9A12-8C4D2E1F0B9A") == "4b2e8a1d-7f3c-4e89-9a12-8c4d2e1f0b9a"
+    assert sanitize_correlation_id("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6") == "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
+    assert sanitize_correlation_id("cid-0123456789abcdef") == "cid-0123456789abcdef"
+    assert sanitize_correlation_id("req-0123456789abcdef0123456789abcdef") == "req-0123456789abcdef0123456789abcdef"
+    assert sanitize_correlation_id("trace-0123456789abcdef") == "trace-0123456789abcdef"
+
+    # Malicious correlation ID replaced with safe server-generated UUID
     dirty_cid = "<script>alert('xss')</script>"
     clean_dirty = sanitize_correlation_id(dirty_cid)
     assert clean_dirty != dirty_cid
@@ -553,6 +560,82 @@ def test_metadata_validation_and_bounding():
     assert sanitize_method("EVIL_VERB") == "UNKNOWN"
     assert sanitize_method("<script>") == "UNKNOWN"
     assert sanitize_method(None) == "UNKNOWN"
+
+
+def test_correlation_id_rejects_credential_like_headers_and_preserves_tracing():
+    """Verify that client-provided correlation IDs containing credentials, tokens, or arbitrary text
+    are rejected and replaced with server-generated UUIDs, while trusted UUID/trace formats are preserved."""
+    # 1. Short secret-like headers (passwords, tokens, credentials, words)
+    short_secrets = [
+        "secret123",
+        "admin",
+        "pass_123",
+        "root",
+        "bearer",
+        "password",
+        "token-abc",
+        "auth:key",
+        "api-secret",
+    ]
+    for secret in short_secrets:
+        sanitized = sanitize_correlation_id(secret)
+        assert sanitized != secret, f"Failed to reject short secret '{secret}'"
+        assert len(sanitized) == 32
+        assert re.match(r"^[0-9a-f]{32}$", sanitized)
+        assert secret.lower() not in sanitized
+
+    # 2. Long secret-like headers (API keys, PATs, JWT fragments, emails)
+    long_secrets = [
+        "custom_secret_api_key_1234567890abcdef1234567890",
+        "github_token_dummy_abcdefghijklmnopqrstuvwxyz1234",
+        "Bearer-token-xyz-1234567890abcdefghijklmnopqrst",
+        "mock_jwt_header.mock_jwt_payload_data_signature",
+        "user.identity@finex.internal",
+        "aws_access_key_dummy_sample_credential_example",
+        "slack_bot_token_dummy_sample_1234567890abcdef",
+    ]
+    for secret in long_secrets:
+        sanitized = sanitize_correlation_id(secret)
+        assert sanitized != secret, f"Failed to reject long secret '{secret}'"
+        assert len(sanitized) == 32
+        assert re.match(r"^[0-9a-f]{32}$", sanitized)
+        # Verify secret fragment never preserved in server-generated ID
+        assert "custom_secret" not in sanitized
+        assert "github_token" not in sanitized
+        assert "bearer" not in sanitized
+        assert "jwt" not in sanitized
+
+    # 3. Legitimate distributed tracing formats are preserved
+    valid_tracing_ids = [
+        ("12345678-1234-4234-8234-123456789abc", "12345678-1234-4234-8234-123456789abc"),
+        ("4B2E8A1D-7F3C-4E89-9A12-8C4D2E1F0B9A", "4b2e8a1d-7f3c-4e89-9a12-8c4d2e1f0b9a"),
+        ("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6", "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"),
+        ("cid-0123456789abcdef", "cid-0123456789abcdef"),
+        ("req-0123456789abcdef0123456789abcdef", "req-0123456789abcdef0123456789abcdef"),
+        ("trace-fedcba9876543210", "trace-fedcba9876543210"),
+    ]
+    for raw_val, expected in valid_tracing_ids:
+        assert sanitize_correlation_id(raw_val) == expected, f"Failed to preserve valid tracing ID '{raw_val}'"
+
+
+@pytest.mark.asyncio
+async def test_middleware_and_recorder_correlation_id_isolation(app):
+    """Verify end-to-end that client secret headers are never stored in error monitoring DB."""
+    secret_header = "custom_secret_api_key_test_leak_12345"
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Trigger 404 with secret-like correlation header
+        response = await client.get("/api/v1/non_existent_route", headers={"X-Correlation-ID": secret_header})
+        assert response.status_code == 404
+
+        # Verify that any database error record generated contains a safe UUID, NOT the secret
+        async with AsyncSessionLocal() as session:
+            stmt = select(ErrorEvent).order_by(ErrorEvent.created_at.desc()).limit(5)
+            events = (await session.execute(stmt)).scalars().all()
+            for ev in events:
+                assert secret_header not in ev.correlation_id
+                assert "custom_secret" not in ev.correlation_id
+                assert "test_leak" not in ev.correlation_id
 
 
 # =============================================================================
@@ -741,8 +824,13 @@ async def test_audited_capture_paths(app, owner_headers):
 
 @pytest.mark.asyncio
 async def test_connection_pool_protection_and_concurrency_ceiling():
-    """Verify that at most MAX_CONCURRENT_RECORDING_TASKS (5) concurrent DB sessions run,
-    and excess writes drop immediately to protect connection pool capacity."""
+    """Verify that at most MAX_CONCURRENT_RECORDING_TASKS (5) concurrent DB recording sessions
+    can run simultaneously within the local worker process, and excess writes fail open immediately
+    to protect the worker's connection pool.
+
+    NOTE: This tests in-process semaphore boundaries; across multiple worker processes,
+    each worker independently enforces its own 5-task limit. No global cluster-wide pool
+    guarantee is asserted."""
     reset_error_recorder_state()
     active_db_sessions = 0
     max_simultaneous_sessions = 0
@@ -768,7 +856,7 @@ async def test_connection_pool_protection_and_concurrency_ceiling():
         # Launch 20 simultaneous recording calls
         tasks = [
             record_error_event(
-                correlation_id=f"pool-test-{i}",
+                correlation_id=f"cid-{uuid.uuid4().hex[:16]}",
                 endpoint="/api/v1/test",
                 method="GET",
                 status_code=500,

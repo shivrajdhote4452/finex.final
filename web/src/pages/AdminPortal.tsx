@@ -1254,7 +1254,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onNavigateToApp }) => 
             This dashboard displays server-side operational exceptions (including unhandled 5xx exceptions, 503 service outages, 429 rate limits, 422 schema validation errors, and 400/401/403/404 HTTP errors).
             It <strong>does not</strong> capture client-side network disconnects, local browser JavaScript crashes, or edge CDN dropouts that never reach the backend API.
             Endpoints are logged as parameterized route templates (unmatched paths are anonymized to /unmatched_route), and all messages are mapped to allowlisted error codes with server-side sanitization.
-            Database writes are bounded by a 250ms ceiling and concurrency limits (max 5 simultaneous writes); during storage degradation, events are dropped fail-open to preserve database connection pool capacity.
+            Database writes are bounded by a 250ms ceiling and per-process concurrency limits (max 5 simultaneous writes per worker); during storage degradation, events are dropped fail-open to protect local worker connection pool capacity.
           </div>
         </div>
 

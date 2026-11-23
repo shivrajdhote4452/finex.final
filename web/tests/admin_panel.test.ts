@@ -595,8 +595,8 @@ describe('Separate FinEx Admin Portal Frontend & Domain Contract', () => {
       'or edge CDN dropouts that never reach the backend API. ' +
       'Endpoints are logged as parameterized route templates (unmatched paths are anonymized to /unmatched_route), ' +
       'and all messages are mapped to allowlisted error codes with server-side sanitization. ' +
-      'Database writes are bounded by a 250ms ceiling and concurrency limits (max 5 simultaneous writes); ' +
-      'during storage degradation, events are dropped fail-open to preserve database connection pool capacity.';
+      'Database writes are bounded by a 250ms ceiling and per-process concurrency limits (max 5 simultaneous writes per worker); ' +
+      'during storage degradation, events are dropped fail-open to protect local worker connection pool capacity.';
 
     // Check captured vs uncaptured explicit explanations
     assert.ok(scopeNotice.includes('server-side operational exceptions'));

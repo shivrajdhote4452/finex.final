@@ -138,8 +138,8 @@ class AdminErrorsResponse(BaseModel):
     total_pages: int
     scope_notice: str = (
         "Observability Scope: Real recorded server-side error events (400, 401, 403, 404, 413, 422, 429, 500, 503). "
-        "Execution is bounded by a 250ms ceiling and concurrency limits (max 5 simultaneous writes); during storage degradation, "
-        "events are dropped fail-open to protect database pool capacity. Unmatched routes are anonymized to /unmatched_route. "
+        "Execution is bounded by a 250ms ceiling and per-process concurrency limits (max 5 simultaneous writes per worker); during storage degradation, "
+        "events are dropped fail-open to protect local worker connection pool capacity. Unmatched routes are anonymized to /unmatched_route. "
         "Retention periodically prunes records older than 30 days or beyond the 5,000-row target. "
         "Does not capture client-side network loss, browser script crashes, or edge proxy drops before reaching the API."
     )
@@ -154,7 +154,7 @@ class AdminErrorSummaryResponse(BaseModel):
     errors_by_feature: Dict[str, int]
     scope_notice: str = (
         "Observability Scope: Real server-side recorded error events across 4xx and 5xx status codes with bounded execution timeout. "
-        "Under storage degradation, events exceeding concurrency limits or 250ms timeout are dropped fail-open. "
+        "Under storage degradation, events exceeding per-process concurrency limits or 250ms timeout are dropped fail-open. "
         "Edge drops and client-side browser network disconnects are not captured."
     )
 

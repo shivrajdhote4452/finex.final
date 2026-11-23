@@ -1,6 +1,7 @@
 import collections
 import contextvars
 import time
+import uuid
 from typing import Callable, Dict, List
 
 from backend.app.core.errors import build_error_response
@@ -19,9 +20,15 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         start_time = time.perf_counter()
         raw_cid = request.headers.get("X-Correlation-ID") or request.headers.get("X-Request-ID")
-        from backend.app.services.error_recorder import sanitize_correlation_id
-
-        cid = sanitize_correlation_id(raw_cid)
+        if (
+            raw_cid
+            and len(raw_cid.strip()) <= 64
+            and raw_cid.strip().isascii()
+            and not any(c in raw_cid for c in "\r\n\t\x00")
+        ):
+            cid = raw_cid.strip()
+        else:
+            cid = str(uuid.uuid4())
 
         request.state.correlation_id = cid
         token = correlation_id_ctx.set(cid)

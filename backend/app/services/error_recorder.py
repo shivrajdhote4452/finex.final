@@ -45,11 +45,20 @@ _is_recording_ctx: contextvars.ContextVar[bool] = contextvars.ContextVar("_is_re
 _prune_lock = asyncio.Lock()
 _last_prune_timestamp: float = 0.0
 
-# Concurrency and connection pool protection: limit simultaneous DB recording sessions
+# Concurrency and connection pool protection (PER-PROCESS IN-MEMORY LIMITS):
+# In multi-worker deployments (e.g. Uvicorn with W workers), each worker process maintains
+# its own asyncio event loop, its own SQLAlchemy engine pool (pool_size=10, max_overflow=20),
+# and its own _recording_semaphore. This bounds concurrent recording tasks to 5 within the
+# local worker process to prevent local connection pool starvation.
+# NOTE: This is an in-memory per-process semaphore, NOT a global cluster-wide distributed lock;
+# across W workers, aggregate concurrent writes can reach 5 * W under simultaneous failure surges.
+# We do not claim an absolute global database-cluster pool-exhaustion guarantee.
 MAX_CONCURRENT_RECORDING_TASKS = 5
 _recording_semaphore = asyncio.Semaphore(MAX_CONCURRENT_RECORDING_TASKS)
 
-# Storage outage circuit breaker
+# Storage outage circuit breaker (PER-PROCESS IN-MEMORY STATE):
+# Each worker process independently tracks consecutive DB recording failures and trips its
+# local circuit breaker after CIRCUIT_BREAKER_THRESHOLD failures for CIRCUIT_BREAKER_COOLDOWN_SECONDS.
 _circuit_open_until: float = 0.0
 _consecutive_db_failures: int = 0
 CIRCUIT_BREAKER_THRESHOLD: int = 3
@@ -218,13 +227,29 @@ REDACTION_PATTERNS: Tuple[Tuple[re.Pattern, str], ...] = (
 # =============================================================================
 
 
+# Strict trusted correlation ID pattern:
+# Accepts standard UUIDv1-v5 (canonical 8-4-4-4-12 hex with hyphens), 16 to 64-character hexadecimal trace IDs,
+# or standard prefixed hex IDs ('cid-<8-64 hex>', 'req-<8-64 hex>', 'trace-<8-64 hex>').
+# Letters g-z, spaces, punctuation, underscores, and credential formats (e.g., sk_live_..., ghp_..., passwords)
+# are strictly disallowed to prevent client headers from injecting credentials or arbitrary tokens into logs/storage.
+TRUSTED_CORRELATION_ID_PATTERN = re.compile(
+    r"^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9a-fA-F]{16,64}|(?:cid|req|trace)-[0-9a-fA-F]{8,64})$"
+)
+
+
 def sanitize_correlation_id(cid: Optional[str]) -> str:
-    """Validates and bounds correlation IDs to alphanumeric and safe delimiter chars."""
+    """Validates correlation IDs against a strict trusted format (UUID or hex trace ID).
+
+    If the provided identifier strictly matches the trusted format, it is normalized to lowercase and preserved
+    for distributed request tracing. Any header containing non-hex characters (e.g. letters g-z, symbols,
+    underscores, passwords, API keys like sk_live_..., tokens, or emails) is rejected and replaced with a
+    cryptographically random server-generated UUIDv4 hex identifier.
+    """
     if not cid:
         return uuid.uuid4().hex
     clean = str(cid).strip()
-    if len(clean) <= 64 and re.match(r"^[a-zA-Z0-9_\-\.:]{1,64}$", clean):
-        return clean
+    if len(clean) <= 64 and TRUSTED_CORRELATION_ID_PATTERN.match(clean):
+        return clean.lower()
     return uuid.uuid4().hex
 
 
