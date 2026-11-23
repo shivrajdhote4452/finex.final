@@ -264,13 +264,11 @@ def test_categorize_error_mapping():
 
 @pytest.mark.asyncio
 async def test_record_and_query_error_event(app, owner_headers):
-    """Verify that an error event is durably recorded and retrievable with correlation ID."""
-    test_corr_id = f"cid-{uuid.uuid4().hex[:16]}"
+    """Verify that an error event is durably recorded with a server-generated incident ID."""
     test_msg = "Database connection timed out for user_id=usr-test with password=superSecretPassword!"
 
-    # Record event
+    # Record event (persisted identifier is generated on the server)
     event = await record_error_event(
-        correlation_id=test_corr_id,
         endpoint="/api/v1/portfolio/holdings",
         method="GET",
         status_code=500,
@@ -279,19 +277,21 @@ async def test_record_and_query_error_event(app, owner_headers):
         user_id="usr-test-123",
     )
     assert event is not None
-    assert event.correlation_id == test_corr_id
+    assert event.correlation_id is not None
+    assert len(event.correlation_id) == 32
+    assert re.match(r"^[0-9a-f]{32}$", event.correlation_id)
     assert event.status_code == 500
     assert "superSecretPassword!" not in event.sanitized_message
     assert event.sanitized_message == "Database operation failed or timed out."
 
-    # Query via Admin API
+    # Query via Admin API using the server-generated incident identifier
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        res = await client.get(f"/api/v1/admin/errors?search={test_corr_id}", headers=owner_headers)
+        res = await client.get(f"/api/v1/admin/errors?search={event.correlation_id}", headers=owner_headers)
         assert res.status_code == 200
         data = res.json().get("data", res.json())
         assert data["total"] >= 1
-        found = [e for e in data["errors"] if e["correlation_id"] == test_corr_id]
+        found = [e for e in data["errors"] if e["correlation_id"] == event.correlation_id]
         assert len(found) == 1
         item = found[0]
         assert item["status_code"] == 500
@@ -313,29 +313,26 @@ async def test_errors_filtering_and_pagination(app, owner_headers):
     """Verify filtering by status_code, category, and pagination mechanics."""
     tag = uuid.uuid4().hex[:12]
 
-    # Create 3 distinct events with unique searchable tag
+    # Create 3 distinct events with unique searchable tag in error_type
     await record_error_event(
-        correlation_id=f"cid-{tag}0001",
         endpoint="/api/v1/auth/google",
         method="POST",
         status_code=500,
-        error_type="GoogleOAuthError",
+        error_type=f"GoogleOAuthError_{tag}",
         raw_message=f"Google OAuth token verification failed tag={tag}",
     )
     await record_error_event(
-        correlation_id=f"cid-{tag}0002",
         endpoint="/api/v1/orders/paper",
         method="POST",
         status_code=422,
-        error_type="RequestValidationError",
+        error_type=f"RequestValidationError_{tag}",
         raw_message=f"Invalid order quantity specified tag={tag}",
     )
     await record_error_event(
-        correlation_id=f"cid-{tag}0003",
         endpoint="/api/v1/market/live",
         method="GET",
         status_code=429,
-        error_type="RateLimitExceeded",
+        error_type=f"RateLimitExceeded_{tag}",
         raw_message=f"Rate limit exceeded on market quote stream tag={tag}",
     )
 
@@ -528,24 +525,25 @@ def test_unmatched_route_anonymizes_sensitive_path_segments():
 
 def test_metadata_validation_and_bounding():
     """Verify correlation ID, user ID, and HTTP method validation and length bounding."""
-    # Correlation ID: Valid trusted formats (canonical UUID, hex trace IDs, cid-/req- prefixed hex)
-    assert sanitize_correlation_id("12345678-1234-4234-8234-123456789abc") == "12345678-1234-4234-8234-123456789abc"
-    assert sanitize_correlation_id("4B2E8A1D-7F3C-4E89-9A12-8C4D2E1F0B9A") == "4b2e8a1d-7f3c-4e89-9a12-8c4d2e1f0b9a"
-    assert sanitize_correlation_id("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6") == "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
-    assert sanitize_correlation_id("cid-0123456789abcdef") == "cid-0123456789abcdef"
-    assert sanitize_correlation_id("req-0123456789abcdef0123456789abcdef") == "req-0123456789abcdef0123456789abcdef"
-    assert sanitize_correlation_id("trace-0123456789abcdef") == "trace-0123456789abcdef"
+    # Persisted incident identifiers are always generated on the server (32-character lowercase hex UUID)
+    cid_sample = sanitize_correlation_id("12345678-1234-4234-8234-123456789abc")
+    assert len(cid_sample) == 32
+    assert re.match(r"^[0-9a-f]{32}$", cid_sample)
+    # Never preserves client-supplied value directly in database identifier
+    assert cid_sample != "12345678-1234-4234-8234-123456789abc"
 
-    # Malicious correlation ID replaced with safe server-generated UUID
+    # Malicious correlation ID produces safe server-generated UUID
     dirty_cid = "<script>alert('xss')</script>"
     clean_dirty = sanitize_correlation_id(dirty_cid)
     assert clean_dirty != dirty_cid
-    assert len(clean_dirty) == 32  # uuid4 hex
+    assert len(clean_dirty) == 32
+    assert re.match(r"^[0-9a-f]{32}$", clean_dirty)
 
-    # Oversized correlation ID (> 64 chars) replaced with safe UUID
+    # Oversized correlation ID (> 64 chars) produces safe server-generated UUID
     long_cid = "a" * 100
     clean_long = sanitize_correlation_id(long_cid)
     assert len(clean_long) == 32
+    assert re.match(r"^[0-9a-f]{32}$", clean_long)
 
     # User ID
     assert sanitize_user_id("usr-safe-123") == "usr-safe-123"
@@ -562,9 +560,9 @@ def test_metadata_validation_and_bounding():
     assert sanitize_method(None) == "UNKNOWN"
 
 
-def test_correlation_id_rejects_credential_like_headers_and_preserves_tracing():
+def test_correlation_id_rejects_credential_like_headers():
     """Verify that client-provided correlation IDs containing credentials, tokens, or arbitrary text
-    are rejected and replaced with server-generated UUIDs, while trusted UUID/trace formats are preserved."""
+    are rejected and replaced with server-generated UUIDs."""
     # 1. Short secret-like headers (passwords, tokens, credentials, words)
     short_secrets = [
         "secret123",
@@ -605,17 +603,19 @@ def test_correlation_id_rejects_credential_like_headers_and_preserves_tracing():
         assert "bearer" not in sanitized
         assert "jwt" not in sanitized
 
-    # 3. Legitimate distributed tracing formats are preserved
-    valid_tracing_ids = [
-        ("12345678-1234-4234-8234-123456789abc", "12345678-1234-4234-8234-123456789abc"),
-        ("4B2E8A1D-7F3C-4E89-9A12-8C4D2E1F0B9A", "4b2e8a1d-7f3c-4e89-9a12-8c4d2e1f0b9a"),
-        ("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6", "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"),
-        ("cid-0123456789abcdef", "cid-0123456789abcdef"),
-        ("req-0123456789abcdef0123456789abcdef", "req-0123456789abcdef0123456789abcdef"),
-        ("trace-fedcba9876543210", "trace-fedcba9876543210"),
+    # 3. Client-provided hex strings (including synthetic hex secrets) are NOT stored as the database identifier
+    client_hex_inputs = [
+        "12345678-1234-4234-8234-123456789abc",
+        "4B2E8A1D-7F3C-4E89-9A12-8C4D2E1F0B9A",
+        "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6",
+        "d41d8cd98f00b204e9800998ecf8427e",  # 32-hex synthetic secret
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",  # 64-hex synthetic secret
     ]
-    for raw_val, expected in valid_tracing_ids:
-        assert sanitize_correlation_id(raw_val) == expected, f"Failed to preserve valid tracing ID '{raw_val}'"
+    for raw_hex in client_hex_inputs:
+        sanitized = sanitize_correlation_id(raw_hex)
+        assert sanitized != raw_hex.lower(), f"Client hex '{raw_hex}' must not be directly stored"
+        assert len(sanitized) == 32
+        assert re.match(r"^[0-9a-f]{32}$", sanitized)
 
 
 @pytest.mark.asyncio
@@ -636,6 +636,64 @@ async def test_middleware_and_recorder_correlation_id_isolation(app):
                 assert secret_header not in ev.correlation_id
                 assert "custom_secret" not in ev.correlation_id
                 assert "test_leak" not in ev.correlation_id
+
+
+@pytest.mark.asyncio
+async def test_synthetic_hex_secret_rejected_from_database_and_tracing_preserved(app):
+    """Verify that synthetic hex secrets (e.g. 32-char and 64-char hex strings) passed in client headers
+    are never stored as the incident identifier in the database, while distributed tracing is safely preserved."""
+    synthetic_32_hex_secret = "d41d8cd98f00b204e9800998ecf8427e"
+    synthetic_64_hex_secret = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # 1. Error request with 32-hex synthetic secret
+        res_32 = await client.get(
+            "/api/v1/non_existent_route_for_hex_test_32",
+            headers={"X-Correlation-ID": synthetic_32_hex_secret},
+        )
+        assert res_32.status_code == 404
+        body_32 = res_32.json()
+        meta_cid_32 = body_32.get("meta", {}).get("correlation_id")
+        assert meta_cid_32 is not None
+        assert meta_cid_32 != synthetic_32_hex_secret
+        assert len(meta_cid_32) == 32
+        assert res_32.headers.get("X-Correlation-ID") != synthetic_32_hex_secret
+        assert res_32.headers.get("X-Incident-ID") == meta_cid_32
+
+        # 2. Error request with 64-hex synthetic secret
+        res_64 = await client.get(
+            "/api/v1/non_existent_route_for_hex_test_64",
+            headers={"X-Correlation-ID": synthetic_64_hex_secret},
+        )
+        assert res_64.status_code == 404
+        body_64 = res_64.json()
+        meta_cid_64 = body_64.get("meta", {}).get("correlation_id")
+        assert meta_cid_64 is not None
+        assert meta_cid_64 != synthetic_64_hex_secret
+        assert len(meta_cid_64) == 32
+        assert res_64.headers.get("X-Correlation-ID") != synthetic_64_hex_secret
+        assert res_64.headers.get("X-Incident-ID") == meta_cid_64
+
+        # 3. Verify database storage NEVER contains either synthetic hex secret
+        async with AsyncSessionLocal() as session:
+            stmt = select(ErrorEvent).order_by(ErrorEvent.created_at.desc()).limit(10)
+            events = (await session.execute(stmt)).scalars().all()
+            for ev in events:
+                assert ev.correlation_id != synthetic_32_hex_secret
+                assert ev.correlation_id != synthetic_64_hex_secret
+                assert re.match(r"^[0-9a-f]{32}$", ev.correlation_id)
+
+        # 4. Verify safe distributed tracing is preserved for successful requests
+        safe_trace_id = "trace-client-distributed-12345"
+        res_ok = await client.get(
+            "/api/v1/health/live",
+            headers={"X-Correlation-ID": safe_trace_id},
+        )
+        assert res_ok.status_code == 200
+        assert res_ok.headers.get("X-Correlation-ID") == safe_trace_id
+        body_ok = res_ok.json()
+        assert body_ok.get("meta", {}).get("correlation_id") == safe_trace_id
 
 
 # =============================================================================

@@ -227,30 +227,19 @@ REDACTION_PATTERNS: Tuple[Tuple[re.Pattern, str], ...] = (
 # =============================================================================
 
 
-# Strict trusted correlation ID pattern:
-# Accepts standard UUIDv1-v5 (canonical 8-4-4-4-12 hex with hyphens), 16 to 64-character hexadecimal trace IDs,
-# or standard prefixed hex IDs ('cid-<8-64 hex>', 'req-<8-64 hex>', 'trace-<8-64 hex>').
-# Letters g-z, spaces, punctuation, underscores, and credential formats (e.g., sk_live_..., ghp_..., passwords)
-# are strictly disallowed to prevent client headers from injecting credentials or arbitrary tokens into logs/storage.
-TRUSTED_CORRELATION_ID_PATTERN = re.compile(
-    r"^(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|[0-9a-fA-F]{16,64}|(?:cid|req|trace)-[0-9a-fA-F]{8,64})$"
-)
-
-
-def sanitize_correlation_id(cid: Optional[str]) -> str:
-    """Validates correlation IDs against a strict trusted format (UUID or hex trace ID).
-
-    If the provided identifier strictly matches the trusted format, it is normalized to lowercase and preserved
-    for distributed request tracing. Any header containing non-hex characters (e.g. letters g-z, symbols,
-    underscores, passwords, API keys like sk_live_..., tokens, or emails) is rejected and replaced with a
-    cryptographically random server-generated UUIDv4 hex identifier.
-    """
-    if not cid:
-        return uuid.uuid4().hex
-    clean = str(cid).strip()
-    if len(clean) <= 64 and TRUSTED_CORRELATION_ID_PATTERN.match(clean):
-        return clean.lower()
+def generate_server_incident_id() -> str:
+    """Generates an authoritative, cryptographically random server-side incident identifier."""
     return uuid.uuid4().hex
+
+
+def sanitize_correlation_id(cid: Optional[str] = None) -> str:
+    """Always generates a safe server-side correlation identifier for database persistence.
+
+    Client-supplied correlation values are NEVER stored directly in the error monitoring
+    database, even if they match hex or UUID formats, preventing arbitrary client-supplied
+    secrets (e.g. 16-64 hex API keys, tokens, passwords) from being persisted.
+    """
+    return generate_server_incident_id()
 
 
 def sanitize_user_id(uid: Optional[str]) -> Optional[str]:
@@ -657,10 +646,18 @@ async def record_error_event(
         token = _is_recording_ctx.set(True)
         try:
             # 1. Resolve and bound metadata
-            cid_raw = correlation_id
-            if request is not None and not cid_raw:
-                cid_raw = getattr(request.state, "correlation_id", None)
-            resolved_cid = sanitize_correlation_id(cid_raw)
+            # The persisted incident identifier is ALWAYS generated on the server.
+            # Client-supplied correlation values are NEVER stored directly in the database,
+            # ensuring that client-supplied hex secrets or arbitrary tokens cannot be persisted.
+            if request is not None and getattr(request.state, "server_incident_id", None):
+                resolved_cid = request.state.server_incident_id
+            else:
+                resolved_cid = generate_server_incident_id()
+                if request is not None:
+                    try:
+                        request.state.server_incident_id = resolved_cid
+                    except Exception:
+                        pass
 
             resolved_method = sanitize_method(method or (request.method if request else None))
             resolved_endpoint = extract_route_template(request, fallback_path=endpoint)

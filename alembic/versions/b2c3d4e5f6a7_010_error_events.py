@@ -67,7 +67,7 @@ def downgrade() -> None:
 
     def table_exists(table_name: str) -> bool:
         if inspector is None:
-            return False
+            return True
         return table_name in inspector.get_table_names()
 
     if table_exists("error_events"):
