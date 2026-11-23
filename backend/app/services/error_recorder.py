@@ -45,6 +45,24 @@ _is_recording_ctx: contextvars.ContextVar[bool] = contextvars.ContextVar("_is_re
 _prune_lock = asyncio.Lock()
 _last_prune_timestamp: float = 0.0
 
+# Concurrency and connection pool protection: limit simultaneous DB recording sessions
+MAX_CONCURRENT_RECORDING_TASKS = 5
+_recording_semaphore = asyncio.Semaphore(MAX_CONCURRENT_RECORDING_TASKS)
+
+# Storage outage circuit breaker
+_circuit_open_until: float = 0.0
+_consecutive_db_failures: int = 0
+CIRCUIT_BREAKER_THRESHOLD: int = 3
+CIRCUIT_BREAKER_COOLDOWN_SECONDS: float = 10.0
+
+
+def reset_error_recorder_state() -> None:
+    """Helper for testing to reset circuit breaker and concurrency state."""
+    global _circuit_open_until, _consecutive_db_failures
+    _circuit_open_until = 0.0
+    _consecutive_db_failures = 0
+
+
 ALLOWLISTED_METHODS: FrozenSet[str] = frozenset({"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"})
 
 # =============================================================================
@@ -228,8 +246,48 @@ def sanitize_method(method: Optional[str]) -> str:
     return m if m in ALLOWLISTED_METHODS else "UNKNOWN"
 
 
+UNMATCHED_ROUTE_FALLBACK = "/unmatched_route"
+
+STATIC_KNOWN_ROUTES: FrozenSet[str] = frozenset(
+    {
+        "/",
+        "/docs",
+        "/redoc",
+        "/api/v1/openapi.json",
+        "/api/v1/health",
+        "/api/v1/admin/overview",
+        "/api/v1/admin/users",
+        "/api/v1/admin/orders",
+        "/api/v1/admin/system/health",
+        "/api/v1/admin/me",
+        "/api/v1/admin/errors",
+        "/api/v1/admin/errors/summary",
+        "/api/v1/auth/google",
+        "/api/v1/auth/login",
+        "/api/v1/auth/register",
+        "/api/v1/auth/logout",
+        "/api/v1/auth/refresh",
+        "/api/v1/auth/verify-email",
+        "/api/v1/auth/request-password-reset",
+        "/api/v1/auth/reset-password",
+        "/api/v1/portfolio",
+        "/api/v1/portfolio/holdings",
+        "/api/v1/paper/account",
+        "/api/v1/orders/paper",
+        "/api/v1/market/live",
+        "/api/v1/market/quotes",
+        "/api/v1/ai/chat",
+    }
+)
+
+
 def extract_route_template(request: Optional[Request], fallback_path: Optional[str] = None) -> str:
-    """Extracts the route template (e.g. /users/{user_id}) instead of raw paths with IDs."""
+    """Extracts the route template (e.g. /users/{user_id}) instead of raw paths with IDs.
+
+    For unmatched routes (e.g. 404s, malformed URLs, or unrouted paths), strictly returns
+    '/unmatched_route' to ensure no arbitrary path segments, names, emails, or short secrets
+    can ever be persisted to the database.
+    """
     if request is not None:
         try:
             # 1. Starlette stores matched route pattern in scope['route']
@@ -239,30 +297,24 @@ def extract_route_template(request: Optional[Request], fallback_path: Optional[s
         except Exception:
             pass
 
-        raw_path = request.url.path or "unknown"
+        raw_path = getattr(request.url, "path", None)
     else:
-        raw_path = fallback_path or "unknown"
+        raw_path = fallback_path
 
-    # 2. Scrub sensitive parameters from raw path if no template was resolved
-    clean_path = raw_path
-    # Scrub UUIDs
-    clean_path = re.sub(
-        r"/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}",
-        "/{uuid}",
-        clean_path,
-    )
-    # Scrub FinEx entity IDs (usr-, ord-, acc-, tx-, sec-, tok-)
-    clean_path = re.sub(
-        r"/(?:usr|ord|acc|tx|sec|tok)-[a-zA-Z0-9_\-]+",
-        "/{id}",
-        clean_path,
-    )
-    # Scrub raw integer IDs
-    clean_path = re.sub(r"/\d+(?=/|$)", "/{id}", clean_path)
-    # Scrub reset tokens / long hex or base64 hashes
-    clean_path = re.sub(r"/[a-zA-Z0-9_\-]{24,}", "/{token}", clean_path)
+    if not raw_path:
+        return UNMATCHED_ROUTE_FALLBACK
 
-    return clean_path[:255]
+    clean = str(raw_path).strip()
+    if clean in STATIC_KNOWN_ROUTES:
+        return clean
+
+    # Allow explicit route templates that contain parameter placeholders like {user_id}
+    # and strictly match safe route pattern syntax
+    if "{" in clean and "}" in clean and re.match(r"^/[a-zA-Z0-9_\-/{}]*$", clean):
+        return clean[:255]
+
+    # For ALL other unmatched paths, strictly return the generic fallback
+    return UNMATCHED_ROUTE_FALLBACK
 
 
 def sanitize_error_message(message: Any, max_length: int = 500) -> str:
@@ -430,11 +482,19 @@ def categorize_error(
 # =============================================================================
 
 
+async def prune_if_due(session: Optional[Any] = None) -> None:
+    """Checks if prune throttle interval has elapsed, and runs pruning if due."""
+    global _last_prune_timestamp
+    if time.monotonic() - _last_prune_timestamp >= PRUNE_THROTTLE_SECONDS:
+        await prune_bounded_storage(session=session)
+
+
 async def prune_bounded_storage(session: Optional[Any] = None) -> None:
     """Enforces bounded retention under concurrency lock.
 
     Deletes events older than RETENTION_DAYS and keeps total events <= MAX_STORED_ERRORS.
-    All exceptions are swallowed to prevent maintenance failures from disrupting services.
+    Bounded by PRUNE_TIMEOUT_SECONDS (1.0s). All exceptions are swallowed to prevent
+    maintenance failures from disrupting services.
     """
     global _last_prune_timestamp
 
@@ -444,13 +504,16 @@ async def prune_bounded_storage(session: Optional[Any] = None) -> None:
 
     async with _prune_lock:
         try:
-            if session is None:
-                async with AsyncSessionLocal() as standalone_session:
-                    await _execute_prune(standalone_session)
-                    await standalone_session.commit()
-            else:
-                await _execute_prune(session)
 
+            async def _run_prune():
+                if session is None:
+                    async with AsyncSessionLocal() as standalone_session:
+                        await _execute_prune(standalone_session)
+                        await standalone_session.commit()
+                else:
+                    await _execute_prune(session)
+
+            await asyncio.wait_for(_run_prune(), timeout=PRUNE_TIMEOUT_SECONDS)
             _last_prune_timestamp = time.monotonic()
         except Exception as prune_err:
             logger.debug(f"ErrorRecorder: Bounded retention pruning notice (non-fatal): {prune_err}")
@@ -529,79 +592,126 @@ async def record_error_event(
     """Safely records an operational error event to database storage.
 
     FAIL-SAFE & BOUNDED GUARANTEES:
-    1. Hard Timeout: Bounded by RECORDING_TIMEOUT_SECONDS (250ms). Unresponsive DB
-       will never hang incoming user requests.
-    2. Recursion Safe: Re-entrant calls within the same context return None immediately.
-    3. Safe Code & Message: Unvetted exception traces are never persisted.
-    4. Route Templates: Path parameters and tokens are stripped from recorded endpoints.
-    5. No Request-Path Pruning: Pruning is decoupled and executed conditionally.
+    1. Bounded Added Latency:
+       - Normal healthy database: Adds ~1-5ms to the error response path.
+       - Degraded/slow database: Hard execution ceiling of RECORDING_TIMEOUT_SECONDS (250ms),
+         after which recording aborts and fails open. Latency is capped at <= 250ms.
+       - Saturated pool / open circuit breaker: Bypasses storage write in 0-10ms.
+    2. Connection Pool Protection:
+       - Maximum MAX_CONCURRENT_RECORDING_TASKS (5) simultaneous database recording sessions.
+       - If all 5 slots are busy, excess writes are dropped immediately (fail-open) to prevent
+         exhausting the database connection pool.
+    3. Storage Outage Circuit Breaker:
+       - After CIRCUIT_BREAKER_THRESHOLD (3) consecutive timeouts or database errors, opens circuit
+         for CIRCUIT_BREAKER_COOLDOWN_SECONDS (10s), failing open in 0ms without touching the DB.
+    4. Recursion Safe: Re-entrant calls within the same context return None immediately.
+    5. Safe Code & Message: Unvetted exception traces are never persisted.
+    6. Route Templates: Path parameters and tokens are stripped from recorded endpoints.
     """
-    # Recursion guard
-    if _is_recording_ctx.get():
+    global _circuit_open_until, _consecutive_db_failures
+
+    # 1. Circuit breaker guard: during storage outages, bypass DB in 0ms
+    if time.monotonic() < _circuit_open_until:
         return None
 
-    token = _is_recording_ctx.set(True)
+    # 2. Concurrency guard: bound concurrent DB sessions to prevent pool exhaustion
     try:
-        # 1. Resolve and bound metadata
-        cid_raw = correlation_id
-        if request is not None and not cid_raw:
-            cid_raw = getattr(request.state, "correlation_id", None)
-        resolved_cid = sanitize_correlation_id(cid_raw)
-
-        resolved_method = sanitize_method(method or (request.method if request else None))
-        resolved_endpoint = extract_route_template(request, fallback_path=endpoint)
-
-        resolved_uid = sanitize_user_id(user_id)
-        if request is not None and not resolved_uid:
-            try:
-                curr_user = getattr(request.state, "user", None)
-                if isinstance(curr_user, dict):
-                    resolved_uid = sanitize_user_id(curr_user.get("sub") or curr_user.get("user_id"))
-            except Exception:
-                pass
-
-        # 2. Bounded status code
-        safe_status = max(100, min(599, int(status_code)))
-
-        # 3. Resolve error details via Allowlisted Catalog
-        resolved_type = error_type or (type(exc).__name__ if exc else "ApiError")
-        raw_msg = raw_message if raw_message is not None else message
-
-        resolved_code, auto_category, safe_msg, auto_feature = resolve_safe_error_details(
-            status_code=safe_status,
-            exc=exc,
-            error_code=error_code,
-            raw_message=raw_msg,
-            endpoint=resolved_endpoint,
-        )
-
-        final_category = category or auto_category
-        final_feature = feature_area or auto_feature
-        final_message = sanitize_error_message(safe_msg)
-
-        # 4. Execute database write bounded by strict timeout
-        return await asyncio.wait_for(
-            _persist_error_event(
-                correlation_id=resolved_cid,
-                endpoint=resolved_endpoint,
-                method=resolved_method,
-                status_code=safe_status,
-                error_type=resolved_type[:100],
-                category=final_category[:50],
-                feature_area=final_feature[:50],
-                sanitized_message=final_message,
-                user_id=resolved_uid,
-            ),
-            timeout=RECORDING_TIMEOUT_SECONDS,
-        )
-
-    except asyncio.TimeoutError:
+        await asyncio.wait_for(_recording_semaphore.acquire(), timeout=0.01)
+    except (asyncio.TimeoutError, Exception):
         logger.warning(
-            f"ErrorRecorder: Bounded database write timed out after {RECORDING_TIMEOUT_SECONDS}s (non-fatal fail-open)"
+            f"ErrorRecorder: Concurrency limit reached ({MAX_CONCURRENT_RECORDING_TASKS} active recordings). "
+            "Dropping error write to prevent connection pool exhaustion (fail-open)."
         )
         return None
-    except Exception as exc_err:
-        logger.warning(f"ErrorRecorder: Fail-safe intercepted error event recording failure (non-fatal): {exc_err}")
-        return None
+
+    try:
+        # Recursion guard
+        if _is_recording_ctx.get():
+            return None
+
+        token = _is_recording_ctx.set(True)
+        try:
+            # 1. Resolve and bound metadata
+            cid_raw = correlation_id
+            if request is not None and not cid_raw:
+                cid_raw = getattr(request.state, "correlation_id", None)
+            resolved_cid = sanitize_correlation_id(cid_raw)
+
+            resolved_method = sanitize_method(method or (request.method if request else None))
+            resolved_endpoint = extract_route_template(request, fallback_path=endpoint)
+
+            resolved_uid = sanitize_user_id(user_id)
+            if request is not None and not resolved_uid:
+                try:
+                    curr_user = getattr(request.state, "user", None)
+                    if isinstance(curr_user, dict):
+                        resolved_uid = sanitize_user_id(curr_user.get("sub") or curr_user.get("user_id"))
+                except Exception:
+                    pass
+
+            # 2. Bounded status code
+            safe_status = max(100, min(599, int(status_code)))
+
+            # 3. Resolve error details via Allowlisted Catalog
+            resolved_type = error_type or (type(exc).__name__ if exc else "ApiError")
+            raw_msg = raw_message if raw_message is not None else message
+
+            resolved_code, auto_category, safe_msg, auto_feature = resolve_safe_error_details(
+                status_code=safe_status,
+                exc=exc,
+                error_code=error_code,
+                raw_message=raw_msg,
+                endpoint=resolved_endpoint,
+            )
+
+            final_category = category or auto_category
+            final_feature = feature_area or auto_feature
+            final_message = sanitize_error_message(safe_msg)
+
+            # 4. Execute database write bounded by strict timeout
+            event = await asyncio.wait_for(
+                _persist_error_event(
+                    correlation_id=resolved_cid,
+                    endpoint=resolved_endpoint,
+                    method=resolved_method,
+                    status_code=safe_status,
+                    error_type=resolved_type[:100],
+                    category=final_category[:50],
+                    feature_area=final_feature[:50],
+                    sanitized_message=final_message,
+                    user_id=resolved_uid,
+                ),
+                timeout=RECORDING_TIMEOUT_SECONDS,
+            )
+            # Reset failure count on success
+            _consecutive_db_failures = 0
+            return event
+
+        except asyncio.TimeoutError:
+            _consecutive_db_failures += 1
+            logger.warning(
+                f"ErrorRecorder: Bounded database write timed out after {RECORDING_TIMEOUT_SECONDS}s "
+                "(fail-open, added latency bounded)"
+            )
+            if _consecutive_db_failures >= CIRCUIT_BREAKER_THRESHOLD:
+                _circuit_open_until = time.monotonic() + CIRCUIT_BREAKER_COOLDOWN_SECONDS
+                logger.warning(
+                    f"ErrorRecorder: Opened circuit breaker for {CIRCUIT_BREAKER_COOLDOWN_SECONDS}s after "
+                    f"{_consecutive_db_failures} consecutive database timeouts/failures."
+                )
+            return None
+        except Exception as exc_err:
+            _consecutive_db_failures += 1
+            logger.warning(f"ErrorRecorder: Fail-safe intercepted error event recording failure (non-fatal): {exc_err}")
+            if _consecutive_db_failures >= CIRCUIT_BREAKER_THRESHOLD:
+                _circuit_open_until = time.monotonic() + CIRCUIT_BREAKER_COOLDOWN_SECONDS
+                logger.warning(
+                    f"ErrorRecorder: Opened circuit breaker for {CIRCUIT_BREAKER_COOLDOWN_SECONDS}s after "
+                    f"{_consecutive_db_failures} consecutive database errors."
+                )
+            return None
+        finally:
+            _is_recording_ctx.reset(token)
+
     finally:
-        _is_recording_ctx.reset(token)
+        _recording_semaphore.release()

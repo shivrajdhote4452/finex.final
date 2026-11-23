@@ -27,20 +27,24 @@ Validates:
 import asyncio
 import time
 import uuid
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from backend.app.config import get_settings
-from backend.app.database import engine
+from backend.app.database import AsyncSessionLocal, engine
 from backend.app.factory import create_app
 from backend.app.models import Base
+from backend.app.models.monitoring import ErrorEvent
 from backend.app.routers.auth import create_access_token
 from backend.app.services.error_recorder import (
     _is_recording_ctx,
     categorize_error,
     extract_route_template,
     prune_bounded_storage,
+    prune_if_due,
     record_error_event,
+    reset_error_recorder_state,
     resolve_safe_error_details,
     sanitize_correlation_id,
     sanitize_error_message,
@@ -48,6 +52,7 @@ from backend.app.services.error_recorder import (
     sanitize_user_id,
 )
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import func, select
 
 
 @pytest.fixture
@@ -474,29 +479,45 @@ def test_route_template_extraction_from_starlette_scope():
     assert template == "/api/v1/users/{user_id}/portfolio"
 
 
-def test_fallback_parameter_scrubbing():
-    """Verify sensitive parameters (IDs, tokens, UUIDs) are scrubbed from raw paths."""
-    # UUIDs
-    p_uuid = "/api/v1/audit/12345678-1234-5678-1234-567812345678"
-    assert extract_route_template(None, fallback_path=p_uuid) == "/api/v1/audit/{uuid}"
+def test_unmatched_route_anonymizes_sensitive_path_segments():
+    """Verify that unmatched routes with short secrets, names, emails, and tokens are NEVER persisted.
 
-    # FinEx entity IDs (usr-, ord-, acc-, tx-, sec-, tok-)
-    p_user = "/api/v1/users/usr-secret-9999/portfolio"
-    assert extract_route_template(None, fallback_path=p_user) == "/api/v1/users/{id}/portfolio"
+    Any unmatched path strictly resolves to generic '/unmatched_route'.
+    """
+    # 1. Short secrets and passwords in URL
+    assert extract_route_template(None, fallback_path="/api/v1/debug/hunter2") == "/unmatched_route"
+    assert extract_route_template(None, fallback_path="/api/v1/auth/secret123") == "/unmatched_route"
+    assert extract_route_template(None, fallback_path="/api/v1/keys/sk_test_9988") == "/unmatched_route"
 
-    p_order = "/api/v1/orders/ord-998877/cancel"
-    assert extract_route_template(None, fallback_path=p_order) == "/api/v1/orders/{id}/cancel"
+    # 2. Names and usernames in path
+    assert extract_route_template(None, fallback_path="/api/v1/users/john_doe") == "/unmatched_route"
+    assert extract_route_template(None, fallback_path="/api/v1/profiles/shivraj") == "/unmatched_route"
 
-    p_acc = "/api/v1/accounts/acc-001122/trades"
-    assert extract_route_template(None, fallback_path=p_acc) == "/api/v1/accounts/{id}/trades"
+    # 3. Emails in path
+    assert extract_route_template(None, fallback_path="/api/v1/verify/alice@example.com") == "/unmatched_route"
+    assert extract_route_template(None, fallback_path="/api/v1/users/customer.test@gmail.com") == "/unmatched_route"
 
-    # Numeric integer IDs
-    p_num = "/api/v1/securities/54321/quotes"
-    assert extract_route_template(None, fallback_path=p_num) == "/api/v1/securities/{id}/quotes"
+    # 4. Short tokens and hashes in path
+    assert extract_route_template(None, fallback_path="/api/v1/reset/tok99") == "/unmatched_route"
+    assert (
+        extract_route_template(None, fallback_path="/api/v1/audit/12345678-1234-5678-1234-567812345678")
+        == "/unmatched_route"
+    )
 
-    # Long tokens / hashes
-    p_tok = "/api/v1/auth/reset/a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
-    assert extract_route_template(None, fallback_path=p_tok) == "/api/v1/auth/reset/{token}"
+    # 5. Empty or None path
+    assert extract_route_template(None, fallback_path="") == "/unmatched_route"
+    assert extract_route_template(None, fallback_path=None) == "/unmatched_route"
+
+    # 6. Static known allowlisted routes are preserved
+    assert extract_route_template(None, fallback_path="/api/v1/health") == "/api/v1/health"
+    assert extract_route_template(None, fallback_path="/api/v1/portfolio/holdings") == "/api/v1/portfolio/holdings"
+    assert extract_route_template(None, fallback_path="/api/v1/orders/paper") == "/api/v1/orders/paper"
+
+    # 7. Valid explicit parameterized route templates are preserved
+    assert (
+        extract_route_template(None, fallback_path="/api/v1/users/{user_id}/portfolio")
+        == "/api/v1/users/{user_id}/portfolio"
+    )
 
 
 # =============================================================================
@@ -706,3 +727,171 @@ async def test_audited_capture_paths(app, owner_headers):
 
         for expected_code in [401, 403, 404, 413]:
             assert expected_code in captured_codes, f"Expected {expected_code} in captured codes: {captured_codes}"
+
+        # Verify that 404 endpoint was anonymized to /unmatched_route without leaking path
+        not_found_events = [e for e in data["errors"] if e["status_code"] == 404]
+        assert len(not_found_events) >= 1
+        assert not_found_events[0]["endpoint"] == "/unmatched_route"
+
+
+# =============================================================================
+# 15. Connection Pool Protection & Bounded Concurrency Tests (Finding 3)
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_connection_pool_protection_and_concurrency_ceiling():
+    """Verify that at most MAX_CONCURRENT_RECORDING_TASKS (5) concurrent DB sessions run,
+    and excess writes drop immediately to protect connection pool capacity."""
+    reset_error_recorder_state()
+    active_db_sessions = 0
+    max_simultaneous_sessions = 0
+    lock = asyncio.Lock()
+
+    async def _slow_db_operation(*args, **kwargs):
+        nonlocal active_db_sessions, max_simultaneous_sessions
+        async with lock:
+            active_db_sessions += 1
+            if active_db_sessions > max_simultaneous_sessions:
+                max_simultaneous_sessions = active_db_sessions
+        await asyncio.sleep(0.15)
+        async with lock:
+            active_db_sessions -= 1
+
+    with patch("backend.app.services.error_recorder.AsyncSessionLocal") as mock_session_cls:
+        mock_session = AsyncMock()
+        mock_session.add = lambda x: None
+        mock_session.commit.side_effect = _slow_db_operation
+        mock_session.refresh.side_effect = _slow_db_operation
+        mock_session_cls.return_value.__aenter__.return_value = mock_session
+
+        # Launch 20 simultaneous recording calls
+        tasks = [
+            record_error_event(
+                correlation_id=f"pool-test-{i}",
+                endpoint="/api/v1/test",
+                method="GET",
+                status_code=500,
+            )
+            for i in range(20)
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Verify concurrency never exceeded ceiling of 5
+        assert max_simultaneous_sessions <= 5, f"Exceeded concurrency ceiling: {max_simultaneous_sessions} > 5"
+        # Verify non-blocking: excess calls dropped cleanly (returned None) without hanging
+        assert any(r is None for r in results)
+    reset_error_recorder_state()
+
+
+# =============================================================================
+# 16. Storage Outage Circuit Breaker Tests (Finding 3)
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_storage_outage_circuit_breaker():
+    """Verify that repeated database failures trip circuit breaker, failing open in 0ms without touching DB."""
+    reset_error_recorder_state()
+
+    with patch("backend.app.services.error_recorder.AsyncSessionLocal") as mock_session_cls:
+        mock_session_cls.side_effect = Exception("PostgreSQL down / connection refused")
+
+        # 1. First 3 failures should trip circuit breaker
+        for _ in range(3):
+            res = await record_error_event(
+                correlation_id="trip-cb",
+                endpoint="/api/v1/test",
+                method="GET",
+                status_code=500,
+            )
+            assert res is None
+
+        # 2. Subsequent call should immediately fail open without calling AsyncSessionLocal
+        mock_session_cls.reset_mock()
+        start = time.perf_counter()
+        res_tripped = await record_error_event(
+            correlation_id="circuit-open",
+            endpoint="/api/v1/test",
+            method="GET",
+            status_code=500,
+        )
+        elapsed = time.perf_counter() - start
+        assert res_tripped is None
+        # Immediate fail open (< 50ms)
+        assert elapsed < 0.05
+        # Zero database connection attempts while circuit is open
+        mock_session_cls.assert_not_called()
+    reset_error_recorder_state()
+
+
+# =============================================================================
+# 17. Actual Added Latency Tests (Finding 3)
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_actual_added_latency_bounded_by_timeout():
+    """Verify that added latency is explicitly bounded to <= 250ms under slow DB and not described as zero delay."""
+    reset_error_recorder_state()
+
+    async def _hanging_db(*args, **kwargs):
+        await asyncio.sleep(2.0)
+
+    with patch("backend.app.services.error_recorder.AsyncSessionLocal") as mock_session_cls:
+        mock_session = AsyncMock()
+        mock_session.commit.side_effect = _hanging_db
+        mock_session_cls.return_value.__aenter__.return_value = mock_session
+
+        start = time.perf_counter()
+        res = await record_error_event(
+            correlation_id="latency-test",
+            endpoint="/api/v1/test",
+            method="GET",
+            status_code=500,
+        )
+        elapsed = time.perf_counter() - start
+        assert res is None
+        # Latency is bounded by RECORDING_TIMEOUT_SECONDS (0.25s), NOT zero delay
+        assert 0.20 <= elapsed < 0.65, f"Expected bounded latency ~0.25s, got {elapsed:.3f}s"
+    reset_error_recorder_state()
+
+
+# =============================================================================
+# 18. Retention Pruning & Ceiling Enforcement Tests (Finding 1)
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_bounded_retention_pruning_and_ceiling():
+    """Verify prune_bounded_storage and prune_if_due clean up expired records and enforce retention."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=35)
+
+    async with AsyncSessionLocal() as session:
+        for i in range(5):
+            session.add(
+                ErrorEvent(
+                    id=f"err-old-{uuid.uuid4().hex[:8]}",
+                    correlation_id=f"cid-old-{i}",
+                    endpoint="/api/v1/test",
+                    method="GET",
+                    status_code=500,
+                    error_type="TestOldError",
+                    category="SERVER_ERROR",
+                    feature_area="System",
+                    sanitized_message="Old error message",
+                    created_at=cutoff,
+                )
+            )
+        await session.commit()
+
+    # Run prune
+    await prune_bounded_storage()
+
+    # Verify old events pruned
+    async with AsyncSessionLocal() as session:
+        res = await session.execute(select(func.count(ErrorEvent.id)).where(ErrorEvent.error_type == "TestOldError"))
+        assert res.scalar() == 0
+
+    # Test prune_if_due runs without error
+    await prune_if_due()

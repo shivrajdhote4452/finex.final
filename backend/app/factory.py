@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -114,7 +115,43 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
                         )
             except Exception as exc:
                 startup_logger.warning(f"Angel One startup initialization failed: {exc}. Fallback provider active.")
+
+        # Error storage bounded retention: initial cleanup + background periodic maintenance loop
+        prune_task = None
+        try:
+            from backend.app.services.error_recorder import prune_bounded_storage
+
+            # 1. Run initial cleanup upon startup / restart
+            await prune_bounded_storage()
+
+            # 2. Start a single controlled background maintenance task for periodic pruning
+            async def _periodic_prune_loop():
+                while True:
+                    try:
+                        await asyncio.sleep(300)  # 5 minutes
+                        await prune_bounded_storage()
+                    except asyncio.CancelledError:
+                        break
+                    except Exception as loop_err:
+                        import logging
+
+                        logging.getLogger("startup").debug(f"Periodic error prune notice: {loop_err}")
+
+            prune_task = asyncio.create_task(_periodic_prune_loop())
+        except Exception as prune_init_err:
+            import logging
+
+            logging.getLogger("startup").warning(f"Error retention initial pruning skipped: {prune_init_err}")
+
         yield
+
+        # Shutdown: cleanly cancel the periodic maintenance task
+        if prune_task is not None:
+            prune_task.cancel()
+            try:
+                await prune_task
+            except asyncio.CancelledError:
+                pass
 
     app = FastAPI(
         title=app_settings.APP_NAME,

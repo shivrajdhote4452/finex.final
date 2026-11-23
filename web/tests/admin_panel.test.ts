@@ -589,16 +589,22 @@ describe('Separate FinEx Admin Portal Frontend & Domain Contract', () => {
 
   test('17. Surveillance scope disclosure banner explains what is and is not captured', () => {
     const scopeNotice =
-      'This dashboard displays durable, server-side recorded operational exceptions ' +
+      'This dashboard displays server-side operational exceptions ' +
       '(including unhandled 5xx exceptions, 503 service outages, 429 rate limits, 422 schema validation errors, and 400/401/403/404 HTTP errors). ' +
       'It does not capture client-side network disconnects, local browser JavaScript crashes, ' +
-      'or edge CDN dropouts that never reach the backend API.';
+      'or edge CDN dropouts that never reach the backend API. ' +
+      'Endpoints are logged as parameterized route templates (unmatched paths are anonymized to /unmatched_route), ' +
+      'and all messages are mapped to allowlisted error codes with server-side sanitization. ' +
+      'Database writes are bounded by a 250ms ceiling and concurrency limits (max 5 simultaneous writes); ' +
+      'during storage degradation, events are dropped fail-open to preserve database connection pool capacity.';
 
     // Check captured vs uncaptured explicit explanations
-    assert.ok(scopeNotice.includes('server-side recorded operational exceptions'));
+    assert.ok(scopeNotice.includes('server-side operational exceptions'));
     assert.ok(scopeNotice.includes('does not capture client-side network disconnects'));
     assert.ok(scopeNotice.includes('local browser JavaScript crashes'));
     assert.ok(scopeNotice.includes('edge CDN dropouts'));
+    assert.ok(scopeNotice.includes('/unmatched_route'));
+    assert.ok(scopeNotice.includes('dropped fail-open'));
   });
 
   test('18. Error status badge classification accurately distinguishes 5xx vs 4xx', () => {

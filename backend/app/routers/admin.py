@@ -25,6 +25,7 @@ from backend.app.models.monitoring import ErrorEvent
 from backend.app.models.paper_trading import PaperOrder
 from backend.app.routers.auth import require_owner
 from backend.app.routers.health import check_db_ready
+from backend.app.services.error_recorder import prune_if_due
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
@@ -136,9 +137,10 @@ class AdminErrorsResponse(BaseModel):
     limit: int
     total_pages: int
     scope_notice: str = (
-        "Observability Scope: Real recorded server-side error events. Captures unhandled server exceptions (500), "
-        "upstream broker failures (503), rate limit breaches (429), request validation errors (422), payload limit breaches (413), "
-        "and standard HTTP exceptions (400, 401, 403, 404). Bounded 250ms logging timeout with route template anonymization. "
+        "Observability Scope: Real recorded server-side error events (400, 401, 403, 404, 413, 422, 429, 500, 503). "
+        "Execution is bounded by a 250ms ceiling and concurrency limits (max 5 simultaneous writes); during storage degradation, "
+        "events are dropped fail-open to protect database pool capacity. Unmatched routes are anonymized to /unmatched_route. "
+        "Retention periodically prunes records older than 30 days or beyond the 5,000-row target. "
         "Does not capture client-side network loss, browser script crashes, or edge proxy drops before reaching the API."
     )
 
@@ -152,6 +154,7 @@ class AdminErrorSummaryResponse(BaseModel):
     errors_by_feature: Dict[str, int]
     scope_notice: str = (
         "Observability Scope: Real server-side recorded error events across 4xx and 5xx status codes with bounded execution timeout. "
+        "Under storage degradation, events exceeding concurrency limits or 250ms timeout are dropped fail-open. "
         "Edge drops and client-side browser network disconnects are not captured."
     )
 
@@ -569,6 +572,9 @@ async def get_admin_errors(
     db: AsyncSession = Depends(get_db),
 ):
     cid = getattr(request.state, "correlation_id", "none")
+
+    # Opportunistically execute retention pruning if interval has elapsed
+    await prune_if_due(session=db)
 
     query = select(ErrorEvent)
 
