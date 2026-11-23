@@ -590,7 +590,7 @@ describe('Separate FinEx Admin Portal Frontend & Domain Contract', () => {
   test('17. Surveillance scope disclosure banner explains what is and is not captured', () => {
     const scopeNotice =
       'This dashboard displays durable, server-side recorded operational exceptions ' +
-      '(including unhandled 5xx exceptions, 503 service outages, 429 rate limit events, and 422 schema validation errors). ' +
+      '(including unhandled 5xx exceptions, 503 service outages, 429 rate limits, 422 schema validation errors, and 400/401/403/404 HTTP errors). ' +
       'It does not capture client-side network disconnects, local browser JavaScript crashes, ' +
       'or edge CDN dropouts that never reach the backend API.';
 

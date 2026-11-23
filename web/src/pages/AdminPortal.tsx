@@ -1251,9 +1251,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onNavigateToApp }) => 
             <span>Surveillance Scope & Data Hygiene Notice</span>
           </div>
           <div>
-            This dashboard displays durable, server-side recorded operational exceptions (including unhandled 5xx exceptions, 503 service outages, 429 rate limit events, and 422 schema validation errors).
+            This dashboard displays durable, server-side recorded operational exceptions (including unhandled 5xx exceptions, 503 service outages, 429 rate limits, 422 schema validation errors, and 400/401/403/404 HTTP errors).
             It <strong>does not</strong> capture client-side network disconnects, local browser JavaScript crashes, or edge CDN dropouts that never reach the backend API.
-            All messages are sanitized server-side prior to persistence to ensure credentials, tokens, PII, and raw stack traces are never stored or displayed.
+            Endpoints are logged as parameterized route templates rather than raw paths, and all messages are mapped to allowlisted error codes with server-side sanitization. Database writes are bounded by a 250ms timeout to prevent delaying user requests.
           </div>
         </div>
 

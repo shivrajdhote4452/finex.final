@@ -169,6 +169,7 @@ async def finex_exception_handler(request: Request, exc: FinExException) -> JSON
                 request=request,
                 exc=exc,
                 status_code=exc.status_code,
+                error_code=exc.code,
                 message=exc.message,
                 correlation_id=correlation_id,
             )
@@ -202,12 +203,11 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     try:
         from backend.app.services.error_recorder import record_error_event
 
-        summary_issue = "; ".join(f"{d.field}: {d.issue}" for d in details[:3])
         await record_error_event(
             request=request,
             exc=exc,
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            message=f"Validation error: {summary_issue}",
+            error_code="VALIDATION_ERROR",
             correlation_id=correlation_id,
         )
     except Exception as rec_err:
@@ -228,7 +228,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
         logger.warning(
             f"HTTPException [{exc.status_code}] on {request.method} {request.url.path}: {exc.detail} (cid: {correlation_id})"
         )
-        if exc.status_code >= 400 and exc.status_code != 404:
+        if exc.status_code >= 400:
             try:
                 from backend.app.services.error_recorder import record_error_event
 
@@ -236,7 +236,8 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
                     request=request,
                     exc=exc,
                     status_code=exc.status_code,
-                    message=str(exc.detail),
+                    error_code="HTTP_EXCEPTION",
+                    raw_message=str(exc.detail),
                     correlation_id=correlation_id,
                 )
             except Exception as rec_err:
@@ -262,7 +263,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
             request=request,
             exc=exc,
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message=f"{type(exc).__name__}: {str(exc)}",
+            error_code="INTERNAL_SERVER_ERROR",
             correlation_id=correlation_id,
         )
     except Exception as rec_err:
@@ -271,6 +272,6 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     return build_error_response(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         code="INTERNAL_SERVER_ERROR",
-        message=f"{type(exc).__name__}: {str(exc)}",
+        message="An unexpected server error occurred. Please contact support with the correlation ID if this persists.",
         correlation_id=correlation_id,
     )

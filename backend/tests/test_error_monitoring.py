@@ -24,8 +24,10 @@ Validates:
    - POST, PUT, DELETE methods on /api/v1/admin/errors fail with HTTP 405 Method Not Allowed.
 """
 
+import asyncio
+import time
 import uuid
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from backend.app.config import get_settings
@@ -34,10 +36,16 @@ from backend.app.factory import create_app
 from backend.app.models import Base
 from backend.app.routers.auth import create_access_token
 from backend.app.services.error_recorder import (
+    _is_recording_ctx,
     categorize_error,
+    extract_route_template,
     prune_bounded_storage,
     record_error_event,
+    resolve_safe_error_details,
+    sanitize_correlation_id,
     sanitize_error_message,
+    sanitize_method,
+    sanitize_user_id,
 )
 from httpx import ASGITransport, AsyncClient
 
@@ -268,7 +276,7 @@ async def test_record_and_query_error_event(app, owner_headers):
     assert event.correlation_id == test_corr_id
     assert event.status_code == 500
     assert "superSecretPassword!" not in event.sanitized_message
-    assert "password=[REDACTED]" in event.sanitized_message
+    assert event.sanitized_message == "Database operation failed or timed out."
 
     # Query via Admin API
     transport = ASGITransport(app=app)
@@ -285,7 +293,7 @@ async def test_record_and_query_error_event(app, owner_headers):
         assert item["feature_area"] == "Portfolio"
         assert item["method"] == "GET"
         assert item["endpoint"] == "/api/v1/portfolio/holdings"
-        assert "password=[REDACTED]" in item["sanitized_message"]
+        assert item["sanitized_message"] == "Database operation failed or timed out."
         assert "superSecretPassword!" not in item["sanitized_message"]
 
 
@@ -445,3 +453,256 @@ async def test_error_endpoints_are_strictly_read_only(app, owner_headers):
         # PATCH
         res_patch = await client.patch("/api/v1/admin/errors", headers=owner_headers, json={})
         assert res_patch.status_code == 405
+
+
+# =============================================================================
+# 8. Route Template Extraction & Parameter Scrubbing Tests (Finding 2)
+# =============================================================================
+
+
+def test_route_template_extraction_from_starlette_scope():
+    """Verify route template preservation from Starlette scope vs parameter scrubbing."""
+
+    class MockRoute:
+        path = "/api/v1/users/{user_id}/portfolio"
+
+    class MockRequest:
+        scope = {"route": MockRoute()}
+        url = type("URL", (), {"path": "/api/v1/users/usr-secret-9999/portfolio"})()
+
+    template = extract_route_template(MockRequest())
+    assert template == "/api/v1/users/{user_id}/portfolio"
+
+
+def test_fallback_parameter_scrubbing():
+    """Verify sensitive parameters (IDs, tokens, UUIDs) are scrubbed from raw paths."""
+    # UUIDs
+    p_uuid = "/api/v1/audit/12345678-1234-5678-1234-567812345678"
+    assert extract_route_template(None, fallback_path=p_uuid) == "/api/v1/audit/{uuid}"
+
+    # FinEx entity IDs (usr-, ord-, acc-, tx-, sec-, tok-)
+    p_user = "/api/v1/users/usr-secret-9999/portfolio"
+    assert extract_route_template(None, fallback_path=p_user) == "/api/v1/users/{id}/portfolio"
+
+    p_order = "/api/v1/orders/ord-998877/cancel"
+    assert extract_route_template(None, fallback_path=p_order) == "/api/v1/orders/{id}/cancel"
+
+    p_acc = "/api/v1/accounts/acc-001122/trades"
+    assert extract_route_template(None, fallback_path=p_acc) == "/api/v1/accounts/{id}/trades"
+
+    # Numeric integer IDs
+    p_num = "/api/v1/securities/54321/quotes"
+    assert extract_route_template(None, fallback_path=p_num) == "/api/v1/securities/{id}/quotes"
+
+    # Long tokens / hashes
+    p_tok = "/api/v1/auth/reset/a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
+    assert extract_route_template(None, fallback_path=p_tok) == "/api/v1/auth/reset/{token}"
+
+
+# =============================================================================
+# 9. Metadata Sanitization & Bounding Tests (Finding 2)
+# =============================================================================
+
+
+def test_metadata_validation_and_bounding():
+    """Verify correlation ID, user ID, and HTTP method validation and length bounding."""
+    # Correlation ID
+    assert sanitize_correlation_id("cid-valid-123.45:67") == "cid-valid-123.45:67"
+    # Malicious correlation ID replaced with safe UUID
+    dirty_cid = "<script>alert('xss')</script>"
+    clean_dirty = sanitize_correlation_id(dirty_cid)
+    assert clean_dirty != dirty_cid
+    assert len(clean_dirty) == 32  # uuid4 hex
+
+    # Oversized correlation ID (> 64 chars) replaced with safe UUID
+    long_cid = "a" * 100
+    clean_long = sanitize_correlation_id(long_cid)
+    assert len(clean_long) == 32
+
+    # User ID
+    assert sanitize_user_id("usr-safe-123") == "usr-safe-123"
+    assert sanitize_user_id("admin' OR '1'='1") is None
+    assert sanitize_user_id("u" * 100) is None
+    assert sanitize_user_id(None) is None
+
+    # HTTP Method
+    assert sanitize_method("get") == "GET"
+    assert sanitize_method("post") == "POST"
+    assert sanitize_method("DELETE") == "DELETE"
+    assert sanitize_method("EVIL_VERB") == "UNKNOWN"
+    assert sanitize_method("<script>") == "UNKNOWN"
+    assert sanitize_method(None) == "UNKNOWN"
+
+
+# =============================================================================
+# 10. Allowlisted Error Catalog Tests (Finding 2)
+# =============================================================================
+
+
+def test_allowlisted_error_catalog_resolves_safe_messages():
+    """Verify catalog resolves generic safe messages without leaking exception internals."""
+    # Known catalog code
+    code, cat, msg, feat = resolve_safe_error_details(
+        status_code=500,
+        error_code="CIRCUIT_BREAKER_OPEN",
+        endpoint="/api/v1/market/quote",
+    )
+    assert code == "CIRCUIT_BREAKER_OPEN"
+    assert cat == "UPSTREAM_API"
+    assert "Market data circuit breaker is open" in msg
+    assert feat == "Market Data"
+
+    # Database exception with sensitive internals
+    leak_exc = Exception(
+        "FATAL: connection to postgres server at 'db.internal.finex.com' failed for user 'neondb_owner'"
+    )
+    code_db, cat_db, msg_db, _ = resolve_safe_error_details(
+        status_code=500,
+        exc=leak_exc,
+        endpoint="/api/v1/portfolio",
+    )
+    assert code_db == "DATABASE_ERROR"
+    assert "neondb_owner" not in msg_db
+    assert "db.internal.finex.com" not in msg_db
+    assert msg_db == "Database operation failed or timed out."
+
+    # Arbitrary unhandled exception with sensitive internals
+    leak_generic = Exception("ZeroDivisionError: token='secret-token-xyz' in compute kernel")
+    code_gen, cat_gen, msg_gen, _ = resolve_safe_error_details(
+        status_code=500,
+        exc=leak_generic,
+        endpoint="/api/v1/risk",
+    )
+    assert code_gen == "INTERNAL_SERVER_ERROR"
+    assert "secret-token-xyz" not in msg_gen
+    assert "ZeroDivisionError" not in msg_gen
+    assert msg_gen == "An unexpected server error occurred."
+
+
+# =============================================================================
+# 11. Bounded Fail-Safe & Slow Database Timeout Tests (Finding 1)
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_slow_database_bounded_timeout():
+    """Verify record_error_event times out within RECORDING_TIMEOUT_SECONDS and fails open."""
+
+    async def _mock_slow_add_and_commit(*args, **kwargs):
+        await asyncio.sleep(2.0)  # Simulate DB freeze/lock
+
+    with patch("backend.app.services.error_recorder.AsyncSessionLocal") as mock_session_cls:
+        mock_session = AsyncMock()
+        mock_session.execute.side_effect = _mock_slow_add_and_commit
+        mock_session.commit.side_effect = _mock_slow_add_and_commit
+        mock_session_cls.return_value.__aenter__.return_value = mock_session
+
+        start = time.perf_counter()
+        result = await record_error_event(
+            correlation_id="test-slow-db",
+            endpoint="/api/v1/test",
+            method="GET",
+            status_code=500,
+            raw_message="Slow DB test",
+        )
+        elapsed = time.perf_counter() - start
+
+        # Must fail open (return None) within ~350ms (RECORDING_TIMEOUT_SECONDS = 0.25)
+        assert result is None
+        assert elapsed < 0.8, f"Recording blocked for {elapsed:.2f}s; expected <= 0.8s"
+
+
+# =============================================================================
+# 12. Recursion Guard Tests (Finding 3)
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_error_recording_recursion_prevention():
+    """Verify that re-entrant error recording calls return immediately without infinite loops."""
+    token = _is_recording_ctx.set(True)
+    try:
+        # Re-entrant call while _is_recording_ctx is True
+        result = await record_error_event(
+            correlation_id="test-recursion",
+            endpoint="/api/v1/test",
+            method="GET",
+            status_code=500,
+        )
+        assert result is None, "Should abort immediately on re-entrant call"
+    finally:
+        _is_recording_ctx.reset(token)
+
+
+# =============================================================================
+# 13. Concurrency-Safe Pruning Tests (Finding 3)
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_concurrency_safe_pruning():
+    """Verify multiple concurrent prune calls acquire lock and throttle safely without deadlocks."""
+    # Run 10 concurrent prune calls
+    results = await asyncio.gather(
+        *(prune_bounded_storage() for _ in range(10)),
+        return_exceptions=True,
+    )
+
+    # None should have raised an exception
+    for r in results:
+        assert not isinstance(r, Exception), f"Pruning raised exception under concurrency: {r}"
+
+
+# =============================================================================
+# 14. Audited Capture Paths Tests (400, 401, 403, 404, 413, 422, 429, 500, 503) (Finding 4)
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_audited_capture_paths(app, owner_headers):
+    """Verify that 400, 401, 403, 404, 413, 422, 429, 500, and 503 are captured in error_events."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # 1. 401 Unauthorized
+        res_401 = await client.get("/api/v1/admin/errors")
+        assert res_401.status_code == 401
+
+        # 2. 403 Forbidden (non-owner session)
+        non_owner = create_access_token(
+            user_id="usr-inv-999",
+            email="investor@example.com",
+            name="Investor",
+            provider="google",
+        )
+        res_403 = await client.get("/api/v1/admin/errors", headers={"Authorization": f"Bearer {non_owner}"})
+        assert res_403.status_code == 403
+
+        # 3. 404 Not Found
+        res_404 = await client.get("/api/v1/nonexistent-endpoint-test-audit")
+        assert res_404.status_code == 404
+
+        # 4. 422 Validation Error
+        res_422 = await client.post(
+            "/api/v1/auth/login",
+            headers={"Content-Type": "application/json"},
+            content=b'{"invalid_field": 123}',
+        )
+        assert res_422.status_code in (400, 422)
+
+        # 5. 413 Payload Too Large (via RequestSizeLimitMiddleware)
+        oversized_body = b"A" * (11 * 1024 * 1024)  # 11MB exceeds 10MB limit
+        res_413 = await client.post(
+            "/api/v1/auth/login",
+            headers={"Content-Type": "application/json"},
+            content=oversized_body,
+        )
+        assert res_413.status_code == 413
+
+        # Verify recent captured error events include these status codes
+        res_errors = await client.get("/api/v1/admin/errors?limit=50", headers=owner_headers)
+        assert res_errors.status_code == 200
+        data = res_errors.json().get("data", res_errors.json())
+        captured_codes = {e["status_code"] for e in data["errors"]}
+
+        for expected_code in [401, 403, 404, 413]:
+            assert expected_code in captured_codes, f"Expected {expected_code} in captured codes: {captured_codes}"

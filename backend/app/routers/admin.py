@@ -137,7 +137,8 @@ class AdminErrorsResponse(BaseModel):
     total_pages: int
     scope_notice: str = (
         "Observability Scope: Real recorded server-side error events. Captures unhandled server exceptions (500), "
-        "upstream broker failures (503), rate limit breaches (429), and request validation errors (422). "
+        "upstream broker failures (503), rate limit breaches (429), request validation errors (422), payload limit breaches (413), "
+        "and standard HTTP exceptions (400, 401, 403, 404). Bounded 250ms logging timeout with route template anonymization. "
         "Does not capture client-side network loss, browser script crashes, or edge proxy drops before reaching the API."
     )
 
@@ -150,7 +151,7 @@ class AdminErrorSummaryResponse(BaseModel):
     errors_by_category: Dict[str, int]
     errors_by_feature: Dict[str, int]
     scope_notice: str = (
-        "Observability Scope: Real server-side recorded error events. "
+        "Observability Scope: Real server-side recorded error events across 4xx and 5xx status codes with bounded execution timeout. "
         "Edge drops and client-side browser network disconnects are not captured."
     )
 

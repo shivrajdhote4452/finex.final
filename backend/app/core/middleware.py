@@ -1,7 +1,6 @@
 import collections
 import contextvars
 import time
-import uuid
 from typing import Callable, Dict, List
 
 from backend.app.core.errors import build_error_response
@@ -19,9 +18,10 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         start_time = time.perf_counter()
-        cid = request.headers.get("X-Correlation-ID") or request.headers.get("X-Request-ID")
-        if not cid:
-            cid = str(uuid.uuid4())
+        raw_cid = request.headers.get("X-Correlation-ID") or request.headers.get("X-Request-ID")
+        from backend.app.services.error_recorder import sanitize_correlation_id
+
+        cid = sanitize_correlation_id(raw_cid)
 
         request.state.correlation_id = cid
         token = correlation_id_ctx.set(cid)
@@ -42,7 +42,7 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
                     request=request,
                     exc=unhandled_mw_exc,
                     status_code=500,
-                    message=f"{type(unhandled_mw_exc).__name__}: {str(unhandled_mw_exc)}",
+                    error_code="INTERNAL_SERVER_ERROR",
                     correlation_id=cid,
                 )
             except Exception:
@@ -162,6 +162,17 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
         if len(queue) >= limit:
             cid = getattr(request.state, "correlation_id", "none")
             retry_after = int(self.window_seconds - (now - queue[0])) + 1
+            try:
+                from backend.app.services.error_recorder import record_error_event
+
+                await record_error_event(
+                    request=request,
+                    status_code=429,
+                    error_code="RATE_LIMIT_EXCEEDED",
+                    correlation_id=cid,
+                )
+            except Exception:
+                pass
             response = build_error_response(
                 status_code=429,
                 code="RATE_LIMIT_EXCEEDED",
@@ -206,6 +217,17 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
 
                 if length > max_allowed:
                     cid = getattr(request.state, "correlation_id", "none")
+                    try:
+                        from backend.app.services.error_recorder import record_error_event
+
+                        await record_error_event(
+                            request=request,
+                            status_code=413,
+                            error_code="PAYLOAD_TOO_LARGE",
+                            correlation_id=cid,
+                        )
+                    except Exception:
+                        pass
                     return build_error_response(
                         status_code=413,
                         code="PAYLOAD_TOO_LARGE",
