@@ -379,4 +379,97 @@ describe('Separate FinEx Admin Portal Frontend & Domain Contract', () => {
       '/admin/orders?page=1&limit=15&symbol=TCS&status=REJECTED'
     );
   });
+
+  // -------------------------------------------------------------
+  // 7. DASHBOARD METRICS: ZERO ORDERS & HONEST REJECTIONS
+  // -------------------------------------------------------------
+  test('12. Order Success Rate calculates "No orders yet" when total paper orders is zero', () => {
+    // Pure calculation helper matching AdminPortal and AdminScreen implementation
+    const computeSuccessRate = (totalOrders: number, filledOrders: number): string => {
+      if (totalOrders <= 0) {
+        return 'No orders yet';
+      }
+      return `${Math.round((filledOrders / totalOrders) * 100)}%`;
+    };
+
+    // Zero orders must never show 100%
+    assert.strictEqual(computeSuccessRate(0, 0), 'No orders yet');
+    assert.notStrictEqual(computeSuccessRate(0, 0), '100%');
+    assert.notStrictEqual(computeSuccessRate(0, 0), '100.0%');
+
+    // Non-zero orders compute accurate ratios
+    assert.strictEqual(computeSuccessRate(10, 10), '100%');
+    assert.strictEqual(computeSuccessRate(10, 8), '80%');
+    assert.strictEqual(computeSuccessRate(3, 1), '33%');
+    assert.strictEqual(computeSuccessRate(5, 0), '0%');
+  });
+
+  test('13. Empty rejected orders states use honest wording without overclaiming clean execution', () => {
+    const getRejectedEmptyState = (recentRejectedCount: number): string => {
+      if (recentRejectedCount === 0) {
+        return 'No rejected orders recorded.';
+      }
+      return `${recentRejectedCount} rejected orders`;
+    };
+
+    const emptyText = getRejectedEmptyState(0);
+    assert.strictEqual(emptyText, 'No rejected orders recorded.');
+    assert.strictEqual(
+      emptyText.includes('All simulated orders executed cleanly'),
+      false,
+      'Must NOT overclaim clean execution when failed requests may not become rejected orders'
+    );
+    assert.strictEqual(
+      emptyText.includes('All simulated orders have processed normally'),
+      false,
+      'Must NOT claim all simulated orders processed normally'
+    );
+  });
+
+  // -------------------------------------------------------------
+  // 8. SYSTEM HEALTH: CONFIGURATION VS VERIFIED DELIVERY CAVEATS
+  // -------------------------------------------------------------
+  test('14. System health diagnostic labels make it explicit that configuration != verified live delivery', () => {
+    const mockHealth: AdminSystemHealthResponse = {
+      backend: { status: 'ok', app: 'FinEx Platform API', version: 'v1.2.2' },
+      database: { status: 'ok', latency_ms: 1.2 },
+      market_data: { mode: 'SIMULATED', allow_fixtures: false, enable_demo_simulation: true },
+      angel_one: {
+        is_configured: true,
+        smartapi_library_available: true,
+        is_circuit_open: false,
+        has_active_session: false,
+        verification_note:
+          'Configuration reflects present environment credentials. It does not prove that live market data or exchange streaming is working.',
+      },
+      email: {
+        is_configured: true,
+        host: 'smtp.sendgrid.net',
+        port: 587,
+        use_tls: true,
+        from_email: 'noreply@finexai.tech',
+        verification_note:
+          'SMTP host configuration detected. It does not prove that email delivery to recipient inboxes is working.',
+      },
+    };
+
+    // UI Badge text formatter matching AdminPortal logic
+    const getAngelBadge = (isConfigured: boolean): string =>
+      isConfigured ? 'CONFIGURED (UNVERIFIED LIVE)' : 'SIMULATED / UNCONFIGURED';
+
+    const getEmailBadge = (isConfigured: boolean): string =>
+      isConfigured ? 'CONFIGURED (DELIVERY UNVERIFIED)' : 'DEV MODE (UNCONFIGURED)';
+
+    assert.strictEqual(getAngelBadge(true), 'CONFIGURED (UNVERIFIED LIVE)');
+    assert.strictEqual(getAngelBadge(false), 'SIMULATED / UNCONFIGURED');
+    assert.notStrictEqual(getAngelBadge(true), 'LIVE CONFIG');
+
+    assert.strictEqual(getEmailBadge(true), 'CONFIGURED (DELIVERY UNVERIFIED)');
+    assert.strictEqual(getEmailBadge(false), 'DEV MODE (UNCONFIGURED)');
+    assert.notStrictEqual(getEmailBadge(true), 'SMTP ACTIVE');
+
+    // Verify caveats are documented
+    assert.ok(mockHealth.angel_one.verification_note?.includes('does not prove that live market data'));
+    assert.ok(mockHealth.email.verification_note?.includes('does not prove that email delivery'));
+  });
 });

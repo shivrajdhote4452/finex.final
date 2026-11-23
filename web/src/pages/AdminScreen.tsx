@@ -418,9 +418,9 @@ export const AdminScreen: React.FC<AdminScreenProps> = ({ onNavigate }) => {
                   </div>
                   <div
                     style={{
-                      fontSize: '32px',
+                      fontSize: overviewData.total_orders > 0 ? '32px' : '22px',
                       fontWeight: 800,
-                      color: 'var(--color-action)',
+                      color: overviewData.total_orders > 0 ? 'var(--color-action)' : 'var(--text-muted)',
                       fontFamily: 'var(--font-mono)',
                     }}
                   >
@@ -428,7 +428,7 @@ export const AdminScreen: React.FC<AdminScreenProps> = ({ onNavigate }) => {
                       ? `${Math.round(
                           ((overviewData.orders_by_status['FILLED'] || 0) / overviewData.total_orders) * 100
                         )}%`
-                      : '100%'}
+                      : 'No orders yet'}
                   </div>
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
                     Pending: {overviewData.orders_by_status['PENDING'] || 0} | Cancelled: {overviewData.orders_by_status['CANCELLED'] || 0}
@@ -516,7 +516,7 @@ export const AdminScreen: React.FC<AdminScreenProps> = ({ onNavigate }) => {
 
                 {overviewData.recent_rejected_orders.length === 0 ? (
                   <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
-                    No rejected orders recorded. All simulated orders have processed normally.
+                    No rejected orders recorded.
                   </div>
                 ) : (
                   <div style={{ overflowX: 'auto' }}>
@@ -1336,7 +1336,7 @@ export const AdminScreen: React.FC<AdminScreenProps> = ({ onNavigate }) => {
                       fontWeight: 700,
                     }}
                   >
-                    {healthData.angel_one.is_configured ? 'CONFIGURED' : 'NOT CONFIGURED'}
+                    {healthData.angel_one.is_configured ? 'CONFIGURED (UNVERIFIED LIVE)' : 'NOT CONFIGURED'}
                   </span>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '13px' }}>
@@ -1368,6 +1368,9 @@ export const AdminScreen: React.FC<AdminScreenProps> = ({ onNavigate }) => {
                       Missing: {healthData.angel_one.missing_fields.join(', ')}
                     </div>
                   )}
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px', padding: '6px 8px', backgroundColor: 'rgba(255, 255, 255, 0.03)', borderRadius: 'var(--radius-xs)', borderLeft: '2px solid var(--color-action)' }}>
+                    ℹ️ <strong>Operational Notice:</strong> Configuration reflects present environment credentials. It does not prove that live market data or exchange streaming is working.
+                  </div>
                 </div>
               </div>
 
@@ -1397,7 +1400,7 @@ export const AdminScreen: React.FC<AdminScreenProps> = ({ onNavigate }) => {
                       fontWeight: 700,
                     }}
                   >
-                    {healthData.email.is_configured ? 'SMTP ACTIVE' : 'UNAVAILABLE'}
+                    {healthData.email.is_configured ? 'CONFIGURED (DELIVERY UNVERIFIED)' : 'UNAVAILABLE'}
                   </span>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '13px' }}>
@@ -1428,6 +1431,9 @@ export const AdminScreen: React.FC<AdminScreenProps> = ({ onNavigate }) => {
                       Development fallback queue active. Outbound delivery is disabled.
                     </div>
                   )}
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px', padding: '6px 8px', backgroundColor: 'rgba(255, 255, 255, 0.03)', borderRadius: 'var(--radius-xs)', borderLeft: '2px solid var(--color-action)' }}>
+                    ℹ️ <strong>Operational Notice:</strong> SMTP host configuration detected. It does not prove that email delivery to recipient inboxes is working.
+                  </div>
                 </div>
               </div>
             </div>
