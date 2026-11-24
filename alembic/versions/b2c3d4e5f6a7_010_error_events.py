@@ -21,6 +21,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     conn = op.get_bind()
+    if conn.dialect.name == "postgresql":
+        op.execute("SET LOCAL lock_timeout = '5s'")
+        op.execute("SET LOCAL statement_timeout = '15s'")
+
     inspector = None if alembic_context.is_offline_mode() else sa.inspect(conn)
 
     def table_exists(table_name: str) -> bool:
@@ -63,6 +67,10 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     conn = op.get_bind()
+    if conn.dialect.name == "postgresql":
+        op.execute("SET LOCAL lock_timeout = '5s'")
+        op.execute("SET LOCAL statement_timeout = '15s'")
+
     inspector = None if alembic_context.is_offline_mode() else sa.inspect(conn)
 
     def table_exists(table_name: str) -> bool:
