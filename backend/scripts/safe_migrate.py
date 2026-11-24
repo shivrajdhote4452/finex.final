@@ -24,6 +24,11 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("safe_migrate")
+if not logger.handlers:
+    _handler = logging.StreamHandler(sys.stdout)
+    _handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
+    logger.addHandler(_handler)
+    logger.propagate = False
 
 
 def get_masked_url(url_str: str) -> str:
@@ -112,11 +117,12 @@ async def execute_safe_migration(
     engine = create_async_engine(
         clean_url,
         connect_args=connect_args,
-        isolation_level="AUTOCOMMIT",  # Connection manages individual transactions cleanly
     )
 
     alembic_cfg = Config("alembic.ini")
     alembic_cfg.set_main_option("sqlalchemy.url", clean_url)
+    alembic_cfg.attributes["lock_timeout_ms"] = lock_timeout_ms
+    alembic_cfg.attributes["statement_timeout_ms"] = statement_timeout_ms
 
     try:
         async with engine.connect() as conn:
@@ -145,12 +151,19 @@ async def execute_safe_migration(
 
             def _run_in_sync_context(connection):
                 alembic_cfg.attributes["connection"] = connection
+                alembic_cfg.attributes["lock_timeout_ms"] = lock_timeout_ms
+                alembic_cfg.attributes["statement_timeout_ms"] = statement_timeout_ms
                 if is_downgrade:
                     command.downgrade(alembic_cfg, target_revision)
                 else:
                     command.upgrade(alembic_cfg, target_revision)
 
-            await conn.run_sync(_run_in_sync_context)
+            try:
+                await conn.run_sync(_run_in_sync_context)
+                await conn.commit()
+            except Exception:
+                await conn.rollback()
+                raise
 
             # 3. Post-migration verification
             post_rev = await conn.scalar(sa.text("SELECT version_num FROM alembic_version;"))
@@ -158,6 +171,7 @@ async def execute_safe_migration(
             return True
 
     except Exception as exc:
+        print(f"DEBUG_EXC: {type(exc)}: {exc}", file=sys.stderr, flush=True)
         err_text = str(exc)
         if "lock timeout" in err_text.lower() or "55p03" in err_text.lower():
             logger.error(
@@ -171,7 +185,7 @@ async def execute_safe_migration(
                 "Transaction rolled back cleanly."
             )
         else:
-            logger.error(f"MIGRATION FAILED: {exc}")
+            logger.exception(f"MIGRATION FAILED: {exc}")
         return False
     finally:
         await engine.dispose()

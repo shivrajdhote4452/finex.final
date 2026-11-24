@@ -102,15 +102,23 @@ async def test_safe_migrate_runner_full_lifecycle_on_isolated_postgresql():
             count_errors = await conn.scalar(sa.text("SELECT count(*) FROM error_events;"))
             assert count_errors == 0
 
-            # Verify indexes exist
-            idx_rows = (
+            # Verify all 8 indexes exist
+            idx_rows = set(
                 (await conn.execute(sa.text("SELECT indexname FROM pg_indexes WHERE tablename = 'error_events';")))
                 .scalars()
                 .all()
             )
-            assert "ix_error_events_created_at" in idx_rows
-            assert "ix_error_events_correlation_id" in idx_rows
-            assert "ix_error_events_status_code" in idx_rows
+            expected_8_indexes = {
+                "ix_error_events_created_at",
+                "ix_error_events_correlation_id",
+                "ix_error_events_status_code",
+                "ix_error_events_category",
+                "ix_error_events_feature_area",
+                "ix_error_events_endpoint",
+                "ix_error_events_error_type",
+                "ix_error_events_user_id",
+            }
+            assert expected_8_indexes.issubset(idx_rows), f"Missing indexes: {expected_8_indexes - idx_rows}"
 
             # Verify representative portfolio data remained 100% intact
             holding_qty = await conn.scalar(
@@ -216,3 +224,174 @@ def test_prepare_connection_params_enforces_tls_and_pooler_settings():
     ssl_ctx = connect_args["ssl"]
     assert ssl_ctx.check_hostname is True, "Hostname verification must be enabled"
     assert ssl_ctx.verify_mode == ssl.CERT_REQUIRED, "Certificate verification must be required"
+
+
+async def test_safe_migrate_runner_aborts_and_rolls_back_on_index_creation_failure(monkeypatch):
+    """Verify that if an error occurs during index creation:
+    1. The transaction aborts and rolls back completely.
+    2. Zero partial table or indexes remain in the database.
+    3. Alembic revision remains at 009 (a1b2c3d4e5f6).
+    4. Representative portfolio data is 100% unchanged.
+    5. After failure is resolved, a subsequent migration run succeeds, persists, and all 8 indexes exist.
+    """
+    os.environ["ENVIRONMENT"] = "testing"
+    db_name = f"test_finex_tx_fail_{uuid.uuid4().hex[:8]}"
+    db_url = await create_disposable_database(db_name)
+
+    try:
+        # Step 1: Baseline setup to revision 009 with representative portfolio data
+        await asyncio.to_thread(run_alembic_upgrade_sync, db_url, "a1b2c3d4e5f6")
+
+        now_dt = datetime.now(timezone.utc)
+        user_id = f"usr-failtest-{uuid.uuid4().hex[:8]}"
+        portfolio_id = f"port-failtest-{uuid.uuid4().hex[:8]}"
+
+        engine_seed = create_async_engine(db_url)
+        async with engine_seed.connect() as conn:
+            await conn.execute(
+                sa.text(
+                    "INSERT INTO users ("
+                    "  id, email, provider, provider_subject, is_active, is_verified, "
+                    "  email_verified, created_at, updated_at"
+                    ") VALUES ("
+                    "  :id, :email, 'google', :sub, true, true, true, :now, :now"
+                    ")"
+                ),
+                {"id": user_id, "email": f"{user_id}@finex.test", "sub": f"sub-{user_id}", "now": now_dt},
+            )
+            await conn.execute(
+                sa.text(
+                    "INSERT INTO portfolios ("
+                    "  id, user_id, name, currency, is_default, created_at, updated_at"
+                    ") VALUES ("
+                    "  :id, :uid, 'Growth Portfolio', 'INR', true, :now, :now"
+                    ")"
+                ),
+                {"id": portfolio_id, "uid": user_id, "now": now_dt},
+            )
+            pdate = date(2026, 10, 1)
+            await conn.execute(
+                sa.text(
+                    "INSERT INTO portfolio_holdings ("
+                    "  id, portfolio_id, symbol, asset_class, quantity, cost_basis_per_share, "
+                    "  currency, purchase_date, created_at, updated_at"
+                    ") VALUES ("
+                    "  :id, :pid, 'RELIANCE.NS', 'EQUITY', 75.0, 2400.0, 'INR', :pdate, :now, :now"
+                    ")"
+                ),
+                {"id": f"hld-{uuid.uuid4().hex[:8]}", "pid": portfolio_id, "pdate": pdate, "now": now_dt},
+            )
+            await conn.commit()
+        await engine_seed.dispose()
+
+        # Step 2: Inject failure during index creation (after table is created)
+        from alembic import op
+
+        orig_create_index = op.create_index
+        call_count = {"count": 0}
+
+        def failing_create_index(*args, **kwargs):
+            call_count["count"] += 1
+            # Allow table creation to complete, then fail on index creation
+            if call_count["count"] >= 2:
+                raise RuntimeError("Simulated intentional failure during index creation on error_events!")
+            return orig_create_index(*args, **kwargs)
+
+        monkeypatch.setattr(op, "create_index", failing_create_index)
+
+        # Step 3: Run safe_migrate runner - must fail cleanly and return False
+        migration_failed = await execute_safe_migration(
+            database_url=db_url,
+            target_revision="b2c3d4e5f6a7",
+            lock_timeout_ms=5000,
+            statement_timeout_ms=15000,
+        )
+        assert migration_failed is False, "Migration should have failed and returned False due to index creation error"
+
+        # Step 4: Reconnect with a fresh engine and verify zero partial state
+        engine_check_failure = create_async_engine(db_url)
+        async with engine_check_failure.connect() as conn:
+            # Revision must remain at 009 (a1b2c3d4e5f6)
+            current_rev = await conn.scalar(sa.text("SELECT version_num FROM alembic_version;"))
+            assert current_rev == "a1b2c3d4e5f6", f"Expected revision a1b2c3d4e5f6 after rollback, got {current_rev}"
+
+            # Table must NOT exist
+            table_count = await conn.scalar(
+                sa.text(
+                    "SELECT count(*) FROM information_schema.tables "
+                    "WHERE table_schema = 'public' AND table_name = 'error_events';"
+                )
+            )
+            assert table_count == 0, "error_events table must NOT exist after rolled back migration"
+
+            # No partial error_events indexes must exist
+            index_count = await conn.scalar(
+                sa.text("SELECT count(*) FROM pg_indexes WHERE tablename = 'error_events';")
+            )
+            assert index_count == 0, "No partial indexes should remain after rollback"
+
+            # Representative portfolio data must be 100% unchanged
+            holding_qty = await conn.scalar(
+                sa.text("SELECT quantity FROM portfolio_holdings WHERE portfolio_id = :pid;"),
+                {"pid": portfolio_id},
+            )
+            assert float(holding_qty) == 75.0, "Portfolio holdings were altered by failed migration!"
+        await engine_check_failure.dispose()
+
+        # Step 5: Restore monkeypatch and execute migration successfully
+        monkeypatch.undo()
+
+        migration_success = await execute_safe_migration(
+            database_url=db_url,
+            target_revision="b2c3d4e5f6a7",
+            lock_timeout_ms=5000,
+            statement_timeout_ms=15000,
+        )
+        assert migration_success is True, "Migration should succeed after restoring normal index creation"
+
+        # Step 6: Fresh reconnect to verify full persistence of all 8 indexes and portfolio data
+        engine_check_success = create_async_engine(db_url)
+        async with engine_check_success.connect() as conn:
+            # Revision must be b2c3d4e5f6a7
+            new_rev = await conn.scalar(sa.text("SELECT version_num FROM alembic_version;"))
+            assert new_rev == "b2c3d4e5f6a7"
+
+            # Table exists
+            new_table_count = await conn.scalar(
+                sa.text(
+                    "SELECT count(*) FROM information_schema.tables "
+                    "WHERE table_schema = 'public' AND table_name = 'error_events';"
+                )
+            )
+            assert new_table_count == 1
+
+            # All 8 required indexes must exist
+            idx_names = set(
+                (await conn.execute(sa.text("SELECT indexname FROM pg_indexes WHERE tablename = 'error_events';")))
+                .scalars()
+                .all()
+            )
+            expected_8_indexes = {
+                "ix_error_events_created_at",
+                "ix_error_events_correlation_id",
+                "ix_error_events_status_code",
+                "ix_error_events_category",
+                "ix_error_events_feature_area",
+                "ix_error_events_endpoint",
+                "ix_error_events_error_type",
+                "ix_error_events_user_id",
+            }
+            assert expected_8_indexes.issubset(idx_names), (
+                f"Missing indexes on error_events: {expected_8_indexes - idx_names}"
+            )
+
+            # Representative portfolio data still 100% intact
+            holding_qty_final = await conn.scalar(
+                sa.text("SELECT quantity FROM portfolio_holdings WHERE portfolio_id = :pid;"),
+                {"pid": portfolio_id},
+            )
+            assert float(holding_qty_final) == 75.0
+        await engine_check_success.dispose()
+
+    finally:
+        await drop_disposable_database(db_name)

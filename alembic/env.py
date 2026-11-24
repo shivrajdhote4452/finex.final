@@ -19,11 +19,19 @@ target_metadata = Base.metadata
 
 def do_run_migrations(connection):
     context.configure(connection=connection, target_metadata=target_metadata)
-    with context.begin_transaction():
+    lock_ms = config.attributes.get("lock_timeout_ms", 5000)
+    stmt_ms = config.attributes.get("statement_timeout_ms", 15000)
+    if connection.in_transaction():
         if connection.dialect.name == "postgresql":
-            connection.execute(sa.text("SET LOCAL lock_timeout = '5s';"))
-            connection.execute(sa.text("SET LOCAL statement_timeout = '15s';"))
+            connection.execute(sa.text(f"SET LOCAL lock_timeout = '{lock_ms}ms';"))
+            connection.execute(sa.text(f"SET LOCAL statement_timeout = '{stmt_ms}ms';"))
         context.run_migrations()
+    else:
+        with context.begin_transaction():
+            if connection.dialect.name == "postgresql":
+                connection.execute(sa.text(f"SET LOCAL lock_timeout = '{lock_ms}ms';"))
+                connection.execute(sa.text(f"SET LOCAL statement_timeout = '{stmt_ms}ms';"))
+            context.run_migrations()
 
 
 async def run_async_migrations():
@@ -83,4 +91,3 @@ if context.is_offline_mode():
     run_migrations_offline()
 else:
     run_migrations_online()
-

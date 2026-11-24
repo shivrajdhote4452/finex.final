@@ -8,7 +8,9 @@ Creates error_events table for durable, bounded operational error tracking and o
 """
 
 from typing import Sequence, Union
+
 import sqlalchemy as sa
+
 from alembic import context as alembic_context
 from alembic import op
 
@@ -22,8 +24,11 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     conn = op.get_bind()
     if conn.dialect.name == "postgresql":
-        op.execute("SET LOCAL lock_timeout = '5s'")
-        op.execute("SET LOCAL statement_timeout = '15s'")
+        cfg = getattr(alembic_context, "config", None)
+        lock_ms = cfg.attributes.get("lock_timeout_ms", 5000) if cfg else 5000
+        stmt_ms = cfg.attributes.get("statement_timeout_ms", 15000) if cfg else 15000
+        op.execute(f"SET LOCAL lock_timeout = '{lock_ms}ms'")
+        op.execute(f"SET LOCAL statement_timeout = '{stmt_ms}ms'")
 
     inspector = None if alembic_context.is_offline_mode() else sa.inspect(conn)
 
@@ -52,24 +57,24 @@ def upgrade() -> None:
                 server_default=sa.func.now(),
             ),
         )
-        try:
-            op.create_index("ix_error_events_created_at", "error_events", ["created_at"])
-            op.create_index("ix_error_events_correlation_id", "error_events", ["correlation_id"])
-            op.create_index("ix_error_events_status_code", "error_events", ["status_code"])
-            op.create_index("ix_error_events_category", "error_events", ["category"])
-            op.create_index("ix_error_events_feature_area", "error_events", ["feature_area"])
-            op.create_index("ix_error_events_endpoint", "error_events", ["endpoint"])
-            op.create_index("ix_error_events_error_type", "error_events", ["error_type"])
-            op.create_index("ix_error_events_user_id", "error_events", ["user_id"])
-        except Exception:
-            pass
+        op.create_index("ix_error_events_created_at", "error_events", ["created_at"])
+        op.create_index("ix_error_events_correlation_id", "error_events", ["correlation_id"])
+        op.create_index("ix_error_events_status_code", "error_events", ["status_code"])
+        op.create_index("ix_error_events_category", "error_events", ["category"])
+        op.create_index("ix_error_events_feature_area", "error_events", ["feature_area"])
+        op.create_index("ix_error_events_endpoint", "error_events", ["endpoint"])
+        op.create_index("ix_error_events_error_type", "error_events", ["error_type"])
+        op.create_index("ix_error_events_user_id", "error_events", ["user_id"])
 
 
 def downgrade() -> None:
     conn = op.get_bind()
     if conn.dialect.name == "postgresql":
-        op.execute("SET LOCAL lock_timeout = '5s'")
-        op.execute("SET LOCAL statement_timeout = '15s'")
+        cfg = getattr(alembic_context, "config", None)
+        lock_ms = cfg.attributes.get("lock_timeout_ms", 5000) if cfg else 5000
+        stmt_ms = cfg.attributes.get("statement_timeout_ms", 15000) if cfg else 15000
+        op.execute(f"SET LOCAL lock_timeout = '{lock_ms}ms'")
+        op.execute(f"SET LOCAL statement_timeout = '{stmt_ms}ms'")
 
     inspector = None if alembic_context.is_offline_mode() else sa.inspect(conn)
 
