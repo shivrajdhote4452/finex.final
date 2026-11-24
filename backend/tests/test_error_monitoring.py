@@ -70,7 +70,13 @@ def setup_module_db():
             await conn.run_sync(Base.metadata.create_all)
 
     asyncio.run(_init())
+
+
+@pytest.fixture(autouse=True)
+def auto_reset_error_recorder_state():
+    reset_error_recorder_state()
     yield
+    reset_error_recorder_state()
 
 
 @pytest.fixture
