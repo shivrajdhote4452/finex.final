@@ -28,6 +28,7 @@ from backend.app.domain.paper_trading_service import (
     OrderSubmitRequest,
     PaperTradingEngine,
 )
+from backend.app.domain.portfolio_intent_router import PortfolioIntent, PortfolioIntentRouter
 from backend.app.domain.technical_indicators import (
     calculate_macd,
     calculate_rsi,
@@ -286,10 +287,10 @@ class GeminiInvestmentAssistant:
         if self._verified_working and not force:
             return True
 
-        # Throttle repeated failed verification attempts to avoid blocking callers (cooldown: 30s)
+        # Throttle repeated failed verification attempts to avoid hammering upstream LLM quotas (cooldown: 120s)
         now = time.monotonic()
         if not force and self._last_verification_attempt is not None:
-            if (now - self._last_verification_attempt) < 30.0:
+            if (now - self._last_verification_attempt) < 120.0:
                 return self.is_verified_working()
 
         self._last_verification_attempt = now
@@ -951,6 +952,23 @@ class GeminiInvestmentAssistant:
 
     # --- Main Orchestration Entrypoint ---
 
+    _SAFE_SYMBOL_RE = re.compile(r"^[A-Z0-9 ._-]{1,25}$")
+    _ALLOWED_INTERVALS = frozenset({"1m", "5m", "15m", "30m", "1h", "4h", "1D", "1W", "1M"})
+    _intent_router = PortfolioIntentRouter()
+
+    @classmethod
+    def _sanitize_chart_context(cls, ctx: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Allow only strictly typed chart context fields to prevent prompt injection."""
+        if not ctx or not isinstance(ctx, dict):
+            return {"symbol": "RELIANCE"}
+        raw_sym = str(ctx.get("symbol", "RELIANCE")).upper().strip()
+        safe_sym = raw_sym if cls._SAFE_SYMBOL_RE.fullmatch(raw_sym) else "RELIANCE"
+        sanitized: Dict[str, Any] = {"symbol": safe_sym}
+        raw_tf = ctx.get("timeframe") or ctx.get("interval")
+        if isinstance(raw_tf, str) and raw_tf.strip() in cls._ALLOWED_INTERVALS:
+            sanitized["timeframe"] = raw_tf.strip()
+        return sanitized
+
     async def process_user_turn(
         self,
         user_id: str,
@@ -965,10 +983,21 @@ class GeminiInvestmentAssistant:
         lang = self.detect_language(user_message)
         p_lower = user_message.lower().strip()
 
-        # Resolve active symbol from context if present
-        active_sym = "RELIANCE"
-        if active_chart_context and isinstance(active_chart_context, dict):
-            active_sym = active_chart_context.get("symbol", "RELIANCE")
+        # 0. Guard against prompt injection and cross-user probing
+        route_res = self._intent_router.route(user_message, caller_user_id=user_id)
+        if route_res.predicted_intent == PortfolioIntent.UNAUTHORIZED_ACCESS:
+            return AssistantMessageResponse(
+                message_id=msg_id,
+                conversation_id=conv_id,
+                reply=route_res.refusal_reason
+                or "Access denied: FinEx AI strictly restricts access to your own account and immutable guidelines.",
+                language_detected=lang,
+                is_setup_incomplete=False,
+            )
+
+        # Resolve strictly sanitized active chart context
+        safe_chart_context = self._sanitize_chart_context(active_chart_context)
+        active_sym = safe_chart_context["symbol"]
 
         # 1. Research & Educational Question Intent ("Should I invest?", "Is it good to buy?", etc.)
         # Informational and research queries must remain research requests and NEVER execute or cancel trades.
@@ -1645,7 +1674,7 @@ class GeminiInvestmentAssistant:
         if self.is_llm_ready():
             sys_instruct = (
                 "You are FinEx AI Paper Investment Assistant for Indian Equities (NSE). "
-                f"Active chart context: {active_chart_context or {'symbol': active_sym}}. "
+                f"Active chart context: {safe_chart_context}. "
                 "Respond helpfully in the user's language (English, Hindi, or Hinglish). "
                 "Maintain strict SEBI educational compliance: all trades and balances are 100% virtual paper trading. "
                 "Ground all market prices and facts strictly using verified facts. Never invent quotes."

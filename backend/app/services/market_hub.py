@@ -23,6 +23,8 @@ logger = logging.getLogger(__name__)
 class MarketHub:
     """Central WebSocket broadcaster for real-time market ticks."""
 
+    MAX_WS_CONNECTIONS = 500
+
     def __init__(
         self,
         provider: Optional[RealMarketDataProvider] = None,
@@ -83,6 +85,11 @@ class MarketHub:
 
     async def connect(self, symbol: str, websocket: WebSocket) -> None:
         """Register client connection for a symbol and send initial snapshot."""
+        total_active = sum(len(conns) for conns in self.connections.values())
+        if total_active >= self.MAX_WS_CONNECTIONS:
+            await websocket.close(code=1013)
+            return
+
         clean_symbol = symbol.upper().replace(".NS", "").replace("NSE:", "").strip()
         await websocket.accept()
 

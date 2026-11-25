@@ -654,17 +654,30 @@ class UserStore:
         user_id: Optional[str] = None,
         db: Optional[AsyncSession] = None,
     ) -> None:
-        """Persist revoked token with memory fallback."""
-        self._revoked_tokens.add(token)
+        """Persist SHA-256 hash of revoked token with bounded memory fallback."""
+        from backend.app.services.password_service import hash_token
+
+        token_hash = hash_token(token)
+        if len(self._revoked_tokens) >= 50000:
+            self._revoked_tokens.clear()
+        self._revoked_tokens.add(token_hash)
+        if len(token) <= 512:
+            self._revoked_tokens.add(token)
+
         owns_session = db is None
         session = db if db is not None else AsyncSessionLocal()
         try:
-            res = await session.execute(select(RevokedToken).where(RevokedToken.token == token))
+            res = await session.execute(select(RevokedToken).where(RevokedToken.token == token_hash))
             if not res.scalar_one_or_none():
+                resolved_uid = None
+                if user_id:
+                    u_chk = await session.execute(select(User.id).where(User.id == user_id))
+                    if u_chk.scalar_one_or_none() is not None:
+                        resolved_uid = user_id
                 entry = RevokedToken(
                     id=str(uuid.uuid4()),
-                    token=token,
-                    user_id=user_id,
+                    token=token_hash,
+                    user_id=resolved_uid,
                     revoked_at=datetime.now(timezone.utc),
                 )
                 session.add(entry)
@@ -686,19 +699,23 @@ class UserStore:
 
     async def is_token_revoked_db(self, token: str, db: Optional[AsyncSession] = None) -> bool:
         """Check token revocation against memory and PostgreSQL database."""
-        if token in self._revoked_tokens:
+        from backend.app.services.password_service import hash_token
+
+        token_hash = hash_token(token)
+        if token_hash in self._revoked_tokens or token in self._revoked_tokens:
             return True
         owns_session = db is None
         session = db if db is not None else AsyncSessionLocal()
         try:
-            res = await session.execute(select(RevokedToken).where(RevokedToken.token == token))
+            candidates = [token_hash, token] if len(token) <= 512 else [token_hash]
+            res = await session.execute(select(RevokedToken).where(RevokedToken.token.in_(candidates)))
             if res.scalar_one_or_none() is not None:
-                self._revoked_tokens.add(token)
+                self._revoked_tokens.add(token_hash)
                 return True
             return False
         except Exception as e:
             logger.debug(f"Database check in is_token_revoked failed: {e}. Using memory revocation list.")
-            return token in self._revoked_tokens
+            return token_hash in self._revoked_tokens or token in self._revoked_tokens
         finally:
             if owns_session:
                 try:
@@ -1167,7 +1184,11 @@ class UserStore:
         owns_session = db is None
         session = db if db is not None else AsyncSessionLocal()
         try:
-            stmt = select(AuthToken).where((AuthToken.token_hash == hashed) & (AuthToken.token_type == token_type))
+            stmt = (
+                select(AuthToken)
+                .where((AuthToken.token_hash == hashed) & (AuthToken.token_type == token_type))
+                .with_for_update()
+            )
             res = await session.execute(stmt)
             token_rec = res.scalar_one_or_none()
             if not token_rec:

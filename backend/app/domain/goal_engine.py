@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional
 
 from backend.app.database import AsyncSessionLocal
 from backend.app.models.goals import FinancialGoal, GoalContribution
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -44,17 +44,33 @@ class GoalCreate(BaseModel):
         ...,
         description="'RETIREMENT', 'EMERGENCY_FUND', 'HOME_PURCHASE', 'EDUCATION', 'TRAVEL', 'WEALTH_CREATION', 'CUSTOM'",
     )
-    target_amount: Decimal = Field(..., gt=0, description="Target corpus in INR")
-    current_amount: Decimal = Field(Decimal("0.00"), ge=0, description="Initial corpus already saved")
+    target_amount: Decimal = Field(..., gt=0, le=Decimal("10000000000"), description="Target corpus in INR")
+    current_amount: Decimal = Field(
+        Decimal("0.00"), ge=0, le=Decimal("10000000000"), description="Initial corpus already saved"
+    )
     target_date: str = Field(..., description="Target completion date (YYYY-MM-DD)")
     assumed_annual_return_pct: Decimal = Field(Decimal("8.00"), ge=0, le=30, description="Assumed nominal annual CAGR")
 
+    @field_validator("target_amount", "current_amount", "assumed_annual_return_pct")
+    @classmethod
+    def _validate_finite_decimals(cls, v: Decimal) -> Decimal:
+        if not v.is_finite():
+            raise ValueError("Goal numeric field must be finite.")
+        return v
+
 
 class GoalUpdate(BaseModel):
-    title: Optional[str] = None
-    target_amount: Optional[Decimal] = None
-    assumed_annual_return_pct: Optional[Decimal] = None
-    status: Optional[str] = None
+    title: Optional[str] = Field(None, min_length=1, max_length=120)
+    target_amount: Optional[Decimal] = Field(None, gt=0, le=Decimal("10000000000"))
+    assumed_annual_return_pct: Optional[Decimal] = Field(None, ge=0, le=30)
+    status: Optional[str] = Field(None, pattern="^(ACTIVE|PAUSED|COMPLETED|ARCHIVED)$")
+
+    @field_validator("target_amount", "assumed_annual_return_pct")
+    @classmethod
+    def _validate_finite_decimals(cls, v: Optional[Decimal]) -> Optional[Decimal]:
+        if v is not None and not v.is_finite():
+            raise ValueError("Goal numeric field must be finite.")
+        return v
 
 
 class ContributionCreate(BaseModel):

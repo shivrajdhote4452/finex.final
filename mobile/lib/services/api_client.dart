@@ -220,6 +220,13 @@ class ApiClient {
   }
 
 
+  Future<void> _handleUnauthorizedIfNeeded(http.Response response) async {
+    if (response.statusCode == 401) {
+      await setToken(null);
+      await setProfile(null);
+    }
+  }
+
   String _extractErrorMessage(http.Response response, [String fallback = 'Request failed']) {
     try {
       final decoded = jsonDecode(response.body);
@@ -523,8 +530,9 @@ class ApiClient {
   // --- Market Data ---
 
   Future<Map<String, dynamic>?> getQuote(String symbol) async {
-    final url = Uri.parse('$baseUrl/market/quotes/$symbol');
+    final url = Uri.parse('$baseUrl/market/quotes/${Uri.encodeComponent(symbol)}');
     final response = await http.get(url, headers: _headers());
+    await _handleUnauthorizedIfNeeded(response);
     final data = jsonDecode(response.body);
     if (response.statusCode == 200 && data['data'] != null) {
       return Map<String, dynamic>.from(data['data']);
@@ -536,6 +544,7 @@ class ApiClient {
   Future<Map<String, dynamic>> getAccount() async {
     final url = Uri.parse('$baseUrl/paper-trading/account');
     final response = await http.get(url, headers: _headers());
+    await _handleUnauthorizedIfNeeded(response);
     final data = jsonDecode(response.body);
     if (response.statusCode == 200 && data['data'] != null) {
       return Map<String, dynamic>.from(data['data']);
@@ -787,12 +796,13 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> sendAiMessage(String conversationId, String content) async {
-    final url = Uri.parse('$baseUrl/ai/conversations/$conversationId/messages');
+    final url = Uri.parse('$baseUrl/ai/conversations/${Uri.encodeComponent(conversationId)}/messages');
     final response = await http.post(
       url,
       headers: _headers(),
       body: jsonEncode({'content': content}),
     );
+    await _handleUnauthorizedIfNeeded(response);
     final data = jsonDecode(response.body);
     if (response.statusCode == 200 && data['data'] != null) {
       return Map<String, dynamic>.from(data['data']);
@@ -811,8 +821,9 @@ class ApiClient {
     if (interval != null) queryParams['interval'] = interval;
     if (range != null) queryParams['range'] = range;
     if (asOf != null) queryParams['as_of'] = asOf;
-    final uri = Uri.parse('$baseUrl/market/history/$symbol').replace(queryParameters: queryParams);
+    final uri = Uri.parse('$baseUrl/market/history/${Uri.encodeComponent(symbol)}').replace(queryParameters: queryParams);
     final response = await http.get(uri, headers: _headers());
+    await _handleUnauthorizedIfNeeded(response);
     final data = jsonDecode(response.body);
     if (response.statusCode == 200 && data['data'] != null) {
       return Map<String, dynamic>.from(data['data']);
@@ -839,8 +850,9 @@ class ApiClient {
   }) async {
     final queryParams = <String, String>{'indicator': indicator};
     if (period != null) queryParams['period'] = period.toString();
-    final uri = Uri.parse('$baseUrl/market/indicators/$symbol').replace(queryParameters: queryParams);
+    final uri = Uri.parse('$baseUrl/market/indicators/${Uri.encodeComponent(symbol)}').replace(queryParameters: queryParams);
     final response = await http.get(uri, headers: _headers());
+    await _handleUnauthorizedIfNeeded(response);
     final data = jsonDecode(response.body);
     if (response.statusCode == 200 && data['data'] != null) {
       return Map<String, dynamic>.from(data['data']);
@@ -886,8 +898,9 @@ class ApiClient {
   }) => sendAiAssistantMessage(message, chartContext: chartContext);
 
   Future<Map<String, dynamic>> executeProposal(String proposalId) async {
-    final url = Uri.parse('$baseUrl/ai/assistant/proposals/$proposalId/execute');
+    final url = Uri.parse('$baseUrl/ai/assistant/proposals/${Uri.encodeComponent(proposalId)}/execute');
     final response = await http.post(url, headers: _headers());
+    await _handleUnauthorizedIfNeeded(response);
     final data = jsonDecode(response.body);
     if (response.statusCode == 200 && data['data'] != null) {
       return Map<String, dynamic>.from(data['data']);

@@ -14,7 +14,7 @@ Exposes:
 
 from backend.app.core.envelope import create_response_envelope
 from backend.app.domain.notifications_service import NotificationsService
-from backend.app.routers.auth import get_current_user_id
+from backend.app.routers.auth import extract_authenticated_user_id, get_current_user_id
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 router = APIRouter(prefix="/notifications", tags=["Notification Center"])
@@ -31,7 +31,7 @@ async def list_notifications(
 ):
     """Retrieve owner-scoped notifications."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     result = notifications_service.list_notifications(user_id, unread_only=unread_only, limit=limit, offset=offset)
     return create_response_envelope(data=result, correlation_id=cid)
@@ -44,7 +44,7 @@ async def get_unread_notification_count(
 ):
     """Get fast badge unread counter for notification bell."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     count = notifications_service.get_unread_count(user_id)
     return create_response_envelope(data={"unread_count": count}, correlation_id=cid)
@@ -58,7 +58,7 @@ async def mark_notification_read(
 ):
     """Mark a notification as read with ownership enforcement."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     try:
         updated = notifications_service.mark_as_read(user_id, notification_id)
@@ -77,7 +77,7 @@ async def mark_all_notifications_read(
 ):
     """Mark all unread notifications for current user as read."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     count = notifications_service.mark_all_as_read(user_id)
     return create_response_envelope(data={"marked_read_count": count}, correlation_id=cid)
@@ -91,7 +91,7 @@ async def get_notification_delivery_attempts(
 ):
     """Audit delivery attempts across channels for a specific notification."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     try:
         attempts = notifications_service.get_delivery_attempts(user_id, notification_id)

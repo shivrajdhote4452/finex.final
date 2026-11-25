@@ -210,7 +210,9 @@ export const AppContent: React.FC = () => {
     const handleHash = () => {
       const hash = window.location.hash.toLowerCase();
       if (hash.includes('onboarding') || hash.includes('step=')) {
-        if (isMounted) setAuthState('onboarding');
+        if (isMounted && apiClient.isAuthenticated()) {
+          setAuthState('onboarding');
+        }
       }
     };
     window.addEventListener('hashchange', handleHash);
@@ -260,9 +262,14 @@ export const AppContent: React.FC = () => {
       } else {
         setAuthState('onboarding');
       }
-    } catch {
-      // When backend is offline or static Vercel deployment, grant entry to authenticated dashboard
-      setAuthState('authenticated');
+    } catch (err: any) {
+      if (err?.status === 401) {
+        apiClient.setToken(null);
+        setAuthState('welcome');
+        return;
+      }
+      // Fall back on transient network/cold-start failure only when a valid session token is present
+      setAuthState(apiClient.isAuthenticated() ? 'authenticated' : 'welcome');
     }
   };
 

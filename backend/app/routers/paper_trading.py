@@ -21,7 +21,7 @@ from backend.app.domain.paper_trading_service import (
     OrderSubmitRequest,
     PaperTradingEngine,
 )
-from backend.app.routers.auth import get_current_user_id, is_owner
+from backend.app.routers.auth import extract_authenticated_user_id, get_current_user_id, is_owner
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -53,7 +53,7 @@ async def get_paper_account(
 ):
     """Fetch virtual account overview with equity, cash, and positions summary from PostgreSQL."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     try:
         summary = await engine.get_portfolio_summary_db(user_id, db=db)
@@ -62,7 +62,7 @@ async def get_paper_account(
         raise
     except Exception as e:
         logger.error(f"get_paper_account error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Account summary error: {type(e).__name__}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Unable to retrieve paper account summary.")
 
 
 @router.post("/orders")
@@ -75,7 +75,7 @@ async def submit_paper_order(
 ):
     """Execute simulated market order atomically with idempotency protection in PostgreSQL."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     key = payload.idempotency_key or x_idempotency_key
     if not key:
@@ -108,7 +108,7 @@ async def submit_paper_order(
         raise
     except Exception as e:
         logger.error(f"submit_paper_order error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Order error: {type(e).__name__}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Unable to execute paper order.")
 
 
 @router.get("/orders")
@@ -120,7 +120,7 @@ async def list_paper_orders(
 ):
     """Fetch order history for authenticated caller from PostgreSQL."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     orders = await engine.get_orders_db(user_id, limit=limit, db=db)
     return create_response_envelope(
@@ -137,7 +137,7 @@ async def list_paper_positions(
 ):
     """Fetch all open simulated positions for authenticated caller from PostgreSQL."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     positions = await engine.get_positions_db(user_id, db=db)
     return create_response_envelope(
@@ -154,7 +154,7 @@ async def get_cash_ledger(
 ):
     """Fetch append-only cash ledger audit trail from PostgreSQL."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     ledger = await engine.get_ledger_db(user_id, db=db)
     return create_response_envelope(
@@ -178,7 +178,7 @@ async def reset_paper_account(
         )
 
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     if not payload.confirm_reset:
         return create_response_envelope(
@@ -210,7 +210,7 @@ async def deposit_virtual_cash(
         )
 
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     result = await engine.deposit_funds_db(user_id, payload.amount, db=db)
     return create_response_envelope(data=result, correlation_id=cid)
@@ -229,7 +229,7 @@ async def submit_paper_option_order(
 ):
     """Execute simulated long-only options buy order with deterministic cost & risk math."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     key = payload.idempotency_key or x_idempotency_key
     if not key:
@@ -251,7 +251,7 @@ async def list_paper_option_positions(
 ):
     """Fetch all open simulated options positions with mark-to-market valuation, P&L, and ITM/OTM status."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     positions = await engine.get_options_positions_db(user_id, db=db)
     return create_response_envelope(
@@ -279,9 +279,14 @@ async def settle_expired_options_endpoint(
     - OTM options expire worthless with 100% loss of virtual premium paid.
     """
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     spot_prices = payload.spot_prices if payload else None
+    if spot_prices is not None and not is_owner(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the workspace owner may supply custom option settlement spot prices.",
+        )
     settlement_results = await engine.settle_expired_options_db(user_id, spot_prices=spot_prices, db=db)
     return create_response_envelope(
         data={"settlements": settlement_results, "count": len(settlement_results)},

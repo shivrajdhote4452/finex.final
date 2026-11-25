@@ -91,7 +91,7 @@ class _MobileAskFinExScreenState extends State<MobileAskFinExScreen> {
         _messages.add({
           "role": "assistant",
           "headline": "Connection Issue",
-          "body": "Could not connect to the live FinEx RAG engine. Please verify the backend API is active at ${apiClient.baseUrl}.",
+          "body": "Could not connect to the live FinEx RAG engine. Please check your network connection and try again.",
           "citation": "[Warning] Offline Mode",
           "evidence": "Offline fallback: live retrieval requires backend connectivity.",
         });

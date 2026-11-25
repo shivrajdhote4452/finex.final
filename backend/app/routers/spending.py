@@ -17,7 +17,7 @@ from typing import Optional
 from backend.app.core.envelope import create_response_envelope
 from backend.app.database import get_db
 from backend.app.domain.spending_service import SpendingService
-from backend.app.routers.auth import get_current_user_id
+from backend.app.routers.auth import extract_authenticated_user_id, get_current_user_id
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,25 +27,27 @@ spending_service = SpendingService()
 
 
 class CategoryUpdateRequest(BaseModel):
-    category_id: str = Field(..., description="Target category ID (e.g. 'FOOD_DINING', 'TRAVEL')")
+    category_id: str = Field(
+        ..., pattern=r"^[A-Z0-9_]{2,32}$", description="Target category ID (e.g. 'FOOD_DINING', 'TRAVEL')"
+    )
 
 
 class CsvTextUploadRequest(BaseModel):
-    file_name: str
-    csv_content: str
+    file_name: str = Field(..., min_length=1, max_length=255)
+    csv_content: str = Field(..., min_length=1, max_length=2000000)
 
 
 class CsvCommitRequest(BaseModel):
-    preview_id: str
+    preview_id: str = Field(..., min_length=3, max_length=64)
     accepted_indices: Optional[list[int]] = None
 
 
 class ManualTransactionRequest(BaseModel):
-    transaction_date: str
-    amount: float
-    description: str
-    transaction_type: str = "DEBIT"
-    category_id: Optional[str] = None
+    transaction_date: str = Field(..., min_length=8, max_length=32)
+    amount: float = Field(..., gt=0, le=100000000, allow_inf_nan=False)
+    description: str = Field(..., min_length=1, max_length=500)
+    transaction_type: str = Field("DEBIT", pattern="^(DEBIT|CREDIT)$")
+    category_id: Optional[str] = Field(None, pattern=r"^[A-Z0-9_]{2,32}$")
 
 
 @router.post("/upload/preview")
@@ -57,7 +59,7 @@ async def preview_transactions_csv(
 ):
     """CH-09: Parse bank statement CSV into preview without committing transactions."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     try:
         res = await spending_service.preview_csv_db(
@@ -80,7 +82,7 @@ async def commit_transactions_csv(
 ):
     """CH-09: Commit accepted transactions from an approved preview session to PostgreSQL."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     try:
         res = await spending_service.commit_csv_db(
@@ -107,7 +109,7 @@ async def add_manual_transaction(
 ):
     """CH-09: Create a manual expense/income entry in PostgreSQL."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     try:
         res = await spending_service.add_manual_transaction_db(
@@ -133,7 +135,7 @@ async def upload_transactions_csv(
 ):
     """Ingest bank statement CSV with PII masking and PostgreSQL persistence."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     try:
         res = await spending_service.ingest_csv_db(
@@ -159,7 +161,7 @@ async def list_transactions(
 ):
     """List masked transactions from PostgreSQL with category filter."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     res = await spending_service.list_transactions_db(
         user_id=user_id,
@@ -182,7 +184,7 @@ async def update_transaction_category(
 ):
     """Update or correct category for a transaction in PostgreSQL."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     try:
         updated = await spending_service.update_transaction_category_db(
@@ -208,7 +210,7 @@ async def get_monthly_spending_summary(
 ):
     """Retrieve monthly spending roll-up by category from PostgreSQL."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     summary = await spending_service.get_monthly_summary_db(user_id=user_id, year_month=year_month, db=db)
     return create_response_envelope(data=summary.model_dump(mode="json"), correlation_id=cid)

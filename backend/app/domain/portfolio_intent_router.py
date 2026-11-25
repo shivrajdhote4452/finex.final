@@ -49,7 +49,7 @@ class IntentRoutingResult(BaseModel):
 class PortfolioIntentRouter:
     """Classifies user queries into deterministic intent pathways."""
 
-    def route(self, query: str, caller_user_id: str = "usr-shivraj-001") -> IntentRoutingResult:
+    def route(self, query: str, caller_user_id: Optional[str] = None) -> IntentRoutingResult:
         q_lower = query.strip().lower()
 
         # 0. Prompt Injection / Jailbreak / Instruction Override check

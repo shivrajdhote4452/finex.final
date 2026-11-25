@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import '../theme/terminal_theme.dart';
 
@@ -167,7 +168,7 @@ class ErrorFallbackView extends StatelessWidget {
                   height: 1.4,
                 ),
               ),
-              if (error != null) ...[
+              if (error != null && kDebugMode) ...[
                 const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.all(8),

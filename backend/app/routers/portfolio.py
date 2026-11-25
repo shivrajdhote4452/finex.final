@@ -13,7 +13,7 @@ from backend.app.adapters.market_data_provider import VERIFIED_OBSERVATIONS
 from backend.app.core.envelope import create_response_envelope
 from backend.app.core.errors import ForbiddenException, NotFoundException
 from backend.app.domain.portfolio import calculate_portfolio_valuation
-from backend.app.routers.auth import get_current_user_id
+from backend.app.routers.auth import extract_authenticated_user_id, get_current_user_id
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
@@ -34,7 +34,7 @@ class AddHoldingRequest(BaseModel):
 async def get_my_portfolio(request: Request, current_user: dict = Depends(get_current_user_id)):
     """Fetch or bootstrap the default portfolio for the authenticated caller."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     # Find or bootstrap portfolio
     p = next((x for x in _PORTFOLIO_STORE.values() if x["user_id"] == user_id), None)
@@ -89,7 +89,7 @@ async def get_portfolio_summary(
 ):
     """Calculate deterministic portfolio valuation, P&L and asset allocation."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     p = _PORTFOLIO_STORE.get(portfolio_id)
     if not p:
@@ -130,7 +130,7 @@ async def add_portfolio_holding(
 ):
     """Add or increase a holding position in caller's portfolio."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     p = _PORTFOLIO_STORE.get(portfolio_id)
     if not p:
@@ -179,7 +179,7 @@ async def remove_portfolio_holding(
 ):
     """Remove a holding from caller's portfolio."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     p = _PORTFOLIO_STORE.get(portfolio_id)
     if not p:

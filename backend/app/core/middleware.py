@@ -2,13 +2,29 @@ import collections
 import contextvars
 import time
 import uuid
-from typing import Callable, Dict, List
+from typing import Callable, List, Optional
 
 from backend.app.core.errors import build_error_response
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
 correlation_id_ctx: contextvars.ContextVar[str] = contextvars.ContextVar("correlation_id", default="none")
+
+
+def extract_client_ip(request: Request) -> str:
+    """Resolve client IP without trusting leftmost caller-spoofable X-Forwarded-For values."""
+    cf_ip = request.headers.get("CF-Connecting-IP")
+    if cf_ip and cf_ip.strip() and len(cf_ip.strip()) <= 64:
+        return cf_ip.strip()
+
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for:
+        hops = [hop.strip() for hop in forwarded_for.split(",") if hop.strip()]
+        if hops:
+            # Rightmost hop reflects what the edge reverse proxy observed rather than attacker-prepended entries.
+            return hops[-1][:64]
+
+    return request.client.host if request.client else "unknown"
 
 
 class CorrelationIdMiddleware(BaseHTTPMiddleware):
@@ -108,11 +124,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         else:
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
-                "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
-                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; "
+                "script-src 'self'; "
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
                 "font-src 'self' https://fonts.gstatic.com; "
                 "img-src 'self' data: https:; "
-                "connect-src 'self' *; "
+                "connect-src 'self'; "
+                "object-src 'none'; "
+                "base-uri 'self'; "
                 "frame-ancestors 'none';"
             )
         return response
@@ -120,7 +138,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 class RateLimiterMiddleware(BaseHTTPMiddleware):
     """
-    In-memory sliding-window rate limiter per client IP / auth token.
+    Bounded in-memory sliding-window rate limiter per verified JWT subject or client IP.
     Enforces distinct limits for auth / heavy endpoints vs standard routes.
     """
 
@@ -132,13 +150,15 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
         default_limit: int = 120,
         auth_limit: int = 30,
         window_seconds: int = 60,
+        max_buckets: int = 10000,
     ):
         super().__init__(app)
         self.default_limit = default_limit
         self.auth_limit = auth_limit
         self.window_seconds = window_seconds
-        # Mapping: client_key -> deque of timestamps
-        self.records: Dict[str, collections.deque] = collections.defaultdict(collections.deque)
+        self.max_buckets = max(100, max_buckets)
+        # Bounded OrderedDict LRU: client_key -> deque of timestamps
+        self.records: "collections.OrderedDict[str, collections.deque]" = collections.OrderedDict()
         RateLimiterMiddleware._instances.append(self)
 
     @classmethod
@@ -147,16 +167,36 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
         for inst in cls._instances:
             inst.records.clear()
 
-    def _get_client_key(self, request: Request) -> str:
-        auth = request.headers.get("Authorization")
-        if auth and auth.startswith("Bearer "):
-            return f"auth:{auth[7:]}"
-        client_host = request.client.host if request.client else "unknown"
+    def _get_verified_subject(self, auth_header: Optional[str]) -> Optional[str]:
+        if not auth_header or not auth_header.startswith("Bearer "):
+            return None
+        token = auth_header[7:].strip()
+        if not token or len(token) > 2048:
+            return None
+        try:
+            import jwt
+            from backend.app.config import get_settings
 
-        forwarded_for = request.headers.get("X-Forwarded-For")
-        if forwarded_for:
-            client_host = forwarded_for.split(",")[0].strip()
-        return f"ip:{client_host}"
+            settings = get_settings()
+            payload = jwt.decode(
+                token,
+                settings.JWT_SECRET_KEY,
+                algorithms=[settings.JWT_ALGORITHM],
+                options={"verify_aud": False},
+            )
+            sub = payload.get("sub")
+            if isinstance(sub, str) and sub.strip():
+                return sub.strip()
+        except Exception:
+            return None
+        return None
+
+    def _get_client_key(self, request: Request) -> str:
+        # Never trust unverified Bearer strings as rate-limit keys (prevents bypass & memory DoS)
+        verified_sub = self._get_verified_subject(request.headers.get("Authorization"))
+        if verified_sub:
+            return f"user:{verified_sub}"
+        return f"ip:{extract_client_ip(request)}"
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         path = request.url.path
@@ -172,7 +212,14 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
         now = time.time()
         window_start = now - self.window_seconds
 
-        queue = self.records[client_key]
+        queue = self.records.get(client_key)
+        if queue is None:
+            while len(self.records) >= self.max_buckets:
+                self.records.popitem(last=False)
+            queue = collections.deque()
+            self.records[client_key] = queue
+        else:
+            self.records.move_to_end(client_key)
         # Evict timestamps outside the window
         while queue and queue[0] < window_start:
             queue.popleft()
@@ -225,14 +272,14 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
         self.max_json_bytes = max_json_bytes
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        is_upload = "/spending/upload" in request.url.path
+        max_allowed = self.max_upload_bytes if is_upload else self.max_json_bytes
         content_length = request.headers.get("content-length")
+
         if content_length:
             try:
                 length = int(content_length)
-                is_upload = "/spending/upload" in request.url.path
-                max_allowed = self.max_upload_bytes if is_upload else self.max_json_bytes
-
-                if length > max_allowed:
+                if length < 0 or length > max_allowed:
                     cid = getattr(request.state, "server_incident_id", None) or getattr(
                         request.state, "correlation_id", "none"
                     )
@@ -254,5 +301,24 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
                     )
             except ValueError:
                 pass
+        elif request.method in ("POST", "PUT", "PATCH"):
+            # Enforce size limits on chunked/streaming requests lacking Content-Length.
+            total_bytes = 0
+            chunks: List[bytes] = []
+            async for chunk in request.stream():
+                total_bytes += len(chunk)
+                if total_bytes > max_allowed:
+                    cid = getattr(request.state, "server_incident_id", None) or getattr(
+                        request.state, "correlation_id", "none"
+                    )
+                    return build_error_response(
+                        status_code=413,
+                        code="PAYLOAD_TOO_LARGE",
+                        message=f"Streaming request size exceeds the maximum allowed limit ({max_allowed} bytes).",
+                        correlation_id=cid,
+                    )
+                chunks.append(chunk)
+            body_bytes = b"".join(chunks)
+            request._body = body_bytes  # type: ignore[attr-defined]
 
         return await call_next(request)

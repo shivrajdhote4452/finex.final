@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useFinancial, LedgerEntry } from '../context/FinancialContext';
+import { buildSafeCsvContent } from '../utils/security';
 
 export const TransactionsScreen: React.FC = () => {
   const {
@@ -46,12 +47,12 @@ export const TransactionsScreen: React.FC = () => {
   const winRate = sellOrders.length > 0 ? Math.round((winningTrades / sellOrders.length) * 100) : 100;
   const simulatedBrokerageSaved = totalTradesCount * 20; // ₹20 flat discount broker fee saved
 
-  // Export to CSV function
+  // Export to CSV function with formula-injection neutralization and RFC-4180 escaping
   const handleExportCSV = () => {
     const headers = ['Order ID', 'Timestamp', 'Type', 'Order Mechanism', 'Symbol', 'Shares', 'Fill Price', 'Total (INR)', 'Realized PnL (INR)', 'Cash After', 'Status'];
     const rows = ledger.map((l) => [
       l.id,
-      `"${l.timestamp}"`,
+      l.timestamp,
       l.type,
       l.orderType,
       l.symbol,
@@ -63,14 +64,16 @@ export const TransactionsScreen: React.FC = () => {
       l.status,
     ]);
 
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
+    const csvBody = buildSafeCsvContent(headers, rows);
+    const blob = new Blob([csvBody], { type: 'text/csv;charset=utf-8;' });
+    const blobUrl = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
+    link.setAttribute('href', blobUrl);
     link.setAttribute('download', `finex_transactions_ledger_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(blobUrl);
   };
 
   const handleDepositSubmit = () => {

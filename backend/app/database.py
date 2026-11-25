@@ -4,6 +4,7 @@ Task ID: S1-DAT-02, W0-PAL
 Implements AbstractOperationalStorage from backend.app.ports.storage.
 """
 
+import logging
 import os
 import sys
 from typing import Any, AsyncGenerator, Dict
@@ -16,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import NullPool
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 # Initialize Async SQLAlchemy Engine
 engine_kwargs: Dict[str, Any] = {
@@ -289,7 +291,8 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             yield session
             try:
                 await session.commit()
-            except Exception:
+            except Exception as commit_exc:
+                logger.warning("Database session post-yield commit rolled back: %s", commit_exc)
                 try:
                     await session.rollback()
                 except Exception:

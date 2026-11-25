@@ -6,6 +6,7 @@ and safe development logging + inspection queue when unconfigured.
 """
 
 import asyncio
+import html
 import logging
 import smtplib
 from email.mime.multipart import MIMEMultipart
@@ -67,6 +68,8 @@ class EmailService:
         settings = get_settings()
         base_url = settings.FRONTEND_URL.rstrip("/")
         verification_link = f"{base_url}/#verify-email?token={raw_token}"
+        safe_name = html.escape(name or "Investor", quote=True)
+        safe_link = html.escape(verification_link, quote=True)
 
         subject = "Verify your email address for FinEx"
         text_body = (
@@ -89,16 +92,16 @@ class EmailService:
     </div>
     <h2 style="font-size: 20px; font-weight: 600; margin-bottom: 12px; color: #FFFFFF;">Confirm your email address</h2>
     <p style="color: #A1A1AA; font-size: 14px; line-height: 1.6; margin-bottom: 24px;">
-      Hello {name}, welcome to FinEx. Please click the button below to verify your email address and activate your account.
+      Hello {safe_name}, welcome to FinEx. Please click the button below to verify your email address and activate your account.
     </p>
     <div style="margin: 28px 0;">
-      <a href="{verification_link}" style="background-color: #F29A60; color: #000000; font-weight: 700; font-size: 14px; text-decoration: none; padding: 12px 28px; border-radius: 4px; display: inline-block;">
+      <a href="{safe_link}" style="background-color: #F29A60; color: #000000; font-weight: 700; font-size: 14px; text-decoration: none; padding: 12px 28px; border-radius: 4px; display: inline-block;">
         Verify Email Address →
       </a>
     </div>
     <p style="color: #71717A; font-size: 12px; line-height: 1.5; margin-top: 24px;">
       If the button does not work, copy and paste this link into your browser:<br/>
-      <a href="{verification_link}" style="color: #F29A60; word-break: break-all;">{verification_link}</a>
+      <a href="{safe_link}" style="color: #F29A60; word-break: break-all;">{safe_link}</a>
     </p>
     <div style="border-top: 1px solid #1F1F23; margin-top: 28px; padding-top: 16px; font-size: 11px; color: #52525B;">
       This link is valid for {settings.EMAIL_VERIFICATION_EXPIRE_HOURS} hours. If you did not create a FinEx account, no further action is required.
@@ -120,6 +123,8 @@ class EmailService:
         settings = get_settings()
         base_url = settings.FRONTEND_URL.rstrip("/")
         reset_link = f"{base_url}/#reset-password?token={raw_token}"
+        safe_name = html.escape(name or "Investor", quote=True)
+        safe_link = html.escape(reset_link, quote=True)
 
         subject = "Reset your FinEx account password"
         text_body = (
@@ -142,16 +147,16 @@ class EmailService:
     </div>
     <h2 style="font-size: 20px; font-weight: 600; margin-bottom: 12px; color: #FFFFFF;">Reset your password</h2>
     <p style="color: #A1A1AA; font-size: 14px; line-height: 1.6; margin-bottom: 24px;">
-      Hello {name}, we received a request to reset your FinEx password. Click the button below to set a new password.
+      Hello {safe_name}, we received a request to reset your FinEx password. Click the button below to set a new password.
     </p>
     <div style="margin: 28px 0;">
-      <a href="{reset_link}" style="background-color: #F29A60; color: #000000; font-weight: 700; font-size: 14px; text-decoration: none; padding: 12px 28px; border-radius: 4px; display: inline-block;">
+      <a href="{safe_link}" style="background-color: #F29A60; color: #000000; font-weight: 700; font-size: 14px; text-decoration: none; padding: 12px 28px; border-radius: 4px; display: inline-block;">
         Reset Password →
       </a>
     </div>
     <p style="color: #71717A; font-size: 12px; line-height: 1.5; margin-top: 24px;">
       If the button does not work, copy and paste this link into your browser:<br/>
-      <a href="{reset_link}" style="color: #F29A60; word-break: break-all;">{reset_link}</a>
+      <a href="{safe_link}" style="color: #F29A60; word-break: break-all;">{safe_link}</a>
     </p>
     <div style="border-top: 1px solid #1F1F23; margin-top: 28px; padding-top: 16px; font-size: 11px; color: #52525B;">
       This link is single-use and expires in {settings.PASSWORD_RESET_EXPIRE_MINUTES} minutes. If you did not make this request, your account remains secure.
@@ -174,6 +179,9 @@ class EmailService:
         base_url = settings.FRONTEND_URL.rstrip("/")
         signin_link = f"{base_url}/#signin"
         reset_link = f"{base_url}/#forgot"
+        safe_name = html.escape(name or "Investor", quote=True)
+        safe_signin = html.escape(signin_link, quote=True)
+        safe_reset = html.escape(reset_link, quote=True)
 
         subject = "FinEx Account Notice: Registration Attempt"
         text_body = (
@@ -195,15 +203,15 @@ class EmailService:
     </div>
     <h2 style="font-size: 20px; font-weight: 600; margin-bottom: 12px; color: #FFFFFF;">FinEx Account Notice</h2>
     <p style="color: #A1A1AA; font-size: 14px; line-height: 1.6; margin-bottom: 24px;">
-      Hello {name}, we received a request to register a new account using your email address. Because you already have a registered account, no new account was created and your credentials were not changed.
+      Hello {safe_name}, we received a request to register a new account using your email address. Because you already have a registered account, no new account was created and your credentials were not changed.
     </p>
     <div style="margin: 28px 0; display: flex; gap: 12px;">
-      <a href="{signin_link}" style="background-color: #F29A60; color: #000000; font-weight: 700; font-size: 14px; text-decoration: none; padding: 12px 28px; border-radius: 4px; display: inline-block;">
+      <a href="{safe_signin}" style="background-color: #F29A60; color: #000000; font-weight: 700; font-size: 14px; text-decoration: none; padding: 12px 28px; border-radius: 4px; display: inline-block;">
         Sign In to Your Account →
       </a>
     </div>
     <p style="color: #71717A; font-size: 12px; line-height: 1.5; margin-top: 24px;">
-      If you forgot your password, you can request a reset link at: <a href="{reset_link}" style="color: #F29A60;">{reset_link}</a>
+      If you forgot your password, you can request a reset link at: <a href="{safe_reset}" style="color: #F29A60;">{safe_reset}</a>
     </p>
     <div style="border-top: 1px solid #1F1F23; margin-top: 28px; padding-top: 16px; font-size: 11px; color: #52525B;">
       If you did not make this request, you can safely ignore this email. Your existing FinEx account remains secure.

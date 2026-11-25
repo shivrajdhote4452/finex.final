@@ -22,7 +22,7 @@ from backend.app.domain.paper_trading_service import PaperTradingEngine
 from backend.app.domain.portfolio_intelligence_service import (
     PortfolioIntelligenceService,
 )
-from backend.app.routers.auth import get_current_user_id
+from backend.app.routers.auth import extract_authenticated_user_id, get_current_user_id
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -48,7 +48,7 @@ async def get_portfolio_intelligence(
 ):
     """Retrieve full deterministic intelligence report on current holdings."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     # Get active holdings from paper trading engine or default baseline
     summary = await paper_engine.get_portfolio_summary_db(user_id, db=db)
@@ -97,7 +97,7 @@ async def run_scenario_stress_test(
 ):
     """Run a custom hypothetical sector stress test."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     summary = await paper_engine.get_portfolio_summary_db(user_id, db=db)
     holdings = summary.get("positions", [])

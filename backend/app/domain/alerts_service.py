@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # In-memory operational store for isolated testing/development baseline
 _ALERT_RULES_STORE: Dict[str, Dict[str, Any]] = {}  # rule_id -> rule_dict
@@ -33,16 +33,32 @@ class AlertRuleCreate(BaseModel):
     )
     symbol: Optional[str] = Field(None, description="Security symbol for price alerts")
     comparison_operator: str = Field(..., description="'>=', '<=', '>', '<', '='")
-    threshold_value: Decimal = Field(..., description="Threshold value in specified unit")
+    threshold_value: Decimal = Field(
+        ..., ge=Decimal("-1000000000"), le=Decimal("1000000000"), description="Threshold value in specified unit"
+    )
     threshold_unit: str = Field(..., description="'INR', 'PERCENT', 'RATIO'")
     cooldown_minutes: int = Field(60, ge=5, le=1440, description="Minimum minutes between repeated triggers")
 
+    @field_validator("threshold_value")
+    @classmethod
+    def _validate_threshold_finite(cls, v: Decimal) -> Decimal:
+        if not v.is_finite():
+            raise ValueError("threshold_value must be finite.")
+        return v
+
 
 class AlertRuleUpdate(BaseModel):
-    threshold_value: Optional[Decimal] = None
+    threshold_value: Optional[Decimal] = Field(None, ge=Decimal("-1000000000"), le=Decimal("1000000000"))
     comparison_operator: Optional[str] = None
-    cooldown_minutes: Optional[int] = None
+    cooldown_minutes: Optional[int] = Field(None, ge=5, le=1440)
     is_active: Optional[bool] = None
+
+    @field_validator("threshold_value")
+    @classmethod
+    def _validate_threshold_finite(cls, v: Optional[Decimal]) -> Optional[Decimal]:
+        if v is not None and not v.is_finite():
+            raise ValueError("threshold_value must be finite.")
+        return v
 
 
 class AlertsService:

@@ -6,6 +6,7 @@ explicit freshness metadata, and fallback to cached records without inventing pr
 """
 
 import hashlib
+import urllib.parse
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple
@@ -1117,7 +1118,7 @@ class RealMarketDataProvider(AbstractMarketDataProvider):
                     canonical_id = inst.get("canonical_id", f"NSE:{norm}")
                     break
 
-        encoded_sym = provider_sym.replace("^", "%5E")
+        encoded_sym = urllib.parse.quote(provider_sym, safe="")
         url = f"https://query1.finance.yahoo.com/v8/finance/chart/{encoded_sym}?interval=1d&range=1d"
         headers = {
             "User-Agent": "FinEx-Terminal/1.0 (Educational Financial Simulator; contact@finex.internal)",
@@ -1235,9 +1236,11 @@ class RealMarketDataProvider(AbstractMarketDataProvider):
         }
         yf_interval = interval_map.get(interval, "1d")
 
-        # Determine range query
+        # Determine range query (allowlist prevents query-string injection)
+        allowed_ranges = {"1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max"}
         if range_param:
-            range_query = f"range={range_param.lower()}"
+            rp_lower = range_param.strip().lower()
+            range_query = f"range={rp_lower if rp_lower in allowed_ranges else '1y'}"
         else:
             try:
                 s_dt = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
@@ -1265,8 +1268,11 @@ class RealMarketDataProvider(AbstractMarketDataProvider):
             except Exception:
                 range_query = "range=1y"
 
-        encoded_sym = provider_sym.replace("^", "%5E")
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{encoded_sym}?interval={yf_interval}&{range_query}"
+        safe_interval = (
+            yf_interval if yf_interval in {"1m", "5m", "15m", "30m", "60m", "1h", "1d", "1wk", "1mo"} else "1d"
+        )
+        encoded_sym = urllib.parse.quote(provider_sym, safe="")
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{encoded_sym}?interval={safe_interval}&{range_query}"
         headers = {
             "User-Agent": "FinEx-Terminal/1.0 (Educational Financial Simulator; contact@finex.internal)",
             "Accept": "application/json",
@@ -1364,7 +1370,11 @@ class RealMarketDataProvider(AbstractMarketDataProvider):
         # 3. If force_cache is enabled, prioritize genuine stored DB observations
         if self.force_cache:
             db_quote = await self._fetch_db_quote(norm)
-            if db_quote:
+            if db_quote and not (
+                self.allow_fixture_fallback
+                and db_quote.source == "nse_official_baseline_snapshot"
+                and db_quote.is_stale
+            ):
                 self._cache[norm] = db_quote
                 return db_quote
 
@@ -1376,10 +1386,11 @@ class RealMarketDataProvider(AbstractMarketDataProvider):
                 return live_quote
 
         # 5. Check local PostgreSQL database for genuine stored observations
-        db_quote = await self._fetch_db_quote(norm)
-        if db_quote:
-            self._cache[norm] = db_quote
-            return db_quote
+        if not self.force_cache:
+            db_quote = await self._fetch_db_quote(norm)
+            if db_quote:
+                self._cache[norm] = db_quote
+                return db_quote
 
         # 6. If live/DB fetch failed, return cached quote if present (recalculating freshness)
         if norm in self._cache:

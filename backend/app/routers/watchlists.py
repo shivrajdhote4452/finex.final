@@ -11,7 +11,7 @@ from backend.app.core.envelope import create_response_envelope
 from backend.app.core.errors import ConflictException, NotFoundException
 from backend.app.database import get_db
 from backend.app.models.market import Security, Watchlist, WatchlistItem
-from backend.app.routers.auth import get_current_user_id
+from backend.app.routers.auth import extract_authenticated_user_id, get_current_user_id
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
@@ -40,7 +40,7 @@ async def get_user_watchlists(
 ):
     """Fetch all watchlists belonging to the authenticated caller with database persistence."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     try:
         stmt = (
@@ -128,7 +128,7 @@ async def create_user_watchlist(
 ):
     """Create a new named watchlist for the caller with database persistence."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     # Duplicate name check in DB
     try:
@@ -187,7 +187,7 @@ async def add_symbol_to_watchlist(
 ):
     """Add an instrument to a watchlist with duplicate prevention and database persistence."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
     sym = payload.symbol.upper().strip()
 
     try:
@@ -274,7 +274,7 @@ async def remove_symbol_from_watchlist(
 ):
     """Remove an instrument from a watchlist."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
     sym = symbol.upper().strip()
 
     try:

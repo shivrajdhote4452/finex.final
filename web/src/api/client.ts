@@ -348,7 +348,8 @@ class ApiClient {
         // Expired if current time in seconds is >= exp (with 30s grace window)
         return Date.now() / 1000 >= json.exp - 30;
       }
-      return false;
+      // Fail closed when token lacks a numeric expiry claim
+      return true;
     } catch {
       return true;
     }
@@ -767,7 +768,7 @@ class ApiClient {
         is_delayed: boolean;
         is_stale: boolean;
         data_status: string;
-      }>(`/market/quotes/${symbol}`);
+      }>(`/market/quotes/${encodeURIComponent(symbol)}`);
     },
 
     getIndices: async (options?: { category?: string; tier?: number }) => {
@@ -910,7 +911,7 @@ class ApiClient {
           currency?: string;
           observation_time?: string;
         }>;
-      }>(`/market/history/${symbol}${queryStr}`);
+      }>(`/market/history/${encodeURIComponent(symbol)}${queryStr}`);
     },
 
     getMode: async () => {
@@ -942,7 +943,7 @@ class ApiClient {
         period?: number;
         series: Array<any>;
         data_mode: string;
-      }>(`/market/indicators/${symbol}?${q.toString()}`);
+      }>(`/market/indicators/${encodeURIComponent(symbol)}?${q.toString()}`);
     },
 
     search: async (query: string) => {
@@ -1168,7 +1169,7 @@ class ApiClient {
     },
 
     getSummary: async (yearMonth?: string) => {
-      const q = yearMonth ? `?year_month=${yearMonth}` : '';
+      const q = yearMonth ? `?year_month=${encodeURIComponent(yearMonth)}` : '';
       return this.request<{
         user_id: string;
         year_month: string;
@@ -1258,7 +1259,7 @@ class ApiClient {
     },
 
     addContribution: async (goalId: string, amount: number) => {
-      return this.request<any>(`/goals/${goalId}/contributions`, {
+      return this.request<any>(`/goals/${encodeURIComponent(goalId)}/contributions`, {
         method: 'POST',
         body: JSON.stringify({ amount }),
       });
@@ -1287,7 +1288,7 @@ class ApiClient {
     },
 
     markRead: async (notifId: string) => {
-      return this.request<any>(`/alerts/notifications/${notifId}/read`, {
+      return this.request<any>(`/alerts/notifications/${encodeURIComponent(notifId)}/read`, {
         method: 'POST',
       });
     },
@@ -1334,7 +1335,7 @@ class ApiClient {
           legal_disclaimer?: string;
           created_at: string;
         }>;
-      }>(`/ai/conversations/${conversationId}/messages`);
+      }>(`/ai/conversations/${encodeURIComponent(conversationId)}/messages`);
     },
 
     sendMessage: async (conversationId: string, content: string) => {
@@ -1359,7 +1360,7 @@ class ApiClient {
           legal_disclaimer?: string;
           created_at: string;
         };
-      }>(`/ai/conversations/${conversationId}/messages`, {
+      }>(`/ai/conversations/${encodeURIComponent(conversationId)}/messages`, {
         method: 'POST',
         body: JSON.stringify({ content }),
       });
@@ -1380,7 +1381,7 @@ class ApiClient {
       return this.request<{
         success: boolean;
         deleted_id: string;
-      }>(`/ai/conversations/${conversationId}`, {
+      }>(`/ai/conversations/${encodeURIComponent(conversationId)}`, {
         method: 'DELETE',
       });
     },
@@ -1464,7 +1465,7 @@ class ApiClient {
       return this.request<{
         deleted_id: string;
         status: string;
-      }>(`/charts/layouts/${id}`, {
+      }>(`/charts/layouts/${encodeURIComponent(id)}`, {
         method: 'DELETE',
       });
     },
@@ -1481,7 +1482,7 @@ class ApiClient {
           created_at: string;
         }>;
         total: number;
-      }>(`/charts/drawings/${symbol}`);
+      }>(`/charts/drawings/${encodeURIComponent(symbol)}`);
     },
 
     saveDrawing: async (payload: {
@@ -1507,7 +1508,7 @@ class ApiClient {
       return this.request<{
         deleted_id: string;
         status: string;
-      }>(`/charts/drawings/${id}`, {
+      }>(`/charts/drawings/${encodeURIComponent(id)}`, {
         method: 'DELETE',
       });
     },
@@ -1517,7 +1518,7 @@ class ApiClient {
         symbol: string;
         deleted_count: number;
         status: string;
-      }>(`/charts/drawings/clear/${symbol}`, {
+      }>(`/charts/drawings/clear/${encodeURIComponent(symbol)}`, {
         method: 'DELETE',
       });
     },
@@ -1633,7 +1634,7 @@ class ApiClient {
     },
 
     getProposals: async (status?: string) => {
-      const q = status ? `?status=${status}` : '';
+      const q = status ? `?status=${encodeURIComponent(status)}` : '';
       return this.request<{
         proposals: Array<any>;
         total: number;
@@ -1658,7 +1659,7 @@ class ApiClient {
         remaining_virtual_cash?: number;
         currency?: string;
         error?: string;
-      }>(`/ai/assistant/proposals/${proposalId}/execute`, {
+      }>(`/ai/assistant/proposals/${encodeURIComponent(proposalId)}/execute`, {
         method: 'POST',
       });
     },

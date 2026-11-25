@@ -14,8 +14,10 @@ from typing import Optional
 import jwt
 from backend.app.config import get_settings
 from backend.app.core.envelope import create_response_envelope
+from backend.app.core.middleware import extract_client_ip
 from backend.app.database import get_db
 from backend.app.domain.user_store import is_placeholder_google_subject, user_store
+from backend.app.models.core import User
 from backend.app.services.email_service import email_service
 from backend.app.services.password_service import (
     auth_rate_limiter,
@@ -27,6 +29,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
@@ -100,6 +103,10 @@ def is_token_revoked(token: str) -> bool:
     return user_store.is_token_revoked(token)
 
 
+JWT_ISSUER = "finex-api"
+JWT_AUDIENCE = "finex-clients"
+
+
 def create_access_token(user_id: str, email: str, name: str, provider: str = "google") -> str:
     """Generate a signed HS256 JWT access token with standard claims."""
     expires = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -108,11 +115,25 @@ def create_access_token(user_id: str, email: str, name: str, provider: str = "go
         "email": email,
         "name": name,
         "provider": provider,
+        "iss": JWT_ISSUER,
+        "purpose": "access",
         "jti": str(uuid.uuid4()),
         "exp": expires,
         "iat": datetime.now(timezone.utc),
     }
     return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+
+
+def extract_authenticated_user_id(current_user: dict) -> str:
+    """Fail-closed helper returning verified user subject ID or raising HTTP 401."""
+    raw_uid = current_user.get("sub") if isinstance(current_user, dict) else None
+    if not isinstance(raw_uid, str) or not raw_uid.strip():
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication session: missing subject identifier",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return raw_uid.strip()
 
 
 def is_owner(user: object) -> bool:
@@ -186,14 +207,44 @@ async def get_current_user_id(
         )
 
     try:
-        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
-        if not payload.get("sub"):
+        payload = jwt.decode(
+            token,
+            settings.JWT_SECRET_KEY,
+            algorithms=[settings.JWT_ALGORITHM],
+            options={"verify_aud": False, "require": ["sub", "exp"]},
+        )
+        sub = payload.get("sub")
+        if not isinstance(sub, str) or not sub.strip():
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid token claims: missing subject identifier",
                 headers={"WWW-Authenticate": "Bearer"},
             )
+        if "iss" in payload and payload["iss"] != JWT_ISSUER:
+            raise jwt.InvalidIssuerError("Untrusted token issuer")
+        if "aud" in payload and payload["aud"] != JWT_AUDIENCE:
+            raise jwt.InvalidAudienceError("Untrusted token audience")
+        if payload.get("purpose") not in (None, "access"):
+            raise jwt.InvalidTokenError("Unsupported token purpose")
+
+        # If user record exists in PostgreSQL, enforce active account state fail-closed.
+        if db is not None:
+            try:
+                res = await db.execute(select(User.is_active).where(User.id == sub.strip()))
+                is_active = res.scalar_one_or_none()
+                if is_active is False:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Account is disabled or inactive",
+                    )
+            except HTTPException:
+                raise
+            except Exception:
+                pass
+
         return payload
+    except HTTPException:
+        raise
     except jwt.PyJWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -719,7 +770,7 @@ async def login_with_email(
     """
     cid = getattr(request.state, "correlation_id", "none")
     clean_email = payload.email.strip().lower()
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = extract_client_ip(request)
 
     # Check brute-force rate limiter
     is_locked, retry_after = auth_rate_limiter.check_login_rate_limit(f"email:{clean_email}")
@@ -799,7 +850,7 @@ async def forgot_password(
     """
     cid = getattr(request.state, "correlation_id", "none")
     clean_email = payload.email.strip().lower()
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = extract_client_ip(request)
 
     is_limited, retry_after = auth_rate_limiter.check_and_record_forgot_request(f"forgot:{clean_email}")
     if not is_limited:
@@ -849,18 +900,12 @@ async def forgot_password(
         )
         if not delivery.get("delivered") and delivery.get("status") != "test_captured":
             logger.warning(
-                "Password reset email for %s could not be delivered: status=%s",
-                clean_email,
+                "Password reset email delivery unsuccessful (correlation_id=%s): status=%s",
+                cid,
                 delivery.get("status"),
             )
-            resp_data = {
-                "sent": False,
-                "message": "Password reset email could not be delivered due to a mail server issue. Please try again later or contact support.",
-                "delivery_status": delivery.get("status"),
-            }
-            return create_response_envelope(resp_data, correlation_id=cid)
 
-    # Safe generic response regardless of whether account was found
+    # Safe generic response regardless of whether account was found or mail delivery succeeded
     resp_data = {
         "sent": True,
         "message": "If an account exists for this email address, password reset instructions have been sent.",
@@ -929,7 +974,7 @@ async def resend_verification_email(
         return create_response_envelope(resp_data, correlation_id=cid)
 
     user = await user_store.get_user_by_email_db(clean_email, db=db)
-    if user and not (user.email_verified or user.is_verified):
+    if user and user.is_active and not (user.email_verified or user.is_verified):
         profile = await user_store.get_profile_db(user.id, db=db)
         display_name = profile.full_name if profile and profile.full_name else "Investor"
 
@@ -944,6 +989,11 @@ async def resend_verification_email(
             new_pw_hash = hash_password(payload.password)
             from backend.app.services.password_service import create_verification_token
 
+            await user_store.invalidate_user_tokens_db(
+                user_id=user.id,
+                token_type="email_verification",
+                db=db,
+            )
             raw_token = create_verification_token(
                 user_id=user.id,
                 pending_password_hash=new_pw_hash,
@@ -969,6 +1019,11 @@ async def resend_verification_email(
             # chosen by an attacker during unverified initial registration.
             # Instead, issue a secure single-use password setup / reset link so the inbox owner
             # explicitly establishes their own password upon clicking.
+            await user_store.invalidate_user_tokens_db(
+                user_id=user.id,
+                token_type="password_reset",
+                db=db,
+            )
             raw_token = await user_store.create_auth_token_db(
                 user_id=user.id,
                 token_type="password_reset",
@@ -985,16 +1040,10 @@ async def resend_verification_email(
 
         if not delivery.get("delivered") and delivery.get("status") != "test_captured":
             logger.warning(
-                "Verification resend email for %s could not be delivered: status=%s",
-                clean_email,
+                "Verification resend email could not be delivered (user_id=%s): status=%s",
+                user.id,
                 delivery.get("status"),
             )
-            resp_data = {
-                "sent": False,
-                "message": "Verification email could not be delivered due to a mail server issue. Please try again later or contact support.",
-                "delivery_status": delivery.get("status"),
-            }
-            return create_response_envelope(resp_data, correlation_id=cid)
 
     resp_data = {
         "sent": True,
@@ -1030,8 +1079,8 @@ async def set_account_password(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User account not found.")
 
-    # If user already has a password and logged in via local password, require current_password
-    if user.password_hash and current_user.get("provider") != "google":
+    # If account already has a password, always verify current_password regardless of login provider
+    if user.password_hash:
         if not payload.current_password or not verify_password(payload.current_password, user.password_hash):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -1057,19 +1106,33 @@ async def revoke_access_token(
     request: Request,
     payload: Optional[RevokeRequest] = None,
     authorization: Optional[str] = Header(None),
+    current_user: dict = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """Revoke an active JWT token persistently in PostgreSQL to deny subsequent requests across restarts."""
+    """Revoke caller's active JWT token persistently in PostgreSQL to deny subsequent requests across restarts."""
+    caller_sub = extract_authenticated_user_id(current_user)
     token = None
     if payload and payload.token:
-        token = payload.token.strip()
+        candidate = payload.token.strip()
+        try:
+            cand_payload = jwt.decode(
+                candidate,
+                settings.JWT_SECRET_KEY,
+                algorithms=[settings.JWT_ALGORITHM],
+                options={"verify_aud": False, "verify_exp": False},
+            )
+        except jwt.PyJWTError:
+            raise HTTPException(status_code=400, detail="Provided token is invalid or untrusted") from None
+        if cand_payload.get("sub") != caller_sub:
+            raise HTTPException(status_code=403, detail="Forbidden: Cannot revoke another user's token")
+        token = candidate
     elif authorization and authorization.startswith("Bearer "):
         token = authorization.split(" ")[1].strip()
 
     if not token:
         raise HTTPException(status_code=400, detail="Token must be provided in payload or Authorization header")
 
-    await user_store.revoke_token_db(token, db=db)
+    await user_store.revoke_token_db(token, user_id=caller_sub, db=db)
     cid = getattr(request.state, "correlation_id", "none")
     return create_response_envelope({"revoked": True, "token_prefix": token[:10] + "..."}, correlation_id=cid)
 
