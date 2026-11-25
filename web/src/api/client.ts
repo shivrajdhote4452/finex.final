@@ -1705,6 +1705,9 @@ class ApiClient {
       is_active?: boolean;
       email_verified?: boolean;
       onboarding_completed?: boolean;
+      date_from?: string;
+      date_to?: string;
+      sort_order?: 'desc' | 'asc';
     }) => {
       const q = new URLSearchParams();
       if (params?.page) q.set('page', String(params.page));
@@ -1713,6 +1716,9 @@ class ApiClient {
       if (params?.is_active !== undefined) q.set('is_active', String(params.is_active));
       if (params?.email_verified !== undefined) q.set('email_verified', String(params.email_verified));
       if (params?.onboarding_completed !== undefined) q.set('onboarding_completed', String(params.onboarding_completed));
+      if (params?.date_from) q.set('date_from', params.date_from);
+      if (params?.date_to) q.set('date_to', params.date_to);
+      if (params?.sort_order) q.set('sort_order', params.sort_order);
       const qs = q.toString() ? `?${q.toString()}` : '';
       return this.request<AdminUsersResponse>(`/admin/users${qs}`);
     },

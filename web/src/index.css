@@ -2518,6 +2518,7 @@ body,
   margin-top: 4px;
 }
 
+.admin-panel-toolbar,
 .admin-errors-toolbar {
   display: flex;
   flex-direction: column;
@@ -2528,6 +2529,7 @@ body,
   border: 1px solid var(--border-subtle);
 }
 
+.admin-panel-search-row,
 .admin-errors-search-row {
   display: flex;
   align-items: center;
@@ -2535,12 +2537,14 @@ body,
   flex-wrap: wrap;
 }
 
+.admin-panel-filter-grid,
 .admin-errors-filter-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr));
   gap: 10px;
 }
 
+.admin-panel-filter-field,
 .admin-errors-filter-field {
   display: flex;
   flex-direction: column;
@@ -2548,12 +2552,15 @@ body,
   min-width: 0;
 }
 
+.admin-panel-filter-label,
 .admin-errors-filter-label {
   font-size: 11px;
   font-weight: 600;
   color: var(--text-muted);
 }
 
+.admin-panel-input,
+.admin-panel-select,
 .admin-errors-input,
 .admin-errors-select {
   height: 36px;
@@ -2571,16 +2578,23 @@ body,
   color-scheme: dark;
 }
 
+[data-theme="light"] .admin-panel-input,
+[data-theme="light"] .admin-panel-select,
 [data-theme="light"] .admin-errors-input,
 [data-theme="light"] .admin-errors-select {
   color-scheme: light;
 }
 
+.admin-panel-input:focus,
+.admin-panel-select:focus,
 .admin-errors-input:focus,
 .admin-errors-select:focus {
   border-color: var(--color-action);
 }
 
+.admin-panel-clear-btn,
+.admin-panel-retry-btn,
+.admin-panel-page-btn,
 .admin-errors-clear-btn,
 .admin-errors-retry-btn,
 .admin-errors-page-btn {
@@ -2596,6 +2610,9 @@ body,
   transition: background-color var(--transition-fast), border-color var(--transition-fast);
 }
 
+.admin-panel-clear-btn:hover,
+.admin-panel-retry-btn:hover,
+.admin-panel-page-btn:not(:disabled):hover,
 .admin-errors-clear-btn:hover,
 .admin-errors-retry-btn:hover,
 .admin-errors-page-btn:not(:disabled):hover {
@@ -2603,11 +2620,13 @@ body,
   background-color: var(--color-action-bg);
 }
 
+.admin-panel-page-btn:disabled,
 .admin-errors-page-btn:disabled {
   cursor: not-allowed;
   opacity: 0.45;
 }
 
+.admin-panel-inline-alert,
 .admin-errors-inline-alert {
   display: flex;
   align-items: center;
@@ -2623,6 +2642,7 @@ body,
   font-weight: 600;
 }
 
+.admin-panel-results-card,
 .admin-errors-results-card {
   background-color: var(--bg-card);
   border: 1px solid var(--border-subtle);
@@ -2630,6 +2650,7 @@ body,
   padding: 20px;
 }
 
+.admin-panel-results-header,
 .admin-errors-results-header {
   display: flex;
   align-items: center;
@@ -2639,6 +2660,7 @@ body,
   margin-bottom: 12px;
 }
 
+.admin-panel-error-banner,
 .admin-errors-error-banner {
   display: flex;
   align-items: center;
@@ -2652,6 +2674,22 @@ body,
   border-radius: var(--radius-xs);
 }
 
+.admin-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-xs);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.admin-pill-positive {
+  background-color: var(--color-profit-bg);
+  border: 1px solid var(--color-profit-border);
+  color: var(--color-profit);
+}
+
+.admin-pill-negative,
 .admin-errors-status-5xx {
   display: inline-block;
   padding: 2px 8px;
@@ -2663,6 +2701,7 @@ body,
   color: var(--color-loss);
 }
 
+.admin-pill-warning,
 .admin-errors-status-4xx {
   display: inline-block;
   padding: 2px 8px;
@@ -2674,9 +2713,10 @@ body,
   color: var(--color-warning);
 }
 
+.admin-pill-neutral,
 .admin-errors-category-badge {
   display: inline-block;
-  padding: 2px 6px;
+  padding: 2px 7px;
   border-radius: var(--radius-xs);
   background-color: var(--bg-subtle);
   border: 1px solid var(--border-subtle);
@@ -2702,6 +2742,7 @@ body,
   color: var(--color-profit);
 }
 
+.admin-panel-pagination,
 .admin-errors-pagination {
   display: flex;
   align-items: center;
@@ -2714,14 +2755,17 @@ body,
   font-size: 12px;
 }
 
+.admin-panel-desktop-table,
 .admin-errors-desktop-table {
   display: block;
 }
 
+.admin-panel-mobile-list,
 .admin-errors-mobile-list {
   display: none;
 }
 
+.admin-panel-card,
 .admin-error-card {
   display: flex;
   flex-direction: column;
@@ -2732,6 +2776,7 @@ body,
   border-radius: var(--radius-sm);
 }
 
+.admin-panel-card-top,
 .admin-error-card-top {
   display: flex;
   align-items: flex-start;
@@ -2741,17 +2786,21 @@ body,
 }
 
 @media (max-width: 768px) {
+  .admin-panel-desktop-table,
   .admin-errors-desktop-table {
     display: none;
   }
+  .admin-panel-mobile-list,
   .admin-errors-mobile-list {
     display: flex;
     flex-direction: column;
     gap: 12px;
   }
+  .admin-panel-results-card,
   .admin-errors-results-card {
     padding: 14px;
   }
+  .admin-panel-toolbar,
   .admin-errors-toolbar {
     padding: 12px;
   }

@@ -3,11 +3,11 @@ import { useFinancial } from '../context/FinancialContext';
 import {
   apiClient,
   AdminOverviewResponse,
-  AdminUsersResponse,
   AdminOrdersResponse,
   AdminSystemHealthResponse,
 } from '../api/client';
 import { AdminErrorsPanel } from '../components/admin/AdminErrorsPanel';
+import { AdminUsersPanel } from '../components/admin/AdminUsersPanel';
 import { NavigationTab } from '../domain/sessionNavigation';
 
 interface AdminScreenProps {
@@ -26,15 +26,9 @@ export const AdminScreen: React.FC<AdminScreenProps> = ({ onNavigate }) => {
   const [overviewLoading, setOverviewLoading] = useState<boolean>(false);
   const [overviewError, setOverviewError] = useState<string | null>(null);
 
-  // Users State
-  const [usersData, setUsersData] = useState<AdminUsersResponse | null>(null);
+  // Users State (managed inside AdminUsersPanel)
   const [usersLoading, setUsersLoading] = useState<boolean>(false);
-  const [usersError, setUsersError] = useState<string | null>(null);
-  const [userSearch, setUserSearch] = useState<string>('');
-  const [userPage, setUserPage] = useState<number>(1);
-  const [userFilterActive, setUserFilterActive] = useState<boolean | undefined>(undefined);
-  const [userFilterVerified, setUserFilterVerified] = useState<boolean | undefined>(undefined);
-  const [userFilterOnboarded, setUserFilterOnboarded] = useState<boolean | undefined>(undefined);
+  const [usersRefreshTick, setUsersRefreshTick] = useState<number>(0);
 
   // Orders State
   const [ordersData, setOrdersData] = useState<AdminOrdersResponse | null>(null);
@@ -68,28 +62,6 @@ export const AdminScreen: React.FC<AdminScreenProps> = ({ onNavigate }) => {
       setOverviewLoading(false);
     }
   }, [isOwner]);
-
-  // Fetch Users
-  const fetchUsers = useCallback(async () => {
-    if (!isOwner) return;
-    setUsersLoading(true);
-    setUsersError(null);
-    try {
-      const data = await apiClient.admin.getUsers({
-        page: userPage,
-        limit: 15,
-        search: userSearch.trim() || undefined,
-        is_active: userFilterActive,
-        email_verified: userFilterVerified,
-        onboarding_completed: userFilterOnboarded,
-      });
-      setUsersData(data);
-    } catch (err: any) {
-      setUsersError(err?.message || 'Failed to load user directory');
-    } finally {
-      setUsersLoading(false);
-    }
-  }, [isOwner, userPage, userSearch, userFilterActive, userFilterVerified, userFilterOnboarded]);
 
   // Fetch Orders
   const fetchOrders = useCallback(async () => {
@@ -131,10 +103,9 @@ export const AdminScreen: React.FC<AdminScreenProps> = ({ onNavigate }) => {
   useEffect(() => {
     if (!isOwner) return;
     if (activeTab === 'overview') fetchOverview();
-    else if (activeTab === 'users') fetchUsers();
     else if (activeTab === 'orders') fetchOrders();
     else if (activeTab === 'health') fetchHealth();
-  }, [activeTab, isOwner, fetchOverview, fetchUsers, fetchOrders, fetchHealth]);
+  }, [activeTab, isOwner, fetchOverview, fetchOrders, fetchHealth]);
 
   // If not owner, show Access Denied Guard
   if (!isOwner) {
@@ -246,7 +217,7 @@ export const AdminScreen: React.FC<AdminScreenProps> = ({ onNavigate }) => {
         <button
           onClick={() => {
             if (activeTab === 'overview') fetchOverview();
-            else if (activeTab === 'users') fetchUsers();
+            else if (activeTab === 'users') setUsersRefreshTick((n) => n + 1);
             else if (activeTab === 'orders') fetchOrders();
             else if (activeTab === 'health') fetchHealth();
             else if (activeTab === 'errors') setErrorsRefreshTick((n) => n + 1);
@@ -580,272 +551,10 @@ export const AdminScreen: React.FC<AdminScreenProps> = ({ onNavigate }) => {
       {/* 2. USER DIRECTORY TAB */}
       {/* ===================================================================== */}
       {activeTab === 'users' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {/* Search & Filters */}
-          <div
-            style={{
-              backgroundColor: 'var(--bg-card)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 'var(--radius-sm)',
-              padding: '16px',
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: '12px',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            }}
-          >
-            <div style={{ display: 'flex', flex: '1 1 280px', gap: '8px' }}>
-              <input
-                type="text"
-                placeholder="Search by name, email, or user ID..."
-                value={userSearch}
-                onChange={(e) => {
-                  setUserSearch(e.target.value);
-                  setUserPage(1);
-                }}
-                style={{
-                  flex: 1,
-                  backgroundColor: 'var(--bg-input, var(--bg-main))',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 'var(--radius-xs)',
-                  padding: '8px 12px',
-                  fontSize: '13px',
-                  color: 'var(--text-main)',
-                  outline: 'none',
-                }}
-              />
-            </div>
-
-            {/* Filter Badges */}
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              <button
-                onClick={() => {
-                  setUserFilterVerified(userFilterVerified === true ? undefined : true);
-                  setUserPage(1);
-                }}
-                style={{
-                  backgroundColor: userFilterVerified === true ? 'var(--color-action)' : 'var(--bg-main)',
-                  color: userFilterVerified === true ? '#FFFFFF' : 'var(--text-muted)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 'var(--radius-xs)',
-                  padding: '6px 12px',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                Verified Only
-              </button>
-
-              <button
-                onClick={() => {
-                  setUserFilterOnboarded(userFilterOnboarded === true ? undefined : true);
-                  setUserPage(1);
-                }}
-                style={{
-                  backgroundColor: userFilterOnboarded === true ? 'var(--color-action)' : 'var(--bg-main)',
-                  color: userFilterOnboarded === true ? '#FFFFFF' : 'var(--text-muted)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 'var(--radius-xs)',
-                  padding: '6px 12px',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                }}
-              >
-                Onboarded Only
-              </button>
-
-              {(userSearch || userFilterVerified !== undefined || userFilterOnboarded !== undefined) && (
-                <button
-                  onClick={() => {
-                    setUserSearch('');
-                    setUserFilterVerified(undefined);
-                    setUserFilterOnboarded(undefined);
-                    setUserFilterActive(undefined);
-                    setUserPage(1);
-                  }}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--text-muted)',
-                    fontSize: '12px',
-                    cursor: 'pointer',
-                    textDecoration: 'underline',
-                  }}
-                >
-                  Reset
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* User Table */}
-          <div
-            style={{
-              backgroundColor: 'var(--bg-card)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 'var(--radius-sm)',
-              padding: '16px',
-            }}
-          >
-            {usersLoading && (
-              <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
-                Loading users...
-              </div>
-            )}
-
-            {usersError && (
-              <div
-                style={{
-                  backgroundColor: 'rgba(239, 68, 68, 0.08)',
-                  border: '1px solid var(--color-loss, #EF4444)',
-                  borderRadius: 'var(--radius-xs)',
-                  padding: '16px',
-                  color: 'var(--color-loss, #EF4444)',
-                  fontSize: '13px',
-                }}
-              >
-                {usersError}
-              </div>
-            )}
-
-            {!usersLoading && usersData && usersData.users.length === 0 && (
-              <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
-                No registered users matched the active filters.
-              </div>
-            )}
-
-            {!usersLoading && usersData && usersData.users.length > 0 && (
-              <>
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid var(--border-subtle)', textAlign: 'left', color: 'var(--text-muted)' }}>
-                        <th style={{ padding: '10px 12px' }}>Investor</th>
-                        <th style={{ padding: '10px 12px' }}>Email</th>
-                        <th style={{ padding: '10px 12px' }}>Registered</th>
-                        <th style={{ padding: '10px 12px' }}>Verification</th>
-                        <th style={{ padding: '10px 12px' }}>Onboarding</th>
-                        <th style={{ padding: '10px 12px' }}>Risk Band</th>
-                        <th style={{ padding: '10px 12px' }}>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {usersData.users.map((u) => (
-                        <tr key={u.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                          <td style={{ padding: '12px', fontWeight: 600, color: 'var(--text-main)' }}>
-                            {u.full_name || u.display_name || 'Investor'}
-                          </td>
-                          <td style={{ padding: '12px', color: 'var(--text-main)', fontFamily: 'var(--font-mono)', fontSize: '12px' }}>
-                            {u.email}
-                          </td>
-                          <td style={{ padding: '12px', color: 'var(--text-muted)', fontSize: '12px', whiteSpace: 'nowrap' }}>
-                            {u.created_at ? new Date(u.created_at).toLocaleDateString() : 'N/A'}
-                          </td>
-                          <td style={{ padding: '12px' }}>
-                            <span
-                              style={{
-                                fontSize: '11px',
-                                padding: '2px 8px',
-                                borderRadius: 'var(--radius-xs)',
-                                backgroundColor: u.email_verified ? 'rgba(5, 150, 105, 0.1)' : 'rgba(156, 163, 175, 0.15)',
-                                color: u.email_verified ? 'var(--color-profit, #059669)' : 'var(--text-muted)',
-                                fontWeight: 600,
-                              }}
-                            >
-                              {u.email_verified ? 'Verified' : 'Unverified'}
-                            </span>
-                          </td>
-                          <td style={{ padding: '12px' }}>
-                            <span
-                              style={{
-                                fontSize: '11px',
-                                padding: '2px 8px',
-                                borderRadius: 'var(--radius-xs)',
-                                backgroundColor: u.onboarding_completed ? 'rgba(5, 150, 105, 0.1)' : 'rgba(217, 119, 6, 0.1)',
-                                color: u.onboarding_completed ? 'var(--color-profit, #059669)' : '#D97706',
-                                fontWeight: 600,
-                              }}
-                            >
-                              {u.onboarding_completed ? 'Completed' : 'Pending'}
-                            </span>
-                          </td>
-                          <td style={{ padding: '12px', color: 'var(--text-muted)', fontSize: '12px' }}>
-                            {u.risk_band || 'Unscored'}
-                          </td>
-                          <td style={{ padding: '12px' }}>
-                            <span
-                              style={{
-                                fontSize: '11px',
-                                padding: '2px 8px',
-                                borderRadius: 'var(--radius-xs)',
-                                backgroundColor: u.is_active ? 'rgba(5, 150, 105, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                                color: u.is_active ? 'var(--color-profit, #059669)' : 'var(--color-loss, #EF4444)',
-                                fontWeight: 600,
-                              }}
-                            >
-                              {u.is_active ? 'Active' : 'Disabled'}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Pagination Controls */}
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    marginTop: '16px',
-                    paddingTop: '12px',
-                    borderTop: '1px solid var(--border-subtle)',
-                    fontSize: '12px',
-                    color: 'var(--text-muted)',
-                  }}
-                >
-                  <div>
-                    Showing {usersData.users.length} of {usersData.total} users (Page {usersData.page} of {usersData.total_pages})
-                  </div>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button
-                      onClick={() => setUserPage((p) => Math.max(1, p - 1))}
-                      disabled={userPage <= 1}
-                      style={{
-                        backgroundColor: 'var(--bg-main)',
-                        border: '1px solid var(--border-subtle)',
-                        borderRadius: 'var(--radius-xs)',
-                        padding: '6px 12px',
-                        color: userPage <= 1 ? 'var(--text-muted)' : 'var(--text-main)',
-                        cursor: userPage <= 1 ? 'not-allowed' : 'pointer',
-                      }}
-                    >
-                      ← Previous
-                    </button>
-                    <button
-                      onClick={() => setUserPage((p) => Math.min(usersData.total_pages, p + 1))}
-                      disabled={userPage >= usersData.total_pages}
-                      style={{
-                        backgroundColor: 'var(--bg-main)',
-                        border: '1px solid var(--border-subtle)',
-                        borderRadius: 'var(--radius-xs)',
-                        padding: '6px 12px',
-                        color: userPage >= usersData.total_pages ? 'var(--text-muted)' : 'var(--text-main)',
-                        cursor: userPage >= usersData.total_pages ? 'not-allowed' : 'pointer',
-                      }}
-                    >
-                      Next →
-                    </button>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
+        <AdminUsersPanel
+          refreshTrigger={usersRefreshTick}
+          onLoadingChange={setUsersLoading}
+        />
       )}
 
       {/* ===================================================================== */}
