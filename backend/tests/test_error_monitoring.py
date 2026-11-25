@@ -1047,3 +1047,242 @@ async def test_bounded_retention_pruning_and_ceiling():
 
     # Test prune_if_due runs without error
     await prune_if_due()
+
+
+# =============================================================================
+# 9. Date Range, Multi-Filter, Sorting, Safe Search & Input Validation Tests
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_errors_date_range_combined_filters_and_sort_order(app, owner_headers):
+    """Verify date range filtering, multi-filter intersection, deterministic sorting, and pagination."""
+    tag = uuid.uuid4().hex[:10]
+
+    async with AsyncSessionLocal() as session:
+        session.add_all(
+            [
+                ErrorEvent(
+                    correlation_id=f"cid-{tag}-oldest",
+                    endpoint="/api/v1/portfolio/holdings",
+                    method="GET",
+                    status_code=404,
+                    error_type=f"NotFoundError_{tag}",
+                    category="NOT_FOUND",
+                    feature_area="Portfolio",
+                    sanitized_message=f"Holding missing {tag}",
+                    created_at=datetime(2026, 11, 20, 8, 30, 0, tzinfo=timezone.utc),
+                ),
+                ErrorEvent(
+                    correlation_id=f"cid-{tag}-mid",
+                    endpoint="/api/v1/market/quote",
+                    method="GET",
+                    status_code=502,
+                    error_type=f"UpstreamGatewayError_{tag}",
+                    category="UPSTREAM_API",
+                    feature_area="Market Data",
+                    sanitized_message=f"NSE upstream timed out {tag}",
+                    created_at=datetime(2026, 11, 22, 14, 15, 0, tzinfo=timezone.utc),
+                ),
+                ErrorEvent(
+                    correlation_id=f"cid-{tag}-latest",
+                    endpoint="/api/v1/orders/paper",
+                    method="POST",
+                    status_code=500,
+                    error_type=f"DatabasePoolError_{tag}",
+                    category="DATABASE",
+                    feature_area="Paper Trading",
+                    sanitized_message=f"Connection pool exhausted {tag}",
+                    created_at=datetime(2026, 11, 24, 21, 45, 0, tzinfo=timezone.utc),
+                ),
+            ]
+        )
+        await session.commit()
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Default sort order is newest first (desc)
+        res_desc = await client.get(f"/api/v1/admin/errors?search={tag}", headers=owner_headers)
+        assert res_desc.status_code == 200
+        desc_data = res_desc.json().get("data", res_desc.json())
+        assert [item["correlation_id"] for item in desc_data["errors"]] == [
+            f"cid-{tag}-latest",
+            f"cid-{tag}-mid",
+            f"cid-{tag}-oldest",
+        ]
+
+        # Explicit ascending sort returns oldest first
+        res_asc = await client.get(f"/api/v1/admin/errors?search={tag}&sort_order=asc", headers=owner_headers)
+        assert res_asc.status_code == 200
+        asc_data = res_asc.json().get("data", res_asc.json())
+        assert [item["correlation_id"] for item in asc_data["errors"]] == [
+            f"cid-{tag}-oldest",
+            f"cid-{tag}-mid",
+            f"cid-{tag}-latest",
+        ]
+
+        # YYYY-MM-DD date window excludes 2026-11-20
+        res_range = await client.get(
+            f"/api/v1/admin/errors?search={tag}&date_from=2026-11-22&date_to=2026-11-24",
+            headers=owner_headers,
+        )
+        assert res_range.status_code == 200
+        range_items = res_range.json().get("data", res_range.json())["errors"]
+        assert [item["correlation_id"] for item in range_items] == [
+            f"cid-{tag}-latest",
+            f"cid-{tag}-mid",
+        ]
+
+        # Full ISO-8601 timestamp excludes mid event at 14:15Z
+        res_iso = await client.get(
+            f"/api/v1/admin/errors?search={tag}&date_from=2026-11-22T15:00:00Z",
+            headers=owner_headers,
+        )
+        assert res_iso.status_code == 200
+        iso_items = res_iso.json().get("data", res_iso.json())["errors"]
+        assert [item["correlation_id"] for item in iso_items] == [f"cid-{tag}-latest"]
+
+        # YYYY-MM-DD date_to includes entire end-of-day UTC
+        res_to = await client.get(
+            f"/api/v1/admin/errors?search={tag}&date_to=2026-11-22",
+            headers=owner_headers,
+        )
+        assert res_to.status_code == 200
+        to_items = res_to.json().get("data", res_to.json())["errors"]
+        assert [item["correlation_id"] for item in to_items] == [
+            f"cid-{tag}-mid",
+            f"cid-{tag}-oldest",
+        ]
+
+        # Combined filters (case-insensitive feature_area and category)
+        res_combo = await client.get(
+            f"/api/v1/admin/errors?search={tag}&date_from=2026-11-21&date_to=2026-11-25"
+            "&feature_area=paper%20trading&category=database&status_code=500",
+            headers=owner_headers,
+        )
+        assert res_combo.status_code == 200
+        combo_items = res_combo.json().get("data", res_combo.json())["errors"]
+        assert len(combo_items) == 1
+        assert combo_items[0]["correlation_id"] == f"cid-{tag}-latest"
+
+        # Bounded pagination across pages with limit=2
+        res_p1 = await client.get(f"/api/v1/admin/errors?search={tag}&limit=2&page=1", headers=owner_headers)
+        res_p2 = await client.get(f"/api/v1/admin/errors?search={tag}&limit=2&page=2", headers=owner_headers)
+        p1 = res_p1.json().get("data", res_p1.json())
+        p2 = res_p2.json().get("data", res_p2.json())
+        assert p1["total"] == 3
+        assert p1["total_pages"] == 2
+        assert [item["correlation_id"] for item in p1["errors"]] == [f"cid-{tag}-latest", f"cid-{tag}-mid"]
+        assert [item["correlation_id"] for item in p2["errors"]] == [f"cid-{tag}-oldest"]
+
+
+@pytest.mark.asyncio
+async def test_errors_safe_search_fields_wildcard_escaping_and_user_id_exclusion(app, owner_headers):
+    """Verify safe searchable columns, LIKE wildcard escaping, and exclusion of user_id from search."""
+    tag = uuid.uuid4().hex[:10]
+    private_uid_only = f"privateuid_{uuid.uuid4().hex[:10]}"
+
+    async with AsyncSessionLocal() as session:
+        session.add_all(
+            [
+                ErrorEvent(
+                    correlation_id=f"corr-special-{tag}",
+                    endpoint=f"/api/v1/risk/{tag}",
+                    method="POST",
+                    status_code=409,
+                    error_type=f"StateConflict_{tag}",
+                    category="CONFLICT",
+                    feature_area="Risk Assessment",
+                    sanitized_message=f"Quote 100%_exact {tag}",
+                    user_id=private_uid_only,
+                ),
+                ErrorEvent(
+                    correlation_id=f"corr-other-{tag}",
+                    endpoint="/api/v1/goals/plan",
+                    method="GET",
+                    status_code=400,
+                    error_type="BadRequest",
+                    category="CLIENT_ERROR",
+                    feature_area="Goals",
+                    sanitized_message=f"Quote 100abcXexact {tag}",
+                    user_id="usr-regular-999",
+                ),
+            ]
+        )
+        await session.commit()
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Match by correlation ID, endpoint, category, and feature_area
+        for query_val, expected_cid in [
+            (f"corr-special-{tag}", f"corr-special-{tag}"),
+            (f"/api/v1/risk/{tag}", f"corr-special-{tag}"),
+            (f"StateConflict_{tag}", f"corr-special-{tag}"),
+        ]:
+            res = await client.get(f"/api/v1/admin/errors?search={query_val}", headers=owner_headers)
+            assert res.status_code == 200
+            items = res.json().get("data", res.json())["errors"]
+            assert len(items) == 1
+            assert items[0]["correlation_id"] == expected_cid
+
+        # Search combined with category/feature_area terms
+        res_cat = await client.get(
+            "/api/v1/admin/errors?search=CONFLICT&feature_area=Risk%20Assessment",
+            headers=owner_headers,
+        )
+        assert res_cat.status_code == 200
+        cat_cids = [item["correlation_id"] for item in res_cat.json().get("data", res_cat.json())["errors"]]
+        assert f"corr-special-{tag}" in cat_cids
+
+        # Wildcard characters (% and _) must be matched literally, not as SQL wildcards
+        res_wildcard = await client.get(
+            "/api/v1/admin/errors?search=100%25_exact",
+            headers=owner_headers,
+        )
+        assert res_wildcard.status_code == 200
+        wildcard_cids = [
+            item["correlation_id"] for item in res_wildcard.json().get("data", res_wildcard.json())["errors"]
+        ]
+        assert f"corr-special-{tag}" in wildcard_cids
+        assert f"corr-other-{tag}" not in wildcard_cids
+
+        # user_id must NOT be searchable
+        res_uid = await client.get(f"/api/v1/admin/errors?search={private_uid_only}", headers=owner_headers)
+        assert res_uid.status_code == 200
+        uid_data = res_uid.json().get("data", res_uid.json())
+        assert uid_data["total"] == 0
+        assert uid_data["errors"] == []
+
+
+@pytest.mark.asyncio
+async def test_errors_filter_input_validation_and_bounds(app, owner_headers):
+    """Verify invalid dates, inverted ranges, unsafe tokens, and out-of-bounds pagination fail with 422."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        invalid_queries = [
+            "date_from=not-a-date",
+            "date_to=2026-02-30",
+            "date_from=2026-11-25&date_to=2026-11-20",
+            "sort_order=random",
+            "category=DATABASE%3BDROP",
+            "feature_area=Auth%3Cscript%3E",
+            "status_code=999",
+            "page=0",
+            "limit=101",
+            f"search={'x' * 121}",
+        ]
+        for qs in invalid_queries:
+            res = await client.get(f"/api/v1/admin/errors?{qs}", headers=owner_headers)
+            assert res.status_code == 422, f"Expected 422 for query '{qs}', got {res.status_code}: {res.text}"
+
+
+@pytest.mark.asyncio
+async def test_errors_auth_and_readonly_preserved_with_filter_params(app, non_owner_headers, non_google_owner_headers):
+    """Verify server-side owner auth and read-only scope remain strict when filter parameters are supplied."""
+    transport = ASGITransport(app=app)
+    qs = "date_from=2026-11-01&date_to=2026-11-25&sort_order=asc&feature_area=Auth&category=SERVER_ERROR"
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        assert (await client.get(f"/api/v1/admin/errors?{qs}")).status_code == 401
+        assert (await client.get(f"/api/v1/admin/errors?{qs}", headers=non_owner_headers)).status_code == 403
+        assert (await client.get(f"/api/v1/admin/errors?{qs}", headers=non_google_owner_headers)).status_code == 403
+        assert (await client.patch(f"/api/v1/admin/errors?{qs}", headers=non_owner_headers)).status_code == 405

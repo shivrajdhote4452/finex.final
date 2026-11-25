@@ -1746,14 +1746,20 @@ class ApiClient {
       status_code?: number;
       category?: string;
       feature_area?: string;
+      date_from?: string;
+      date_to?: string;
+      sort_order?: 'desc' | 'asc';
       search?: string;
     }) => {
       const q = new URLSearchParams();
       if (params?.page) q.set('page', String(params.page));
       if (params?.limit) q.set('limit', String(params.limit));
-      if (params?.status_code) q.set('status_code', String(params.status_code));
+      if (params?.status_code !== undefined) q.set('status_code', String(params.status_code));
       if (params?.category) q.set('category', params.category);
       if (params?.feature_area) q.set('feature_area', params.feature_area);
+      if (params?.date_from) q.set('date_from', params.date_from);
+      if (params?.date_to) q.set('date_to', params.date_to);
+      if (params?.sort_order) q.set('sort_order', params.sort_order);
       if (params?.search) q.set('search', params.search);
       const qs = q.toString() ? `?${q.toString()}` : '';
       return this.request<AdminErrorsResponse>(`/admin/errors${qs}`);
