@@ -58,6 +58,19 @@ import {
   validateUserDateRange,
   type UserFilterState,
 } from '../src/domain/userDirectory.ts';
+import {
+  DEFAULT_ORDER_FILTERS,
+  ORDER_SORT_OPTIONS,
+  ORDER_STATUS_OPTIONS,
+  buildOrderQueryParams,
+  formatOrderPrice,
+  formatOrderTimestamp,
+  hasActiveOrderFilters,
+  normalizeOrderStatusCounts,
+  resolveOrderFailureDetails,
+  validateOrderDateRange,
+  type OrderFilterState,
+} from '../src/domain/paperTradingOverview.ts';
 
 // Helper to create a cryptographically valid unexpired JWT for frontend client tests
 const createValidTestToken = (sub: string) => {
@@ -911,5 +924,147 @@ describe('Separate FinEx Admin Portal Frontend & Domain Contract', () => {
       USER_SORT_OPTIONS.map((o) => o.value),
       ['desc', 'asc']
     );
+  });
+
+  // -------------------------------------------------------------
+  // 11. PAPER TRADING OVERVIEW & ORDERS DOMAIN CONTRACT
+  // -------------------------------------------------------------
+  test('29. Paper trading order status catalog matches real DB schema statuses cleanly', () => {
+    assert.deepStrictEqual([...ORDER_STATUS_OPTIONS], ['FILLED', 'REJECTED', 'PENDING', 'CANCELLED']);
+    assert.strictEqual(ORDER_STATUS_OPTIONS.includes('ACCEPTED' as any), false);
+    assert.strictEqual(DEFAULT_ORDER_FILTERS.sortOrder, 'desc');
+    assert.strictEqual(DEFAULT_ORDER_FILTERS.limit, 20);
+    assert.deepStrictEqual(
+      ORDER_SORT_OPTIONS.map((o) => o.value),
+      ['desc', 'asc']
+    );
+
+    const normalized = normalizeOrderStatusCounts({ FILLED: 4, REJECTED: -2 });
+    assert.strictEqual(normalized.FILLED, 4);
+    assert.strictEqual(normalized.REJECTED, 0);
+    assert.strictEqual(normalized.PENDING, 0);
+    assert.strictEqual(normalized.CANCELLED, 0);
+  });
+
+  test('30. buildOrderQueryParams enforces bounds, uppercases enums, trims search, and resolves date bounds', () => {
+    const filters: OrderFilterState = {
+      search: '  reliance  ',
+      status: 'rejected',
+      side: 'sell',
+      dateFrom: '2026-11-15',
+      dateTo: '2026-11-25',
+      sortOrder: 'asc',
+      limit: 50,
+    };
+
+    const params = buildOrderQueryParams(filters, 4, true);
+    assert.strictEqual(params.page, 4);
+    assert.strictEqual(params.limit, 50);
+    assert.strictEqual(params.search, 'reliance');
+    assert.strictEqual(params.status, 'REJECTED');
+    assert.strictEqual(params.side, 'SELL');
+    assert.strictEqual(params.sort_order, 'asc');
+    assert.strictEqual(params.date_from, toLocalDateBoundaryIso('2026-11-15', 'start'));
+    assert.strictEqual(params.date_to, toLocalDateBoundaryIso('2026-11-25', 'end'));
+
+    const fallback = buildOrderQueryParams(
+      {
+        ...DEFAULT_ORDER_FILTERS,
+        search: '   ',
+        limit: 500,
+      },
+      0,
+      false
+    );
+    assert.strictEqual(fallback.page, 1);
+    assert.strictEqual(fallback.limit, 20);
+    assert.strictEqual(fallback.search, undefined);
+    assert.strictEqual(fallback.status, undefined);
+    assert.strictEqual(fallback.side, undefined);
+    assert.strictEqual(fallback.sort_order, 'desc');
+  });
+
+  test('31. validateOrderDateRange and hasActiveOrderFilters validate chronological bounds and active state', () => {
+    assert.strictEqual(validateOrderDateRange('', ''), null);
+    assert.strictEqual(validateOrderDateRange('2026-11-01', '2026-11-25'), null);
+    assert.strictEqual(validateOrderDateRange('2026-11-25', '2026-11-25'), null);
+    assert.ok(validateOrderDateRange('invalid', '2026-11-25')?.includes('YYYY-MM-DD'));
+    assert.ok(validateOrderDateRange('2026-11-25', '2026-11-20')?.includes('on or before'));
+
+    assert.strictEqual(hasActiveOrderFilters(DEFAULT_ORDER_FILTERS), false);
+    assert.strictEqual(hasActiveOrderFilters({ ...DEFAULT_ORDER_FILTERS, search: '  ' }), false);
+    assert.strictEqual(hasActiveOrderFilters({ ...DEFAULT_ORDER_FILTERS, search: 'TCS' }), true);
+    assert.strictEqual(hasActiveOrderFilters({ ...DEFAULT_ORDER_FILTERS, status: 'REJECTED' }), true);
+    assert.strictEqual(hasActiveOrderFilters({ ...DEFAULT_ORDER_FILTERS, side: 'BUY' }), true);
+    assert.strictEqual(hasActiveOrderFilters({ ...DEFAULT_ORDER_FILTERS, dateTo: '2026-11-25' }), true);
+    assert.strictEqual(hasActiveOrderFilters({ ...DEFAULT_ORDER_FILTERS, sortOrder: 'asc' }), true);
+  });
+
+  test('32. apiClient.admin.getOrders serializes date_from, date_to, sort_order, side, status, and search', async () => {
+    let capturedUrl = '';
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      capturedUrl = String(input);
+      return new Response(
+        JSON.stringify({
+          orders: [],
+          total: 0,
+          page: 1,
+          limit: 20,
+          total_pages: 1,
+          overall_total: 0,
+          status_counts: { FILLED: 0, REJECTED: 0, PENDING: 0, CANCELLED: 0 },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    }) as any;
+
+    try {
+      apiClient.setAdminToken(createValidTestToken('owner-1'));
+      await apiClient.admin.getOrders({
+        page: 2,
+        limit: 10,
+        symbol: 'INFY',
+        status: 'REJECTED',
+        side: 'SELL',
+        date_from: '2026-11-10T00:00:00.000Z',
+        date_to: '2026-11-25T23:59:59.999Z',
+        sort_order: 'asc',
+        search: 'ord-123',
+      });
+
+      const parsed = new URL(capturedUrl, 'http://localhost');
+      assert.strictEqual(parsed.pathname, '/api/v1/admin/orders');
+      assert.strictEqual(parsed.searchParams.get('page'), '2');
+      assert.strictEqual(parsed.searchParams.get('limit'), '10');
+      assert.strictEqual(parsed.searchParams.get('symbol'), 'INFY');
+      assert.strictEqual(parsed.searchParams.get('status'), 'REJECTED');
+      assert.strictEqual(parsed.searchParams.get('side'), 'SELL');
+      assert.strictEqual(parsed.searchParams.get('date_from'), '2026-11-10T00:00:00.000Z');
+      assert.strictEqual(parsed.searchParams.get('date_to'), '2026-11-25T23:59:59.999Z');
+      assert.strictEqual(parsed.searchParams.get('sort_order'), 'asc');
+      assert.strictEqual(parsed.searchParams.get('search'), 'ord-123');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test('33. resolveOrderFailureDetails, formatOrderPrice, and formatOrderTimestamp handle missing/unsafe inputs honestly', () => {
+    assert.strictEqual(resolveOrderFailureDetails({ status: 'REJECTED', rejection_reason: null }), 'Failure reason unavailable');
+    assert.strictEqual(resolveOrderFailureDetails({ status: 'REJECTED', rejection_reason: '   ' }), 'Failure reason unavailable');
+    assert.strictEqual(resolveOrderFailureDetails({ status: 'FILLED', rejection_reason: null }), '—');
+    assert.strictEqual(
+      resolveOrderFailureDetails({ status: 'REJECTED', rejection_reason: 'Insufficient virtual cash balance for requested order.' }),
+      'Insufficient virtual cash balance for requested order.'
+    );
+
+    assert.strictEqual(formatOrderPrice({ fill_price: null, limit_price: null }), '—');
+    assert.strictEqual(formatOrderPrice({ fill_price: 0, limit_price: null }), '—');
+    assert.ok(formatOrderPrice({ fill_price: 2450.5, limit_price: null }).includes('2,450.50'));
+    assert.ok(formatOrderPrice({ fill_price: null, limit_price: 3400 }).includes('3,400.00'));
+
+    assert.strictEqual(formatOrderTimestamp(null), '—');
+    assert.strictEqual(formatOrderTimestamp('invalid'), '—');
+    assert.ok(formatOrderTimestamp('2026-11-25T11:20:00Z').includes('2026'));
   });
 });
