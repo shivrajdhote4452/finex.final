@@ -3,13 +3,12 @@ import {
   apiClient,
   AdminMeResponse,
   AdminOverviewResponse,
-  AdminUsersResponse,
   AdminOrdersResponse,
   AdminSystemHealthResponse,
-  AdminUserItem,
   AdminOrderItem,
 } from '../api/client';
 import { AdminErrorsPanel } from '../components/admin/AdminErrorsPanel';
+import { AdminUsersPanel } from '../components/admin/AdminUsersPanel';
 import { ThemeToggle } from '../components/common/ThemeToggle';
 
 interface AdminPortalProps {
@@ -30,15 +29,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onNavigateToApp }) => 
   const [overviewLoading, setOverviewLoading] = useState<boolean>(false);
   const [overviewError, setOverviewError] = useState<string | null>(null);
 
-  // Users State
-  const [usersData, setUsersData] = useState<AdminUsersResponse | null>(null);
+  // Users State (managed inside AdminUsersPanel)
   const [usersLoading, setUsersLoading] = useState<boolean>(false);
-  const [usersError, setUsersError] = useState<string | null>(null);
-  const [userSearch, setUserSearch] = useState<string>('');
-  const [userPage, setUserPage] = useState<number>(1);
-  const [userFilterActive, setUserFilterActive] = useState<boolean | undefined>(undefined);
-  const [userFilterVerified, setUserFilterVerified] = useState<boolean | undefined>(undefined);
-  const [userFilterOnboarded, setUserFilterOnboarded] = useState<boolean | undefined>(undefined);
+  const [usersRefreshTick, setUsersRefreshTick] = useState<number>(0);
 
   // Orders State
   const [ordersData, setOrdersData] = useState<AdminOrdersResponse | null>(null);
@@ -218,30 +211,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onNavigateToApp }) => 
     }
   }, []);
 
-  const fetchUsers = useCallback(async () => {
-    setUsersLoading(true);
-    setUsersError(null);
-    try {
-      const data = await apiClient.admin.getUsers({
-        page: userPage,
-        limit: 15,
-        search: userSearch.trim() || undefined,
-        is_active: userFilterActive,
-        email_verified: userFilterVerified,
-        onboarding_completed: userFilterOnboarded,
-      });
-      setUsersData(data);
-    } catch (err: any) {
-      if (err?.status === 401) {
-        setAdminAuthState('login');
-        return;
-      }
-      setUsersError(err?.message || 'Failed to load user directory');
-    } finally {
-      setUsersLoading(false);
-    }
-  }, [userPage, userSearch, userFilterActive, userFilterVerified, userFilterOnboarded]);
-
   const fetchOrders = useCallback(async () => {
     setOrdersLoading(true);
     setOrdersError(null);
@@ -285,10 +254,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onNavigateToApp }) => 
   useEffect(() => {
     if (adminAuthState !== 'authenticated') return;
     if (activeTab === 'overview') fetchOverview();
-    else if (activeTab === 'users') fetchUsers();
     else if (activeTab === 'orders') fetchOrders();
     else if (activeTab === 'health') fetchHealth();
-  }, [adminAuthState, activeTab, fetchOverview, fetchUsers, fetchOrders, fetchHealth]);
+  }, [adminAuthState, activeTab, fetchOverview, fetchOrders, fetchHealth]);
 
   // ---------------------------------------------------------------------------
   // RENDER: Checking Session
@@ -649,217 +617,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onNavigateToApp }) => 
     );
   };
 
-  const renderUsersTab = () => {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        {/* Search & Filters */}
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: '12px',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            backgroundColor: 'var(--bg-card)',
-            padding: '16px',
-            borderRadius: 'var(--radius-sm)',
-            border: '1px solid var(--border-subtle)',
-          }}
-        >
-          <div style={{ display: 'flex', flex: 1, minWidth: '240px', gap: '8px' }}>
-            <input
-              type="text"
-              placeholder="Search by email, name, or user ID..."
-              value={userSearch}
-              onChange={(e) => {
-                setUserSearch(e.target.value);
-                setUserPage(1);
-              }}
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                fontSize: '13px',
-                borderRadius: 'var(--radius-xs)',
-                border: '1px solid var(--border-subtle)',
-                backgroundColor: 'var(--bg-main)',
-                color: 'var(--text-main)',
-              }}
-            />
-          </div>
-
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <select
-              value={userFilterActive === undefined ? '' : String(userFilterActive)}
-              onChange={(e) => {
-                setUserFilterActive(e.target.value === '' ? undefined : e.target.value === 'true');
-                setUserPage(1);
-              }}
-              style={{
-                padding: '8px 12px',
-                fontSize: '12px',
-                borderRadius: 'var(--radius-xs)',
-                border: '1px solid var(--border-subtle)',
-                backgroundColor: 'var(--bg-main)',
-                color: 'var(--text-main)',
-              }}
-            >
-              <option value="">All Statuses</option>
-              <option value="true">Active Only</option>
-              <option value="false">Inactive</option>
-            </select>
-
-            <select
-              value={userFilterVerified === undefined ? '' : String(userFilterVerified)}
-              onChange={(e) => {
-                setUserFilterVerified(e.target.value === '' ? undefined : e.target.value === 'true');
-                setUserPage(1);
-              }}
-              style={{
-                padding: '8px 12px',
-                fontSize: '12px',
-                borderRadius: 'var(--radius-xs)',
-                border: '1px solid var(--border-subtle)',
-                backgroundColor: 'var(--bg-main)',
-                color: 'var(--text-main)',
-              }}
-            >
-              <option value="">All Email States</option>
-              <option value="true">Verified Email</option>
-              <option value="false">Unverified</option>
-            </select>
-
-            <select
-              value={userFilterOnboarded === undefined ? '' : String(userFilterOnboarded)}
-              onChange={(e) => {
-                setUserFilterOnboarded(e.target.value === '' ? undefined : e.target.value === 'true');
-                setUserPage(1);
-              }}
-              style={{
-                padding: '8px 12px',
-                fontSize: '12px',
-                borderRadius: 'var(--radius-xs)',
-                border: '1px solid var(--border-subtle)',
-                backgroundColor: 'var(--bg-main)',
-                color: 'var(--text-main)',
-              }}
-            >
-              <option value="">All Onboarding</option>
-              <option value="true">Completed</option>
-              <option value="false">Pending</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Users Table */}
-        <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '20px' }}>
-          {usersLoading ? (
-            <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-muted)' }}>Loading user directory...</div>
-          ) : usersError ? (
-            <div style={{ padding: '16px', color: 'var(--color-loss)' }}>{usersError}</div>
-          ) : !usersData || usersData.users.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-muted)' }}>No matching users found.</div>
-          ) : (
-            <>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-muted)' }}>
-                      <th style={{ padding: '10px 8px' }}>User ID</th>
-                      <th style={{ padding: '10px 8px' }}>Email</th>
-                      <th style={{ padding: '10px 8px' }}>Name</th>
-                      <th style={{ padding: '10px 8px' }}>Verified</th>
-                      <th style={{ padding: '10px 8px' }}>Onboarded</th>
-                      <th style={{ padding: '10px 8px' }}>Risk Band</th>
-                      <th style={{ padding: '10px 8px' }}>Status</th>
-                      <th style={{ padding: '10px 8px' }}>Registered</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {usersData.users.map((u: AdminUserItem) => (
-                      <tr key={u.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                        <td style={{ padding: '10px 8px', fontFamily: 'var(--font-mono)' }}>{u.id}</td>
-                        <td style={{ padding: '10px 8px', fontWeight: 600 }}>{u.email}</td>
-                        <td style={{ padding: '10px 8px' }}>{u.display_name || u.full_name || '—'}</td>
-                        <td style={{ padding: '10px 8px' }}>
-                          <span style={{ color: u.email_verified ? 'var(--color-profit)' : 'var(--text-muted)' }}>
-                            {u.email_verified ? '✓ Yes' : 'No'}
-                          </span>
-                        </td>
-                        <td style={{ padding: '10px 8px' }}>
-                          <span style={{ color: u.onboarding_completed ? 'var(--color-profit)' : 'var(--text-muted)' }}>
-                            {u.onboarding_completed ? '✓ Yes' : 'Pending'}
-                          </span>
-                        </td>
-                        <td style={{ padding: '10px 8px' }}>
-                          <span
-                            style={{
-                              padding: '2px 6px',
-                              borderRadius: 'var(--radius-xs)',
-                              backgroundColor: 'rgba(255,255,255,0.06)',
-                              fontSize: '11px',
-                            }}
-                          >
-                            {u.risk_band || 'UNASSESSED'}
-                          </span>
-                        </td>
-                        <td style={{ padding: '10px 8px' }}>
-                          <span style={{ color: u.is_active ? 'var(--color-profit)' : 'var(--color-loss)', fontWeight: 600 }}>
-                            {u.is_active ? 'Active' : 'Disabled'}
-                          </span>
-                        </td>
-                        <td style={{ padding: '10px 8px', color: 'var(--text-muted)' }}>
-                          {u.created_at ? new Date(u.created_at).toLocaleDateString('en-IN') : '—'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Pagination */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '16px', fontSize: '12px' }}>
-                <div style={{ color: 'var(--text-muted)' }}>
-                  Total {usersData.total} users · Page {usersData.page} of {usersData.total_pages}
-                </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button
-                    onClick={() => setUserPage((p) => Math.max(1, p - 1))}
-                    disabled={usersData.page <= 1}
-                    style={{
-                      padding: '4px 10px',
-                      backgroundColor: 'var(--bg-main)',
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: 'var(--radius-xs)',
-                      color: 'var(--text-main)',
-                      cursor: usersData.page <= 1 ? 'not-allowed' : 'pointer',
-                      opacity: usersData.page <= 1 ? 0.5 : 1,
-                    }}
-                  >
-                    Previous
-                  </button>
-                  <button
-                    onClick={() => setUserPage((p) => Math.min(usersData.total_pages, p + 1))}
-                    disabled={usersData.page >= usersData.total_pages}
-                    style={{
-                      padding: '4px 10px',
-                      backgroundColor: 'var(--bg-main)',
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: 'var(--radius-xs)',
-                      color: 'var(--text-main)',
-                      cursor: usersData.page >= usersData.total_pages ? 'not-allowed' : 'pointer',
-                      opacity: usersData.page >= usersData.total_pages ? 0.5 : 1,
-                    }}
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    );
-  };
+  const renderUsersTab = () => (
+    <AdminUsersPanel
+      refreshTrigger={usersRefreshTick}
+      onLoadingChange={setUsersLoading}
+      onUnauthorized={() => setAdminAuthState('login')}
+    />
+  );
 
   const renderOrdersTab = () => {
     return (
@@ -1332,7 +1096,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ onNavigateToApp }) => 
           <button
             onClick={() => {
               if (activeTab === 'overview') fetchOverview();
-              else if (activeTab === 'users') fetchUsers();
+              else if (activeTab === 'users') setUsersRefreshTick((n) => n + 1);
               else if (activeTab === 'orders') fetchOrders();
               else if (activeTab === 'health') fetchHealth();
               else if (activeTab === 'errors') setErrorsRefreshTick((n) => n + 1);

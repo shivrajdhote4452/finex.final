@@ -162,6 +162,74 @@ class AdminErrorSummaryResponse(BaseModel):
 
 
 # =============================================================================
+# Shared Filter Validation & Date Helpers
+# =============================================================================
+
+_SAFE_FILTER_TEXT_RE = re.compile(r"^[A-Za-z0-9 _-]+$")
+_DATE_ONLY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _escape_like_term(raw: str) -> str:
+    """Escapes SQL LIKE/ILIKE wildcard characters in user search strings."""
+    return raw.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _validate_filter_token(value: Optional[str], field_name: str) -> Optional[str]:
+    """Validates bounded filter tokens against safe alphanumeric/separator characters."""
+    if value is None:
+        return None
+    clean = value.strip()
+    if not clean:
+        return None
+    if not _SAFE_FILTER_TEXT_RE.match(clean):
+        raise ValidationException(
+            f"Invalid {field_name} filter value. Only letters, numbers, spaces, underscores, and hyphens are allowed."
+        )
+    return clean
+
+
+def _parse_filter_timestamp(raw_value: Optional[str], *, end_of_day: bool, field_name: str) -> Optional[datetime]:
+    """Parses YYYY-MM-DD or ISO-8601 date/time filter boundaries into UTC datetimes."""
+    if raw_value is None:
+        return None
+    clean = raw_value.strip()
+    if not clean:
+        return None
+
+    if _DATE_ONLY_RE.match(clean):
+        try:
+            parsed_date = date.fromisoformat(clean)
+        except ValueError as exc:
+            raise ValidationException(f"Invalid {field_name} date. Expected YYYY-MM-DD.") from exc
+        if end_of_day:
+            return datetime(
+                parsed_date.year, parsed_date.month, parsed_date.day, 23, 59, 59, 999999, tzinfo=timezone.utc
+            )
+        return datetime(parsed_date.year, parsed_date.month, parsed_date.day, 0, 0, 0, 0, tzinfo=timezone.utc)
+
+    iso_candidate = clean[:-1] + "+00:00" if clean.endswith("Z") else clean
+    try:
+        parsed_dt = datetime.fromisoformat(iso_candidate)
+    except ValueError as exc:
+        raise ValidationException(f"Invalid {field_name} format. Expected YYYY-MM-DD or ISO-8601 datetime.") from exc
+
+    if parsed_dt.tzinfo is None:
+        return parsed_dt.replace(tzinfo=timezone.utc)
+    return parsed_dt.astimezone(timezone.utc)
+
+
+def _parse_date_range(
+    date_from: Optional[str], date_to: Optional[str]
+) -> tuple[Optional[datetime], Optional[datetime]]:
+    """Parses optional start/end boundaries and enforces chronological order."""
+    parsed_from = _parse_filter_timestamp(date_from, end_of_day=False, field_name="date_from")
+    parsed_to = _parse_filter_timestamp(date_to, end_of_day=True, field_name="date_to")
+    if parsed_from is not None and parsed_to is not None and parsed_from > parsed_to:
+        raise ValidationException("date_from must not be after date_to.")
+    return parsed_from, parsed_to
+
+
+# =============================================================================
 # Endpoints
 # =============================================================================
 
@@ -268,15 +336,26 @@ async def get_admin_overview(
 )
 async def list_admin_users(
     request: Request,
-    page: int = Query(1, ge=1, description="Page number"),
+    page: int = Query(1, ge=1, le=10000, description="Page number"),
     limit: int = Query(20, ge=1, le=100, description="Items per page"),
-    search: Optional[str] = Query(None, description="Search term for email or name"),
+    search: Optional[str] = Query(None, max_length=120, description="Search by name or email"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
     email_verified: Optional[bool] = Query(None, description="Filter by verified email status"),
     onboarding_completed: Optional[bool] = Query(None, description="Filter by onboarding status"),
+    date_from: Optional[str] = Query(
+        None, max_length=40, description="Include users registered at or after date/datetime"
+    ),
+    date_to: Optional[str] = Query(
+        None, max_length=40, description="Include users registered at or before date/datetime"
+    ),
+    sort_order: Literal["desc", "asc"] = Query(
+        "desc", description="Sort order by registration date (desc = newest first)"
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     cid = getattr(request.state, "correlation_id", "none")
+
+    parsed_from, parsed_to = _parse_date_range(date_from, date_to)
 
     query = select(
         User.id,
@@ -294,13 +373,13 @@ async def list_admin_users(
     ).outerjoin(UserProfile, User.id == UserProfile.user_id)
 
     if search and search.strip():
-        term = f"%{search.strip()}%"
+        escaped = _escape_like_term(search.strip())
+        term = f"%{escaped}%"
         query = query.where(
             or_(
-                User.email.ilike(term),
-                UserProfile.display_name.ilike(term),
-                UserProfile.full_name.ilike(term),
-                User.id.ilike(term),
+                User.email.ilike(term, escape="\\"),
+                UserProfile.display_name.ilike(term, escape="\\"),
+                UserProfile.full_name.ilike(term, escape="\\"),
             )
         )
 
@@ -324,12 +403,23 @@ async def list_admin_users(
                 UserProfile.onboarding_completed.is_(False) | UserProfile.onboarding_completed.is_(None)
             )
 
+    if parsed_from is not None:
+        query = query.where(User.created_at >= parsed_from)
+
+    if parsed_to is not None:
+        query = query.where(User.created_at <= parsed_to)
+
     # Count matching records
     count_stmt = select(func.count()).select_from(query.order_by(None).subquery())
     total_count = (await db.execute(count_stmt)).scalar() or 0
 
-    # Paginate and order
-    query = query.order_by(User.created_at.desc()).offset((page - 1) * limit).limit(limit)
+    # Paginate and order deterministically (default: newest registered first)
+    if sort_order == "asc":
+        query = query.order_by(User.created_at.asc(), User.id.asc())
+    else:
+        query = query.order_by(User.created_at.desc(), User.id.desc())
+
+    query = query.offset((page - 1) * limit).limit(limit)
     rows = (await db.execute(query)).fetchall()
 
     user_items: List[AdminUserItem] = []
@@ -558,59 +648,6 @@ async def get_admin_me(
     return create_response_envelope(me_data.model_dump(), correlation_id=cid)
 
 
-_SAFE_FILTER_TEXT_RE = re.compile(r"^[A-Za-z0-9 _-]+$")
-_DATE_ONLY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-
-
-def _escape_like_term(raw: str) -> str:
-    """Escapes SQL LIKE/ILIKE wildcard characters in user search strings."""
-    return raw.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
-
-def _validate_filter_token(value: Optional[str], field_name: str) -> Optional[str]:
-    """Validates bounded filter tokens against safe alphanumeric/separator characters."""
-    if value is None:
-        return None
-    clean = value.strip()
-    if not clean:
-        return None
-    if not _SAFE_FILTER_TEXT_RE.match(clean):
-        raise ValidationException(
-            f"Invalid {field_name} filter value. Only letters, numbers, spaces, underscores, and hyphens are allowed."
-        )
-    return clean
-
-
-def _parse_error_filter_timestamp(raw_value: Optional[str], *, end_of_day: bool, field_name: str) -> Optional[datetime]:
-    """Parses YYYY-MM-DD or ISO-8601 date/time filter boundaries into UTC datetimes."""
-    if raw_value is None:
-        return None
-    clean = raw_value.strip()
-    if not clean:
-        return None
-
-    if _DATE_ONLY_RE.match(clean):
-        try:
-            parsed_date = date.fromisoformat(clean)
-        except ValueError as exc:
-            raise ValidationException(f"Invalid {field_name} date. Expected YYYY-MM-DD.") from exc
-        if end_of_day:
-            return datetime(
-                parsed_date.year, parsed_date.month, parsed_date.day, 23, 59, 59, 999999, tzinfo=timezone.utc
-            )
-        return datetime(parsed_date.year, parsed_date.month, parsed_date.day, 0, 0, 0, 0, tzinfo=timezone.utc)
-
-    iso_candidate = clean[:-1] + "+00:00" if clean.endswith("Z") else clean
-    try:
-        parsed_dt = datetime.fromisoformat(iso_candidate)
-    except ValueError as exc:
-        raise ValidationException(f"Invalid {field_name} format. Expected YYYY-MM-DD or ISO-8601 datetime.") from exc
-
-    if parsed_dt.tzinfo is None:
-        return parsed_dt.replace(tzinfo=timezone.utc)
-    return parsed_dt.astimezone(timezone.utc)
-
-
 @router.get(
     "/errors",
     summary="Admin Error Monitoring Log",
@@ -641,11 +678,7 @@ async def get_admin_errors(
 
     clean_category = _validate_filter_token(category, "category")
     clean_feature = _validate_filter_token(feature_area, "feature_area")
-    parsed_from = _parse_error_filter_timestamp(date_from, end_of_day=False, field_name="date_from")
-    parsed_to = _parse_error_filter_timestamp(date_to, end_of_day=True, field_name="date_to")
-
-    if parsed_from is not None and parsed_to is not None and parsed_from > parsed_to:
-        raise ValidationException("date_from must not be after date_to.")
+    parsed_from, parsed_to = _parse_date_range(date_from, date_to)
 
     # Opportunistically execute retention pruning if interval has elapsed
     await prune_if_due(session=db)

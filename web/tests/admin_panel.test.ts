@@ -47,6 +47,17 @@ import {
   validateErrorDateRange,
   type ErrorFilterState,
 } from '../src/domain/errorMonitoring.ts';
+import {
+  DEFAULT_USER_FILTERS,
+  USER_ACCOUNT_STATUS_OPTIONS,
+  USER_SORT_OPTIONS,
+  buildUserQueryParams,
+  formatUserRegistrationDate,
+  hasActiveUserFilters,
+  resolveUserDisplayName,
+  validateUserDateRange,
+  type UserFilterState,
+} from '../src/domain/userDirectory.ts';
 
 // Helper to create a cryptographically valid unexpired JWT for frontend client tests
 const createValidTestToken = (sub: string) => {
@@ -766,5 +777,139 @@ describe('Separate FinEx Admin Portal Frontend & Domain Contract', () => {
     const formatted = formatErrorTimestamp('2026-11-25T10:30:00Z');
     assert.notStrictEqual(formatted, '—');
     assert.ok(formatted.includes('2026'));
+  });
+
+  // -------------------------------------------------------------
+  // 10. ADMIN USER DIRECTORY DOMAIN & FILTER SERIALIZATION
+  // -------------------------------------------------------------
+  test('24. buildUserQueryParams enforces defaults, status mapping, trimmed search, sort order, and local day bounds', () => {
+    const filters: UserFilterState = {
+      search: '  priya@example.com  ',
+      accountStatus: 'inactive',
+      emailVerified: 'true',
+      onboardingCompleted: 'false',
+      dateFrom: '2026-11-10',
+      dateTo: '2026-11-25',
+      sortOrder: 'asc',
+      limit: 50,
+    };
+
+    const params = buildUserQueryParams(filters, 2, true);
+    assert.strictEqual(params.page, 2);
+    assert.strictEqual(params.limit, 50);
+    assert.strictEqual(params.search, 'priya@example.com');
+    assert.strictEqual(params.is_active, false);
+    assert.strictEqual(params.email_verified, true);
+    assert.strictEqual(params.onboarding_completed, false);
+    assert.strictEqual(params.sort_order, 'asc');
+    assert.strictEqual(params.date_from, toLocalDateBoundaryIso('2026-11-10', 'start'));
+    assert.strictEqual(params.date_to, toLocalDateBoundaryIso('2026-11-25', 'end'));
+
+    const fallback = buildUserQueryParams(
+      {
+        ...DEFAULT_USER_FILTERS,
+        accountStatus: 'active',
+        search: '   ',
+        limit: 999,
+      },
+      -3,
+      false
+    );
+    assert.strictEqual(fallback.page, 1);
+    assert.strictEqual(fallback.limit, 20);
+    assert.strictEqual(fallback.is_active, true);
+    assert.strictEqual(fallback.email_verified, undefined);
+    assert.strictEqual(fallback.onboarding_completed, undefined);
+    assert.strictEqual(fallback.search, undefined);
+    assert.strictEqual(fallback.sort_order, 'desc');
+  });
+
+  test('25. validateUserDateRange and hasActiveUserFilters detect invalid ranges and active states', () => {
+    assert.strictEqual(validateUserDateRange('', ''), null);
+    assert.strictEqual(validateUserDateRange('2026-11-10', '2026-11-25'), null);
+    assert.strictEqual(validateUserDateRange('2026-11-25', '2026-11-25'), null);
+    assert.ok(validateUserDateRange('25-11-2026', '2026-11-25')?.includes('YYYY-MM-DD'));
+    assert.ok(validateUserDateRange('2026-11-25', '2026-11-20')?.includes('on or before'));
+
+    assert.strictEqual(hasActiveUserFilters(DEFAULT_USER_FILTERS), false);
+    assert.strictEqual(hasActiveUserFilters({ ...DEFAULT_USER_FILTERS, search: '   ' }), false);
+    assert.strictEqual(hasActiveUserFilters({ ...DEFAULT_USER_FILTERS, search: 'alice' }), true);
+    assert.strictEqual(hasActiveUserFilters({ ...DEFAULT_USER_FILTERS, accountStatus: 'active' }), true);
+    assert.strictEqual(hasActiveUserFilters({ ...DEFAULT_USER_FILTERS, emailVerified: 'false' }), true);
+    assert.strictEqual(hasActiveUserFilters({ ...DEFAULT_USER_FILTERS, onboardingCompleted: 'true' }), true);
+    assert.strictEqual(hasActiveUserFilters({ ...DEFAULT_USER_FILTERS, dateFrom: '2026-11-01' }), true);
+    assert.strictEqual(hasActiveUserFilters({ ...DEFAULT_USER_FILTERS, sortOrder: 'asc' }), true);
+  });
+
+  test('26. apiClient.admin.getUsers serializes search, status flags, date_from, date_to, and sort_order', async () => {
+    let capturedUrl = '';
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      capturedUrl = String(input);
+      return new Response(
+        JSON.stringify({
+          users: [],
+          total: 0,
+          page: 1,
+          limit: 20,
+          total_pages: 1,
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    }) as any;
+
+    try {
+      apiClient.setAdminToken(createValidTestToken('owner-1'));
+      await apiClient.admin.getUsers({
+        page: 3,
+        limit: 10,
+        search: 'shivraj',
+        is_active: false,
+        email_verified: true,
+        onboarding_completed: false,
+        date_from: '2026-11-01T00:00:00.000Z',
+        date_to: '2026-11-25T23:59:59.999Z',
+        sort_order: 'asc',
+      });
+
+      const parsed = new URL(capturedUrl, 'http://localhost');
+      assert.strictEqual(parsed.pathname, '/api/v1/admin/users');
+      assert.strictEqual(parsed.searchParams.get('page'), '3');
+      assert.strictEqual(parsed.searchParams.get('limit'), '10');
+      assert.strictEqual(parsed.searchParams.get('search'), 'shivraj');
+      assert.strictEqual(parsed.searchParams.get('is_active'), 'false');
+      assert.strictEqual(parsed.searchParams.get('email_verified'), 'true');
+      assert.strictEqual(parsed.searchParams.get('onboarding_completed'), 'false');
+      assert.strictEqual(parsed.searchParams.get('date_from'), '2026-11-01T00:00:00.000Z');
+      assert.strictEqual(parsed.searchParams.get('date_to'), '2026-11-25T23:59:59.999Z');
+      assert.strictEqual(parsed.searchParams.get('sort_order'), 'asc');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test('27. resolveUserDisplayName and formatUserRegistrationDate handle missing/valid inputs cleanly', () => {
+    assert.strictEqual(resolveUserDisplayName({ full_name: 'Aarav Patel', display_name: 'Aarav' }), 'Aarav Patel');
+    assert.strictEqual(resolveUserDisplayName({ full_name: '  ', display_name: 'InvestorA' }), 'InvestorA');
+    assert.strictEqual(resolveUserDisplayName({ full_name: null, display_name: undefined }), '—');
+
+    assert.strictEqual(formatUserRegistrationDate(null), '—');
+    assert.strictEqual(formatUserRegistrationDate('invalid'), '—');
+    const formatted = formatUserRegistrationDate('2026-11-25T09:15:00Z');
+    assert.notStrictEqual(formatted, '—');
+    assert.ok(formatted.includes('2026'));
+  });
+
+  test('28. User directory default sort and options prioritize newest registrations and read-only safety', () => {
+    assert.strictEqual(DEFAULT_USER_FILTERS.sortOrder, 'desc');
+    assert.strictEqual(DEFAULT_USER_FILTERS.limit, 20);
+    assert.deepStrictEqual(
+      USER_ACCOUNT_STATUS_OPTIONS.map((o) => o.value),
+      ['', 'active', 'inactive']
+    );
+    assert.deepStrictEqual(
+      USER_SORT_OPTIONS.map((o) => o.value),
+      ['desc', 'asc']
+    );
   });
 });

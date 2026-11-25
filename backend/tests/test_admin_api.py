@@ -16,6 +16,8 @@ Validates:
 8. System health diagnostics safely expose integration states without revealing credentials.
 """
 
+import uuid
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 import pytest
@@ -23,7 +25,7 @@ from backend.app.config import get_settings
 from backend.app.database import AsyncSessionLocal, engine
 from backend.app.factory import create_app
 from backend.app.models.core import Base as CoreBase
-from backend.app.models.core import User
+from backend.app.models.core import User, UserProfile
 from backend.app.models.paper_trading import (
     Base as PaperBase,
 )
@@ -1352,3 +1354,294 @@ async def test_admin_login_logout_preserves_owner_portfolio_and_investor_session
             )
             ledger_after = [(led.id, led.entry_type, float(led.amount)) for led in res_led_after.scalars().all()]
             assert ledger_after == snapshot_ledger
+
+
+# =============================================================================
+# Enhanced User Directory Search, Date Range, Sorting, Validation & Privacy Tests
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_admin_users_date_range_combined_filters_and_sort_order(app, owner_headers):
+    """Verify user directory supports registration date bounds, status filters, sorting, and bounded pagination."""
+    tag = uuid.uuid4().hex[:10]
+    uid_oldest = f"usr-test-oldest-{tag}"
+    uid_mid = f"usr-test-mid-{tag}"
+    uid_latest = f"usr-test-latest-{tag}"
+    created_ids = [uid_oldest, uid_mid, uid_latest]
+
+    async with AsyncSessionLocal() as session:
+        session.add_all(
+            [
+                User(
+                    id=uid_oldest,
+                    email=f"alpha.{tag}@example.com",
+                    provider="email",
+                    provider_subject=f"sub-oldest-{tag}",
+                    password_hash="hashed-secret-oldest",
+                    is_active=False,
+                    email_verified=False,
+                    is_verified=False,
+                    created_at=datetime(2026, 11, 20, 9, 0, 0, tzinfo=timezone.utc),
+                ),
+                User(
+                    id=uid_mid,
+                    email=f"beta.{tag}@example.com",
+                    provider="google",
+                    provider_subject=f"sub-mid-{tag}",
+                    google_subject=f"gsub-mid-{tag}",
+                    is_active=True,
+                    email_verified=True,
+                    is_verified=True,
+                    created_at=datetime(2026, 11, 22, 14, 30, 0, tzinfo=timezone.utc),
+                ),
+                User(
+                    id=uid_latest,
+                    email=f"gamma.{tag}@example.com",
+                    provider="email",
+                    provider_subject=f"sub-latest-{tag}",
+                    password_hash="hashed-secret-latest",
+                    is_active=True,
+                    email_verified=False,
+                    is_verified=False,
+                    created_at=datetime(2026, 11, 24, 20, 15, 0, tzinfo=timezone.utc),
+                ),
+            ]
+        )
+        await session.flush()
+        session.add_all(
+            [
+                UserProfile(
+                    id=f"prof-oldest-{tag}",
+                    user_id=uid_oldest,
+                    full_name=f"Alpha Investor {tag}",
+                    display_name="Alpha",
+                    onboarding_completed=False,
+                ),
+                UserProfile(
+                    id=f"prof-mid-{tag}",
+                    user_id=uid_mid,
+                    full_name=f"Beta Trader {tag}",
+                    display_name="Beta",
+                    onboarding_completed=True,
+                    risk_band="MODERATE",
+                    risk_assessment={"q1": "private-answer-never-expose"},
+                ),
+                UserProfile(
+                    id=f"prof-latest-{tag}",
+                    user_id=uid_latest,
+                    full_name=f"Gamma Member {tag}",
+                    display_name="Gamma",
+                    onboarding_completed=False,
+                ),
+            ]
+        )
+        await session.commit()
+
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            # Default order is newest registered first (desc)
+            res_desc = await client.get(f"/api/v1/admin/users?search={tag}", headers=owner_headers)
+            assert res_desc.status_code == 200
+            desc_emails = [u["email"] for u in res_desc.json()["data"]["users"]]
+            assert desc_emails == [
+                f"gamma.{tag}@example.com",
+                f"beta.{tag}@example.com",
+                f"alpha.{tag}@example.com",
+            ]
+
+            # Explicit ascending sort returns oldest registered first
+            res_asc = await client.get(f"/api/v1/admin/users?search={tag}&sort_order=asc", headers=owner_headers)
+            assert res_asc.status_code == 200
+            asc_emails = [u["email"] for u in res_asc.json()["data"]["users"]]
+            assert asc_emails == [
+                f"alpha.{tag}@example.com",
+                f"beta.{tag}@example.com",
+                f"gamma.{tag}@example.com",
+            ]
+
+            # YYYY-MM-DD date window excludes 2026-11-20
+            res_range = await client.get(
+                f"/api/v1/admin/users?search={tag}&date_from=2026-11-22&date_to=2026-11-24",
+                headers=owner_headers,
+            )
+            assert res_range.status_code == 200
+            range_emails = [u["email"] for u in res_range.json()["data"]["users"]]
+            assert range_emails == [f"gamma.{tag}@example.com", f"beta.{tag}@example.com"]
+
+            # ISO-8601 date_from excludes 14:30Z mid user
+            res_iso = await client.get(
+                f"/api/v1/admin/users?search={tag}&date_from=2026-11-22T15:00:00Z",
+                headers=owner_headers,
+            )
+            assert res_iso.status_code == 200
+            assert [u["email"] for u in res_iso.json()["data"]["users"]] == [f"gamma.{tag}@example.com"]
+
+            # Date to includes full end-of-day UTC
+            res_to = await client.get(
+                f"/api/v1/admin/users?search={tag}&date_to=2026-11-22",
+                headers=owner_headers,
+            )
+            assert res_to.status_code == 200
+            assert [u["email"] for u in res_to.json()["data"]["users"]] == [
+                f"beta.{tag}@example.com",
+                f"alpha.{tag}@example.com",
+            ]
+
+            # Combined filters (active, verified, onboarded, search by name, date range)
+            res_combo = await client.get(
+                f"/api/v1/admin/users?search=Beta%20Trader%20{tag}&is_active=true&email_verified=true"
+                "&onboarding_completed=true&date_from=2026-11-21&date_to=2026-11-23",
+                headers=owner_headers,
+            )
+            assert res_combo.status_code == 200
+            combo_users = res_combo.json()["data"]["users"]
+            assert len(combo_users) == 1
+            assert combo_users[0]["email"] == f"beta.{tag}@example.com"
+
+            # Inactive status filter
+            res_inactive = await client.get(f"/api/v1/admin/users?search={tag}&is_active=false", headers=owner_headers)
+            assert res_inactive.status_code == 200
+            assert [u["email"] for u in res_inactive.json()["data"]["users"]] == [f"alpha.{tag}@example.com"]
+
+            # Bounded pagination: limit=2 across page=1 and page=2
+            res_p1 = await client.get(f"/api/v1/admin/users?search={tag}&limit=2&page=1", headers=owner_headers)
+            res_p2 = await client.get(f"/api/v1/admin/users?search={tag}&limit=2&page=2", headers=owner_headers)
+            p1 = res_p1.json()["data"]
+            p2 = res_p2.json()["data"]
+            assert p1["total"] == 3
+            assert p1["total_pages"] == 2
+            assert [u["email"] for u in p1["users"]] == [f"gamma.{tag}@example.com", f"beta.{tag}@example.com"]
+            assert [u["email"] for u in p2["users"]] == [f"alpha.{tag}@example.com"]
+    finally:
+        async with AsyncSessionLocal() as session:
+            await session.execute(delete(User).where(User.id.in_(created_ids)))
+            await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_admin_users_search_wildcard_escape_outerjoin_and_privacy(app, owner_headers):
+    """Verify LIKE escaping, users without UserProfile rows, and strict exclusion of sensitive/ID search leaks."""
+    tag = uuid.uuid4().hex[:10]
+    uid_literal = f"usr-secretid-only-{tag}"
+    uid_wildcard = f"usr-no-profile-{tag}"
+    created_ids = [uid_literal, uid_wildcard]
+
+    async with AsyncSessionLocal() as session:
+        session.add_all(
+            [
+                User(
+                    id=uid_literal,
+                    email=f"literal.{tag}@example.com",
+                    provider="google",
+                    provider_subject=f"sub-hidden-{tag}",
+                    google_subject=f"google-hidden-{tag}",
+                    password_hash=f"hash-hidden-{tag}",
+                    is_active=True,
+                    email_verified=True,
+                    is_verified=True,
+                ),
+                User(
+                    id=uid_wildcard,
+                    email=f"no.profile.100abcX@{tag}.example.com",
+                    provider="email",
+                    provider_subject=f"sub-other-{tag}",
+                    is_active=True,
+                    email_verified=False,
+                    is_verified=False,
+                ),
+            ]
+        )
+        await session.flush()
+        session.add(
+            UserProfile(
+                id=f"prof-lit-{tag}",
+                user_id=uid_literal,
+                full_name=f"Investor 100%_match {tag}",
+                display_name=f"Handle_{tag}",
+                onboarding_completed=True,
+                risk_assessment={"secret_note": f"assessment-secret-{tag}"},
+            )
+        )
+        await session.commit()
+
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            # SQL wildcards (% and _) must be escaped and match literal characters only
+            res_lit = await client.get("/api/v1/admin/users?search=100%25_match", headers=owner_headers)
+            assert res_lit.status_code == 200
+            lit_emails = [u["email"] for u in res_lit.json()["data"]["users"]]
+            assert f"literal.{tag}@example.com" in lit_emails
+            assert f"no.profile.100abcX@{tag}.example.com" not in lit_emails
+
+            # User without UserProfile row still appears via email search & outerjoin
+            res_noprof = await client.get("/api/v1/admin/users?search=no.profile.100abcX", headers=owner_headers)
+            assert res_noprof.status_code == 200
+            noprof_users = res_noprof.json()["data"]["users"]
+            assert len(noprof_users) == 1
+            assert noprof_users[0]["onboarding_completed"] is False
+
+            # Search must NOT match internal User.id, OAuth subjects, password_hash, or private risk_assessment
+            for private_probe in [
+                uid_literal,
+                f"sub-hidden-{tag}",
+                f"google-hidden-{tag}",
+                f"hash-hidden-{tag}",
+                f"assessment-secret-{tag}",
+            ]:
+                res_priv = await client.get(f"/api/v1/admin/users?search={private_probe}", headers=owner_headers)
+                assert res_priv.status_code == 200
+                priv_data = res_priv.json()["data"]
+                assert priv_data["total"] == 0, f"Private probe '{private_probe}' unexpectedly matched user records"
+
+            # Verify returned payload keys remain strictly safe
+            res_safe = await client.get(f"/api/v1/admin/users?search=Handle_{tag}", headers=owner_headers)
+            assert res_safe.status_code == 200
+            users = res_safe.json()["data"]["users"]
+            assert len(users) == 1
+            user_obj = users[0]
+            for forbidden_key in ("password_hash", "password", "google_subject", "provider_subject", "risk_assessment"):
+                assert forbidden_key not in user_obj
+    finally:
+        async with AsyncSessionLocal() as session:
+            await session.execute(delete(User).where(User.id.in_(created_ids)))
+            await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_admin_users_filter_input_validation_and_bounds(app, owner_headers):
+    """Verify invalid dates, inverted ranges, invalid sort_order, and out-of-bounds pagination fail with 422."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        invalid_queries = [
+            "date_from=not-a-date",
+            "date_to=2026-02-30",
+            "date_from=2026-11-25&date_to=2026-11-20",
+            "sort_order=random",
+            "page=0",
+            "page=10001",
+            "limit=0",
+            "limit=101",
+            f"search={'a' * 121}",
+        ]
+        for qs in invalid_queries:
+            res = await client.get(f"/api/v1/admin/users?{qs}", headers=owner_headers)
+            assert res.status_code == 422, f"Expected 422 for query '{qs}', got {res.status_code}: {res.text}"
+
+
+@pytest.mark.asyncio
+async def test_admin_users_auth_and_readonly_enforced_with_filters(
+    app, owner_headers, non_owner_headers, non_google_owner_headers
+):
+    """Verify server-side owner authorization and read-only scope stay enforced when user filters are passed."""
+    transport = ASGITransport(app=app)
+    qs = "date_from=2026-11-01&date_to=2026-11-25&sort_order=asc&is_active=true&search=test"
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        assert (await client.get(f"/api/v1/admin/users?{qs}")).status_code == 401
+        assert (await client.get(f"/api/v1/admin/users?{qs}", headers=non_owner_headers)).status_code == 403
+        assert (await client.get(f"/api/v1/admin/users?{qs}", headers=non_google_owner_headers)).status_code == 403
+        assert (await client.post(f"/api/v1/admin/users?{qs}", headers=owner_headers)).status_code == 405
+        assert (await client.patch(f"/api/v1/admin/users?{qs}", headers=owner_headers)).status_code == 405
+        assert (await client.delete(f"/api/v1/admin/users?{qs}", headers=owner_headers)).status_code == 405
