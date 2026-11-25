@@ -35,6 +35,18 @@ import {
   type AdminErrorsResponse,
   type AdminErrorSummaryResponse,
 } from '../src/api/client.ts';
+import {
+  DEFAULT_ERROR_FILTERS,
+  ERROR_CATEGORIES,
+  ERROR_STATUS_OPTIONS,
+  buildErrorQueryParams,
+  formatErrorTimestamp,
+  hasActiveErrorFilters,
+  mergeErrorFilterOptions,
+  toLocalDateBoundaryIso,
+  validateErrorDateRange,
+  type ErrorFilterState,
+} from '../src/domain/errorMonitoring.ts';
 
 // Helper to create a cryptographically valid unexpired JWT for frontend client tests
 const createValidTestToken = (sub: string) => {
@@ -624,5 +636,135 @@ describe('Separate FinEx Admin Portal Frontend & Domain Contract', () => {
     assert.strictEqual(getStatusClassification(422).badgeStyle, 'warning');
     assert.strictEqual(getStatusClassification(429).is5xx, false);
     assert.strictEqual(getStatusClassification(404).is5xx, false);
+  });
+
+  test('19. buildErrorQueryParams enforces bounded inputs, trimmed search, sort order, and local day bounds', () => {
+    const filters: ErrorFilterState = {
+      search: '  corr-123  ',
+      category: 'DATABASE',
+      featureArea: 'Paper Trading',
+      statusCode: '502',
+      dateFrom: '2026-11-20',
+      dateTo: '2026-11-24',
+      sortOrder: 'asc',
+      limit: 50,
+    };
+
+    const params = buildErrorQueryParams(filters, 3, true);
+    assert.strictEqual(params.page, 3);
+    assert.strictEqual(params.limit, 50);
+    assert.strictEqual(params.status_code, 502);
+    assert.strictEqual(params.category, 'DATABASE');
+    assert.strictEqual(params.feature_area, 'Paper Trading');
+    assert.strictEqual(params.sort_order, 'asc');
+    assert.strictEqual(params.search, 'corr-123');
+    assert.strictEqual(params.date_from, toLocalDateBoundaryIso('2026-11-20', 'start'));
+    assert.strictEqual(params.date_to, toLocalDateBoundaryIso('2026-11-24', 'end'));
+
+    // Out-of-bounds pagination, invalid status code, and blank search fall back safely
+    const outOfBounds = buildErrorQueryParams(
+      {
+        ...DEFAULT_ERROR_FILTERS,
+        search: '   ',
+        statusCode: '999',
+        limit: 500,
+      },
+      0,
+      false
+    );
+    assert.strictEqual(outOfBounds.page, 1);
+    assert.strictEqual(outOfBounds.limit, 20);
+    assert.strictEqual(outOfBounds.status_code, undefined);
+    assert.strictEqual(outOfBounds.search, undefined);
+    assert.strictEqual(outOfBounds.sort_order, 'desc');
+  });
+
+  test('20. validateErrorDateRange and hasActiveErrorFilters detect invalid ranges and active state', () => {
+    assert.strictEqual(validateErrorDateRange('', ''), null);
+    assert.strictEqual(validateErrorDateRange('2026-11-20', '2026-11-25'), null);
+    assert.strictEqual(validateErrorDateRange('2026-11-24', '2026-11-24'), null);
+    assert.ok(validateErrorDateRange('2026/11/24', '2026-11-25')?.includes('YYYY-MM-DD'));
+    assert.ok(validateErrorDateRange('2026-11-20', 'invalid')?.includes('YYYY-MM-DD'));
+    assert.ok(validateErrorDateRange('2026-11-25', '2026-11-20')?.includes('on or before'));
+
+    assert.strictEqual(hasActiveErrorFilters(DEFAULT_ERROR_FILTERS), false);
+    assert.strictEqual(hasActiveErrorFilters({ ...DEFAULT_ERROR_FILTERS, search: '   ' }), false);
+    assert.strictEqual(hasActiveErrorFilters({ ...DEFAULT_ERROR_FILTERS, category: 'NOT_FOUND' }), true);
+    assert.strictEqual(hasActiveErrorFilters({ ...DEFAULT_ERROR_FILTERS, featureArea: 'Auth' }), true);
+    assert.strictEqual(hasActiveErrorFilters({ ...DEFAULT_ERROR_FILTERS, statusCode: '409' }), true);
+    assert.strictEqual(hasActiveErrorFilters({ ...DEFAULT_ERROR_FILTERS, dateFrom: '2026-11-24' }), true);
+    assert.strictEqual(hasActiveErrorFilters({ ...DEFAULT_ERROR_FILTERS, sortOrder: 'asc' }), true);
+  });
+
+  test('21. Error catalog options cover NOT_FOUND, 409, and merge dynamic summary values without duplicates', () => {
+    assert.ok(ERROR_CATEGORIES.includes('NOT_FOUND'));
+    assert.ok(ERROR_STATUS_OPTIONS.some((opt) => opt.value === 409));
+
+    const merged = mergeErrorFilterOptions(ERROR_CATEGORIES, {
+      DATABASE: 5,
+      NOT_FOUND: 2,
+      CUSTOM_DYNAMIC_CAT: 1,
+      '': 3,
+    });
+    assert.strictEqual(merged.filter((item) => item === 'DATABASE').length, 1);
+    assert.ok(merged.includes('CUSTOM_DYNAMIC_CAT'));
+    assert.strictEqual(merged.includes(''), false);
+  });
+
+  test('22. apiClient.admin.getErrors serializes date_from, date_to, sort_order, and filter params', async () => {
+    let capturedUrl = '';
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      capturedUrl = String(input);
+      return new Response(
+        JSON.stringify({
+          errors: [],
+          total: 0,
+          page: 1,
+          limit: 20,
+          total_pages: 1,
+          scope_notice: 'Real recorded server-side events only.',
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    }) as any;
+
+    try {
+      apiClient.setAdminToken(createValidTestToken('owner-1'));
+      await apiClient.admin.getErrors({
+        page: 2,
+        limit: 50,
+        status_code: 409,
+        category: 'CONFLICT',
+        feature_area: 'Paper Trading',
+        date_from: '2026-11-20T00:00:00.000Z',
+        date_to: '2026-11-25T23:59:59.999Z',
+        sort_order: 'asc',
+        search: 'corr-xyz',
+      });
+
+      const parsed = new URL(capturedUrl, 'http://localhost');
+      assert.strictEqual(parsed.pathname, '/api/v1/admin/errors');
+      assert.strictEqual(parsed.searchParams.get('page'), '2');
+      assert.strictEqual(parsed.searchParams.get('limit'), '50');
+      assert.strictEqual(parsed.searchParams.get('status_code'), '409');
+      assert.strictEqual(parsed.searchParams.get('category'), 'CONFLICT');
+      assert.strictEqual(parsed.searchParams.get('feature_area'), 'Paper Trading');
+      assert.strictEqual(parsed.searchParams.get('date_from'), '2026-11-20T00:00:00.000Z');
+      assert.strictEqual(parsed.searchParams.get('date_to'), '2026-11-25T23:59:59.999Z');
+      assert.strictEqual(parsed.searchParams.get('sort_order'), 'asc');
+      assert.strictEqual(parsed.searchParams.get('search'), 'corr-xyz');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test('23. formatErrorTimestamp handles invalid or empty inputs gracefully', () => {
+    assert.strictEqual(formatErrorTimestamp(null), '—');
+    assert.strictEqual(formatErrorTimestamp(undefined), '—');
+    assert.strictEqual(formatErrorTimestamp('not-a-timestamp'), '—');
+    const formatted = formatErrorTimestamp('2026-11-25T10:30:00Z');
+    assert.notStrictEqual(formatted, '—');
+    assert.ok(formatted.includes('2026'));
   });
 });

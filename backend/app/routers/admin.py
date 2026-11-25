@@ -12,11 +12,13 @@ Authorization:
 """
 
 import math
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+import re
+from datetime import date, datetime, timedelta, timezone
+from typing import Any, Dict, List, Literal, Optional
 
 from backend.app.config import get_settings
 from backend.app.core.envelope import create_response_envelope
+from backend.app.core.errors import ValidationException
 from backend.app.database import get_db
 from backend.app.dependencies import get_angel_adapter
 from backend.app.domain.user_store import user_store
@@ -556,6 +558,59 @@ async def get_admin_me(
     return create_response_envelope(me_data.model_dump(), correlation_id=cid)
 
 
+_SAFE_FILTER_TEXT_RE = re.compile(r"^[A-Za-z0-9 _-]+$")
+_DATE_ONLY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _escape_like_term(raw: str) -> str:
+    """Escapes SQL LIKE/ILIKE wildcard characters in user search strings."""
+    return raw.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _validate_filter_token(value: Optional[str], field_name: str) -> Optional[str]:
+    """Validates bounded filter tokens against safe alphanumeric/separator characters."""
+    if value is None:
+        return None
+    clean = value.strip()
+    if not clean:
+        return None
+    if not _SAFE_FILTER_TEXT_RE.match(clean):
+        raise ValidationException(
+            f"Invalid {field_name} filter value. Only letters, numbers, spaces, underscores, and hyphens are allowed."
+        )
+    return clean
+
+
+def _parse_error_filter_timestamp(raw_value: Optional[str], *, end_of_day: bool, field_name: str) -> Optional[datetime]:
+    """Parses YYYY-MM-DD or ISO-8601 date/time filter boundaries into UTC datetimes."""
+    if raw_value is None:
+        return None
+    clean = raw_value.strip()
+    if not clean:
+        return None
+
+    if _DATE_ONLY_RE.match(clean):
+        try:
+            parsed_date = date.fromisoformat(clean)
+        except ValueError as exc:
+            raise ValidationException(f"Invalid {field_name} date. Expected YYYY-MM-DD.") from exc
+        if end_of_day:
+            return datetime(
+                parsed_date.year, parsed_date.month, parsed_date.day, 23, 59, 59, 999999, tzinfo=timezone.utc
+            )
+        return datetime(parsed_date.year, parsed_date.month, parsed_date.day, 0, 0, 0, 0, tzinfo=timezone.utc)
+
+    iso_candidate = clean[:-1] + "+00:00" if clean.endswith("Z") else clean
+    try:
+        parsed_dt = datetime.fromisoformat(iso_candidate)
+    except ValueError as exc:
+        raise ValidationException(f"Invalid {field_name} format. Expected YYYY-MM-DD or ISO-8601 datetime.") from exc
+
+    if parsed_dt.tzinfo is None:
+        return parsed_dt.replace(tzinfo=timezone.utc)
+    return parsed_dt.astimezone(timezone.utc)
+
+
 @router.get(
     "/errors",
     summary="Admin Error Monitoring Log",
@@ -563,15 +618,34 @@ async def get_admin_me(
 )
 async def get_admin_errors(
     request: Request,
-    page: int = Query(1, ge=1, description="Page number"),
+    page: int = Query(1, ge=1, le=10000, description="Page number"),
     limit: int = Query(20, ge=1, le=100, description="Items per page"),
-    status_code: Optional[int] = Query(None, description="Filter by exact HTTP status code"),
-    category: Optional[str] = Query(None, description="Filter by category (e.g. SERVER_ERROR, VALIDATION)"),
-    feature_area: Optional[str] = Query(None, description="Filter by feature area (e.g. Auth, Market Data)"),
-    search: Optional[str] = Query(None, description="Search endpoint, message, error type, or correlation ID"),
+    status_code: Optional[int] = Query(None, ge=100, le=599, description="Filter by exact HTTP status code"),
+    category: Optional[str] = Query(
+        None, max_length=50, description="Filter by category (e.g. SERVER_ERROR, VALIDATION)"
+    ),
+    feature_area: Optional[str] = Query(
+        None, max_length=50, description="Filter by feature area (e.g. Auth, Market Data)"
+    ),
+    date_from: Optional[str] = Query(None, max_length=40, description="Include events at or after date/datetime"),
+    date_to: Optional[str] = Query(None, max_length=40, description="Include events at or before date/datetime"),
+    sort_order: Literal["desc", "asc"] = Query("desc", description="Sort order by created_at (desc = newest first)"),
+    search: Optional[str] = Query(
+        None,
+        max_length=120,
+        description="Search correlation ID, endpoint, category, feature area, error type, or sanitized message",
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     cid = getattr(request.state, "correlation_id", "none")
+
+    clean_category = _validate_filter_token(category, "category")
+    clean_feature = _validate_filter_token(feature_area, "feature_area")
+    parsed_from = _parse_error_filter_timestamp(date_from, end_of_day=False, field_name="date_from")
+    parsed_to = _parse_error_filter_timestamp(date_to, end_of_day=True, field_name="date_to")
+
+    if parsed_from is not None and parsed_to is not None and parsed_from > parsed_to:
+        raise ValidationException("date_from must not be after date_to.")
 
     # Opportunistically execute retention pruning if interval has elapsed
     await prune_if_due(session=db)
@@ -581,20 +655,29 @@ async def get_admin_errors(
     if status_code is not None:
         query = query.where(ErrorEvent.status_code == status_code)
 
-    if category and category.strip():
-        query = query.where(ErrorEvent.category == category.strip().upper())
+    if clean_category:
+        query = query.where(ErrorEvent.category == clean_category.upper())
 
-    if feature_area and feature_area.strip():
-        query = query.where(ErrorEvent.feature_area == feature_area.strip())
+    if clean_feature:
+        query = query.where(func.lower(ErrorEvent.feature_area) == clean_feature.lower())
+
+    if parsed_from is not None:
+        query = query.where(ErrorEvent.created_at >= parsed_from)
+
+    if parsed_to is not None:
+        query = query.where(ErrorEvent.created_at <= parsed_to)
 
     if search and search.strip():
-        term = f"%{search.strip()}%"
+        escaped = _escape_like_term(search.strip())
+        term = f"%{escaped}%"
         query = query.where(
             or_(
-                ErrorEvent.endpoint.ilike(term),
-                ErrorEvent.sanitized_message.ilike(term),
-                ErrorEvent.error_type.ilike(term),
-                ErrorEvent.correlation_id.ilike(term),
+                ErrorEvent.correlation_id.ilike(term, escape="\\"),
+                ErrorEvent.endpoint.ilike(term, escape="\\"),
+                ErrorEvent.category.ilike(term, escape="\\"),
+                ErrorEvent.feature_area.ilike(term, escape="\\"),
+                ErrorEvent.error_type.ilike(term, escape="\\"),
+                ErrorEvent.sanitized_message.ilike(term, escape="\\"),
             )
         )
 
@@ -602,8 +685,13 @@ async def get_admin_errors(
     count_stmt = select(func.count()).select_from(query.order_by(None).subquery())
     total_count = (await db.execute(count_stmt)).scalar() or 0
 
-    # Paginate and order by newest first
-    query = query.order_by(ErrorEvent.created_at.desc()).offset((page - 1) * limit).limit(limit)
+    # Paginate and order deterministically (default: latest errors first)
+    if sort_order == "asc":
+        query = query.order_by(ErrorEvent.created_at.asc(), ErrorEvent.id.asc())
+    else:
+        query = query.order_by(ErrorEvent.created_at.desc(), ErrorEvent.id.desc())
+
+    query = query.offset((page - 1) * limit).limit(limit)
     rows = (await db.execute(query)).scalars().all()
 
     items = [
