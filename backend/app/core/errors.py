@@ -1,4 +1,5 @@
 import logging
+import uuid
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
@@ -153,14 +154,35 @@ def build_error_response(
     )
     content = payload.model_dump()
     content["detail"] = message  # Standard FastAPI/Starlette client and test compatibility
-    return JSONResponse(status_code=status_code, content=content, headers=headers)
+    resp_headers = dict(headers or {})
+    resp_headers["X-Correlation-ID"] = correlation_id
+    resp_headers["X-Incident-ID"] = correlation_id
+    return JSONResponse(status_code=status_code, content=content, headers=resp_headers)
 
 
 async def finex_exception_handler(request: Request, exc: FinExException) -> JSONResponse:
-    correlation_id = getattr(request.state, "correlation_id", "unknown-correlation-id")
+    server_cid = getattr(request.state, "server_incident_id", None)
+    if not server_cid:
+        server_cid = uuid.uuid4().hex
+        request.state.server_incident_id = server_cid
+
     logger.warning(
-        f"FinExException [{exc.code}] on {request.method} {request.url.path}: {exc.message} (cid: {correlation_id})"
+        f"FinExException [{exc.code}] on {request.method} {request.url.path}: {exc.message} (incident_id: {server_cid})"
     )
+    if exc.status_code >= 400:
+        try:
+            from backend.app.services.error_recorder import record_error_event
+
+            await record_error_event(
+                request=request,
+                exc=exc,
+                status_code=exc.status_code,
+                error_code=exc.code,
+                message=exc.message,
+            )
+        except Exception as rec_err:
+            logger.warning(f"Failed to record FinExException event: {rec_err}")
+
     headers = getattr(exc, "headers", None)
     if not headers and hasattr(exc, "retry_after"):
         headers = {"Retry-After": str(exc.retry_after)}
@@ -168,52 +190,100 @@ async def finex_exception_handler(request: Request, exc: FinExException) -> JSON
         status_code=exc.status_code,
         code=exc.code,
         message=exc.message,
-        correlation_id=correlation_id,
+        correlation_id=server_cid,
         details=exc.details,
         headers=headers,
     )
 
 
 async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
-    correlation_id = getattr(request.state, "correlation_id", "unknown-correlation-id")
+    server_cid = getattr(request.state, "server_incident_id", None)
+    if not server_cid:
+        server_cid = uuid.uuid4().hex
+        request.state.server_incident_id = server_cid
+
     details = []
     for err in exc.errors():
         field_path = " -> ".join(str(loc) for loc in err.get("loc", []))
         details.append(ErrorDetail(field=field_path, issue=err.get("msg", "Invalid value")))
 
     logger.info(
-        f"Validation error on {request.method} {request.url.path}: {len(details)} errors (cid: {correlation_id})"
+        f"Validation error on {request.method} {request.url.path}: {len(details)} errors (incident_id: {server_cid})"
     )
+
+    try:
+        from backend.app.services.error_recorder import record_error_event
+
+        await record_error_event(
+            request=request,
+            exc=exc,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            error_code="VALIDATION_ERROR",
+        )
+    except Exception as rec_err:
+        logger.warning(f"Failed to record validation error event: {rec_err}")
+
     return build_error_response(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         code="VALIDATION_ERROR",
         message="Request payload failed validation schema.",
-        correlation_id=correlation_id,
+        correlation_id=server_cid,
         details=details,
     )
 
 
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    correlation_id = getattr(request.state, "correlation_id", "unknown-correlation-id")
+    server_cid = getattr(request.state, "server_incident_id", None)
+    if not server_cid:
+        server_cid = uuid.uuid4().hex
+        request.state.server_incident_id = server_cid
+
     if isinstance(exc, (FastAPIHTTPException, StarletteHTTPException)):
         logger.warning(
-            f"HTTPException [{exc.status_code}] on {request.method} {request.url.path}: {exc.detail} (cid: {correlation_id})"
+            f"HTTPException [{exc.status_code}] on {request.method} {request.url.path}: {exc.detail} (incident_id: {server_cid})"
         )
+        if exc.status_code >= 400:
+            try:
+                from backend.app.services.error_recorder import record_error_event
+
+                await record_error_event(
+                    request=request,
+                    exc=exc,
+                    status_code=exc.status_code,
+                    error_code="HTTP_EXCEPTION",
+                    raw_message=str(exc.detail),
+                )
+            except Exception as rec_err:
+                logger.warning(f"Failed to record HTTPException event: {rec_err}")
+
         return build_error_response(
             status_code=exc.status_code,
             code="HTTP_EXCEPTION",
             message=str(exc.detail),
-            correlation_id=correlation_id,
+            correlation_id=server_cid,
             headers=getattr(exc, "headers", None),
         )
 
     logger.error(
-        f"Unhandled server error on {request.method} {request.url.path}: {str(exc)} (cid: {correlation_id})",
+        f"Unhandled server error on {request.method} {request.url.path}: {str(exc)} (incident_id: {server_cid})",
         exc_info=True,
     )
+
+    try:
+        from backend.app.services.error_recorder import record_error_event
+
+        await record_error_event(
+            request=request,
+            exc=exc,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            error_code="INTERNAL_SERVER_ERROR",
+        )
+    except Exception as rec_err:
+        logger.warning(f"Failed to record unhandled server error event: {rec_err}")
+
     return build_error_response(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         code="INTERNAL_SERVER_ERROR",
-        message=f"{type(exc).__name__}: {str(exc)}",
-        correlation_id=correlation_id,
+        message="An unexpected server error occurred. Please contact support with the correlation ID if this persists.",
+        correlation_id=server_cid,
     )

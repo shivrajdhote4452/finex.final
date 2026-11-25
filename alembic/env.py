@@ -1,6 +1,8 @@
 import asyncio
 from logging.config import fileConfig
+from urllib.parse import urlparse
 
+import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from alembic import context
@@ -17,16 +19,27 @@ target_metadata = Base.metadata
 
 def do_run_migrations(connection):
     context.configure(connection=connection, target_metadata=target_metadata)
-    with context.begin_transaction():
+    lock_ms = config.attributes.get("lock_timeout_ms", 5000)
+    stmt_ms = config.attributes.get("statement_timeout_ms", 15000)
+    if connection.in_transaction():
+        if connection.dialect.name == "postgresql":
+            connection.execute(sa.text(f"SET LOCAL lock_timeout = '{lock_ms}ms';"))
+            connection.execute(sa.text(f"SET LOCAL statement_timeout = '{stmt_ms}ms';"))
         context.run_migrations()
+    else:
+        with context.begin_transaction():
+            if connection.dialect.name == "postgresql":
+                connection.execute(sa.text(f"SET LOCAL lock_timeout = '{lock_ms}ms';"))
+                connection.execute(sa.text(f"SET LOCAL statement_timeout = '{stmt_ms}ms';"))
+            context.run_migrations()
 
 
 async def run_async_migrations():
     settings = get_settings()
     db_url = config.get_main_option("sqlalchemy.url") or settings.DATABASE_URL
-    
-    from urllib.parse import urlparse
+
     from backend.app.database import APPROVED_SQLITE_SCHEMES, is_test_env, validate_test_database_allowlist
+
     if is_test_env:
         validate_test_database_allowlist(db_url)
 
@@ -34,6 +47,11 @@ async def run_async_migrations():
     engine_kwargs = {}
     if is_sqlite:
         engine_kwargs["connect_args"] = {"check_same_thread": False}
+    else:
+        if "-pooler" in db_url or "pgbouncer" in db_url or "neon.tech" in db_url:
+            connect_args = engine_kwargs.setdefault("connect_args", {})
+            connect_args["statement_cache_size"] = 0
+            connect_args["prepared_statement_cache_size"] = 0
 
     connectable = create_async_engine(db_url, **engine_kwargs)
     async with connectable.connect() as connection:
@@ -42,8 +60,12 @@ async def run_async_migrations():
 
 
 def run_migrations_online() -> None:
-    """Run migrations in 'online' mode using AsyncIO engine."""
-    asyncio.run(run_async_migrations())
+    """Run migrations in 'online' mode using AsyncIO engine or existing connection."""
+    connectable = config.attributes.get("connection", None)
+    if connectable is not None:
+        do_run_migrations(connectable)
+    else:
+        asyncio.run(run_async_migrations())
 
 
 def run_migrations_offline() -> None:
@@ -51,6 +73,7 @@ def run_migrations_offline() -> None:
     settings = get_settings()
     url = config.get_main_option("sqlalchemy.url") or settings.DATABASE_URL
     from backend.app.database import is_test_env, validate_test_database_allowlist
+
     if is_test_env:
         validate_test_database_allowlist(url)
     context.configure(

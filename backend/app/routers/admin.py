@@ -12,6 +12,7 @@ Authorization:
 """
 
 import math
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from backend.app.config import get_settings
@@ -20,9 +21,11 @@ from backend.app.database import get_db
 from backend.app.dependencies import get_angel_adapter
 from backend.app.domain.user_store import user_store
 from backend.app.models.core import User, UserProfile
+from backend.app.models.monitoring import ErrorEvent
 from backend.app.models.paper_trading import PaperOrder
 from backend.app.routers.auth import require_owner
 from backend.app.routers.health import check_db_ready
+from backend.app.services.error_recorder import prune_if_due
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
@@ -111,6 +114,49 @@ class AdminMeResponse(BaseModel):
     role: str = "owner"
     is_active: bool = True
     email_verified: bool = True
+
+
+class AdminErrorItem(BaseModel):
+    id: str
+    correlation_id: Optional[str] = None
+    endpoint: str
+    method: str
+    status_code: int
+    error_type: str
+    category: str
+    feature_area: str
+    sanitized_message: str
+    user_id: Optional[str] = None
+    created_at: Optional[str] = None
+
+
+class AdminErrorsResponse(BaseModel):
+    errors: List[AdminErrorItem]
+    total: int
+    page: int
+    limit: int
+    total_pages: int
+    scope_notice: str = (
+        "Observability Scope: Real recorded server-side error events (400, 401, 403, 404, 413, 422, 429, 500, 503). "
+        "Execution is bounded by a 250ms ceiling and per-process concurrency limits (max 5 simultaneous writes per worker); during storage degradation, "
+        "events are dropped fail-open to protect local worker connection pool capacity. Unmatched routes are anonymized to /unmatched_route. "
+        "Retention periodically prunes records older than 30 days or beyond the 5,000-row target. "
+        "Does not capture client-side network loss, browser script crashes, or edge proxy drops before reaching the API."
+    )
+
+
+class AdminErrorSummaryResponse(BaseModel):
+    total_errors: int
+    server_errors_5xx: int
+    client_errors_4xx: int
+    last_24h_errors: int
+    errors_by_category: Dict[str, int]
+    errors_by_feature: Dict[str, int]
+    scope_notice: str = (
+        "Observability Scope: Real server-side recorded error events across 4xx and 5xx status codes with bounded execution timeout. "
+        "Under storage degradation, events exceeding per-process concurrency limits or 250ms timeout are dropped fail-open. "
+        "Edge drops and client-side browser network disconnects are not captured."
+    )
 
 
 # =============================================================================
@@ -508,3 +554,128 @@ async def get_admin_me(
         email_verified=bool(user.email_verified or user.is_verified),
     )
     return create_response_envelope(me_data.model_dump(), correlation_id=cid)
+
+
+@router.get(
+    "/errors",
+    summary="Admin Error Monitoring Log",
+    description="Paginated, searchable directory of real recorded server-side operational error events.",
+)
+async def get_admin_errors(
+    request: Request,
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(20, ge=1, le=100, description="Items per page"),
+    status_code: Optional[int] = Query(None, description="Filter by exact HTTP status code"),
+    category: Optional[str] = Query(None, description="Filter by category (e.g. SERVER_ERROR, VALIDATION)"),
+    feature_area: Optional[str] = Query(None, description="Filter by feature area (e.g. Auth, Market Data)"),
+    search: Optional[str] = Query(None, description="Search endpoint, message, error type, or correlation ID"),
+    db: AsyncSession = Depends(get_db),
+):
+    cid = getattr(request.state, "correlation_id", "none")
+
+    # Opportunistically execute retention pruning if interval has elapsed
+    await prune_if_due(session=db)
+
+    query = select(ErrorEvent)
+
+    if status_code is not None:
+        query = query.where(ErrorEvent.status_code == status_code)
+
+    if category and category.strip():
+        query = query.where(ErrorEvent.category == category.strip().upper())
+
+    if feature_area and feature_area.strip():
+        query = query.where(ErrorEvent.feature_area == feature_area.strip())
+
+    if search and search.strip():
+        term = f"%{search.strip()}%"
+        query = query.where(
+            or_(
+                ErrorEvent.endpoint.ilike(term),
+                ErrorEvent.sanitized_message.ilike(term),
+                ErrorEvent.error_type.ilike(term),
+                ErrorEvent.correlation_id.ilike(term),
+            )
+        )
+
+    # Count matching records
+    count_stmt = select(func.count()).select_from(query.order_by(None).subquery())
+    total_count = (await db.execute(count_stmt)).scalar() or 0
+
+    # Paginate and order by newest first
+    query = query.order_by(ErrorEvent.created_at.desc()).offset((page - 1) * limit).limit(limit)
+    rows = (await db.execute(query)).scalars().all()
+
+    items = [
+        AdminErrorItem(
+            id=r.id,
+            correlation_id=r.correlation_id,
+            endpoint=r.endpoint,
+            method=r.method,
+            status_code=r.status_code,
+            error_type=r.error_type,
+            category=r.category,
+            feature_area=r.feature_area,
+            sanitized_message=r.sanitized_message,
+            user_id=r.user_id,
+            created_at=r.created_at.isoformat() if r.created_at else None,
+        )
+        for r in rows
+    ]
+
+    total_pages = max(1, math.ceil(total_count / limit))
+    response_data = AdminErrorsResponse(
+        errors=items,
+        total=total_count,
+        page=page,
+        limit=limit,
+        total_pages=total_pages,
+    )
+    return create_response_envelope(response_data.model_dump(), correlation_id=cid)
+
+
+@router.get(
+    "/errors/summary",
+    summary="Admin Error Monitoring Summary Statistics",
+    description="Aggregate counts of server errors, client errors, recent 24h events, and category breakdown.",
+)
+async def get_admin_errors_summary(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    cid = getattr(request.state, "correlation_id", "none")
+    now = datetime.now(timezone.utc)
+    day_ago = now - timedelta(hours=24)
+
+    total_errors = (await db.execute(select(func.count(ErrorEvent.id)))).scalar() or 0
+    server_errors_5xx = (
+        await db.execute(select(func.count(ErrorEvent.id)).where(ErrorEvent.status_code >= 500))
+    ).scalar() or 0
+    client_errors_4xx = (
+        await db.execute(
+            select(func.count(ErrorEvent.id)).where((ErrorEvent.status_code >= 400) & (ErrorEvent.status_code < 500))
+        )
+    ).scalar() or 0
+    recent_24h_errors = (
+        await db.execute(select(func.count(ErrorEvent.id)).where(ErrorEvent.created_at >= day_ago))
+    ).scalar() or 0
+
+    cat_rows = (
+        await db.execute(select(ErrorEvent.category, func.count(ErrorEvent.id)).group_by(ErrorEvent.category))
+    ).fetchall()
+    errors_by_category = {r[0]: int(r[1]) for r in cat_rows if r[0]}
+
+    feat_rows = (
+        await db.execute(select(ErrorEvent.feature_area, func.count(ErrorEvent.id)).group_by(ErrorEvent.feature_area))
+    ).fetchall()
+    errors_by_feature = {r[0]: int(r[1]) for r in feat_rows if r[0]}
+
+    summary_data = AdminErrorSummaryResponse(
+        total_errors=total_errors,
+        server_errors_5xx=server_errors_5xx,
+        client_errors_4xx=client_errors_4xx,
+        last_24h_errors=recent_24h_errors,
+        errors_by_category=errors_by_category,
+        errors_by_feature=errors_by_feature,
+    )
+    return create_response_envelope(summary_data.model_dump(), correlation_id=cid)

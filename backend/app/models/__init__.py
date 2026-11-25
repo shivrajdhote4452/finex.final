@@ -39,6 +39,9 @@ from backend.app.models.market import (
     Watchlist,
     WatchlistItem,
 )
+from backend.app.models.monitoring import (
+    ErrorEvent,
+)
 from backend.app.models.paper_trading import (
     PaperAccount,
     PaperCashLedger,
@@ -104,4 +107,5 @@ __all__ = [
     "AIMessage",
     "AIFeedback",
     "RetrievalEvent",
+    "ErrorEvent",
 ]

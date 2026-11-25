@@ -19,9 +19,22 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         start_time = time.perf_counter()
-        cid = request.headers.get("X-Correlation-ID") or request.headers.get("X-Request-ID")
-        if not cid:
-            cid = str(uuid.uuid4())
+        raw_cid = request.headers.get("X-Correlation-ID") or request.headers.get("X-Request-ID")
+
+        # Authoritative server-side incident identifier: always generated on the server (UUID4 hex)
+        server_incident_id = uuid.uuid4().hex
+        request.state.server_incident_id = server_incident_id
+
+        # Client-supplied correlation ID: preserved strictly for non-error HTTP request tracing (bounded safe ASCII)
+        if (
+            raw_cid
+            and len(raw_cid.strip()) <= 64
+            and raw_cid.strip().isascii()
+            and not any(c in raw_cid for c in "\r\n\t\x00")
+        ):
+            cid = raw_cid.strip()
+        else:
+            cid = server_incident_id
 
         request.state.correlation_id = cid
         token = correlation_id_ctx.set(cid)
@@ -29,20 +42,37 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
         try:
             response = await call_next(request)
             elapsed_ms = (time.perf_counter() - start_time) * 1000.0
-            response.headers["X-Correlation-ID"] = cid
-            response.headers["X-Request-ID"] = cid
+            if response.status_code >= 400:
+                response.headers["X-Correlation-ID"] = server_incident_id
+                response.headers["X-Request-ID"] = server_incident_id
+            else:
+                response.headers["X-Correlation-ID"] = cid
+                response.headers["X-Request-ID"] = cid
+            response.headers["X-Incident-ID"] = server_incident_id
             response.headers["X-Response-Time-Ms"] = f"{elapsed_ms:.2f}"
             return response
-        except Exception:
+        except Exception as unhandled_mw_exc:
             elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+            try:
+                from backend.app.services.error_recorder import record_error_event
+
+                await record_error_event(
+                    request=request,
+                    exc=unhandled_mw_exc,
+                    status_code=500,
+                    error_code="INTERNAL_SERVER_ERROR",
+                )
+            except Exception:
+                pass
             response = build_error_response(
                 status_code=500,
                 code="INTERNAL_SERVER_ERROR",
                 message="An unexpected error occurred. The incident has been recorded for review.",
-                correlation_id=cid,
+                correlation_id=server_incident_id,
             )
-            response.headers["X-Correlation-ID"] = cid
-            response.headers["X-Request-ID"] = cid
+            response.headers["X-Correlation-ID"] = server_incident_id
+            response.headers["X-Request-ID"] = server_incident_id
+            response.headers["X-Incident-ID"] = server_incident_id
             response.headers["X-Response-Time-Ms"] = f"{elapsed_ms:.2f}"
             return response
         finally:
@@ -148,8 +178,18 @@ class RateLimiterMiddleware(BaseHTTPMiddleware):
             queue.popleft()
 
         if len(queue) >= limit:
-            cid = getattr(request.state, "correlation_id", "none")
+            cid = getattr(request.state, "server_incident_id", None) or getattr(request.state, "correlation_id", "none")
             retry_after = int(self.window_seconds - (now - queue[0])) + 1
+            try:
+                from backend.app.services.error_recorder import record_error_event
+
+                await record_error_event(
+                    request=request,
+                    status_code=429,
+                    error_code="RATE_LIMIT_EXCEEDED",
+                )
+            except Exception:
+                pass
             response = build_error_response(
                 status_code=429,
                 code="RATE_LIMIT_EXCEEDED",
@@ -193,7 +233,19 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
                 max_allowed = self.max_upload_bytes if is_upload else self.max_json_bytes
 
                 if length > max_allowed:
-                    cid = getattr(request.state, "correlation_id", "none")
+                    cid = getattr(request.state, "server_incident_id", None) or getattr(
+                        request.state, "correlation_id", "none"
+                    )
+                    try:
+                        from backend.app.services.error_recorder import record_error_event
+
+                        await record_error_event(
+                            request=request,
+                            status_code=413,
+                            error_code="PAYLOAD_TOO_LARGE",
+                        )
+                    except Exception:
+                        pass
                     return build_error_response(
                         status_code=413,
                         code="PAYLOAD_TOO_LARGE",

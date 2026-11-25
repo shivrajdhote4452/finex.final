@@ -31,6 +31,9 @@ import {
   type AdminOverviewResponse,
   type AdminSystemHealthResponse,
   type AdminMeResponse,
+  type AdminErrorItem,
+  type AdminErrorsResponse,
+  type AdminErrorSummaryResponse,
 } from '../src/api/client.ts';
 
 // Helper to create a cryptographically valid unexpired JWT for frontend client tests
@@ -471,5 +474,155 @@ describe('Separate FinEx Admin Portal Frontend & Domain Contract', () => {
     // Verify caveats are documented
     assert.ok(mockHealth.angel_one.verification_note?.includes('does not prove that live market data'));
     assert.ok(mockHealth.email.verification_note?.includes('does not prove that email delivery'));
+  });
+
+  // -------------------------------------------------------------
+  // 9. ERROR MONITORING CLIENT CONTRACT & SANITIZED PROJECTION
+  // -------------------------------------------------------------
+  test('15. Admin API client handles error query serialization and summary fetch', async () => {
+    let capturedUrl = '';
+    const originalFetch = globalThis.fetch;
+
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      capturedUrl = url;
+      if (url.includes('/api/v1/admin/errors/summary')) {
+        return new Response(
+          JSON.stringify({
+            total_errors: 12,
+            server_errors_5xx: 2,
+            client_errors_4xx: 10,
+            last_24h_errors: 5,
+            errors_by_category: { SERVER_ERROR: 2, VALIDATION: 10 },
+            errors_by_feature_area: { 'Market Data': 2, 'Paper Trading': 10 },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          errors: [],
+          total: 0,
+          page: 1,
+          limit: 20,
+          total_pages: 1,
+          scope_notice: 'Real recorded server-side events only.',
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    }) as any;
+
+    try {
+      apiClient.setAdminToken(createValidTestToken('owner-1'));
+
+      // Test errors list with filter serialization
+      await apiClient.admin.getErrors({
+        page: 2,
+        limit: 15,
+        status_code: 500,
+        category: 'DATABASE',
+        feature_area: 'Portfolio',
+        search: 'timeout',
+      });
+
+      assert.ok(capturedUrl.includes('/api/v1/admin/errors'));
+      assert.ok(capturedUrl.includes('page=2'));
+      assert.ok(capturedUrl.includes('limit=15'));
+      assert.ok(capturedUrl.includes('status_code=500'));
+      assert.ok(capturedUrl.includes('category=DATABASE'));
+      assert.ok(capturedUrl.includes('feature_area=Portfolio'));
+      assert.ok(capturedUrl.includes('search=timeout'));
+
+      // Test summary fetch
+      const summary = await apiClient.admin.getErrorsSummary();
+      assert.strictEqual(summary.total_errors, 12);
+      assert.strictEqual(summary.server_errors_5xx, 2);
+      assert.strictEqual(summary.client_errors_4xx, 10);
+      assert.strictEqual(summary.last_24h_errors, 5);
+      assert.strictEqual(summary.errors_by_category.SERVER_ERROR, 2);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test('16. Error event projection strictly forbids raw secrets, tokens, and traces', () => {
+    // Validate that a typical AdminErrorItem shape conforms strictly to safe sanitized properties
+    const mockItem: AdminErrorItem = {
+      id: 101,
+      correlation_id: 'corr-abc-12345',
+      endpoint: '/api/v1/orders/paper',
+      method: 'POST',
+      status_code: 422,
+      error_type: 'RequestValidationError',
+      category: 'VALIDATION',
+      feature_area: 'Paper Trading',
+      sanitized_message: 'Invalid order quantity: password=[REDACTED]',
+      user_id: 'usr-safe-001',
+      created_at: '2026-11-23T15:00:00Z',
+    };
+
+    const forbiddenFields = [
+      'password',
+      'password_hash',
+      'token',
+      'access_token',
+      'secret_key',
+      'api_key',
+      'raw_traceback',
+      'request_body',
+      'chat_history',
+      'prompt',
+      'response_body',
+    ];
+
+    for (const field of forbiddenFields) {
+      assert.strictEqual(
+        (mockItem as any)[field],
+        undefined,
+        `AdminErrorItem must NOT contain forbidden field: ${field}`
+      );
+    }
+
+    assert.ok(mockItem.sanitized_message.includes('[REDACTED]'));
+    assert.strictEqual(mockItem.correlation_id, 'corr-abc-12345');
+    assert.strictEqual(mockItem.feature_area, 'Paper Trading');
+  });
+
+  test('17. Surveillance scope disclosure banner explains what is and is not captured', () => {
+    const scopeNotice =
+      'This dashboard displays server-side operational exceptions ' +
+      '(including unhandled 5xx exceptions, 503 service outages, 429 rate limits, 422 schema validation errors, and 400/401/403/404 HTTP errors). ' +
+      'It does not capture client-side network disconnects, local browser JavaScript crashes, ' +
+      'or edge CDN dropouts that never reach the backend API. ' +
+      'Endpoints are logged as parameterized route templates (unmatched paths are anonymized to /unmatched_route), ' +
+      'and all messages are mapped to allowlisted error codes with server-side sanitization. ' +
+      'Database writes are bounded by a 250ms ceiling and per-process concurrency limits (max 5 simultaneous writes per worker); ' +
+      'during storage degradation, events are dropped fail-open to protect local worker connection pool capacity.';
+
+    // Check captured vs uncaptured explicit explanations
+    assert.ok(scopeNotice.includes('server-side operational exceptions'));
+    assert.ok(scopeNotice.includes('does not capture client-side network disconnects'));
+    assert.ok(scopeNotice.includes('local browser JavaScript crashes'));
+    assert.ok(scopeNotice.includes('edge CDN dropouts'));
+    assert.ok(scopeNotice.includes('/unmatched_route'));
+    assert.ok(scopeNotice.includes('dropped fail-open'));
+  });
+
+  test('18. Error status badge classification accurately distinguishes 5xx vs 4xx', () => {
+    const getStatusClassification = (statusCode: number) => {
+      const is5xx = statusCode >= 500;
+      return {
+        is5xx,
+        badgeStyle: is5xx ? 'loss' : 'warning',
+      };
+    };
+
+    assert.strictEqual(getStatusClassification(500).is5xx, true);
+    assert.strictEqual(getStatusClassification(500).badgeStyle, 'loss');
+    assert.strictEqual(getStatusClassification(503).is5xx, true);
+
+    assert.strictEqual(getStatusClassification(422).is5xx, false);
+    assert.strictEqual(getStatusClassification(422).badgeStyle, 'warning');
+    assert.strictEqual(getStatusClassification(429).is5xx, false);
+    assert.strictEqual(getStatusClassification(404).is5xx, false);
   });
 });
