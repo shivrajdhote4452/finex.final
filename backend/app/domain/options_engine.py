@@ -267,6 +267,22 @@ def get_strike_step(underlying: str, spot: float) -> float:
     return 5.0
 
 
+def calculate_model_option_volatility(
+    underlying: str,
+    strike: float,
+    spot_price: float,
+    option_type: str,
+) -> float:
+    """Compute deterministic Black-Scholes volatility with consistent moneyness skew."""
+    clean_sym = underlying.upper().strip()
+    base_iv = 0.135 if "NIFTY" in clean_sym else 0.22
+    if spot_price <= 0:
+        return base_iv
+    moneyness = (strike - spot_price) / spot_price
+    skew_factor = 0.15 if option_type.upper().strip() == "CE" else 0.18
+    return round(base_iv + skew_factor * (moneyness**2), 4)
+
+
 # =============================================================================
 # Option Chain Generation (Angel One Primary & Black-Scholes Standard)
 # =============================================================================
@@ -300,9 +316,6 @@ def generate_deterministic_option_chain(
     # ATM Strike is the strike closest to spot rounded to step
     atm_strike = round(spot_price / strike_step) * strike_step
 
-    # Base implied volatility for model estimate
-    base_iv = 0.135 if "NIFTY" in clean_sym else 0.22
-
     strikes_list: List[StrikeRow] = []
 
     exp_code = selected_exp.strftime("%d%b%y").upper()  # e.g. 29OCT26
@@ -310,11 +323,10 @@ def generate_deterministic_option_chain(
     # Generate strikes centered around ATM
     for i in range(-num_strikes_each_side, num_strikes_each_side + 1):
         strike = round(atm_strike + i * strike_step, 2)
-        moneyness = (strike - spot_price) / spot_price
 
         # Volatility smile (higher IV for further OTM/ITM strikes)
-        call_iv = round(base_iv + 0.15 * (moneyness**2), 4)
-        put_iv = round(base_iv + 0.18 * (moneyness**2), 4)
+        call_iv = calculate_model_option_volatility(clean_sym, strike, spot_price, "CE")
+        put_iv = calculate_model_option_volatility(clean_sym, strike, spot_price, "PE")
 
         # Call & Put prices + Greeks
         c_price, c_greeks = calculate_black_scholes_price_and_greeks(

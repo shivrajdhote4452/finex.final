@@ -11,20 +11,65 @@ from starlette.middleware.base import BaseHTTPMiddleware
 correlation_id_ctx: contextvars.ContextVar[str] = contextvars.ContextVar("correlation_id", default="none")
 
 
+def _parse_valid_ip(raw_ip: str | None) -> str | None:
+    """Return canonical IPv4/IPv6 address string when syntactically valid, else None."""
+    if not raw_ip:
+        return None
+    candidate = raw_ip.strip()
+    if not candidate or len(candidate) > 64:
+        return None
+    import ipaddress
+
+    try:
+        return str(ipaddress.ip_address(candidate))
+    except ValueError:
+        return None
+
+
+def _is_trusted_proxy_ip(ip_str: str | None, trusted_cidrs: list[str]) -> bool:
+    """Return True only if direct peer IP matches a configured trusted proxy CIDR."""
+    valid_ip = _parse_valid_ip(ip_str)
+    if not valid_ip or not trusted_cidrs:
+        return False
+    import ipaddress
+
+    peer_addr = ipaddress.ip_address(valid_ip)
+    for cidr in trusted_cidrs:
+        try:
+            if peer_addr in ipaddress.ip_network(cidr, strict=False):
+                return True
+        except ValueError:
+            continue
+    return False
+
+
 def extract_client_ip(request: Request) -> str:
-    """Resolve client IP without trusting leftmost caller-spoofable X-Forwarded-For values."""
-    cf_ip = request.headers.get("CF-Connecting-IP")
-    if cf_ip and cf_ip.strip() and len(cf_ip.strip()) <= 64:
-        return cf_ip.strip()
+    """Resolve client IP from forwarding headers ONLY when direct TCP peer is a trusted proxy."""
+    from backend.app.config import get_settings
+
+    raw_peer = request.client.host if request.client else None
+    peer_ip = _parse_valid_ip(raw_peer)
+    trusted_cidrs = list(getattr(get_settings(), "TRUSTED_PROXY_CIDRS", []) or [])
+
+    if not peer_ip or not _is_trusted_proxy_ip(peer_ip, trusted_cidrs):
+        return peer_ip or (raw_peer or "unknown")
+
+    cf_ip = _parse_valid_ip(request.headers.get("CF-Connecting-IP"))
+    if cf_ip:
+        return cf_ip
 
     forwarded_for = request.headers.get("X-Forwarded-For")
     if forwarded_for:
-        hops = [hop.strip() for hop in forwarded_for.split(",") if hop.strip()]
-        if hops:
-            # Rightmost hop reflects what the edge reverse proxy observed rather than attacker-prepended entries.
-            return hops[-1][:64]
+        valid_hops = [_parse_valid_ip(hop) for hop in forwarded_for.split(",")]
+        clean_hops = [h for h in valid_hops if h is not None]
+        # Walk right-to-left skipping trusted reverse-proxy hops to isolate the connecting client IP.
+        for hop in reversed(clean_hops):
+            if not _is_trusted_proxy_ip(hop, trusted_cidrs):
+                return hop
+        if clean_hops:
+            return clean_hops[0]
 
-    return request.client.host if request.client else "unknown"
+    return peer_ip
 
 
 class CorrelationIdMiddleware(BaseHTTPMiddleware):

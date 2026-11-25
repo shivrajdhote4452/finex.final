@@ -229,6 +229,7 @@ async def get_current_user_id(
 
         # If user record exists in PostgreSQL, enforce active account state fail-closed.
         if db is not None:
+            savepoint = await db.begin_nested() if db.in_transaction() else None
             try:
                 res = await db.execute(select(User.is_active).where(User.id == sub.strip()))
                 is_active = res.scalar_one_or_none()
@@ -237,10 +238,21 @@ async def get_current_user_id(
                         status_code=status.HTTP_403_FORBIDDEN,
                         detail="Account is disabled or inactive",
                     )
+                if savepoint is not None and savepoint.is_active:
+                    await savepoint.commit()
             except HTTPException:
                 raise
             except Exception:
-                pass
+                if savepoint is not None:
+                    try:
+                        await savepoint.rollback()
+                    except Exception:
+                        pass
+                elif db.in_transaction():
+                    try:
+                        await db.rollback()
+                    except Exception:
+                        pass
 
         return payload
     except HTTPException:
@@ -1148,7 +1160,7 @@ async def refresh_access_token(
     old_token = authorization.split(" ")[1].strip()
 
     # Revoke previous token in PostgreSQL on successful rotation
-    await user_store.revoke_token_db(old_token, db=db)
+    await user_store.revoke_token_db(old_token, user_id=user_info.get("sub"), db=db)
 
     new_token = create_access_token(
         user_id=user_info["sub"],

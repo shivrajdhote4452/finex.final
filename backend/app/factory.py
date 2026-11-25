@@ -175,11 +175,10 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     app.add_middleware(RateLimiterMiddleware, default_limit=rate_limit_default, auth_limit=rate_limit_auth)
     app.add_middleware(CorrelationIdMiddleware)
 
-    # 2. CORS Middleware (Strictly allow FinEx production/preview Vercel deployments only)
+    # 2. CORS Middleware (Exact explicitly configured trusted origins only; no wildcard domain regex)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=app_settings.ALLOWED_ORIGINS,
-        allow_origin_regex=r"^https://(?:finex(?:-[a-z0-9-]+)?|finex-final(?:-[a-z0-9-]+)?)\.vercel\.app$",
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=[

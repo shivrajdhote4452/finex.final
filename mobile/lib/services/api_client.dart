@@ -60,6 +60,12 @@ class ApiClient {
   String baseUrl = normalizeBaseUrl(_defaultUrl);
   String? _token;
   Map<String, dynamic>? _currentUserProfile;
+  http.Client _httpClient = http.Client();
+
+  @visibleForTesting
+  void setHttpClient(http.Client? client) {
+    _httpClient = client ?? http.Client();
+  }
 
   /// Observable feed for real-time ledger updates across screens
   final ValueNotifier<List<Map<String, dynamic>>> recentOrdersNotifier =
@@ -141,7 +147,7 @@ class ApiClient {
     try {
       if (_token != null) {
         final url = Uri.parse('$baseUrl/auth/revoke');
-        await http.post(
+        await _httpClient.post(
           url,
           headers: _headers(),
           body: jsonEncode({'token': _token}),
@@ -224,7 +230,26 @@ class ApiClient {
     if (response.statusCode == 401) {
       await setToken(null);
       await setProfile(null);
+      recentOrdersNotifier.value = [];
+      return;
     }
+    if (response.statusCode == 403) {
+      final msg = _extractErrorMessage(response, '').toLowerCase();
+      if (msg.contains('disabled') || msg.contains('inactive') || msg.contains('deactivated')) {
+        await setToken(null);
+        await setProfile(null);
+        recentOrdersNotifier.value = [];
+      }
+    }
+  }
+
+  Map<String, dynamic> _decodeJsonObject(http.Response response) {
+    if (response.body.trim().isEmpty) return <String, dynamic>{};
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic>) return decoded;
+    } catch (_) {}
+    return <String, dynamic>{};
   }
 
   String _extractErrorMessage(http.Response response, [String fallback = 'Request failed']) {
@@ -263,12 +288,12 @@ class ApiClient {
       return await mockLoginWithGoogleHandler!(idToken, email: email, name: name);
     }
     final url = Uri.parse('$baseUrl/auth/google');
-    final response = await http.post(
+    final response = await _httpClient.post(
       url,
       headers: _headers(),
       body: jsonEncode({'id_token': idToken}),
     );
-    final data = jsonDecode(response.body);
+    final data = _decodeJsonObject(response);
     if (response.statusCode == 200 && data['data'] != null) {
       final token = data['data']['access_token'] as String?;
       await setToken(token);
@@ -308,7 +333,7 @@ class ApiClient {
     }
     final cleanEmail = email.trim().toLowerCase();
     final url = Uri.parse('$baseUrl/auth/login');
-    final response = await http.post(
+    final response = await _httpClient.post(
       url,
       headers: _headers(),
       body: jsonEncode({
@@ -316,7 +341,7 @@ class ApiClient {
         'password': password,
       }),
     );
-    final data = jsonDecode(response.body);
+    final data = _decodeJsonObject(response);
     if (response.statusCode == 200 && data['data'] != null) {
       final token = data['data']['access_token'] as String?;
       await setToken(token);
@@ -350,7 +375,7 @@ class ApiClient {
     }
     final cleanEmail = email.trim().toLowerCase();
     final url = Uri.parse('$baseUrl/auth/signup');
-    final response = await http.post(
+    final response = await _httpClient.post(
       url,
       headers: _headers(),
       body: jsonEncode({
@@ -359,7 +384,7 @@ class ApiClient {
         'name': (name != null && name.trim().isNotEmpty) ? name.trim() : 'Investor',
       }),
     );
-    final data = jsonDecode(response.body);
+    final data = _decodeJsonObject(response);
     if (response.statusCode == 200 && data['data'] != null) {
       return Map<String, dynamic>.from(data['data']);
     }
@@ -377,12 +402,12 @@ class ApiClient {
     }
     final cleanEmail = email.trim().toLowerCase();
     final url = Uri.parse('$baseUrl/auth/forgot-password');
-    final response = await http.post(
+    final response = await _httpClient.post(
       url,
       headers: _headers(),
       body: jsonEncode({'email': cleanEmail}),
     );
-    final data = jsonDecode(response.body);
+    final data = _decodeJsonObject(response);
     if (response.statusCode == 200 && data['data'] != null) {
       return Map<String, dynamic>.from(data['data']);
     }
@@ -404,12 +429,12 @@ class ApiClient {
     if (password != null && password.isNotEmpty) {
       body['password'] = password;
     }
-    final response = await http.post(
+    final response = await _httpClient.post(
       url,
       headers: _headers(),
       body: jsonEncode(body),
     );
-    final data = jsonDecode(response.body);
+    final data = _decodeJsonObject(response);
     if (response.statusCode == 200 && data['data'] != null) {
       return Map<String, dynamic>.from(data['data']);
     }
@@ -419,12 +444,12 @@ class ApiClient {
 
   Future<Map<String, dynamic>> verifyEmail(String token) async {
     final url = Uri.parse('$baseUrl/auth/verify-email');
-    final response = await http.post(
+    final response = await _httpClient.post(
       url,
       headers: _headers(),
       body: jsonEncode({'token': token.trim()}),
     );
-    final data = jsonDecode(response.body);
+    final data = _decodeJsonObject(response);
     if (response.statusCode == 200 && data['data'] != null) {
       return Map<String, dynamic>.from(data['data']);
     }
@@ -434,12 +459,12 @@ class ApiClient {
 
   Future<Map<String, dynamic>> resetPassword(String token, String newPassword) async {
     final url = Uri.parse('$baseUrl/auth/reset-password');
-    final response = await http.post(
+    final response = await _httpClient.post(
       url,
       headers: _headers(),
       body: jsonEncode({'token': token.trim(), 'new_password': newPassword}),
     );
-    final data = jsonDecode(response.body);
+    final data = _decodeJsonObject(response);
     if (response.statusCode == 200 && data['data'] != null) {
       return Map<String, dynamic>.from(data['data']);
     }
@@ -449,14 +474,18 @@ class ApiClient {
 
   Future<Map<String, dynamic>> getProfile() async {
     final url = Uri.parse('$baseUrl/users/me');
-    final response = await http.get(url, headers: _headers());
-    final data = jsonDecode(response.body);
+    final response = await _httpClient.get(url, headers: _headers());
+    await _handleUnauthorizedIfNeeded(response);
+    final data = _decodeJsonObject(response);
     if (response.statusCode == 200 && data['data'] != null) {
       final profile = Map<String, dynamic>.from(data['data']);
       await setProfile(profile);
       return profile;
     }
-    throw Exception(data['error']?['message'] ?? 'Failed to load profile');
+    throw ApiException(
+      _extractErrorMessage(response, 'Failed to load profile'),
+      statusCode: response.statusCode,
+    );
   }
 
   Future<Map<String, dynamic>> recordConsent({
@@ -466,7 +495,7 @@ class ApiClient {
     bool educationalDisclaimerAccepted = true,
   }) async {
     final url = Uri.parse('$baseUrl/users/consent');
-    final response = await http.post(
+    final response = await _httpClient.post(
       url,
       headers: _headers(),
       body: jsonEncode({
@@ -476,11 +505,15 @@ class ApiClient {
         'educational_disclaimer_accepted': educationalDisclaimerAccepted,
       }),
     );
-    final data = jsonDecode(response.body);
+    await _handleUnauthorizedIfNeeded(response);
+    final data = _decodeJsonObject(response);
     if (response.statusCode == 200 && data['data'] != null) {
       return Map<String, dynamic>.from(data['data']);
     }
-    throw Exception(data['error']?['message'] ?? 'Failed to record consent');
+    throw ApiException(
+      _extractErrorMessage(response, 'Failed to record consent'),
+      statusCode: response.statusCode,
+    );
   }
 
   Future<Map<String, dynamic>> submitRiskAssessment({
@@ -489,7 +522,7 @@ class ApiClient {
     String questionnaireVersion = 'v1.0',
   }) async {
     final url = Uri.parse('$baseUrl/risk/assessments');
-    final response = await http.post(
+    final response = await _httpClient.post(
       url,
       headers: _headers(),
       body: jsonEncode({
@@ -498,11 +531,15 @@ class ApiClient {
         'answers': answers,
       }),
     );
-    final data = jsonDecode(response.body);
+    await _handleUnauthorizedIfNeeded(response);
+    final data = _decodeJsonObject(response);
     if (response.statusCode == 200 && data['data'] != null) {
       return Map<String, dynamic>.from(data['data']);
     }
-    throw Exception(data['error']?['message'] ?? 'Failed to submit risk assessment');
+    throw ApiException(
+      _extractErrorMessage(response, 'Failed to submit risk assessment'),
+      statusCode: response.statusCode,
+    );
   }
 
   // Backward compatibility alias
@@ -531,9 +568,9 @@ class ApiClient {
 
   Future<Map<String, dynamic>?> getQuote(String symbol) async {
     final url = Uri.parse('$baseUrl/market/quotes/${Uri.encodeComponent(symbol)}');
-    final response = await http.get(url, headers: _headers());
+    final response = await _httpClient.get(url, headers: _headers());
     await _handleUnauthorizedIfNeeded(response);
-    final data = jsonDecode(response.body);
+    final data = _decodeJsonObject(response);
     if (response.statusCode == 200 && data['data'] != null) {
       return Map<String, dynamic>.from(data['data']);
     }
@@ -543,13 +580,16 @@ class ApiClient {
   // --- Paper Trading ---
   Future<Map<String, dynamic>> getAccount() async {
     final url = Uri.parse('$baseUrl/paper-trading/account');
-    final response = await http.get(url, headers: _headers());
+    final response = await _httpClient.get(url, headers: _headers());
     await _handleUnauthorizedIfNeeded(response);
-    final data = jsonDecode(response.body);
+    final data = _decodeJsonObject(response);
     if (response.statusCode == 200 && data['data'] != null) {
       return Map<String, dynamic>.from(data['data']);
     }
-    throw Exception(data['error']?['message'] ?? 'Failed to load account');
+    throw ApiException(
+      _extractErrorMessage(response, 'Failed to load account'),
+      statusCode: response.statusCode,
+    );
   }
 
   Future<Map<String, dynamic>> submitOrder({
@@ -564,7 +604,7 @@ class ApiClient {
         'mob-ord-${DateTime.now().millisecondsSinceEpoch}-${math.Random().nextInt(900000) + 100000}';
     final cleanOrderType = orderType.toUpperCase();
     final url = Uri.parse('$baseUrl/paper-trading/orders');
-    final response = await http.post(
+    final response = await _httpClient.post(
       url,
       headers: _headers({'X-Idempotency-Key': key}),
       body: jsonEncode({
@@ -576,7 +616,8 @@ class ApiClient {
         'idempotency_key': key,
       }),
     );
-    final data = jsonDecode(response.body);
+    await _handleUnauthorizedIfNeeded(response);
+    final data = _decodeJsonObject(response);
     if (response.statusCode == 200 && data['data'] != null) {
       final orderRes = Map<String, dynamic>.from(data['data']);
       double? toNum(dynamic v) {
@@ -607,11 +648,10 @@ class ApiClient {
       recentOrdersNotifier.value = [newEntry, ...recentOrdersNotifier.value];
       return orderRes;
     }
-    final errMsg = data['error']?['message'] ??
-        (data['detail'] is String ? data['detail'] : null) ??
-        data['message'] ??
-        'Order submission failed (Status: ${response.statusCode})';
-    throw Exception(errMsg);
+    throw ApiException(
+      _extractErrorMessage(response, 'Order submission failed'),
+      statusCode: response.statusCode,
+    );
   }
 
   Future<Map<String, dynamic>?> reconcileOrder(String idempotencyKey, [int limit = 10]) async {
@@ -638,30 +678,37 @@ class ApiClient {
       return mockDepositFundsHandler!(amount);
     }
     final url = Uri.parse('$baseUrl/paper-trading/deposit');
-    final response = await http.post(
+    final response = await _httpClient.post(
       url,
       headers: _headers(),
       body: jsonEncode({'amount': amount}),
     );
-    final data = jsonDecode(response.body);
+    await _handleUnauthorizedIfNeeded(response);
+    final data = _decodeJsonObject(response);
     if (response.statusCode == 200 && data['data'] != null) {
       return Map<String, dynamic>.from(data['data']);
     }
-    final errMsg = data['error']?['message'] ??
-        (data['detail'] is String ? data['detail'] : null) ??
-        data['message'] ??
-        'Virtual deposit failed (Status: ${response.statusCode})';
-    throw Exception(errMsg);
+    throw ApiException(
+      _extractErrorMessage(response, 'Virtual deposit failed'),
+      statusCode: response.statusCode,
+    );
   }
 
   Future<List<Map<String, dynamic>>> getOrders([int limit = 50]) async {
     final url = Uri.parse('$baseUrl/paper-trading/orders?limit=$limit');
-    final response = await http.get(url, headers: _headers());
-    final data = jsonDecode(response.body);
+    final response = await _httpClient.get(url, headers: _headers());
+    await _handleUnauthorizedIfNeeded(response);
+    final data = _decodeJsonObject(response);
     if (response.statusCode == 200 && data['data'] != null) {
       final orders = List<Map<String, dynamic>>.from(data['data']['orders'] ?? []);
       recentOrdersNotifier.value = orders;
       return orders;
+    }
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      throw ApiException(
+        _extractErrorMessage(response, 'Failed to fetch orders'),
+        statusCode: response.statusCode,
+      );
     }
     return recentOrdersNotifier.value;
   }
@@ -674,8 +721,8 @@ class ApiClient {
     final uri = Uri.parse('$baseUrl/market/indices').replace(
       queryParameters: queryParams.isNotEmpty ? queryParams : null,
     );
-    final response = await http.get(uri, headers: _headers());
-    final data = jsonDecode(response.body);
+    final response = await _httpClient.get(uri, headers: _headers());
+    final data = _decodeJsonObject(response);
     if (response.statusCode == 200 && data['data'] != null) {
       return Map<String, dynamic>.from(data['data']);
     }
@@ -684,8 +731,8 @@ class ApiClient {
 
   Future<Map<String, dynamic>?> getIndexQuote(String symbol) async {
     final uri = Uri.parse('$baseUrl/market/indices/${Uri.encodeComponent(symbol)}/quote');
-    final response = await http.get(uri, headers: _headers());
-    final data = jsonDecode(response.body);
+    final response = await _httpClient.get(uri, headers: _headers());
+    final data = _decodeJsonObject(response);
     if (response.statusCode == 200 && data['data'] != null) {
       return Map<String, dynamic>.from(data['data']);
     }
@@ -703,8 +750,8 @@ class ApiClient {
     final uri = Uri.parse('$baseUrl/market/indices/${Uri.encodeComponent(symbol)}/history').replace(
       queryParameters: queryParams.isNotEmpty ? queryParams : null,
     );
-    final response = await http.get(uri, headers: _headers());
-    final data = jsonDecode(response.body);
+    final response = await _httpClient.get(uri, headers: _headers());
+    final data = _decodeJsonObject(response);
     if (response.statusCode == 200 && data['data'] != null) {
       return Map<String, dynamic>.from(data['data']);
     }
@@ -719,95 +766,128 @@ class ApiClient {
       return mockResetAccountHandler!(confirmReset: confirmReset);
     }
     final url = Uri.parse('$baseUrl/paper-trading/reset');
-    final response = await http.post(
+    final response = await _httpClient.post(
       url,
       headers: _headers(),
       body: jsonEncode({'confirm_reset': confirmReset}),
     );
-    final data = jsonDecode(response.body);
+    await _handleUnauthorizedIfNeeded(response);
+    final data = _decodeJsonObject(response);
     if (response.statusCode == 200 && data['data'] != null) {
       return Map<String, dynamic>.from(data['data']);
     }
-    throw Exception(data['error']?['message'] ?? 'Account reset failed');
+    throw ApiException(
+      _extractErrorMessage(response, 'Account reset failed'),
+      statusCode: response.statusCode,
+    );
   }
 
   // --- Spending & CSV ---
   Future<Map<String, dynamic>> getTransactions() async {
     final url = Uri.parse('$baseUrl/spending/transactions');
-    final response = await http.get(url, headers: _headers());
-    final data = jsonDecode(response.body);
-    if (response.statusCode == 200 && data['data'] != null) {
-      return Map<String, dynamic>.from(data['data']);
+    final response = await _httpClient.get(url, headers: _headers());
+    await _handleUnauthorizedIfNeeded(response);
+    final data = _decodeJsonObject(response);
+    if (response.statusCode == 200) {
+      if (data['data'] != null) {
+        return Map<String, dynamic>.from(data['data']);
+      }
+      return {'transactions': [], 'total': 0};
     }
-    return {'transactions': [], 'total': 0};
+    throw ApiException(
+      _extractErrorMessage(response, 'Failed to load transactions'),
+      statusCode: response.statusCode,
+    );
   }
 
   Future<Map<String, dynamic>> previewCsv(String fileName, String csvContent) async {
     final url = Uri.parse('$baseUrl/spending/upload/preview');
-    final response = await http.post(
+    final response = await _httpClient.post(
       url,
       headers: _headers(),
       body: jsonEncode({'file_name': fileName, 'csv_content': csvContent}),
     );
-    final data = jsonDecode(response.body);
+    await _handleUnauthorizedIfNeeded(response);
+    final data = _decodeJsonObject(response);
     if (response.statusCode == 200 && data['data'] != null) {
       return Map<String, dynamic>.from(data['data']);
     }
-    throw Exception(data['error']?['message'] ?? 'CSV preview failed');
+    throw ApiException(
+      _extractErrorMessage(response, 'CSV preview failed'),
+      statusCode: response.statusCode,
+    );
   }
 
   Future<Map<String, dynamic>> commitCsv(String previewId, [List<int>? acceptedIndices]) async {
     final url = Uri.parse('$baseUrl/spending/upload/commit');
-    final response = await http.post(
+    final response = await _httpClient.post(
       url,
       headers: _headers(),
       body: jsonEncode({'preview_id': previewId, 'accepted_indices': acceptedIndices}),
     );
-    final data = jsonDecode(response.body);
+    await _handleUnauthorizedIfNeeded(response);
+    final data = _decodeJsonObject(response);
     if (response.statusCode == 200 && data['data'] != null) {
       return Map<String, dynamic>.from(data['data']);
     }
-    throw Exception(data['error']?['message'] ?? 'CSV commit failed');
+    throw ApiException(
+      _extractErrorMessage(response, 'CSV commit failed'),
+      statusCode: response.statusCode,
+    );
   }
 
   // --- AI RAG Conversations & Chat ---
   Future<Map<String, dynamic>> createConversation([String title = 'Mobile Assistant']) async {
     final url = Uri.parse('$baseUrl/ai/conversations');
-    final response = await http.post(
+    final response = await _httpClient.post(
       url,
       headers: _headers(),
       body: jsonEncode({'title': title}),
     );
-    final data = jsonDecode(response.body);
+    await _handleUnauthorizedIfNeeded(response);
+    final data = _decodeJsonObject(response);
     if (response.statusCode == 200 && data['data'] != null) {
       return Map<String, dynamic>.from(data['data']);
     }
-    throw Exception(data['error']?['message'] ?? 'Failed to create conversation');
+    throw ApiException(
+      _extractErrorMessage(response, 'Failed to create conversation'),
+      statusCode: response.statusCode,
+    );
   }
 
   Future<List<Map<String, dynamic>>> getConversations() async {
     final url = Uri.parse('$baseUrl/ai/conversations');
-    final response = await http.get(url, headers: _headers());
-    final data = jsonDecode(response.body);
+    final response = await _httpClient.get(url, headers: _headers());
+    await _handleUnauthorizedIfNeeded(response);
+    final data = _decodeJsonObject(response);
     if (response.statusCode == 200 && data['data'] != null) {
       return List<Map<String, dynamic>>.from(data['data']['conversations'] ?? []);
+    }
+    if (response.statusCode == 401 || response.statusCode == 403) {
+      throw ApiException(
+        _extractErrorMessage(response, 'Failed to fetch conversations'),
+        statusCode: response.statusCode,
+      );
     }
     return [];
   }
 
   Future<Map<String, dynamic>> sendAiMessage(String conversationId, String content) async {
     final url = Uri.parse('$baseUrl/ai/conversations/${Uri.encodeComponent(conversationId)}/messages');
-    final response = await http.post(
+    final response = await _httpClient.post(
       url,
       headers: _headers(),
       body: jsonEncode({'content': content}),
     );
     await _handleUnauthorizedIfNeeded(response);
-    final data = jsonDecode(response.body);
+    final data = _decodeJsonObject(response);
     if (response.statusCode == 200 && data['data'] != null) {
       return Map<String, dynamic>.from(data['data']);
     }
-    throw Exception(data['error']?['message'] ?? 'AI retrieval query failed');
+    throw ApiException(
+      _extractErrorMessage(response, 'AI retrieval query failed'),
+      statusCode: response.statusCode,
+    );
   }
 
   // --- Market History & Technical Indicators ---
@@ -822,9 +902,9 @@ class ApiClient {
     if (range != null) queryParams['range'] = range;
     if (asOf != null) queryParams['as_of'] = asOf;
     final uri = Uri.parse('$baseUrl/market/history/${Uri.encodeComponent(symbol)}').replace(queryParameters: queryParams);
-    final response = await http.get(uri, headers: _headers());
+    final response = await _httpClient.get(uri, headers: _headers());
     await _handleUnauthorizedIfNeeded(response);
-    final data = jsonDecode(response.body);
+    final data = _decodeJsonObject(response);
     if (response.statusCode == 200 && data['data'] != null) {
       return Map<String, dynamic>.from(data['data']);
     }
@@ -835,8 +915,8 @@ class ApiClient {
     final queryParams = <String, String>{};
     if (market != null) queryParams['market'] = market;
     final uri = Uri.parse('$baseUrl/market/instruments').replace(queryParameters: queryParams);
-    final response = await http.get(uri, headers: _headers());
-    final data = jsonDecode(response.body);
+    final response = await _httpClient.get(uri, headers: _headers());
+    final data = _decodeJsonObject(response);
     if (response.statusCode == 200 && data['data'] != null && data['data']['instruments'] != null) {
       return List<Map<String, dynamic>>.from(data['data']['instruments']);
     }
@@ -851,9 +931,9 @@ class ApiClient {
     final queryParams = <String, String>{'indicator': indicator};
     if (period != null) queryParams['period'] = period.toString();
     final uri = Uri.parse('$baseUrl/market/indicators/${Uri.encodeComponent(symbol)}').replace(queryParameters: queryParams);
-    final response = await http.get(uri, headers: _headers());
+    final response = await _httpClient.get(uri, headers: _headers());
     await _handleUnauthorizedIfNeeded(response);
-    final data = jsonDecode(response.body);
+    final data = _decodeJsonObject(response);
     if (response.statusCode == 200 && data['data'] != null) {
       return Map<String, dynamic>.from(data['data']);
     }
@@ -862,8 +942,8 @@ class ApiClient {
 
   Future<Map<String, dynamic>> getMarketMode() async {
     final url = Uri.parse('$baseUrl/market/mode');
-    final response = await http.get(url, headers: _headers());
-    final data = jsonDecode(response.body);
+    final response = await _httpClient.get(url, headers: _headers());
+    final data = _decodeJsonObject(response);
     if (response.statusCode == 200 && data['data'] != null) {
       return Map<String, dynamic>.from(data['data']);
     }
@@ -876,7 +956,7 @@ class ApiClient {
     Map<String, dynamic>? chartContext,
   }) async {
     final url = Uri.parse('$baseUrl/ai/assistant/chat');
-    final response = await http.post(
+    final response = await _httpClient.post(
       url,
       headers: _headers(),
       body: jsonEncode({
@@ -884,11 +964,15 @@ class ApiClient {
         if (chartContext != null) 'chart_context': chartContext,
       }),
     );
-    final data = jsonDecode(response.body);
+    await _handleUnauthorizedIfNeeded(response);
+    final data = _decodeJsonObject(response);
     if (response.statusCode == 200 && data['data'] != null) {
       return Map<String, dynamic>.from(data['data']);
     }
-    throw Exception(data['error']?['message'] ?? 'Assistant communication failed');
+    throw ApiException(
+      _extractErrorMessage(response, 'Assistant communication failed'),
+      statusCode: response.statusCode,
+    );
   }
 
   // Backward-compatible alias
@@ -899,13 +983,16 @@ class ApiClient {
 
   Future<Map<String, dynamic>> executeProposal(String proposalId) async {
     final url = Uri.parse('$baseUrl/ai/assistant/proposals/${Uri.encodeComponent(proposalId)}/execute');
-    final response = await http.post(url, headers: _headers());
+    final response = await _httpClient.post(url, headers: _headers());
     await _handleUnauthorizedIfNeeded(response);
-    final data = jsonDecode(response.body);
+    final data = _decodeJsonObject(response);
     if (response.statusCode == 200 && data['data'] != null) {
       return Map<String, dynamic>.from(data['data']);
     }
-    throw Exception(data['error']?['message'] ?? 'Failed to execute proposal');
+    throw ApiException(
+      _extractErrorMessage(response, 'Failed to execute proposal'),
+      statusCode: response.statusCode,
+    );
   }
 }
 

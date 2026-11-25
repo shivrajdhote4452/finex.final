@@ -666,7 +666,10 @@ class UserStore:
 
         owns_session = db is None
         session = db if db is not None else AsyncSessionLocal()
+        savepoint = None
         try:
+            if not owns_session and session.in_transaction():
+                savepoint = await session.begin_nested()
             res = await session.execute(select(RevokedToken).where(RevokedToken.token == token_hash))
             if not res.scalar_one_or_none():
                 resolved_uid = None
@@ -683,8 +686,20 @@ class UserStore:
                 session.add(entry)
                 if owns_session:
                     await session.commit()
+            if savepoint is not None and savepoint.is_active:
+                await savepoint.commit()
         except Exception as e:
             if owns_session:
+                try:
+                    await session.rollback()
+                except Exception:
+                    pass
+            elif savepoint is not None:
+                try:
+                    await savepoint.rollback()
+                except Exception:
+                    pass
+            elif session.in_transaction():
                 try:
                     await session.rollback()
                 except Exception:
@@ -706,14 +721,31 @@ class UserStore:
             return True
         owns_session = db is None
         session = db if db is not None else AsyncSessionLocal()
+        savepoint = None
         try:
+            if not owns_session and session.in_transaction():
+                savepoint = await session.begin_nested()
             candidates = [token_hash, token] if len(token) <= 512 else [token_hash]
             res = await session.execute(select(RevokedToken).where(RevokedToken.token.in_(candidates)))
             if res.scalar_one_or_none() is not None:
                 self._revoked_tokens.add(token_hash)
+                if savepoint is not None and savepoint.is_active:
+                    await savepoint.commit()
                 return True
+            if savepoint is not None and savepoint.is_active:
+                await savepoint.commit()
             return False
         except Exception as e:
+            if savepoint is not None:
+                try:
+                    await savepoint.rollback()
+                except Exception:
+                    pass
+            elif not owns_session and session.in_transaction():
+                try:
+                    await session.rollback()
+                except Exception:
+                    pass
             logger.debug(f"Database check in is_token_revoked failed: {e}. Using memory revocation list.")
             return token_hash in self._revoked_tokens or token in self._revoked_tokens
         finally:

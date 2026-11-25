@@ -26,6 +26,7 @@ from backend.app.config import Environment, get_settings
 from backend.app.database import AsyncSessionLocal
 from backend.app.domain.options_engine import (
     calculate_black_scholes_price_and_greeks,
+    calculate_model_option_volatility,
     get_lot_size,
     settle_option_position,
 )
@@ -1237,11 +1238,12 @@ class PaperTradingEngine:
             days_to_exp = max(0, (exp_date - now.date()).days)
             time_to_exp_years = max(days_to_exp / 365.0, 1.0 / (365.0 * 24.0))
 
+            model_iv = calculate_model_option_volatility(underlying, strike, spot, opt_type)
             cur_prem, _ = calculate_black_scholes_price_and_greeks(
                 spot=spot,
                 strike=strike,
                 time_to_expiry_years=time_to_exp_years,
-                volatility=0.135 if "NIFTY" in underlying else 0.22,
+                volatility=model_iv,
                 option_type=opt_type,
             )
 
@@ -1452,8 +1454,14 @@ class PaperTradingEngine:
         existing_res = await db.execute(existing_stmt)
         existing_order = existing_res.scalar_one_or_none()
         if existing_order:
+            existing_contract = (
+                existing_order.execution_receipt.get("contract_symbol")
+                if isinstance(existing_order.execution_receipt, dict)
+                else None
+            )
             if (
-                existing_order.symbol != contract_sym
+                existing_order.symbol != contract_sym[:20]
+                or (existing_contract and existing_contract != contract_sym)
                 or existing_order.quantity != Decimal(total_quantity)
                 or existing_order.side != side
             ):
@@ -1472,11 +1480,12 @@ class PaperTradingEngine:
             quote = self.get_market_quote_sync(underlying)
         spot = float(quote.price) if quote else 24000.0
         time_to_exp_years = max(days_to_expiry / 365.0, 1.0 / (365.0 * 24.0))
+        model_iv = calculate_model_option_volatility(underlying, float(strike), spot, opt_type)
         calc_price, _ = calculate_black_scholes_price_and_greeks(
             spot=spot,
             strike=float(strike),
             time_to_expiry_years=time_to_exp_years,
-            volatility=0.135 if "NIFTY" in underlying else 0.22,
+            volatility=model_iv,
             option_type=opt_type,
         )
         fill_premium = Decimal(str(calc_price)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
@@ -1648,20 +1657,45 @@ class PaperTradingEngine:
             )
         )
 
-        pos_stmt = select(PaperOptionPosition).where(
-            PaperOptionPosition.account_id == acct_id,
-            PaperOptionPosition.contract_symbol == contract_sym,
-            PaperOptionPosition.status == "OPEN",
+        pos_stmt = (
+            select(PaperOptionPosition)
+            .where(
+                PaperOptionPosition.account_id == acct_id,
+                PaperOptionPosition.contract_symbol == contract_sym,
+            )
+            .with_for_update()
         )
         pos_res = await db.execute(pos_stmt)
         opt_pos = pos_res.scalar_one_or_none()
-        if opt_pos:
+        if opt_pos and opt_pos.status == "OPEN":
             opt_pos.lots += lots
             opt_pos.total_quantity += total_quantity
             opt_pos.total_cost_basis += total_cost
             opt_pos.average_premium = (opt_pos.total_cost_basis / opt_pos.total_quantity).quantize(
                 Decimal("0.01"), rounding=ROUND_HALF_UP
             )
+            opt_pos.max_loss = opt_pos.total_cost_basis
+            opt_pos.breakeven = (
+                (strike + opt_pos.average_premium).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                if opt_type == "CE"
+                else (strike - opt_pos.average_premium).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            )
+            opt_pos.updated_at = now
+        elif opt_pos:
+            # Re-open previously settled/expired contract row to satisfy uq_paper_option_position_contract cleanly
+            opt_pos.underlying = underlying
+            opt_pos.option_type = opt_type
+            opt_pos.strike = strike
+            opt_pos.expiry = payload.expiry
+            opt_pos.lots = lots
+            opt_pos.lot_size = lot_size
+            opt_pos.total_quantity = total_quantity
+            opt_pos.average_premium = fill_premium
+            opt_pos.total_cost_basis = total_cost
+            opt_pos.breakeven = breakeven
+            opt_pos.max_loss = max_loss
+            opt_pos.status = "OPEN"
+            opt_pos.created_at = now
             opt_pos.updated_at = now
         else:
             opt_pos = PaperOptionPosition(
@@ -1724,11 +1758,12 @@ class PaperTradingEngine:
             days_to_exp = max(0, (exp_date - now.date()).days)
             time_to_exp_years = max(days_to_exp / 365.0, 1.0 / (365.0 * 24.0))
 
+            model_iv = calculate_model_option_volatility(underlying, strike, spot, opt_type)
             cur_prem, _ = calculate_black_scholes_price_and_greeks(
                 spot=spot,
                 strike=strike,
                 time_to_expiry_years=time_to_exp_years,
-                volatility=0.135 if "NIFTY" in underlying else 0.22,
+                volatility=model_iv,
                 option_type=opt_type,
             )
             cur_market_val = round(cur_prem * total_qty, 2)

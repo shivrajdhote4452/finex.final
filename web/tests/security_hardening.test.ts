@@ -64,6 +64,7 @@ describe('Frontend Security Hardening Regression Suite', () => {
       const headerMap = Object.fromEntries(catchAll.headers.map((h: any) => [h.key, h.value]));
       assert.equal(headerMap['X-Content-Type-Options'], 'nosniff');
       assert.equal(headerMap['X-Frame-Options'], 'DENY');
+      assert.equal(headerMap['Cross-Origin-Opener-Policy'], 'same-origin-allow-popups');
       assert.ok(headerMap['Referrer-Policy']);
       assert.ok(headerMap['Permissions-Policy']);
       assert.ok(headerMap['Strict-Transport-Security']);
@@ -72,6 +73,8 @@ describe('Frontend Security Hardening Regression Suite', () => {
       assert.ok(csp, `${filePath} must define Content-Security-Policy`);
       assert.ok(!csp.includes("connect-src 'self' *"), 'CSP must not allow wildcard connect-src *');
       assert.ok(!csp.includes("script-src 'self' 'unsafe-inline'"), 'CSP script-src must not permit unsafe-inline');
+      assert.ok(csp.includes("frame-src 'self' https://accounts.google.com/gsi/ https://www.tradingview-widget.com"));
+      assert.ok(csp.includes('https://accounts.google.com/gsi/client'));
       assert.ok(csp.includes("object-src 'none'"));
       assert.ok(csp.includes("frame-ancestors 'none'"));
     }

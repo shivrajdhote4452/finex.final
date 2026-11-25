@@ -12,7 +12,6 @@ Exposes:
 
 import asyncio
 import logging
-import re
 from datetime import date, datetime, time, timedelta, timezone
 from typing import List, Optional
 
@@ -319,13 +318,9 @@ async def market_symbol_websocket(
     settings = get_settings()
     if settings.ENVIRONMENT == Environment.PRODUCTION:
         origin = (websocket.headers.get("origin") or "").strip()
-        if origin and origin not in {"https://finexai.tech", "https://www.finexai.tech"}:
-            if not re.fullmatch(
-                r"https://(?:finex(?:-[a-z0-9-]+)?|finex-final(?:-[a-z0-9-]+)?)\.vercel\.app",
-                origin,
-            ):
-                await websocket.close(code=1008)
-                return
+        if origin and origin not in set(settings.ALLOWED_ORIGINS):
+            await websocket.close(code=1008)
+            return
 
     clean_sym = symbol.upper().replace(".NS", "").replace("NSE:", "").strip()
     allowed_symbols = set(FINEX_INSTRUMENTS.keys()).union({item["symbol"] for item in INSTRUMENT_REGISTRY})
