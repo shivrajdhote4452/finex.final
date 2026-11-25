@@ -9,6 +9,7 @@ import asyncio
 import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -38,16 +39,15 @@ from backend.app.models.paper_trading import (
 )
 from backend.app.models.rag import AIConversation, AIMessage
 from backend.app.routers.auth import create_access_token, extract_authenticated_user_id
+from backend.app.routers.market import market_symbol_websocket
 from backend.app.routers.spending import ManualTransactionRequest
 from backend.app.services.email_service import EmailService
 from backend.app.services.password_service import AuthRateLimiter, hash_password
 from data.quality.paper_trading_reconciliation import PaperTradingReconciler
-from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 from pydantic import ValidationError
 from sqlalchemy import delete, select, text
 from starlette.requests import Request
-from starlette.websockets import WebSocketDisconnect
 
 
 def _make_request(headers: dict[str, str], client_host: str = "127.0.0.1") -> Request:
@@ -196,14 +196,12 @@ async def test_production_cors_docs_sample_and_health_redaction(monkeypatch):
                 )
                 assert "access-control-allow-origin" not in other_evil.headers
 
-            # WebSocket rejects third-party finex-*.vercel.app origins in production
-            with TestClient(prod_app) as ws_client:
-                with pytest.raises(WebSocketDisconnect):
-                    with ws_client.websocket_connect(
-                        "/api/v1/market/ws/RELIANCE",
-                        headers={"Origin": "https://finex-evil.vercel.app"},
-                    ):
-                        pass
+            # WebSocket rejects third-party finex-*.vercel.app origins in production without triggering full lifespan seeding
+            monkeypatch.delenv("ALLOWED_ORIGINS", raising=False)
+            get_settings.cache_clear()
+            evil_ws = SimpleNamespace(headers={"origin": "https://finex-evil.vercel.app"}, close=AsyncMock())
+            await market_symbol_websocket(evil_ws, "RELIANCE", db=AsyncMock(), hub=SimpleNamespace())
+            evil_ws.close.assert_awaited_once_with(code=1008)
 
             # 4. Health/ready must redact raw DB exception internals in production
             with patch(
