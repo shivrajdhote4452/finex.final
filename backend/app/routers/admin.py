@@ -27,7 +27,7 @@ from backend.app.models.monitoring import ErrorEvent
 from backend.app.models.paper_trading import PaperOrder
 from backend.app.routers.auth import require_owner
 from backend.app.routers.health import check_db_ready
-from backend.app.services.error_recorder import prune_if_due
+from backend.app.services.error_recorder import prune_if_due, sanitize_error_message
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
@@ -89,6 +89,12 @@ class AdminOrdersResponse(BaseModel):
     page: int
     limit: int
     total_pages: int
+    overall_total: int = 0
+    status_counts: Dict[str, int] = Field(default_factory=dict)
+    scope_notice: str = (
+        "Persisted paper_orders records only. Client-side disconnects, pre-validation rejections, "
+        "or unrecorded failures do not appear as order records."
+    )
 
 
 class AdminOverviewResponse(BaseModel):
@@ -96,9 +102,15 @@ class AdminOverviewResponse(BaseModel):
     verified_users: int = Field(..., description="Users with verified email or identity")
     unverified_users: int = Field(..., description="Users with unverified status")
     onboarding_completed_users: int = Field(..., description="Users that completed risk onboarding")
-    total_orders: int = Field(..., description="Total paper orders submitted")
+    total_orders: int = Field(..., description="Total recorded paper orders")
     orders_by_status: Dict[str, int] = Field(..., description="Order counts grouped by recorded status")
-    recent_rejected_orders: List[AdminOrderItem] = Field(..., description="Recent rejected orders with reasons")
+    recent_rejected_orders: List[AdminOrderItem] = Field(..., description="Recent rejected orders with safe reasons")
+    recent_orders: List[AdminOrderItem] = Field(
+        default_factory=list, description="Most recent recorded paper orders across all statuses"
+    )
+    orders_scope_notice: str = (
+        "Counts reflect persisted paper_orders rows only; unpersisted request failures are not counted as orders."
+    )
 
 
 class AdminSystemHealthResponse(BaseModel):
@@ -229,6 +241,84 @@ def _parse_date_range(
     return parsed_from, parsed_to
 
 
+_ALLOWED_ORDER_SIDES = frozenset({"BUY", "SELL"})
+_ALLOWED_ORDER_STATUSES = frozenset({"FILLED", "REJECTED", "PENDING", "CANCELLED"})
+_SAFE_ORDER_SYMBOL_RE = re.compile(r"^[A-Za-z0-9._&-]+$")
+_ORDER_TRACE_MARKERS = ("traceback", 'file "', "sqlalchemy", "asyncpg", "psycopg", "stack trace")
+
+_ADMIN_ORDER_COLUMNS = (
+    PaperOrder.id,
+    PaperOrder.user_id,
+    PaperOrder.symbol,
+    PaperOrder.side,
+    PaperOrder.order_type,
+    PaperOrder.quantity,
+    PaperOrder.limit_price,
+    PaperOrder.fill_price,
+    PaperOrder.fee,
+    PaperOrder.status,
+    PaperOrder.rejection_reason,
+    PaperOrder.created_at,
+)
+
+
+def _sanitize_admin_order_reason(raw_reason: Optional[str], status_val: Optional[str]) -> Optional[str]:
+    """Returns an honest, balance-free, credential-safe failure detail for admin display."""
+    clean = (raw_reason or "").strip()
+    if not clean:
+        return "Failure reason unavailable" if status_val == "REJECTED" else None
+
+    lowered = clean.lower()
+    if any(marker in lowered for marker in _ORDER_TRACE_MARKERS):
+        return "Failure details withheld for safety"
+
+    # Protect private cash balances, share holding quantities, and personal budget caps
+    if "insufficient virtual cash" in lowered or "available: ₹" in lowered or "available: rs" in lowered:
+        return "Insufficient virtual cash balance for requested order."
+    if "insufficient holding quantity" in lowered or "you hold " in lowered:
+        return "Insufficient holding quantity for requested sell order."
+    if "exceeds authorized budget limit" in lowered:
+        return "Order cost exceeds configured budget guardrail."
+
+    sanitized = sanitize_error_message(clean, max_length=240)
+    if "[REDACTED]" in sanitized:
+        return "Failure details withheld for safety"
+    return sanitized
+
+
+def _serialize_admin_order(row: Any) -> AdminOrderItem:
+    """Projects a PaperOrder database row into a sanitized read-only admin schema without user email PII."""
+    return AdminOrderItem(
+        id=row.id,
+        user_id=row.user_id,
+        user_email=None,
+        symbol=row.symbol,
+        side=row.side,
+        order_type=row.order_type,
+        quantity=float(row.quantity) if row.quantity is not None else 0.0,
+        limit_price=float(row.limit_price) if row.limit_price is not None else None,
+        fill_price=float(row.fill_price) if row.fill_price is not None else None,
+        fee=float(row.fee) if row.fee is not None else 0.0,
+        status=row.status,
+        rejection_reason=_sanitize_admin_order_reason(row.rejection_reason, row.status),
+        created_at=row.created_at.isoformat() if row.created_at else None,
+    )
+
+
+async def _get_order_status_summary(db: AsyncSession) -> tuple[int, Dict[str, int]]:
+    """Computes total persisted paper orders and grouped status counts in a single query."""
+    status_counts_res = await db.execute(
+        select(PaperOrder.status, func.count(PaperOrder.id)).group_by(PaperOrder.status)
+    )
+    orders_by_status: Dict[str, int] = {
+        row[0]: int(row[1]) for row in status_counts_res.fetchall() if row[0] is not None
+    }
+    total_orders = sum(orders_by_status.values())
+    for st in ("FILLED", "REJECTED", "PENDING", "CANCELLED"):
+        orders_by_status.setdefault(st, 0)
+    return total_orders, orders_by_status
+
+
 # =============================================================================
 # Endpoints
 # =============================================================================
@@ -237,7 +327,7 @@ def _parse_date_range(
 @router.get(
     "/overview",
     summary="Admin Operational Overview",
-    description="Returns aggregate counts of users, onboarding progress, orders by status, and recent rejections.",
+    description="Returns aggregate counts of users, onboarding progress, orders by status, and recent orders.",
 )
 async def get_admin_overview(
     request: Request,
@@ -260,62 +350,25 @@ async def get_admin_overview(
     )
     onboarded_users = onboarded_res.scalar() or 0
 
-    # 2. Paper order metrics
-    total_orders_res = await db.execute(select(func.count(PaperOrder.id)))
-    total_orders = total_orders_res.scalar() or 0
+    # 2. Paper order metrics (single GROUP BY query)
+    total_orders, orders_by_status = await _get_order_status_summary(db)
 
-    status_counts_res = await db.execute(
-        select(PaperOrder.status, func.count(PaperOrder.id)).group_by(PaperOrder.status)
+    # 3. Recent recorded orders across all statuses (single-table, newest first)
+    recent_orders_stmt = (
+        select(*_ADMIN_ORDER_COLUMNS).order_by(PaperOrder.created_at.desc(), PaperOrder.id.desc()).limit(10)
     )
-    orders_by_status: Dict[str, int] = {
-        row[0]: int(row[1]) for row in status_counts_res.fetchall() if row[0] is not None
-    }
-    for st in ["FILLED", "REJECTED", "PENDING", "CANCELLED"]:
-        orders_by_status.setdefault(st, 0)
+    recent_order_rows = (await db.execute(recent_orders_stmt)).fetchall()
+    recent_orders = [_serialize_admin_order(r) for r in recent_order_rows]
 
-    # 3. Recent rejected orders
+    # 4. Recent rejected orders with sanitized safeguard details
     recent_rejected_stmt = (
-        select(
-            PaperOrder.id,
-            PaperOrder.user_id,
-            PaperOrder.symbol,
-            PaperOrder.side,
-            PaperOrder.order_type,
-            PaperOrder.quantity,
-            PaperOrder.limit_price,
-            PaperOrder.fill_price,
-            PaperOrder.fee,
-            PaperOrder.status,
-            PaperOrder.rejection_reason,
-            PaperOrder.created_at,
-            User.email.label("user_email"),
-        )
-        .outerjoin(User, PaperOrder.user_id == User.id)
+        select(*_ADMIN_ORDER_COLUMNS)
         .where(PaperOrder.status == "REJECTED")
-        .order_by(PaperOrder.created_at.desc())
+        .order_by(PaperOrder.created_at.desc(), PaperOrder.id.desc())
         .limit(10)
     )
     recent_rejected_rows = (await db.execute(recent_rejected_stmt)).fetchall()
-
-    recent_rejected_orders: List[Dict[str, Any]] = []
-    for r in recent_rejected_rows:
-        recent_rejected_orders.append(
-            {
-                "id": r.id,
-                "user_id": r.user_id,
-                "user_email": r.user_email,
-                "symbol": r.symbol,
-                "side": r.side,
-                "order_type": r.order_type,
-                "quantity": float(r.quantity) if r.quantity is not None else 0.0,
-                "limit_price": float(r.limit_price) if r.limit_price is not None else None,
-                "fill_price": float(r.fill_price) if r.fill_price is not None else None,
-                "fee": float(r.fee) if r.fee is not None else 0.0,
-                "status": r.status,
-                "rejection_reason": r.rejection_reason or "Unspecified reason",
-                "created_at": r.created_at.isoformat() if r.created_at else None,
-            }
-        )
+    recent_rejected_orders = [_serialize_admin_order(r) for r in recent_rejected_rows]
 
     overview_data = AdminOverviewResponse(
         total_users=total_users,
@@ -324,7 +377,8 @@ async def get_admin_overview(
         onboarding_completed_users=onboarded_users,
         total_orders=total_orders,
         orders_by_status=orders_by_status,
-        recent_rejected_orders=[AdminOrderItem(**o) for o in recent_rejected_orders],
+        recent_rejected_orders=recent_rejected_orders,
+        recent_orders=recent_orders,
     )
     return create_response_envelope(overview_data.model_dump(), correlation_id=cid)
 
@@ -458,79 +512,100 @@ async def list_admin_users(
 )
 async def list_admin_orders(
     request: Request,
-    page: int = Query(1, ge=1, description="Page number"),
+    page: int = Query(1, ge=1, le=1000, description="Page number"),
     limit: int = Query(20, ge=1, le=100, description="Items per page"),
-    symbol: Optional[str] = Query(None, description="Filter by ticker symbol"),
-    side: Optional[str] = Query(None, description="Filter by BUY or SELL side"),
-    status: Optional[str] = Query(None, description="Filter by order status (FILLED, REJECTED, PENDING, etc.)"),
-    search: Optional[str] = Query(None, description="Search symbol, rejection reason, or user email"),
+    symbol: Optional[str] = Query(None, max_length=20, description="Filter by exact ticker symbol"),
+    side: Optional[str] = Query(None, max_length=10, description="Filter by BUY or SELL side"),
+    status: Optional[str] = Query(
+        None,
+        max_length=20,
+        description="Filter by recorded order status (FILLED, REJECTED, PENDING, CANCELLED)",
+    ),
+    date_from: Optional[str] = Query(
+        None, max_length=40, description="Include orders created at or after date/datetime"
+    ),
+    date_to: Optional[str] = Query(
+        None, max_length=40, description="Include orders created at or before date/datetime"
+    ),
+    sort_order: Literal["desc", "asc"] = Query(
+        "desc", description="Sort order by creation timestamp (desc = newest first)"
+    ),
+    search: Optional[str] = Query(None, max_length=80, description="Search by ticker symbol or order ID"),
     db: AsyncSession = Depends(get_db),
 ):
     cid = getattr(request.state, "correlation_id", "none")
 
-    query = select(
-        PaperOrder.id,
-        PaperOrder.user_id,
-        PaperOrder.symbol,
-        PaperOrder.side,
-        PaperOrder.order_type,
-        PaperOrder.quantity,
-        PaperOrder.limit_price,
-        PaperOrder.fill_price,
-        PaperOrder.fee,
-        PaperOrder.status,
-        PaperOrder.rejection_reason,
-        PaperOrder.created_at,
-        User.email.label("user_email"),
-    ).outerjoin(User, PaperOrder.user_id == User.id)
+    parsed_from, parsed_to = _parse_date_range(date_from, date_to)
 
-    if symbol and symbol.strip():
-        query = query.where(PaperOrder.symbol.ilike(f"%{symbol.strip()}%"))
+    clean_symbol: Optional[str] = None
+    if symbol is not None and symbol.strip():
+        candidate_sym = symbol.strip().upper()
+        if not _SAFE_ORDER_SYMBOL_RE.match(candidate_sym):
+            raise ValidationException("Invalid symbol filter value.")
+        clean_symbol = candidate_sym
 
-    if side and side.strip():
-        query = query.where(PaperOrder.side == side.strip().upper())
+    clean_side: Optional[str] = None
+    if side is not None and side.strip():
+        candidate_side = side.strip().upper()
+        if candidate_side not in _ALLOWED_ORDER_SIDES:
+            raise ValidationException("Invalid side filter. Expected BUY or SELL.")
+        clean_side = candidate_side
 
-    if status and status.strip():
-        query = query.where(PaperOrder.status == status.strip().upper())
+    clean_status: Optional[str] = None
+    if status is not None and status.strip():
+        candidate_status = status.strip().upper()
+        if candidate_status not in _ALLOWED_ORDER_STATUSES:
+            raise ValidationException("Invalid status filter. Expected one of FILLED, REJECTED, PENDING, or CANCELLED.")
+        clean_status = candidate_status
+
+    conditions = []
+
+    if clean_symbol:
+        conditions.append(PaperOrder.symbol == clean_symbol)
+
+    if clean_side:
+        conditions.append(PaperOrder.side == clean_side)
+
+    if clean_status:
+        conditions.append(PaperOrder.status == clean_status)
+
+    if parsed_from is not None:
+        conditions.append(PaperOrder.created_at >= parsed_from)
+
+    if parsed_to is not None:
+        conditions.append(PaperOrder.created_at <= parsed_to)
 
     if search and search.strip():
-        term = f"%{search.strip()}%"
-        query = query.where(
+        escaped = _escape_like_term(search.strip())
+        term = f"%{escaped}%"
+        conditions.append(
             or_(
-                PaperOrder.symbol.ilike(term),
-                PaperOrder.rejection_reason.ilike(term),
-                User.email.ilike(term),
-                PaperOrder.id.ilike(term),
+                PaperOrder.symbol.ilike(term, escape="\\"),
+                PaperOrder.id.ilike(term, escape="\\"),
             )
         )
 
-    # Count matching records
-    count_stmt = select(func.count()).select_from(query.order_by(None).subquery())
+    # Single-table COUNT without User join or redundant subquery wrapper
+    count_stmt = select(func.count(PaperOrder.id))
+    if conditions:
+        count_stmt = count_stmt.where(*conditions)
     total_count = (await db.execute(count_stmt)).scalar() or 0
 
-    # Paginate and order
-    query = query.order_by(PaperOrder.created_at.desc()).offset((page - 1) * limit).limit(limit)
-    rows = (await db.execute(query)).fetchall()
+    # Platform status distribution (single GROUP BY query for Overview metrics)
+    overall_total, status_counts = await _get_order_status_summary(db)
 
-    order_items: List[AdminOrderItem] = []
-    for r in rows:
-        order_items.append(
-            AdminOrderItem(
-                id=r.id,
-                user_id=r.user_id,
-                user_email=r.user_email,
-                symbol=r.symbol,
-                side=r.side,
-                order_type=r.order_type,
-                quantity=float(r.quantity) if r.quantity is not None else 0.0,
-                limit_price=float(r.limit_price) if r.limit_price is not None else None,
-                fill_price=float(r.fill_price) if r.fill_price is not None else None,
-                fee=float(r.fee) if r.fee is not None else 0.0,
-                status=r.status,
-                rejection_reason=r.rejection_reason,
-                created_at=r.created_at.isoformat() if r.created_at else None,
-            )
-        )
+    query = select(*_ADMIN_ORDER_COLUMNS)
+    if conditions:
+        query = query.where(*conditions)
+
+    if sort_order == "asc":
+        query = query.order_by(PaperOrder.created_at.asc(), PaperOrder.id.asc())
+    else:
+        query = query.order_by(PaperOrder.created_at.desc(), PaperOrder.id.desc())
+
+    query = query.offset((page - 1) * limit).limit(limit)
+    rows = (await db.execute(query)).fetchall()
+    order_items = [_serialize_admin_order(r) for r in rows]
 
     total_pages = max(1, math.ceil(total_count / limit))
     response_data = AdminOrdersResponse(
@@ -539,6 +614,8 @@ async def list_admin_orders(
         page=page,
         limit=limit,
         total_pages=total_pages,
+        overall_total=overall_total,
+        status_counts=status_counts,
     )
     return create_response_envelope(response_data.model_dump(), correlation_id=cid)
 

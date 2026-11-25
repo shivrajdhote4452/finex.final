@@ -3,11 +3,16 @@ import { useFinancial } from '../context/FinancialContext';
 import {
   apiClient,
   AdminOverviewResponse,
-  AdminOrdersResponse,
   AdminSystemHealthResponse,
 } from '../api/client';
 import { AdminErrorsPanel } from '../components/admin/AdminErrorsPanel';
+import { AdminOrdersPanel } from '../components/admin/AdminOrdersPanel';
 import { AdminUsersPanel } from '../components/admin/AdminUsersPanel';
+import {
+  formatOrderTimestamp,
+  normalizeOrderStatusCounts,
+  resolveOrderFailureDetails,
+} from '../domain/paperTradingOverview';
 import { NavigationTab } from '../domain/sessionNavigation';
 
 interface AdminScreenProps {
@@ -30,14 +35,10 @@ export const AdminScreen: React.FC<AdminScreenProps> = ({ onNavigate }) => {
   const [usersLoading, setUsersLoading] = useState<boolean>(false);
   const [usersRefreshTick, setUsersRefreshTick] = useState<number>(0);
 
-  // Orders State
-  const [ordersData, setOrdersData] = useState<AdminOrdersResponse | null>(null);
+  // Orders State (managed inside AdminOrdersPanel)
   const [ordersLoading, setOrdersLoading] = useState<boolean>(false);
-  const [ordersError, setOrdersError] = useState<string | null>(null);
-  const [orderSearch, setOrderSearch] = useState<string>('');
-  const [orderStatus, setOrderStatus] = useState<string>('');
-  const [orderSide, setOrderSide] = useState<string>('');
-  const [orderPage, setOrderPage] = useState<number>(1);
+  const [ordersRefreshTick, setOrdersRefreshTick] = useState<number>(0);
+  const [ordersPresetStatus, setOrdersPresetStatus] = useState<string>('');
 
   // System Health State
   const [healthData, setHealthData] = useState<AdminSystemHealthResponse | null>(null);
@@ -63,27 +64,6 @@ export const AdminScreen: React.FC<AdminScreenProps> = ({ onNavigate }) => {
     }
   }, [isOwner]);
 
-  // Fetch Orders
-  const fetchOrders = useCallback(async () => {
-    if (!isOwner) return;
-    setOrdersLoading(true);
-    setOrdersError(null);
-    try {
-      const data = await apiClient.admin.getOrders({
-        page: orderPage,
-        limit: 15,
-        search: orderSearch.trim() || undefined,
-        status: orderStatus || undefined,
-        side: orderSide || undefined,
-      });
-      setOrdersData(data);
-    } catch (err: any) {
-      setOrdersError(err?.message || 'Failed to load paper trading orders');
-    } finally {
-      setOrdersLoading(false);
-    }
-  }, [isOwner, orderPage, orderSearch, orderStatus, orderSide]);
-
   // Fetch Health
   const fetchHealth = useCallback(async () => {
     if (!isOwner) return;
@@ -103,9 +83,8 @@ export const AdminScreen: React.FC<AdminScreenProps> = ({ onNavigate }) => {
   useEffect(() => {
     if (!isOwner) return;
     if (activeTab === 'overview') fetchOverview();
-    else if (activeTab === 'orders') fetchOrders();
     else if (activeTab === 'health') fetchHealth();
-  }, [activeTab, isOwner, fetchOverview, fetchOrders, fetchHealth]);
+  }, [activeTab, isOwner, fetchOverview, fetchHealth]);
 
   // If not owner, show Access Denied Guard
   if (!isOwner) {
@@ -218,7 +197,7 @@ export const AdminScreen: React.FC<AdminScreenProps> = ({ onNavigate }) => {
           onClick={() => {
             if (activeTab === 'overview') fetchOverview();
             else if (activeTab === 'users') setUsersRefreshTick((n) => n + 1);
-            else if (activeTab === 'orders') fetchOrders();
+            else if (activeTab === 'orders') setOrdersRefreshTick((n) => n + 1);
             else if (activeTab === 'health') fetchHealth();
             else if (activeTab === 'errors') setErrorsRefreshTick((n) => n + 1);
           }}
@@ -427,36 +406,34 @@ export const AdminScreen: React.FC<AdminScreenProps> = ({ onNavigate }) => {
                   Paper Trading Execution Distribution
                 </h3>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
-                  {Object.entries(overviewData.orders_by_status).map(([status, count]) => {
-                    let badgeColor = 'var(--text-muted)';
-                    let bg = 'rgba(128, 128, 128, 0.1)';
-                    if (status === 'FILLED') {
-                      badgeColor = 'var(--color-profit, #059669)';
-                      bg = 'rgba(5, 150, 105, 0.1)';
-                    } else if (status === 'REJECTED') {
-                      badgeColor = 'var(--color-loss, #EF4444)';
-                      bg = 'rgba(239, 68, 68, 0.1)';
-                    } else if (status === 'PENDING') {
-                      badgeColor = '#D97706';
-                      bg = 'rgba(217, 119, 6, 0.1)';
-                    }
-                    return (
-                      <div
-                        key={status}
-                        style={{
-                          backgroundColor: bg,
-                          border: '1px solid var(--border-subtle)',
-                          borderRadius: 'var(--radius-xs)',
-                          padding: '12px 16px',
-                        }}
+                  {Object.entries(normalizeOrderStatusCounts(overviewData.orders_by_status)).map(([status, count]) => (
+                    <div
+                      key={status}
+                      style={{
+                        backgroundColor: 'var(--bg-input)',
+                        border: '1px solid var(--border-subtle)',
+                        borderRadius: 'var(--radius-xs)',
+                        padding: '12px 16px',
+                      }}
+                    >
+                      <span
+                        className={`admin-pill ${
+                          status === 'FILLED'
+                            ? 'admin-pill-positive'
+                            : status === 'REJECTED'
+                              ? 'admin-pill-negative'
+                              : status === 'PENDING'
+                                ? 'admin-pill-warning'
+                                : 'admin-pill-neutral'
+                        }`}
                       >
-                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>{status}</div>
-                        <div style={{ fontSize: '20px', fontWeight: 800, color: badgeColor, fontFamily: 'var(--font-mono)', marginTop: '4px' }}>
-                          {count.toLocaleString()}
-                        </div>
+                        {status}
+                      </span>
+                      <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-main)', fontFamily: 'var(--font-mono)', marginTop: '6px' }}>
+                        {count.toLocaleString()}
                       </div>
-                    );
-                  })}
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -475,7 +452,7 @@ export const AdminScreen: React.FC<AdminScreenProps> = ({ onNavigate }) => {
                   </h3>
                   <button
                     onClick={() => {
-                      setOrderStatus('REJECTED');
+                      setOrdersPresetStatus('REJECTED');
                       setActiveTab('orders');
                     }}
                     style={{
@@ -505,35 +482,26 @@ export const AdminScreen: React.FC<AdminScreenProps> = ({ onNavigate }) => {
                           <th style={{ padding: '8px 12px' }}>Symbol</th>
                           <th style={{ padding: '8px 12px' }}>Side</th>
                           <th style={{ padding: '8px 12px' }}>Quantity</th>
-                          <th style={{ padding: '8px 12px' }}>Rejection Reason</th>
+                          <th style={{ padding: '8px 12px' }}>Safeguard / Failure Details</th>
                         </tr>
                       </thead>
                       <tbody>
                         {overviewData.recent_rejected_orders.map((o) => (
                           <tr key={o.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                             <td style={{ padding: '10px 12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                              {o.created_at ? new Date(o.created_at).toLocaleString() : 'N/A'}
+                              {formatOrderTimestamp(o.created_at)}
                             </td>
                             <td style={{ padding: '10px 12px', fontWeight: 700, color: 'var(--text-main)' }}>
                               {o.symbol}
                             </td>
                             <td style={{ padding: '10px 12px' }}>
-                              <span
-                                style={{
-                                  fontSize: '11px',
-                                  padding: '2px 6px',
-                                  borderRadius: 'var(--radius-xs)',
-                                  backgroundColor: o.side === 'BUY' ? 'rgba(5, 150, 105, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                                  color: o.side === 'BUY' ? 'var(--color-profit, #059669)' : 'var(--color-loss, #EF4444)',
-                                  fontWeight: 700,
-                                }}
-                              >
+                              <span className={`admin-pill ${o.side === 'BUY' ? 'admin-pill-positive' : 'admin-pill-negative'}`}>
                                 {o.side}
                               </span>
                             </td>
                             <td style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)' }}>{o.quantity}</td>
-                            <td style={{ padding: '10px 12px', color: 'var(--color-loss, #EF4444)', fontWeight: 500 }}>
-                              {o.rejection_reason || 'Unknown'}
+                            <td style={{ padding: '10px 12px', color: 'var(--color-loss)', fontWeight: 500 }}>
+                              {resolveOrderFailureDetails(o)}
                             </td>
                           </tr>
                         ))}
@@ -561,288 +529,11 @@ export const AdminScreen: React.FC<AdminScreenProps> = ({ onNavigate }) => {
       {/* 3. PAPER TRADING TAB */}
       {/* ===================================================================== */}
       {activeTab === 'orders' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {/* Search & Filters */}
-          <div
-            style={{
-              backgroundColor: 'var(--bg-card)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 'var(--radius-sm)',
-              padding: '16px',
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: '12px',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            }}
-          >
-            <div style={{ display: 'flex', flex: '1 1 260px', gap: '8px' }}>
-              <input
-                type="text"
-                placeholder="Search symbol, user email, or reason..."
-                value={orderSearch}
-                onChange={(e) => {
-                  setOrderSearch(e.target.value);
-                  setOrderPage(1);
-                }}
-                style={{
-                  flex: 1,
-                  backgroundColor: 'var(--bg-input, var(--bg-main))',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 'var(--radius-xs)',
-                  padding: '8px 12px',
-                  fontSize: '13px',
-                  color: 'var(--text-main)',
-                  outline: 'none',
-                }}
-              />
-            </div>
-
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              {/* Side Filter */}
-              <select
-                value={orderSide}
-                onChange={(e) => {
-                  setOrderSide(e.target.value);
-                  setOrderPage(1);
-                }}
-                style={{
-                  backgroundColor: 'var(--bg-main)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 'var(--radius-xs)',
-                  padding: '6px 10px',
-                  fontSize: '12px',
-                  color: 'var(--text-main)',
-                  cursor: 'pointer',
-                }}
-              >
-                <option value="">All Sides</option>
-                <option value="BUY">BUY</option>
-                <option value="SELL">SELL</option>
-              </select>
-
-              {/* Status Filter */}
-              <select
-                value={orderStatus}
-                onChange={(e) => {
-                  setOrderStatus(e.target.value);
-                  setOrderPage(1);
-                }}
-                style={{
-                  backgroundColor: 'var(--bg-main)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 'var(--radius-xs)',
-                  padding: '6px 10px',
-                  fontSize: '12px',
-                  color: 'var(--text-main)',
-                  cursor: 'pointer',
-                }}
-              >
-                <option value="">All Statuses</option>
-                <option value="FILLED">FILLED</option>
-                <option value="REJECTED">REJECTED</option>
-                <option value="PENDING">PENDING</option>
-                <option value="CANCELLED">CANCELLED</option>
-              </select>
-
-              {(orderSearch || orderSide || orderStatus) && (
-                <button
-                  onClick={() => {
-                    setOrderSearch('');
-                    setOrderSide('');
-                    setOrderStatus('');
-                    setOrderPage(1);
-                  }}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--text-muted)',
-                    fontSize: '12px',
-                    cursor: 'pointer',
-                    textDecoration: 'underline',
-                  }}
-                >
-                  Reset
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Orders Table */}
-          <div
-            style={{
-              backgroundColor: 'var(--bg-card)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: 'var(--radius-sm)',
-              padding: '16px',
-            }}
-          >
-            {ordersLoading && (
-              <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
-                Loading orders...
-              </div>
-            )}
-
-            {ordersError && (
-              <div
-                style={{
-                  backgroundColor: 'rgba(239, 68, 68, 0.08)',
-                  border: '1px solid var(--color-loss, #EF4444)',
-                  borderRadius: 'var(--radius-xs)',
-                  padding: '16px',
-                  color: 'var(--color-loss, #EF4444)',
-                  fontSize: '13px',
-                }}
-              >
-                {ordersError}
-              </div>
-            )}
-
-            {!ordersLoading && ordersData && ordersData.orders.length === 0 && (
-              <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
-                No paper orders match the selected filters.
-              </div>
-            )}
-
-            {!ordersLoading && ordersData && ordersData.orders.length > 0 && (
-              <>
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                    <thead>
-                      <tr style={{ borderBottom: '1px solid var(--border-subtle)', textAlign: 'left', color: 'var(--text-muted)' }}>
-                        <th style={{ padding: '10px 12px' }}>Time</th>
-                        <th style={{ padding: '10px 12px' }}>User Email</th>
-                        <th style={{ padding: '10px 12px' }}>Symbol</th>
-                        <th style={{ padding: '10px 12px' }}>Side</th>
-                        <th style={{ padding: '10px 12px' }}>Type</th>
-                        <th style={{ padding: '10px 12px' }}>Qty</th>
-                        <th style={{ padding: '10px 12px' }}>Fill / Limit</th>
-                        <th style={{ padding: '10px 12px' }}>Status</th>
-                        <th style={{ padding: '10px 12px' }}>Note / Reason</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {ordersData.orders.map((o) => {
-                        let statusColor = 'var(--text-muted)';
-                        let statusBg = 'rgba(156, 163, 175, 0.15)';
-                        if (o.status === 'FILLED') {
-                          statusColor = 'var(--color-profit, #059669)';
-                          statusBg = 'rgba(5, 150, 105, 0.1)';
-                        } else if (o.status === 'REJECTED') {
-                          statusColor = 'var(--color-loss, #EF4444)';
-                          statusBg = 'rgba(239, 68, 68, 0.1)';
-                        } else if (o.status === 'PENDING') {
-                          statusColor = '#D97706';
-                          statusBg = 'rgba(217, 119, 6, 0.1)';
-                        }
-
-                        return (
-                          <tr key={o.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                            <td style={{ padding: '12px', color: 'var(--text-muted)', fontSize: '12px', whiteSpace: 'nowrap' }}>
-                              {o.created_at ? new Date(o.created_at).toLocaleString() : 'N/A'}
-                            </td>
-                            <td style={{ padding: '12px', color: 'var(--text-main)', fontFamily: 'var(--font-mono)', fontSize: '12px' }}>
-                              {o.user_email || o.user_id.substring(0, 12)}
-                            </td>
-                            <td style={{ padding: '12px', fontWeight: 700, color: 'var(--text-main)' }}>
-                              {o.symbol}
-                            </td>
-                            <td style={{ padding: '12px' }}>
-                              <span
-                                style={{
-                                  fontSize: '11px',
-                                  padding: '2px 8px',
-                                  borderRadius: 'var(--radius-xs)',
-                                  backgroundColor: o.side === 'BUY' ? 'rgba(5, 150, 105, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                                  color: o.side === 'BUY' ? 'var(--color-profit, #059669)' : 'var(--color-loss, #EF4444)',
-                                  fontWeight: 700,
-                                }}
-                              >
-                                {o.side}
-                              </span>
-                            </td>
-                            <td style={{ padding: '12px', color: 'var(--text-muted)', fontSize: '11px', textTransform: 'uppercase' }}>
-                              {o.order_type}
-                            </td>
-                            <td style={{ padding: '12px', fontFamily: 'var(--font-mono)' }}>{o.quantity}</td>
-                            <td style={{ padding: '12px', fontFamily: 'var(--font-mono)', fontSize: '12px' }}>
-                              {o.fill_price ? `₹${o.fill_price.toLocaleString('en-IN')}` : o.limit_price ? `₹${o.limit_price.toLocaleString('en-IN')}` : '-'}
-                            </td>
-                            <td style={{ padding: '12px' }}>
-                              <span
-                                style={{
-                                  fontSize: '11px',
-                                  padding: '2px 8px',
-                                  borderRadius: 'var(--radius-xs)',
-                                  backgroundColor: statusBg,
-                                  color: statusColor,
-                                  fontWeight: 600,
-                                }}
-                              >
-                                {o.status}
-                              </span>
-                            </td>
-                            <td style={{ padding: '12px', color: o.rejection_reason ? 'var(--color-loss, #EF4444)' : 'var(--text-muted)', fontSize: '12px' }}>
-                              {o.rejection_reason || '-'}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Pagination Controls */}
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    marginTop: '16px',
-                    paddingTop: '12px',
-                    borderTop: '1px solid var(--border-subtle)',
-                    fontSize: '12px',
-                    color: 'var(--text-muted)',
-                  }}
-                >
-                  <div>
-                    Showing {ordersData.orders.length} of {ordersData.total} orders (Page {ordersData.page} of {ordersData.total_pages})
-                  </div>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button
-                      onClick={() => setOrderPage((p) => Math.max(1, p - 1))}
-                      disabled={orderPage <= 1}
-                      style={{
-                        backgroundColor: 'var(--bg-main)',
-                        border: '1px solid var(--border-subtle)',
-                        borderRadius: 'var(--radius-xs)',
-                        padding: '6px 12px',
-                        color: orderPage <= 1 ? 'var(--text-muted)' : 'var(--text-main)',
-                        cursor: orderPage <= 1 ? 'not-allowed' : 'pointer',
-                      }}
-                    >
-                      ← Previous
-                    </button>
-                    <button
-                      onClick={() => setOrderPage((p) => Math.min(ordersData.total_pages, p + 1))}
-                      disabled={orderPage >= ordersData.total_pages}
-                      style={{
-                        backgroundColor: 'var(--bg-main)',
-                        border: '1px solid var(--border-subtle)',
-                        borderRadius: 'var(--radius-xs)',
-                        padding: '6px 12px',
-                        color: orderPage >= ordersData.total_pages ? 'var(--text-muted)' : 'var(--text-main)',
-                        cursor: orderPage >= ordersData.total_pages ? 'not-allowed' : 'pointer',
-                      }}
-                    >
-                      Next →
-                    </button>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
+        <AdminOrdersPanel
+          refreshTrigger={ordersRefreshTick}
+          initialStatusFilter={ordersPresetStatus}
+          onLoadingChange={setOrdersLoading}
+        />
       )}
 
       {/* ===================================================================== */}

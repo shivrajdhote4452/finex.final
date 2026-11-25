@@ -1645,3 +1645,366 @@ async def test_admin_users_auth_and_readonly_enforced_with_filters(
         assert (await client.post(f"/api/v1/admin/users?{qs}", headers=owner_headers)).status_code == 405
         assert (await client.patch(f"/api/v1/admin/users?{qs}", headers=owner_headers)).status_code == 405
         assert (await client.delete(f"/api/v1/admin/users?{qs}", headers=owner_headers)).status_code == 405
+
+
+# =============================================================================
+# Enhanced Paper Trading Overview, Orders Filtering, Sorting & Privacy Tests
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_admin_orders_date_range_filters_sorting_and_pagination(app, owner_headers):
+    """Verify /orders and /overview support status counts, date range filters, sorting, and bounded pagination."""
+    tag = uuid.uuid4().hex[:8]
+    uid = f"usr-ord-test-{tag}"
+    acct_id = f"acc-ord-test-{tag}"
+    ord_oldest = f"ord-{tag}-oldest"
+    ord_mid = f"ord-{tag}-mid"
+    ord_rej = f"ord-{tag}-rej"
+    ord_latest = f"ord-{tag}-latest"
+
+    async with AsyncSessionLocal() as session:
+        session.add(
+            User(
+                id=uid,
+                email=f"orders.tester.{tag}@example.com",
+                provider="email",
+                provider_subject=f"sub-ord-{tag}",
+                is_active=True,
+                email_verified=True,
+                is_verified=True,
+            )
+        )
+        await session.flush()
+        session.add(
+            PaperAccount(
+                id=acct_id,
+                user_id=uid,
+                account_number=f"ACC-{tag.upper()}",
+                initial_balance=100000.00,
+                current_cash=92000.00,
+                status="ACTIVE",
+            )
+        )
+        await session.flush()
+        session.add_all(
+            [
+                PaperOrder(
+                    id=ord_oldest,
+                    account_id=acct_id,
+                    user_id=uid,
+                    symbol="TCS",
+                    side="BUY",
+                    order_type="LIMIT",
+                    quantity=5,
+                    limit_price=3400.00,
+                    status="CANCELLED",
+                    rejection_reason=None,
+                    idempotency_key=f"idemp-1-{tag}",
+                    created_at=datetime(2026, 11, 20, 9, 0, 0, tzinfo=timezone.utc),
+                ),
+                PaperOrder(
+                    id=ord_mid,
+                    account_id=acct_id,
+                    user_id=uid,
+                    symbol="INFY",
+                    side="SELL",
+                    order_type="MARKET",
+                    quantity=2,
+                    status="PENDING",
+                    rejection_reason=None,
+                    idempotency_key=f"idemp-2-{tag}",
+                    created_at=datetime(2026, 11, 22, 14, 30, 0, tzinfo=timezone.utc),
+                ),
+                PaperOrder(
+                    id=ord_rej,
+                    account_id=acct_id,
+                    user_id=uid,
+                    symbol="RELIANCE",
+                    side="BUY",
+                    order_type="MARKET",
+                    quantity=10,
+                    status="REJECTED",
+                    rejection_reason=None,
+                    idempotency_key=f"idemp-3-{tag}",
+                    created_at=datetime(2026, 11, 23, 18, 0, 0, tzinfo=timezone.utc),
+                ),
+                PaperOrder(
+                    id=ord_latest,
+                    account_id=acct_id,
+                    user_id=uid,
+                    symbol="RELIANCE",
+                    side="BUY",
+                    order_type="MARKET",
+                    quantity=3,
+                    fill_price=2450.50,
+                    status="FILLED",
+                    rejection_reason=None,
+                    idempotency_key=f"idemp-4-{tag}",
+                    created_at=datetime(2026, 11, 24, 21, 0, 0, tzinfo=timezone.utc),
+                ),
+            ]
+        )
+        await session.commit()
+
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            # Default ordering is newest first (desc) and returns status breakdown
+            res_desc = await client.get(f"/api/v1/admin/orders?search={tag}", headers=owner_headers)
+            assert res_desc.status_code == 200
+            desc_data = res_desc.json()["data"]
+            assert [o["id"] for o in desc_data["orders"]] == [ord_latest, ord_rej, ord_mid, ord_oldest]
+            assert desc_data["overall_total"] >= 4
+            assert desc_data["status_counts"]["FILLED"] >= 1
+            assert desc_data["status_counts"]["REJECTED"] >= 1
+            assert desc_data["status_counts"]["PENDING"] >= 1
+            assert desc_data["status_counts"]["CANCELLED"] >= 1
+
+            # Explicit ascending order returns oldest first
+            res_asc = await client.get(f"/api/v1/admin/orders?search={tag}&sort_order=asc", headers=owner_headers)
+            assert res_asc.status_code == 200
+            assert [o["id"] for o in res_asc.json()["data"]["orders"]] == [ord_oldest, ord_mid, ord_rej, ord_latest]
+
+            # Date window YYYY-MM-DD (2026-11-22..2026-11-23 UTC)
+            res_range = await client.get(
+                f"/api/v1/admin/orders?search={tag}&date_from=2026-11-22&date_to=2026-11-23",
+                headers=owner_headers,
+            )
+            assert res_range.status_code == 200
+            assert [o["id"] for o in res_range.json()["data"]["orders"]] == [ord_rej, ord_mid]
+
+            # ISO-8601 timestamp cutoff excludes 2026-11-23T18:00Z
+            res_iso = await client.get(
+                f"/api/v1/admin/orders?search={tag}&date_from=2026-11-23T20:00:00Z",
+                headers=owner_headers,
+            )
+            assert res_iso.status_code == 200
+            assert [o["id"] for o in res_iso.json()["data"]["orders"]] == [ord_latest]
+
+            # Combined filter: symbol, status, side, search, date range + missing reason fallback
+            res_combo = await client.get(
+                f"/api/v1/admin/orders?search={tag}&symbol=reliance&status=rejected&side=buy"
+                "&date_from=2026-11-20&date_to=2026-11-25",
+                headers=owner_headers,
+            )
+            assert res_combo.status_code == 200
+            combo_orders = res_combo.json()["data"]["orders"]
+            assert len(combo_orders) == 1
+            assert combo_orders[0]["id"] == ord_rej
+            assert combo_orders[0]["rejection_reason"] == "Failure reason unavailable"
+
+            # Bounded pagination across pages (limit=2)
+            res_p1 = await client.get(f"/api/v1/admin/orders?search={tag}&limit=2&page=1", headers=owner_headers)
+            res_p2 = await client.get(f"/api/v1/admin/orders?search={tag}&limit=2&page=2", headers=owner_headers)
+            p1 = res_p1.json()["data"]
+            p2 = res_p2.json()["data"]
+            assert p1["total"] == 4
+            assert p1["total_pages"] == 2
+            assert [o["id"] for o in p1["orders"]] == [ord_latest, ord_rej]
+            assert [o["id"] for o in p2["orders"]] == [ord_mid, ord_oldest]
+
+            # Overview reflects recent orders across recorded statuses + status breakdown
+            res_ov = await client.get("/api/v1/admin/overview", headers=owner_headers)
+            assert res_ov.status_code == 200
+            ov = res_ov.json()["data"]
+            assert ov["total_orders"] >= 4
+            assert isinstance(ov["recent_orders"], list)
+            assert len(ov["recent_orders"]) >= 1
+    finally:
+        async with AsyncSessionLocal() as session:
+            await session.execute(delete(User).where(User.id == uid))
+            await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_admin_orders_privacy_balance_redaction_and_search_scope(app, owner_headers):
+    """Verify private cash/holding counts/tracebacks are sanitized, user_email omitted, and search excludes PII/reasons."""
+    tag = uuid.uuid4().hex[:8]
+    uid = f"usr-priv-ord-{tag}"
+    acct_id = f"acc-priv-ord-{tag}"
+    private_email = f"priv.balance.{tag}@example.com"
+    ord_cash = f"ord-{tag}-cash"
+    ord_hold = f"ord-{tag}-hold"
+    ord_trace = f"ord-{tag}-trace"
+    ord_wild = f"ord-{tag}-100%_match"
+    ord_sim = f"ord-{tag}-100abcXmatch"
+
+    async with AsyncSessionLocal() as session:
+        session.add(
+            User(
+                id=uid,
+                email=private_email,
+                provider="email",
+                provider_subject=f"sub-priv-ord-{tag}",
+                is_active=True,
+                email_verified=True,
+                is_verified=True,
+            )
+        )
+        await session.flush()
+        session.add(
+            PaperAccount(
+                id=acct_id,
+                user_id=uid,
+                account_number=f"ACC-P-{tag.upper()}",
+                initial_balance=100000.00,
+                current_cash=98765.43,
+                status="ACTIVE",
+            )
+        )
+        await session.flush()
+        session.add_all(
+            [
+                PaperOrder(
+                    id=ord_cash,
+                    account_id=acct_id,
+                    user_id=uid,
+                    symbol="HDFCBANK",
+                    side="BUY",
+                    order_type="MARKET",
+                    quantity=10,
+                    status="REJECTED",
+                    rejection_reason="Insufficient virtual cash. Required: ₹150,000.00, Available: ₹98,765.43.",
+                    idempotency_key=f"idemp-c-{tag}",
+                    execution_receipt={"raw_internal_secret": "never-expose"},
+                ),
+                PaperOrder(
+                    id=ord_hold,
+                    account_id=acct_id,
+                    user_id=uid,
+                    symbol="INFY",
+                    side="SELL",
+                    order_type="MARKET",
+                    quantity=20,
+                    status="REJECTED",
+                    rejection_reason="Insufficient holding quantity. Attempted to sell 20 shares, but you hold 5 shares of INFY.",
+                    idempotency_key=f"idemp-h-{tag}",
+                ),
+                PaperOrder(
+                    id=ord_trace,
+                    account_id=acct_id,
+                    user_id=uid,
+                    symbol="WIPRO",
+                    side="BUY",
+                    order_type="MARKET",
+                    quantity=1,
+                    status="REJECTED",
+                    rejection_reason='Traceback (most recent call last): File "/app/secret.py", line 10',
+                    idempotency_key=f"idemp-t-{tag}",
+                ),
+                PaperOrder(
+                    id=ord_wild,
+                    account_id=acct_id,
+                    user_id=uid,
+                    symbol="SBIN",
+                    side="BUY",
+                    order_type="MARKET",
+                    quantity=1,
+                    status="FILLED",
+                    fill_price=800.0,
+                    idempotency_key=f"idemp-w-{tag}",
+                ),
+                PaperOrder(
+                    id=ord_sim,
+                    account_id=acct_id,
+                    user_id=uid,
+                    symbol="LT",
+                    side="BUY",
+                    order_type="MARKET",
+                    quantity=1,
+                    status="FILLED",
+                    fill_price=3500.0,
+                    idempotency_key=f"idemp-s-{tag}",
+                ),
+            ]
+        )
+        await session.commit()
+
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            res = await client.get(f"/api/v1/admin/orders?search={tag}", headers=owner_headers)
+            assert res.status_code == 200
+            by_id = {o["id"]: o for o in res.json()["data"]["orders"]}
+
+            # User email PII and private balances / holding counts / tracebacks must not be leaked
+            for order in by_id.values():
+                assert order["user_email"] is None
+                assert "execution_receipt" not in order
+                assert "idempotency_key" not in order
+
+            assert by_id[ord_cash]["rejection_reason"] == "Insufficient virtual cash balance for requested order."
+            assert "98,765" not in by_id[ord_cash]["rejection_reason"]
+            assert by_id[ord_hold]["rejection_reason"] == "Insufficient holding quantity for requested sell order."
+            assert "hold 5" not in by_id[ord_hold]["rejection_reason"]
+            assert by_id[ord_trace]["rejection_reason"] == "Failure details withheld for safety"
+            assert "secret.py" not in by_id[ord_trace]["rejection_reason"]
+
+            # Overview recent_rejected_orders must apply identical balance/trace redaction
+            res_ov = await client.get("/api/v1/admin/overview", headers=owner_headers)
+            assert res_ov.status_code == 200
+            ov_rej = {o["id"]: o for o in res_ov.json()["data"]["recent_rejected_orders"]}
+            if ord_cash in ov_rej:
+                assert "98,765" not in (ov_rej[ord_cash]["rejection_reason"] or "")
+                assert ov_rej[ord_cash]["user_email"] is None
+
+            # Wildcard escaping in order ID search
+            res_wild = await client.get("/api/v1/admin/orders?search=100%25_match", headers=owner_headers)
+            assert res_wild.status_code == 200
+            wild_ids = [o["id"] for o in res_wild.json()["data"]["orders"]]
+            assert ord_wild in wild_ids
+            assert ord_sim not in wild_ids
+
+            # Search must NOT match user email or private rejection_reason balance strings
+            for probe in (private_email, "98,765.43", "secret.py"):
+                res_probe = await client.get(f"/api/v1/admin/orders?search={probe}", headers=owner_headers)
+                assert res_probe.status_code == 200
+                assert res_probe.json()["data"]["total"] == 0
+    finally:
+        async with AsyncSessionLocal() as session:
+            await session.execute(delete(User).where(User.id == uid))
+            await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_admin_orders_filter_validation_and_bounds(app, owner_headers):
+    """Verify invalid dates, invalid status/side/symbol filters, sort_order, and pagination bounds fail with 422."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        invalid_queries = [
+            "date_from=invalid-date",
+            "date_to=2026-02-30",
+            "date_from=2026-11-25&date_to=2026-11-20",
+            "status=ACCEPTED",
+            "status=UNKNOWN_STATUS",
+            "side=SHORT",
+            "symbol=TCS%3BDROP",
+            "sort_order=random",
+            "page=0",
+            "page=1001",
+            "limit=0",
+            "limit=101",
+            f"search={'x' * 81}",
+        ]
+        for qs in invalid_queries:
+            res = await client.get(f"/api/v1/admin/orders?{qs}", headers=owner_headers)
+            assert res.status_code == 422, f"Expected 422 for query '{qs}', got {res.status_code}: {res.text}"
+
+
+@pytest.mark.asyncio
+async def test_admin_orders_auth_and_readonly_enforced_with_filters(
+    app, owner_headers, non_owner_headers, non_google_owner_headers
+):
+    """Verify owner-only auth and read-only HTTP methods stay strictly enforced on /orders and /overview."""
+    transport = ASGITransport(app=app)
+    qs = "date_from=2026-11-01&date_to=2026-11-25&sort_order=asc&status=FILLED&side=BUY&search=RELIANCE"
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        assert (await client.get(f"/api/v1/admin/orders?{qs}")).status_code == 401
+        assert (await client.get(f"/api/v1/admin/orders?{qs}", headers=non_owner_headers)).status_code == 403
+        assert (await client.get(f"/api/v1/admin/orders?{qs}", headers=non_google_owner_headers)).status_code == 403
+        for method in ("post", "put", "patch", "delete"):
+            res = await getattr(client, method)(f"/api/v1/admin/orders?{qs}", headers=owner_headers)
+            assert res.status_code == 405
+            res_ov = await getattr(client, method)("/api/v1/admin/overview", headers=owner_headers)
+            assert res_ov.status_code == 405
