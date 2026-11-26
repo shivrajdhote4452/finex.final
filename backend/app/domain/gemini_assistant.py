@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 from backend.app.adapters.market_data_provider import INSTRUMENT_REGISTRY, RealMarketDataProvider
-from backend.app.config import get_settings
+from backend.app.config import Environment, get_settings
 from backend.app.domain.paper_trading_service import (
     OrderSubmitRequest,
     PaperTradingEngine,
@@ -379,6 +379,9 @@ class GeminiInvestmentAssistant:
         self._provider = provider
         self._engine = engine
         self._settings = settings
+        self._cached_default_provider: Optional[Any] = None
+        self._cached_provider_key: Optional[tuple] = None
+        self._cached_default_engine: Optional[PaperTradingEngine] = None
         self._verified_working = False
         self._last_verified_at: Optional[float] = None
         self._last_verification_attempt: Optional[float] = None
@@ -394,18 +397,38 @@ class GeminiInvestmentAssistant:
         self._settings = val
 
     @property
-    def provider(self) -> RealMarketDataProvider:
+    def provider(self) -> Any:
         if self._provider is not None:
             return self._provider
-        return RealMarketDataProvider(
-            force_cache=False, allow_fixture_fallback=getattr(self.settings, "MARKET_ALLOW_FIXTURES", False)
-        )
+        settings = self.settings
+        env = getattr(settings, "ENVIRONMENT", Environment.DEVELOPMENT)
+        allow_fixtures = bool(getattr(settings, "MARKET_ALLOW_FIXTURES", False))
+        mode = getattr(settings, "MARKET_DATA_MODE", "")
+        if self._settings is None and mode == "INDIAN_LIVE_DATA":
+            try:
+                from backend.app.dependencies import get_angel_adapter
+
+                angel = get_angel_adapter()
+                if angel.is_configured():
+                    return angel
+            except Exception:
+                pass
+        key = (env, allow_fixtures, mode)
+        if self._cached_default_provider is None or self._cached_provider_key != key:
+            self._cached_default_provider = RealMarketDataProvider(
+                force_cache=(env == Environment.TESTING), allow_fixture_fallback=allow_fixtures
+            )
+            self._cached_provider_key = key
+        return self._cached_default_provider
 
     @property
     def engine(self) -> PaperTradingEngine:
         if self._engine is not None:
             return self._engine
-        return PaperTradingEngine(market_provider=self.provider)
+        active_provider = self.provider
+        if self._cached_default_engine is None or self._cached_default_engine.market_provider is not active_provider:
+            self._cached_default_engine = PaperTradingEngine(market_provider=active_provider)
+        return self._cached_default_engine
 
     def is_groq_api_ready(self) -> bool:
         """Verify if a valid GROQ_API_KEY is configured."""
@@ -649,7 +672,7 @@ class GeminiInvestmentAssistant:
     ) -> Dict[str, Any]:
         if db:
             return await self.engine.get_portfolio_summary_db(user_id, db=db)
-        return self.engine.get_portfolio_summary(user_id)
+        return await self.engine.get_portfolio_summary_async(user_id)
 
     async def tool_get_my_risk_constraints(self, user_id: str, db: Optional[AsyncSession] = None) -> Dict[str, Any]:
         risk_band = "MODERATE"
@@ -1432,7 +1455,15 @@ class GeminiInvestmentAssistant:
                 avg_str = f"₹{float(raw_avg):,.2f}" if raw_avg is not None else "Unavailable"
 
                 raw_mkt_val = p.get("market_value")
-                mkt_str = f" | Value: ₹{float(raw_mkt_val):,.2f}" if raw_mkt_val is not None else ""
+                if raw_mkt_val is not None:
+                    fallback_note = (
+                        " *(valued at cost; live quote unavailable)*"
+                        if p.get("valuation_source") == "cost_basis_fallback"
+                        else ""
+                    )
+                    mkt_str = f" | Value: ₹{float(raw_mkt_val):,.2f}{fallback_note}"
+                else:
+                    mkt_str = ""
                 pos_lines.append(f"- **{sym}**: {qty_str} shares @ avg {avg_str}{mkt_str}")
             pos_text = "\n".join(pos_lines)
             pos_count_label = str(len(positions))

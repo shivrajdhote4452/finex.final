@@ -927,3 +927,232 @@ async def test_order_confirmation_safety_exhaustively():
                     await session.execute(delete(PaperAccount).where(PaperAccount.id == acct.id))
                 await session.execute(delete(User).where(User.id == uid))
             await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_live_quote_beats_fixture_and_updates_portfolio_valuation_across_modes(monkeypatch):
+    """Verify non-testing and production modes use async live quotes instead of stale ₹2,500 fixtures or frozen cost."""
+    import uuid
+    from datetime import datetime, timezone
+    from decimal import Decimal
+    from unittest.mock import patch
+
+    import backend.app.config as config_mod
+    from backend.app.adapters.market_data_provider import Quote, RealMarketDataProvider
+    from backend.app.config import Environment, Settings, get_settings
+    from backend.app.database import AsyncSessionLocal
+    from backend.app.domain.gemini_assistant import GeminiInvestmentAssistant
+    from backend.app.domain.paper_trading_service import PaperTradingEngine
+    from backend.app.models.core import User
+    from backend.app.models.paper_trading import (
+        PaperAccount,
+        PaperCashLedger,
+        PaperOrder,
+        PaperPosition,
+        PaperProposal,
+        PaperTrade,
+    )
+    from backend.app.routers import paper_trading as paper_trading_router
+    from backend.app.routers.auth import create_access_token
+    from backend.app.services.password_service import hash_password
+    from httpx import ASGITransport, AsyncClient
+    from sqlalchemy import delete, select
+
+    uid = f"usr-quote-sel-{uuid.uuid4().hex[:6]}"
+    tok = create_access_token(uid, f"{uid}@example.com", "Quote Selection Tester")
+    headers = {"Authorization": f"Bearer {tok}"}
+
+    now_obs = datetime(2026, 11, 26, 9, 58, 36, tzinfo=timezone.utc)
+    live_price = Decimal("1396.20")
+    outage_mode = False
+    stale_db_only = False
+
+    async def fake_external_quote(_self, symbol: str):
+        if outage_mode:
+            return None
+        norm = _self._normalize_symbol(symbol)
+        if norm != "RELIANCE":
+            return None
+        return Quote(
+            canonical_id="NSE:RELIANCE",
+            symbol="RELIANCE.NS",
+            price=live_price,
+            currency="INR",
+            observed_at=now_obs,
+            ingested_at=datetime.now(timezone.utc),
+            source="yahoo_finance_public_v8",
+            source_uri="https://query1.finance.yahoo.com/v8/finance/chart/RELIANCE.NS?interval=1d&range=1d",
+            source_evidence="test-live-sha256",
+            served_from_cache=False,
+            is_delayed=True,
+            is_stale=False,
+            data_status="delayed",
+        )
+
+    async def fake_db_quote(_self, symbol: str):
+        norm = _self._normalize_symbol(symbol)
+        if stale_db_only and norm == "RELIANCE":
+            return Quote(
+                canonical_id="NSE:RELIANCE",
+                symbol="RELIANCE.NS",
+                price=Decimal("2500.00"),
+                currency="INR",
+                observed_at=datetime(2026, 10, 16, 10, 0, tzinfo=timezone.utc),
+                ingested_at=datetime.now(timezone.utc),
+                source="nse_official_baseline_snapshot",
+                source_uri="urn:market-data:db:RELIANCE",
+                source_evidence="stale-db-sha256",
+                served_from_cache=True,
+                is_delayed=True,
+                is_stale=True,
+                data_status="stale",
+            )
+        return None
+
+    async with AsyncSessionLocal() as session:
+        session.add(
+            User(
+                id=uid,
+                email=f"{uid}@example.com",
+                provider="email",
+                provider_subject=f"sub-{uid}",
+                password_hash=hash_password("StrongPass!123"),
+                is_active=True,
+                is_verified=True,
+            )
+        )
+        await session.commit()
+
+    try:
+        # 1. Simulate development preview config (MARKET_ALLOW_FIXTURES=true, MARKET_DATA_MODE=INDIA_HISTORICAL_REPLAY)
+        monkeypatch.setenv("ENVIRONMENT", "development")
+        monkeypatch.setenv("MARKET_ALLOW_FIXTURES", "true")
+        monkeypatch.setenv("MARKET_DATA_MODE", "INDIA_HISTORICAL_REPLAY")
+        get_settings.cache_clear()
+
+        dev_engine = PaperTradingEngine()
+        dev_assistant = GeminiInvestmentAssistant()
+        assert dev_engine.market_provider.force_cache is False
+        assert dev_engine.market_provider is dev_engine.market_provider
+        assert dev_assistant.provider.force_cache is False
+        assert dev_assistant.provider is dev_assistant.provider
+        assert dev_assistant.engine.market_provider is dev_assistant.provider
+
+        from backend.app.routers import gemini_assistant as assistant_router_mod
+
+        app = create_app()
+        with (
+            patch.object(RealMarketDataProvider, "_fetch_external_quote", new=fake_external_quote),
+            patch.object(RealMarketDataProvider, "_fetch_db_quote", new=fake_db_quote),
+            patch.object(paper_trading_router, "engine", dev_engine),
+            patch.object(assistant_router_mod, "gemini_assistant", dev_assistant),
+        ):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                # Hinglish buy preview & confirmation at live ₹1,396.20
+                prev_res = await client.post(
+                    "/api/v1/ai/assistant/chat",
+                    json={"message": "muze yek reliance kaa share lena hai mere portfolio mee le do ge kya tum?"},
+                    headers=headers,
+                )
+                assert prev_res.status_code == 200
+                conv_id = prev_res.json()["data"]["conversation_id"]
+                assert prev_res.json()["data"]["proposal"]["allocations"][0]["estimated_price"] == 1396.2
+
+                conf_res = await client.post(
+                    "/api/v1/ai/assistant/chat",
+                    json={"message": "Haan", "conversation_id": conv_id},
+                    headers=headers,
+                )
+                assert conf_res.status_code == 200
+                receipt = conf_res.json()["data"]["execution_receipt"]
+                assert receipt["status"] == "EXECUTED"
+                assert float(receipt["receipts"][0]["fill_price"]) == 1396.2
+
+                # Paper-trading API & AskFinEx summary must BOTH use live ₹1,396.20 (NOT ₹2,500 fixture)
+                acct_res = await client.get("/api/v1/paper-trading/account", headers=headers)
+                assert acct_res.status_code == 200
+                acct_data = acct_res.json()["data"]
+                assert acct_data["cash_balance"] == pytest.approx(98603.8, abs=0.01)
+                assert acct_data["positions_market_value"] == pytest.approx(1396.2, abs=0.01)
+                assert acct_data["total_equity"] == pytest.approx(100000.0, abs=0.01)
+                assert acct_data["positions"][0]["current_price"] == pytest.approx(1396.2, abs=0.01)
+                assert acct_data["positions"][0]["valuation_source"] == "market_quote"
+                assert acct_data["positions"][0]["quote_source"] == "yahoo_finance_public_v8"
+
+                pos_res = await client.get("/api/v1/paper-trading/positions", headers=headers)
+                assert pos_res.status_code == 200
+                assert pos_res.json()["data"]["positions"][0]["market_value"] == pytest.approx(1396.2, abs=0.01)
+
+                sum_res = await client.post(
+                    "/api/v1/ai/assistant/chat",
+                    json={"message": "Show my portfolio summary", "conversation_id": conv_id},
+                    headers=headers,
+                )
+                assert sum_res.status_code == 200
+                sum_data = sum_res.json()["data"]
+                assert "₹98,603.80" in sum_data["reply"]
+                assert "₹100,000.00" in sum_data["reply"]
+                assert "₹1,396.20" in sum_data["reply"]
+                assert "₹2,500" not in sum_data["reply"]
+
+                # 2. Switch to production config (MARKET_ALLOW_FIXTURES=false) and verify MTM moves dynamically
+                prod_settings = Settings.model_construct(
+                    ENVIRONMENT=Environment.PRODUCTION,
+                    MARKET_ALLOW_FIXTURES=False,
+                    MARKET_DATA_MODE="INDIA_HISTORICAL_REPLAY",
+                )
+                monkeypatch.setattr(config_mod, "get_settings", lambda: prod_settings)
+                dev_assistant._settings = prod_settings
+
+                dev_engine.market_provider.clear_cache()
+                dev_assistant.provider.clear_cache()
+                live_price = Decimal("1425.50")
+
+                prod_acct_res = await client.get("/api/v1/paper-trading/account", headers=headers)
+                assert prod_acct_res.status_code == 200
+                prod_acct = prod_acct_res.json()["data"]
+                assert prod_acct["positions"][0]["current_price"] == pytest.approx(1425.5, abs=0.01)
+                assert prod_acct["positions"][0]["unrealized_pnl"] == pytest.approx(29.3, abs=0.01)
+                assert prod_acct["total_equity"] == pytest.approx(100029.3, abs=0.01)
+
+                # 3. During live outage with only stale Oct 16 DB row in production, must NOT serve ₹2,500 or poison cache
+                outage_mode = True
+                stale_db_only = True
+                dev_engine.market_provider.clear_cache()
+                dev_assistant.provider.clear_cache()
+
+                stale_acct_res = await client.get("/api/v1/paper-trading/account", headers=headers)
+                assert stale_acct_res.status_code == 200
+                stale_acct = stale_acct_res.json()["data"]
+                assert stale_acct["positions"][0]["current_price"] == pytest.approx(1396.2, abs=0.01)
+                assert stale_acct["positions"][0]["valuation_source"] == "cost_basis_fallback"
+                assert stale_acct["positions"][0]["quote_status"] == "stale"
+
+                stale_sum_res = await client.post(
+                    "/api/v1/ai/assistant/chat",
+                    json={"message": "Show my portfolio summary", "conversation_id": conv_id},
+                    headers=headers,
+                )
+                assert stale_sum_res.status_code == 200
+                assert "valued at cost; live quote unavailable" in stale_sum_res.json()["data"]["reply"]
+                assert "₹2,500" not in stale_sum_res.json()["data"]["reply"]
+
+                # Recover immediately on next call without 60s stale cache poisoning
+                outage_mode = False
+                live_price = Decimal("1450.00")
+                recovered_res = await client.get("/api/v1/paper-trading/account", headers=headers)
+                assert recovered_res.status_code == 200
+                assert recovered_res.json()["data"]["positions"][0]["current_price"] == pytest.approx(1450.0, abs=0.01)
+    finally:
+        get_settings.cache_clear()
+        async with AsyncSessionLocal() as session:
+            acct = (await session.execute(select(PaperAccount).where(PaperAccount.user_id == uid))).scalar_one_or_none()
+            await session.execute(delete(PaperProposal).where(PaperProposal.user_id == uid))
+            if acct:
+                await session.execute(delete(PaperTrade).where(PaperTrade.account_id == acct.id))
+                await session.execute(delete(PaperCashLedger).where(PaperCashLedger.account_id == acct.id))
+                await session.execute(delete(PaperPosition).where(PaperPosition.account_id == acct.id))
+                await session.execute(delete(PaperOrder).where(PaperOrder.account_id == acct.id))
+                await session.execute(delete(PaperAccount).where(PaperAccount.id == acct.id))
+            await session.execute(delete(User).where(User.id == uid))
+            await session.commit()
