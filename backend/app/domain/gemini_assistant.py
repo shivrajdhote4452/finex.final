@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 from backend.app.adapters.market_data_provider import INSTRUMENT_REGISTRY, RealMarketDataProvider
-from backend.app.config import get_settings
+from backend.app.config import Environment, get_settings
 from backend.app.domain.paper_trading_service import (
     OrderSubmitRequest,
     PaperTradingEngine,
@@ -191,6 +191,171 @@ TOOL_DEFINITIONS = [
 ]
 
 
+_DIGIT_TRANS = str.maketrans("०१२३४५६७८९", "0123456789")
+
+_HINGLISH_MARKERS = frozenset(
+    {
+        "kya",
+        "kaise",
+        "mera",
+        "meri",
+        "mere",
+        "karo",
+        "batao",
+        "kharid",
+        "khareed",
+        "kharidna",
+        "khareedna",
+        "bech",
+        "kitna",
+        "kitne",
+        "chahiye",
+        "hai",
+        "hain",
+        "nahi",
+        "kaunse",
+        "kaha",
+        "hoga",
+        "muze",
+        "mujhe",
+        "yek",
+        "ek",
+        "lena",
+        "lelo",
+        "dikhao",
+        "samjhao",
+        "tum",
+    }
+)
+
+_WORD_NUMBER_MAP: Dict[str, int] = {
+    "ek": 1,
+    "yek": 1,
+    "ik": 1,
+    "aik": 1,
+    "one": 1,
+    "single": 1,
+    "एक": 1,
+    "two": 2,
+    "दो": 2,
+    "teen": 3,
+    "three": 3,
+    "तीन": 3,
+    "char": 4,
+    "chaar": 4,
+    "four": 4,
+    "चार": 4,
+    "panch": 5,
+    "paanch": 5,
+    "five": 5,
+    "पांच": 5,
+    "पाँच": 5,
+    "chhah": 6,
+    "chhe": 6,
+    "six": 6,
+    "छह": 6,
+    "saat": 7,
+    "seven": 7,
+    "सात": 7,
+    "aath": 8,
+    "eight": 8,
+    "आठ": 8,
+    "nau": 9,
+    "nine": 9,
+    "नौ": 9,
+    "das": 10,
+    "ten": 10,
+    "दस": 10,
+}
+
+_SYMBOL_ALIASES: Dict[str, str] = {
+    "रिलायंस इंडस्ट्रीज": "RELIANCE",
+    "रिलायंस": "RELIANCE",
+    "tata consultancy": "TCS",
+    "टीसीएस": "TCS",
+    "infosys": "INFY",
+    "इन्फोसिस": "INFY",
+    "इंफोसिस": "INFY",
+    "hdfc bank": "HDFCBANK",
+    "hdfc": "HDFCBANK",
+    "एचडीएफसी": "HDFCBANK",
+    "icici bank": "ICICIBANK",
+    "icici": "ICICIBANK",
+    "आईसीआईसीआई": "ICICIBANK",
+    "state bank": "SBIN",
+    "sbi": "SBIN",
+    "एसबीआई": "SBIN",
+    "wipro": "WIPRO",
+    "विप्रो": "WIPRO",
+    "bharti airtel": "BHARTIARTL",
+    "airtel": "BHARTIARTL",
+    "भारती एयरटेल": "BHARTIARTL",
+    "tata motors": "TATAMOTORS",
+    "टाटा मोटर्स": "TATAMOTORS",
+    "tata steel": "TATASTEEL",
+    "टाटा स्टील": "TATASTEEL",
+    "kotak": "KOTAKBANK",
+    "कोटक": "KOTAKBANK",
+    "bajaj finance": "BAJFINANCE",
+    "बजाज फाइनेंस": "BAJFINANCE",
+    "maruti": "MARUTI",
+    "मारुति": "MARUTI",
+    "sun pharma": "SUNPHARMA",
+    "सन फार्मा": "SUNPHARMA",
+    "zomato": "ZOMATO",
+    "जोमैटो": "ZOMATO",
+    "reliance": "RELIANCE",
+    "asian paints": "ASIANPAINT",
+    "axis bank": "AXISBANK",
+    "tech mahindra": "TECHM",
+    "hcl tech": "HCLTECH",
+    "larsen": "LT",
+    "bharat electronics": "BEL",
+    "hindustan aeronautics": "HAL",
+}
+
+_UPPER_TICKER_STOPWORDS = frozenset(
+    {
+        "NSE",
+        "BSE",
+        "INR",
+        "USD",
+        "RS",
+        "AI",
+        "BUY",
+        "SELL",
+        "SHARE",
+        "SHARES",
+        "STOCK",
+        "STOCKS",
+        "QTY",
+        "PORTFOLIO",
+        "RSI",
+        "SMA",
+        "EMA",
+        "MACD",
+        "VWAP",
+        "YES",
+        "NO",
+        "OK",
+        "HI",
+        "HEY",
+        "MY",
+        "ME",
+        "FOR",
+        "IN",
+        "OF",
+        "TO",
+        "AND",
+        "OR",
+        "THE",
+        "A",
+        "AN",
+        "I",
+    }
+)
+
+
 class AssistantMessageResponse(BaseModel):
     message_id: str
     conversation_id: str
@@ -214,6 +379,9 @@ class GeminiInvestmentAssistant:
         self._provider = provider
         self._engine = engine
         self._settings = settings
+        self._cached_default_provider: Optional[Any] = None
+        self._cached_provider_key: Optional[tuple] = None
+        self._cached_default_engine: Optional[PaperTradingEngine] = None
         self._verified_working = False
         self._last_verified_at: Optional[float] = None
         self._last_verification_attempt: Optional[float] = None
@@ -229,18 +397,38 @@ class GeminiInvestmentAssistant:
         self._settings = val
 
     @property
-    def provider(self) -> RealMarketDataProvider:
+    def provider(self) -> Any:
         if self._provider is not None:
             return self._provider
-        return RealMarketDataProvider(
-            force_cache=False, allow_fixture_fallback=getattr(self.settings, "MARKET_ALLOW_FIXTURES", False)
-        )
+        settings = self.settings
+        env = getattr(settings, "ENVIRONMENT", Environment.DEVELOPMENT)
+        allow_fixtures = bool(getattr(settings, "MARKET_ALLOW_FIXTURES", False))
+        mode = getattr(settings, "MARKET_DATA_MODE", "")
+        if self._settings is None and mode == "INDIAN_LIVE_DATA":
+            try:
+                from backend.app.dependencies import get_angel_adapter
+
+                angel = get_angel_adapter()
+                if angel.is_configured():
+                    return angel
+            except Exception:
+                pass
+        key = (env, allow_fixtures, mode)
+        if self._cached_default_provider is None or self._cached_provider_key != key:
+            self._cached_default_provider = RealMarketDataProvider(
+                force_cache=(env == Environment.TESTING), allow_fixture_fallback=allow_fixtures
+            )
+            self._cached_provider_key = key
+        return self._cached_default_provider
 
     @property
     def engine(self) -> PaperTradingEngine:
         if self._engine is not None:
             return self._engine
-        return PaperTradingEngine(market_provider=self.provider)
+        active_provider = self.provider
+        if self._cached_default_engine is None or self._cached_default_engine.market_provider is not active_provider:
+            self._cached_default_engine = PaperTradingEngine(market_provider=active_provider)
+        return self._cached_default_engine
 
     def is_groq_api_ready(self) -> bool:
         """Verify if a valid GROQ_API_KEY is configured."""
@@ -420,30 +608,8 @@ class GeminiInvestmentAssistant:
         # Hindi Devanagari script detection
         if any("\u0900" <= char <= "\u097f" for char in prompt):
             return "hi"
-        # Common Hinglish marker words
-        hinglish_words = [
-            "kya",
-            "kaise",
-            "mera",
-            "meri",
-            "karo",
-            "batao",
-            "kharid",
-            "bech",
-            "kitna",
-            "chahiye",
-            "hai",
-            "nahi",
-            "kaunse",
-            "kaha",
-            "hoga",
-        ]
-        matched = sum(
-            1
-            for w in hinglish_words
-            if f" {w} " in f" {p_lower} " or p_lower.startswith(w + " ") or p_lower.endswith(" " + w)
-        )
-        if matched >= 1:
+        tokens = set(re.findall(r"[a-z]+", p_lower))
+        if tokens & _HINGLISH_MARKERS or any(p in p_lower for p in ("le do", "le lo", "laga do", "kar do")):
             return "hi-Latn"
         return "en"
 
@@ -505,17 +671,8 @@ class GeminiInvestmentAssistant:
         self, user_id: str, currency: str = "INR", db: Optional[AsyncSession] = None
     ) -> Dict[str, Any]:
         if db:
-            summary = await self.engine.get_portfolio_summary_db(user_id, db=db)
-            return summary
-        acct = self.engine.get_or_create_account(user_id)
-        return {
-            "account_id": acct["id"],
-            "currency": currency,
-            "current_cash": float(acct["current_cash"]),
-            "equity": float(acct["current_cash"]),
-            "positions": [],
-            "status": "VIRTUAL_PAPER_ACCOUNT",
-        }
+            return await self.engine.get_portfolio_summary_db(user_id, db=db)
+        return await self.engine.get_portfolio_summary_async(user_id)
 
     async def tool_get_my_risk_constraints(self, user_id: str, db: Optional[AsyncSession] = None) -> Dict[str, Any]:
         risk_band = "MODERATE"
@@ -565,111 +722,205 @@ class GeminiInvestmentAssistant:
         self,
         user_id: str,
         symbols: List[str],
-        budget: float,
+        budget: Optional[float] = None,
         currency: str = "INR",
         rationale: str = "Assistant recommended allocation",
         conversation_id: Optional[str] = None,
         db: Optional[AsyncSession] = None,
+        requested_quantities: Optional[Dict[str, int]] = None,
     ) -> Dict[str, Any]:
-        """Create a server-validated bounded paper allocation proposal with expiration."""
+        """Create a server-validated bounded paper buy/allocation proposal with expiration."""
         import math
 
-        if budget is None or not math.isfinite(budget) or budget <= 0:
+        if not symbols:
             return {
                 "status": "REJECTED",
-                "error": "Budget must be a finite, strictly positive amount.",
+                "error": "At least one symbol required for a paper trade proposal.",
                 "allocations": [],
-                "total_budget": 0.0,
+                "total_budget": float(budget) if budget is not None and math.isfinite(budget) else 0.0,
                 "requested_budget": float(budget) if budget is not None and math.isfinite(budget) else 0.0,
                 "requires_approval": False,
                 "disclaimer": SIMULATION_DISCLAIMER,
             }
 
-        if not symbols:
-            return {
-                "status": "REJECTED",
-                "error": "At least one symbol required for allocation proposal.",
-                "allocations": [],
-                "total_budget": float(budget),
-                "requested_budget": float(budget),
-                "requires_approval": False,
-                "disclaimer": SIMULATION_DISCLAIMER,
-            }
+        # Fetch caller's authoritative virtual cash balance up front
+        if db:
+            acct = await self.engine.get_or_create_account_db(user_id, db=db)
+            available_cash = Decimal(str(acct.current_cash))
+            account_id = acct.id
+        else:
+            acct = self.engine.get_or_create_account(user_id)
+            available_cash = Decimal(str(acct["current_cash"]))
+            account_id = acct["id"]
 
-        # Treat requested budget as a hard maximum
-        budget_dec = Decimal(str(budget))
-        per_stock_budget = budget_dec / Decimal(len(symbols))
-        allocations = []
+        allocations: List[Dict[str, Any]] = []
         total_estimated = Decimal("0.00")
         unaffordable_symbols = []
+        unavailable_symbols = []
 
-        for sym in symbols:
-            clean_sym = sym.upper().strip()
-            q = await self.provider.get_latest_quote(clean_sym)
-            if not q or q.price <= Decimal("0.00"):
-                continue
-            price = Decimal(str(q.price))
-            if price > per_stock_budget:
-                unaffordable_symbols.append((clean_sym, price))
-                continue
-            qty = int(per_stock_budget // price)
-            if qty <= 0:
-                unaffordable_symbols.append((clean_sym, price))
-                continue
-
-            leg_total = Decimal(str(qty)) * price
-            # Ensure total estimated never exceeds the requested budget
-            if (total_estimated + leg_total) > budget_dec:
-                remaining = budget_dec - total_estimated
-                qty = int(remaining // price)
+        if requested_quantities:
+            for sym in symbols:
+                clean_sym = sym.upper().strip()
+                qty = int(requested_quantities.get(clean_sym, 0))
                 if qty <= 0:
+                    return {
+                        "status": "REJECTED",
+                        "error": f"Share quantity for {clean_sym} must be a positive whole number.",
+                        "allocations": [],
+                        "total_budget": 0.0,
+                        "requested_budget": 0.0,
+                        "requires_approval": False,
+                        "disclaimer": SIMULATION_DISCLAIMER,
+                    }
+                q = await self.provider.get_latest_quote(clean_sym)
+                if not q or q.price <= Decimal("0.00") or q.is_stale or q.data_status == "stale":
+                    unavailable_symbols.append(clean_sym)
                     continue
-                leg_total = Decimal(str(qty)) * price
+                price = Decimal(str(q.price))
+                leg_total = (Decimal(qty) * price).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                total_estimated += leg_total
+                allocations.append(
+                    {
+                        "symbol": clean_sym,
+                        "side": "BUY",
+                        "quantity": qty,
+                        "estimated_price": round(float(price), 2),
+                        "estimated_total": round(float(leg_total), 2),
+                        "currency": currency,
+                    }
+                )
 
-            total_estimated += leg_total
-            allocations.append(
-                {
-                    "symbol": clean_sym,
-                    "quantity": qty,
-                    "estimated_price": round(float(price), 2),
-                    "estimated_total": round(float(leg_total), 2),
-                    "currency": currency,
+            if unavailable_symbols:
+                return {
+                    "status": "QUOTE_UNAVAILABLE",
+                    "error": (
+                        f"Verified market quote for {', '.join(unavailable_symbols)} is currently unavailable. "
+                        "Cannot prepare a virtual order preview without a valid price."
+                    ),
+                    "unavailable_symbols": unavailable_symbols,
+                    "allocations": [],
+                    "total_budget": 0.0,
+                    "requested_budget": 0.0,
+                    "requires_approval": False,
+                    "disclaimer": SIMULATION_DISCLAIMER,
                 }
-            )
 
-        if not allocations:
-            min_price_info = (
-                f" (lowest share price: ₹{min(p for _, p in unaffordable_symbols):,.2f})"
-                if unaffordable_symbols
-                else ""
-            )
-            return {
-                "status": "INSUFFICIENT_BUDGET",
-                "error": f"Requested budget of ₹{budget:,.2f} is insufficient to purchase even a single whole share{min_price_info}. For whole-share paper trading, please provide a larger budget.",
-                "requested_budget": float(budget),
-                "estimated_allocation_total": 0.0,
-                "allocations": [],
-                "requires_approval": False,
-                "disclaimer": SIMULATION_DISCLAIMER,
-            }
+            if total_estimated > available_cash:
+                return {
+                    "status": "INSUFFICIENT_CASH",
+                    "error": (
+                        f"Estimated virtual outlay ₹{total_estimated:,.2f} exceeds your available virtual cash "
+                        f"balance of ₹{available_cash:,.2f}."
+                    ),
+                    "requested_budget": round(float(total_estimated), 2),
+                    "estimated_allocation_total": round(float(total_estimated), 2),
+                    "available_cash": round(float(available_cash), 2),
+                    "allocations": allocations,
+                    "requires_approval": False,
+                    "disclaimer": SIMULATION_DISCLAIMER,
+                }
+
+            budget_dec = total_estimated
+            budget_val = round(float(total_estimated), 2)
+            qty_desc = ", ".join(f"{a['quantity']}x {a['symbol']}" for a in allocations)
+            instruction_text = f"Buy {qty_desc} (virtual)"
+        else:
+            if budget is None or not math.isfinite(budget) or budget <= 0:
+                return {
+                    "status": "REJECTED",
+                    "error": "Budget must be a finite, strictly positive amount.",
+                    "allocations": [],
+                    "total_budget": 0.0,
+                    "requested_budget": float(budget) if budget is not None and math.isfinite(budget) else 0.0,
+                    "requires_approval": False,
+                    "disclaimer": SIMULATION_DISCLAIMER,
+                }
+
+            # Treat requested budget as a hard maximum
+            budget_dec = Decimal(str(budget))
+            per_stock_budget = budget_dec / Decimal(len(symbols))
+
+            for sym in symbols:
+                clean_sym = sym.upper().strip()
+                q = await self.provider.get_latest_quote(clean_sym)
+                if not q or q.price <= Decimal("0.00") or q.is_stale or q.data_status == "stale":
+                    unavailable_symbols.append(clean_sym)
+                    continue
+                price = Decimal(str(q.price))
+                if price > per_stock_budget:
+                    unaffordable_symbols.append((clean_sym, price))
+                    continue
+                qty = int(per_stock_budget // price)
+                if qty <= 0:
+                    unaffordable_symbols.append((clean_sym, price))
+                    continue
+
+                leg_total = Decimal(str(qty)) * price
+                # Ensure total estimated never exceeds the requested budget
+                if (total_estimated + leg_total) > budget_dec:
+                    remaining = budget_dec - total_estimated
+                    qty = int(remaining // price)
+                    if qty <= 0:
+                        continue
+                    leg_total = Decimal(str(qty)) * price
+
+                total_estimated += leg_total
+                allocations.append(
+                    {
+                        "symbol": clean_sym,
+                        "side": "BUY",
+                        "quantity": qty,
+                        "estimated_price": round(float(price), 2),
+                        "estimated_total": round(float(leg_total), 2),
+                        "currency": currency,
+                    }
+                )
+
+            if not allocations:
+                if unavailable_symbols and not unaffordable_symbols:
+                    return {
+                        "status": "QUOTE_UNAVAILABLE",
+                        "error": (
+                            f"Verified market quote unavailable for {', '.join(unavailable_symbols)}. "
+                            "Cannot prepare a virtual order preview without a valid price."
+                        ),
+                        "unavailable_symbols": unavailable_symbols,
+                        "requested_budget": float(budget),
+                        "estimated_allocation_total": 0.0,
+                        "allocations": [],
+                        "requires_approval": False,
+                        "disclaimer": SIMULATION_DISCLAIMER,
+                    }
+                min_price_info = (
+                    f" (lowest share price: ₹{min(p for _, p in unaffordable_symbols):,.2f})"
+                    if unaffordable_symbols
+                    else ""
+                )
+                return {
+                    "status": "INSUFFICIENT_BUDGET",
+                    "error": f"Requested budget of ₹{budget:,.2f} is insufficient to purchase even a single whole share{min_price_info}. For whole-share paper trading, please provide a larger budget.",
+                    "requested_budget": float(budget),
+                    "estimated_allocation_total": 0.0,
+                    "allocations": [],
+                    "requires_approval": False,
+                    "disclaimer": SIMULATION_DISCLAIMER,
+                }
+
+            budget_val = round(float(budget), 2)
+            instruction_text = f"Invest {currency} {budget_val:,.2f} across {', '.join(symbols)}"
 
         proposal_id = f"prop-{uuid.uuid4().hex[:12]}"
-        account_id = f"acc-{user_id}"
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
 
         if db:
-            # Query or create real persisted account in database to satisfy foreign keys
-            acct = await self.engine.get_or_create_account_db(user_id, db=db)
-            account_id = acct.id
-
             prop = PaperProposal(
                 id=proposal_id,
                 user_id=user_id,
                 account_id=account_id,
                 conversation_id=conversation_id,
-                instruction_text=f"Invest {currency} {budget:,.2f} across {', '.join(symbols)}",
+                instruction_text=instruction_text,
                 proposed_allocations=allocations,
-                requested_budget=Decimal(str(round(budget, 2))),
+                requested_budget=Decimal(str(round(budget_val, 2))),
                 total_budget=Decimal(str(round(float(total_estimated), 2))),
                 currency=currency,
                 status="PROPOSED",
@@ -681,10 +932,11 @@ class GeminiInvestmentAssistant:
         return {
             "proposal_id": proposal_id,
             "status": "PROPOSED",
-            "symbols": symbols,
-            "requested_budget": round(budget, 2),
+            "symbols": [a["symbol"] for a in allocations],
+            "requested_budget": budget_val,
             "total_budget": round(float(total_estimated), 2),
             "estimated_allocation_total": round(float(total_estimated), 2),
+            "available_cash": round(float(available_cash), 2),
             "currency": currency,
             "allocations": allocations,
             "expires_in_minutes": 10,
@@ -708,6 +960,7 @@ class GeminiInvestmentAssistant:
             select(PaperProposal)
             .where(PaperProposal.id == proposal_id, PaperProposal.user_id == user_id)
             .with_for_update()
+            .execution_options(populate_existing=True)
         )
         res = await db.execute(stmt)
         prop = res.scalar_one_or_none()
@@ -731,7 +984,7 @@ class GeminiInvestmentAssistant:
 
         now = datetime.now(timezone.utc)
         exp = prop.expires_at.replace(tzinfo=timezone.utc) if prop.expires_at.tzinfo is None else prop.expires_at
-        if now > exp:
+        if now >= exp:
             prop.status = "EXPIRED"
             await db.commit()
             return {
@@ -969,6 +1222,370 @@ class GeminiInvestmentAssistant:
             sanitized["timeframe"] = raw_tf.strip()
         return sanitized
 
+    @staticmethod
+    def _extract_symbols(user_message: str) -> tuple[List[str], List[str]]:
+        """Extract supported NSE symbols and unrecognized uppercase ticker candidates."""
+        p_lower = user_message.lower()
+        found: List[str] = []
+
+        def _add_sym(sym: str) -> None:
+            if sym not in found:
+                found.append(sym)
+
+        # Check explicit Hindi/English company aliases (longest keys first)
+        for alias in sorted(_SYMBOL_ALIASES.keys(), key=len, reverse=True):
+            if any("\u0900" <= c <= "\u097f" for c in alias):
+                if alias in user_message:
+                    _add_sym(_SYMBOL_ALIASES[alias])
+            elif re.search(rf"(?<![a-z0-9]){re.escape(alias)}(?![a-z0-9])", p_lower):
+                _add_sym(_SYMBOL_ALIASES[alias])
+
+        # Check canonical symbols and full registered names with token boundaries
+        for item in INSTRUMENT_REGISTRY:
+            sym = item["symbol"]
+            if re.search(rf"(?<![a-z0-9]){re.escape(sym.lower())}(?![a-z0-9])", p_lower):
+                _add_sym(sym)
+                continue
+            full_name = item["name"].lower()
+            if re.search(rf"(?<![a-z0-9]){re.escape(full_name)}(?![a-z0-9])", p_lower):
+                _add_sym(sym)
+
+        known_upper = {item["symbol"].upper() for item in INSTRUMENT_REGISTRY}
+        unknown_upper = [
+            tok
+            for tok in re.findall(r"\b[A-Z]{2,12}\b", user_message)
+            if tok not in known_upper and tok not in _UPPER_TICKER_STOPWORDS
+        ]
+        return found, list(dict.fromkeys(unknown_upper))
+
+    @staticmethod
+    def _has_buy_action_intent(p_lower: str, raw_message: str) -> bool:
+        """Detect clear English, Hindi, or Hinglish actionable buy/invest requests."""
+        negated = (
+            "do not buy",
+            "don't buy",
+            "dont buy",
+            "do not invest",
+            "don't invest",
+            "dont invest",
+            "mat kharid",
+            "mat lena",
+            "nahi kharidna",
+            "nahi lena",
+            "not buy",
+        )
+        if any(n in p_lower for n in negated):
+            return False
+
+        ascii_patterns = (
+            r"\bbuy\b",
+            r"\bpurchase\b",
+            r"\binvest\b",
+            r"\ballocate\b",
+            r"\ballocation\b",
+            r"\bkhar(?:ee|i)d(?:na|ne|o)?\b",
+            r"\blen[ae]\s+h(?:ai|ain|)\b",
+            r"\ble\s*(?:lo|do(?:\s*ge)?|dijiye|le)\b",
+            r"\blelo\b",
+            r"\blaga\s*do\b",
+            r"\blagana\s+h(?:ai|ain)\b",
+            r"\badd\s+.+\s+(?:to|in)\s+(?:my\s+)?portfolio\b",
+            r"\bmere\s+portfolio\s+m(?:ee|e|ein)\s+.+\b(?:le|add|dal|daal)\b",
+        )
+        if any(re.search(pat, p_lower) for pat in ascii_patterns):
+            return True
+
+        hindi_tokens = ("खरीद", "लेना", "लेने", "ले दो", "ले लो", "लीजिए", "इन्वेस्ट", "निवेश", "लगा दो")
+        return any(tok in raw_message for tok in hindi_tokens)
+
+    @staticmethod
+    def _has_sell_intent(p_lower: str, raw_message: str) -> bool:
+        return bool(re.search(r"\bsell\b|\bbech(?:na|ne|o| do| de)?\b", p_lower) or "बेच" in raw_message)
+
+    @staticmethod
+    def _is_advisory_research_query(p_lower: str, raw_message: str) -> bool:
+        """Detect pure educational/advisory questions ('Should I buy?', 'Is it good?')."""
+        advisory_prefixes = (
+            "should i",
+            "is it good",
+            "is it a good",
+            "is it safe",
+            "why ",
+            "what ",
+            "how ",
+            "which ",
+            "tell me about",
+            "explain",
+            "analysis of",
+            "review",
+            "kya mujhe",
+            "kya yeh",
+            "kya ye",
+            "kaun sa",
+            "kaunsa",
+        )
+        advisory_phrases = (
+            "should i invest",
+            "should i buy",
+            "is it good to invest",
+            "is it good to buy",
+            "is it safe to invest",
+            "worth buying",
+            "good time to buy",
+            "kya invest karna chahiye",
+            "kya buy karna chahiye",
+            "kharidna chahiye",
+            "khareedna chahiye",
+            "lena chahiye",
+            "lene chahiye",
+            "chahiye kya",
+            "would you recommend",
+            "would you suggest",
+            "kya lagta hai",
+        )
+        hindi_advisory = ("चाहिए", "कैसा है", "क्या मुझे खरीदना")
+        return (
+            p_lower.startswith(advisory_prefixes)
+            or any(phrase in p_lower for phrase in advisory_phrases)
+            or any(h in raw_message for h in hindi_advisory)
+        )
+
+    @staticmethod
+    def _extract_quantity_or_budget(user_message: str, p_lower: str) -> Dict[str, Any]:
+        """Parse whole share quantity or INR budget from English, Hindi, and Hinglish text."""
+        norm_text = user_message.translate(_DIGIT_TRANS)
+        norm_lower = norm_text.lower()
+
+        has_currency_hint = bool(
+            "₹" in norm_text
+            or re.search(
+                r"\b(?:inr|rs\.?|rupees?|rupaya|rupaye|budget|worth|laga\s*do|lagao|allocate|allocation)\b", norm_lower
+            )
+            or (
+                re.search(r"\binvest\b|इन्वेस्ट|निवेश", norm_lower)
+                and not re.search(r"\b(?:share|shares|stock|stocks|qty|quantity|unit|units)\b|शेयर", norm_lower)
+            )
+        )
+
+        # Reject explicit negative or zero amounts instead of executing wrong defaults
+        neg_or_zero = re.search(
+            r"(?:^|\s)(-\d+(?:\.\d+)?|0(?:\.0+)?)\s*(?:share|shares|stock|stocks|rs|inr)?\b", norm_lower
+        )
+        if neg_or_zero and not has_currency_hint:
+            return {"mode": "invalid_qty"}
+
+        # Detect fractional shares when share unit is requested
+        frac_share = re.search(
+            r"\b\d+\.\d+\s*(?:[a-z0-9&.-]+\s+)?(?:share|shares|stock|stocks|unit|units)\b", norm_lower
+        )
+        if frac_share:
+            return {"mode": "invalid_qty"}
+
+        # Extract plain numeric values (ignoring commas in amounts like 10,000)
+        num_matches = re.findall(r"(?<![a-zA-Z-])\d+(?:,\d{3})*(?:\.\d+)?(?![a-zA-Z-])", norm_text)
+        parsed_nums = [float(n.replace(",", "")) for n in num_matches]
+
+        if parsed_nums:
+            val = parsed_nums[0]
+            if val <= 0:
+                return {"mode": "invalid_qty"}
+            if has_currency_hint:
+                return {"mode": "budget", "budget": val}
+            if float(val).is_integer():
+                return {"mode": "quantity", "quantity": int(val)}
+            return {"mode": "invalid_qty"}
+
+        # Check English/Hindi/Hinglish word numbers ("yek", "ek", "एक", "one", etc.)
+        for word, num_val in _WORD_NUMBER_MAP.items():
+            if any("\u0900" <= c <= "\u097f" for c in word):
+                if word in norm_text:
+                    return {"mode": "quantity", "quantity": num_val}
+            elif re.search(rf"\b{re.escape(word)}\b", norm_lower):
+                return {"mode": "quantity", "quantity": num_val}
+
+        # Handle Hinglish "do" = 2 only when modifying shares/stocks (never "le do", "laga do", "kar do")
+        if re.search(
+            r"(?<!\ble\s)(?<!\bkar\s)(?<!\bde\s)(?<!\bbata\s)(?<!\blaga\s)\bdo\s+(?:[a-z0-9&.-]+\s+){0,2}(?:shares?|stocks?|qty|quantity|units?|ke|ka|kaa)\b",
+            norm_lower,
+        ):
+            return {"mode": "quantity", "quantity": 2}
+
+        # Handle English article phrasing ("buy a share", "buy a RELIANCE share")
+        if re.search(r"\b(?:a|an)\s+(?:[a-z0-9&.-]+\s+){0,2}shares?\b", norm_lower):
+            return {"mode": "quantity", "quantity": 1}
+
+        return {"mode": "missing"}
+
+    @staticmethod
+    def _format_portfolio_summary_reply(summary: Dict[str, Any], lang: str, active_sym: str) -> str:
+        """Render authoritative virtual portfolio summary without silent zero or cash fallbacks."""
+        raw_cash = summary.get("current_cash")
+        if raw_cash is None:
+            raw_cash = summary.get("cash_balance")
+
+        raw_equity = summary.get("total_equity")
+        if raw_equity is None:
+            raw_equity = summary.get("total_portfolio_value")
+        if raw_equity is None:
+            raw_equity = summary.get("equity")
+
+        cash_str = f"₹{float(raw_cash):,.2f}" if raw_cash is not None else "Unavailable"
+        equity_str = f"₹{float(raw_equity):,.2f}" if raw_equity is not None else "Unavailable"
+
+        positions = summary.get("positions")
+        if positions is None:
+            pos_text = "- Holdings data unavailable."
+            pos_count_label = "Unavailable"
+        elif positions:
+            pos_lines = []
+            for p in positions:
+                sym = p.get("symbol") or "UNKNOWN"
+                raw_qty = p.get("quantity")
+                qty_str = (
+                    f"{raw_qty:g}"
+                    if isinstance(raw_qty, (int, float))
+                    else (str(raw_qty) if raw_qty is not None else "Unavailable")
+                )
+
+                raw_avg = p.get("average_buy_price")
+                if raw_avg is None:
+                    raw_avg = p.get("avg_cost")
+                if raw_avg is None:
+                    raw_avg = p.get("avg_entry_price")
+                avg_str = f"₹{float(raw_avg):,.2f}" if raw_avg is not None else "Unavailable"
+
+                raw_mkt_val = p.get("market_value")
+                if raw_mkt_val is not None:
+                    fallback_note = (
+                        " *(valued at cost; live quote unavailable)*"
+                        if p.get("valuation_source") == "cost_basis_fallback"
+                        else ""
+                    )
+                    mkt_str = f" | Value: ₹{float(raw_mkt_val):,.2f}{fallback_note}"
+                else:
+                    mkt_str = ""
+                pos_lines.append(f"- **{sym}**: {qty_str} shares @ avg {avg_str}{mkt_str}")
+            pos_text = "\n".join(pos_lines)
+            pos_count_label = str(len(positions))
+        else:
+            pos_text = "- No open positions in your virtual ledger yet."
+            pos_count_label = "0"
+
+        if lang == "hi":
+            return (
+                f"**आपका वर्चुअल पेपर पोर्टफोलियो:**\n\n"
+                f"- उपलब्ध वर्चुअल कैश: {cash_str}\n"
+                f"- कुल पोर्टफोलियो इक्विटी: {equity_str}\n\n"
+                f"**सक्रिय पोजीशन्स ({pos_count_label}):**\n"
+                f"{pos_text}\n\n"
+                f"नया पेपर ऑर्डर प्रिव्यू बनाने के लिए शेयर और मात्रा बताएं (उदा: 'Buy 1 {active_sym} share' या '₹10,000 इन्वेस्ट करो')।"
+            )
+        if lang == "hi-Latn":
+            return (
+                f"**Aapka Virtual Paper Portfolio:**\n\n"
+                f"- Available Virtual Cash: {cash_str}\n"
+                f"- Total Portfolio Equity: {equity_str}\n\n"
+                f"**Active Positions ({pos_count_label}):**\n"
+                f"{pos_text}\n\n"
+                f"Virtual buy preview ke liye stock aur quantity ya budget batayein (jaise: 'Buy 1 {active_sym} share' ya 'Invest 10000 in {active_sym}')."
+            )
+        return (
+            f"**Your Virtual Paper Portfolio Summary:**\n\n"
+            f"- Available Virtual Cash: {cash_str}\n"
+            f"- Total Portfolio Equity: {equity_str}\n\n"
+            f"**Active Positions ({pos_count_label}):**\n"
+            f"{pos_text}\n\n"
+            f"To preview a virtual trade, say e.g. *'Buy 1 share of {active_sym}'* or *'Invest INR 25,000 across Nifty leaders'*."
+        )
+
+    @staticmethod
+    def _format_proposal_preview_reply(proposal: Dict[str, Any], lang: str, is_quantity_order: bool) -> str:
+        """Render a bounded virtual paper order preview requiring explicit confirmation."""
+        alloc_details = "\n".join(
+            [
+                f"- **{a.get('side', 'BUY')} {a['quantity']}x {a['symbol']}** @ ₹{a['estimated_price']:,.2f} (Est. Total: ₹{a['estimated_total']:,.2f})"
+                for a in proposal.get("allocations", [])
+            ]
+        )
+        est_total = proposal.get("estimated_allocation_total")
+        est_str = f"₹{float(est_total):,.2f}" if est_total is not None else "Unavailable"
+        avail_cash = proposal.get("available_cash")
+        cash_note = f"Available virtual cash: ₹{float(avail_cash):,.2f}.\n" if avail_cash is not None else ""
+
+        if lang == "hi":
+            header = "मैंने आपका **वर्चुअल पेपर BUY ऑर्डर प्रिव्यू** तैयार किया है (अभी कोई ऑर्डर निष्पादित नहीं हुआ है):"
+            return (
+                f"{header}\n\n{alloc_details}\n\n"
+                f"कुल अनुमानित वर्चुअल लागत: {est_str}\n{cash_note}"
+                f"पुष्टि करने के लिए **'हाँ'** / **'Confirm'** लिखें या **Execute Paper Proposal** बटन दबाएं। (10 मिनट में समाप्त होगा)"
+            )
+        if lang == "hi-Latn":
+            header = (
+                "Maine aapke liye **Virtual Paper BUY Order Preview** taiyar kiya hai (abhi koi order place nahi hua hai):"
+                if is_quantity_order
+                else "Maine aapke liye virtual paper allocation preview taiyar kiya hai (abhi koi order place nahi hua hai):"
+            )
+            return (
+                f"{header}\n\n{alloc_details}\n\n"
+                f"Total estimated virtual cost: {est_str}\n{cash_note}"
+                f"Kya aap yeh virtual order place karna chahte hain? Confirm karne ke liye **'Yes'** / **'Haan'** / **'Confirm'** likhein ya **Execute Paper Proposal** click karein (10 min valid)."
+            )
+        header = (
+            "Here is your **Virtual Paper BUY Order Preview** (no order has been placed yet):"
+            if is_quantity_order
+            else "Here is a proposed virtual paper allocation preview (no order has been placed yet):"
+        )
+        return (
+            f"{header}\n\n{alloc_details}\n\n"
+            f"Total Estimated Outlay: {est_str} virtual INR\n{cash_note}"
+            f"To confirm and execute this virtual order, reply **'Yes'** / **'Confirm'** or click **Execute Paper Proposal** (expires in 10 minutes)."
+        )
+
+    @staticmethod
+    def _build_clarification_reply(reason: str, lang: str, symbols: List[str], active_sym: str, extra: str = "") -> str:
+        """Build a concise, localized clarification without executing or creating a proposal."""
+        sym_label = ", ".join(symbols) if symbols else active_sym
+        if reason == "missing_symbol":
+            if lang == "hi":
+                return f"कृपया बताएं कि आप कौन-सा शेयर वर्चुअल रूप से खरीदना चाहते हैं (उदा: **{active_sym}** या **TCS**) और कितनी मात्रा में?"
+            if lang == "hi-Latn":
+                return f"Kripya stock symbol confirm karein ki aap kaunsa share virtual portfolio me lena chahte hain (jaise **{active_sym}** ya **TCS**)?"
+            return f"Which stock symbol would you like to preview a virtual buy for (for example, **{active_sym}** or **TCS**)?"
+        if reason == "missing_amount":
+            if lang == "hi":
+                return f"आप **{sym_label}** के कितने वर्चुअल शेयर खरीदना चाहते हैं (या कितना वर्चुअल बजट ₹ में लगाना चाहते हैं)?"
+            if lang == "hi-Latn":
+                return f"Aap **{sym_label}** ke kitne virtual shares lena chahte hain (ya kitna INR budget lagana chahte hain)?"
+            return f"How many virtual shares of **{sym_label}** (or what INR budget) would you like me to preview?"
+        if reason == "invalid_qty":
+            if lang == "hi-Latn":
+                return f"Kripya **{sym_label}** ke liye positive whole number share quantity batayein (jaise: 1, 2 ya 5 shares)."
+            if lang == "hi":
+                return f"कृपया **{sym_label}** के लिए एक सकारात्मक पूर्ण संख्या (जैसे 1, 2 या 5 शेयर) बताएं।"
+            return f"Please specify a positive whole number of shares for **{sym_label}** (e.g., 1, 2, or 5 shares)."
+        if reason == "ambiguous_symbols":
+            if lang == "hi-Latn":
+                return f"Aapne ek se zyada stocks ({sym_label}) mention kiye hain. Kripya batayein ki aapko kaunse ek stock ka share lena hai, ya sabhi ke liye INR budget dein."
+            if lang == "hi":
+                return f"आपने एक से अधिक स्टॉक्स ({sym_label}) लिखे हैं। कृपया स्पष्ट करें कि किस एक स्टॉक के कितने शेयर लेने हैं या कुल INR बजट बताएं।"
+            return f"You mentioned multiple symbols ({sym_label}). Please clarify which single stock quantity you want to buy, or specify a total INR budget."
+        if reason == "unknown_symbol":
+            if lang == "hi-Latn":
+                return f"**{extra}** FinEx ke supported virtual equity list me nahi mila. Kripya valid NSE symbol dein (jaise RELIANCE, TCS, INFY, HDFCBANK)."
+            if lang == "hi":
+                return f"**{extra}** FinEx की समर्थित वर्चुअल इक्विटी सूची में नहीं मिला। कृपया मान्य NSE प्रतीक दें (जैसे RELIANCE, TCS, INFY)।"
+            return f"**{extra}** is not in FinEx's supported virtual equities list. Please specify a supported NSE symbol such as RELIANCE, TCS, or INFY."
+        if reason == "sell_or_mixed":
+            if lang == "hi-Latn":
+                return "AskFinEx AI abhi sirf virtual **BUY** order preview banata hai. Sell ya mixed action ke liye please confirm karein ki aap virtual BUY chahte hain, ya Order Ticket use karein."
+            return "AskFinEx AI currently prepares virtual **BUY** order previews only. Please clarify if you want a virtual BUY order, or use the Order Ticket for simulated sell orders."
+        # ambiguous_intent
+        if lang == "hi-Latn":
+            return f"Kya aap **{sym_label}** ka virtual portfolio holding check karna chahte hain, ya **{sym_label}** buy karne ka virtual order preview banana hai? Kripya clear karein."
+        if lang == "hi":
+            return f"क्या आप **{sym_label}** की पोर्टफोलियो होल्डिंग देखना चाहते हैं या नया वर्चुअल BUY ऑर्डर प्रिव्यू बनाना चाहते हैं? कृपया स्पष्ट करें।"
+        return f"Do you want to check your existing **{sym_label}** virtual holding, or prepare a virtual BUY order preview? Please clarify with your desired action and share quantity."
+
     async def process_user_turn(
         self,
         user_id: str,
@@ -999,41 +1616,12 @@ class GeminiInvestmentAssistant:
         safe_chart_context = self._sanitize_chart_context(active_chart_context)
         active_sym = safe_chart_context["symbol"]
 
-        # 1. Research & Educational Question Intent ("Should I invest?", "Is it good to buy?", etc.)
-        # Informational and research queries must remain research requests and NEVER execute or cancel trades.
-        is_research_query = (
-            user_message.strip().endswith("?")
-            or any(
-                p_lower.startswith(q)
-                for q in [
-                    "should i",
-                    "is it good",
-                    "is it a good time",
-                    "why ",
-                    "what ",
-                    "how ",
-                    "can i",
-                    "would you",
-                    "kya mujhe",
-                    "kya yeh",
-                    "tell me about",
-                    "explain",
-                    "analysis of",
-                    "review",
-                ]
-            )
-            or any(
-                q in p_lower
-                for q in [
-                    "should i invest",
-                    "should i buy",
-                    "is it good to invest",
-                    "is it good to buy",
-                    "is it safe to invest",
-                    "kya invest karna chahiye",
-                    "kya buy karna chahiye",
-                ]
-            )
+        # 1. Intent pre-classification (Advisory research vs actionable buy/sell)
+        is_advisory = self._is_advisory_research_query(p_lower, user_message)
+        has_buy_intent = self._has_buy_action_intent(p_lower, user_message)
+        has_sell_intent = self._has_sell_intent(p_lower, user_message)
+        is_research_query = is_advisory or (
+            user_message.strip().endswith("?") and not has_buy_intent and not has_sell_intent
         )
 
         # 2. Refusal & Cancellation Intent ("do not execute", "don't execute", "cancel", "wait", "don't buy", "stop")
@@ -1052,9 +1640,13 @@ class GeminiInvestmentAssistant:
             "dont trade",
             "cancel proposal",
             "cancel order",
+            "cancel kar do",
             "abort trade",
             "stop execution",
             "mat karo",
+            "mat lo",
+            "nahi chahiye",
+            "rehne do",
             "ruko",
             "nahi karna",
         ]
@@ -1142,22 +1734,24 @@ class GeminiInvestmentAssistant:
             )
 
         # 3. Explicit Proposal Authorization
-        # Reject negated or ambiguous authorization
-        negated_approval_phrases = [
+        # Reject negated or ambiguous authorization strictly
+        cleaned_approval = re.sub(r"[.!,\s]+$", "", p_lower).strip()
+        negated_approval_phrases = (
             "do not confirm",
             "don't confirm",
             "dont confirm",
             "not confirm",
+            "not ready to confirm",
             "do not execute",
             "don't execute",
             "dont execute",
             "never execute",
             "never confirm",
             "not sure",
-        ]
+        )
         is_negated_approval = any(neg in p_lower for neg in negated_approval_phrases)
 
-        if is_negated_approval and not is_research_query:
+        if is_negated_approval and not (is_advisory and not has_buy_intent):
             return AssistantMessageResponse(
                 message_id=msg_id,
                 conversation_id=conv_id,
@@ -1168,35 +1762,136 @@ class GeminiInvestmentAssistant:
 
         approval_tokens = {
             "yes",
+            "yes please",
             "approve",
             "confirm",
             "proceed",
             "haan",
+            "haanji",
+            "haan ji",
+            "हाँ",
             "theek hai",
             "execute proposal",
             "confirm proposal",
             "yes execute",
             "yes proceed",
             "yes confirm",
+            "yes buy",
+            "confirm buy",
             "confirm order",
+            "confirm this",
+            "confirm this order",
+            "confirm this trade",
+            "confirm this proposal",
+            "order confirm",
+            "confirm kar do",
+            "haan execute",
+            "haan le lo",
             "execute order",
             "confirm trade",
             "execute trade",
         }
-        is_approval = (
-            not is_refusal
-            and not is_research_query
-            and not is_negated_approval
-            and (
-                p_lower in approval_tokens
-                or p_lower.startswith("confirm proposal")
-                or p_lower.startswith("execute proposal")
-                or p_lower.startswith("confirm prop-")
-                or p_lower.startswith("execute prop-")
-                or any(f"confirm {t}" in p_lower for t in ["proposal", "order", "trade", "this"])
-                or (any(p_lower == token for token in ["yes", "confirm", "approve", "proceed", "haan"]))
+        all_explicit_prop_ids = list(dict.fromkeys(re.findall(r"\bprop-[a-zA-Z0-9_-]+\b", user_message, re.IGNORECASE)))
+        hesitation_markers = (
+            "maybe",
+            "perhaps",
+            "shayad",
+            "later",
+            "baad me",
+            "baad mein",
+            "wait",
+            "ruko",
+            "not sure",
+            "kaunsa",
+            "which",
+            "status",
+            "price",
+            "details",
+        )
+        has_hesitation_or_choice = (
+            user_message.strip().endswith("?")
+            or any(re.search(rf"\b{re.escape(h)}\b", p_lower) for h in hesitation_markers)
+            or bool(re.search(r"\b(?:or|ya|but|par|agar|if)\b", p_lower))
+            or len(all_explicit_prop_ids) > 1
+        )
+        is_explicit_prop_approval = len(all_explicit_prop_ids) == 1 and bool(
+            re.fullmatch(
+                r"(?:(?:yes|haan)[,\s]+)?(?:confirm|execute|approve)\s+(?:the\s+)?(?:(?:proposal|order|trade)\s+)?prop-[a-z0-9_-]+(?:\s+please)?",
+                cleaned_approval,
             )
         )
+        is_exact_approval = (cleaned_approval in approval_tokens) or is_explicit_prop_approval
+        is_approval = (
+            not is_refusal
+            and not is_advisory
+            and not is_negated_approval
+            and not has_hesitation_or_choice
+            and is_exact_approval
+        )
+        has_confirm_or_yes_word = bool(
+            re.search(r"\b(?:yes|haan|haanji|confirm|approve|proceed|execute)\b", p_lower) or "हाँ" in user_message
+        )
+        is_portfolio_or_chart_question = any(
+            w in p_lower for w in ("portfolio", "balance", "holdings", "equity", "cash", "chart", "rsi", "sma", "macd")
+        )
+        is_ambiguous_confirmation = (
+            not is_refusal
+            and not is_negated_approval
+            and not is_approval
+            and not has_buy_intent
+            and not is_advisory
+            and not is_portfolio_or_chart_question
+            and has_confirm_or_yes_word
+            and (has_hesitation_or_choice or "confirm" in p_lower or len(cleaned_approval.split()) <= 4)
+        )
+
+        if is_ambiguous_confirmation:
+            pending_note = ""
+            if db:
+                if len(all_explicit_prop_ids) > 1:
+                    ids_str = ", ".join(f"'{pid}'" for pid in all_explicit_prop_ids)
+                    pending_note = f" Multiple proposal IDs were mentioned ({ids_str})."
+                else:
+                    pend_res = await db.execute(
+                        select(PaperProposal)
+                        .where(
+                            PaperProposal.user_id == user_id,
+                            PaperProposal.conversation_id == conv_id,
+                            PaperProposal.status.in_(["PROPOSED", "PARTIALLY_EXECUTED"]),
+                        )
+                        .order_by(PaperProposal.created_at)
+                    )
+                    pend_rows = pend_res.scalars().all()
+                    if len(pend_rows) == 1:
+                        pending_note = f" Pending proposal: '{pend_rows[0].id}' ({pend_rows[0].instruction_text})."
+                    elif len(pend_rows) > 1:
+                        pending_note = (
+                            " Pending proposals in this conversation: "
+                            + ", ".join(f"'{r.id}'" for r in pend_rows)
+                            + "."
+                        )
+            if lang == "hi-Latn":
+                clarify_reply = (
+                    f"Confirmation clear nahi hai — abhi koi paper order execute nahi kiya gaya hai.{pending_note} "
+                    "Execute karne ke liye sirf **'Haan'**, **'Yes'**, ya **'Confirm'** likhein (ya cancel karne ke liye **'Cancel'** likhein)."
+                )
+            elif lang == "hi":
+                clarify_reply = (
+                    f"पुष्टि स्पष्ट नहीं है — अभी कोई पेपर ऑर्डर निष्पादित नहीं किया गया है।{pending_note} "
+                    "निष्पादित करने के लिए स्पष्ट **'हाँ'** या **'Confirm'** लिखें (या रद्द करने के लिए **'Cancel'** लिखें)।"
+                )
+            else:
+                clarify_reply = (
+                    f"Your confirmation was ambiguous, so no paper order was executed.{pending_note} "
+                    "Please reply clearly with **'Yes'** / **'Confirm'** (or specify the proposal ID) to execute, or **'Cancel'** to discard."
+                )
+            return AssistantMessageResponse(
+                message_id=msg_id,
+                conversation_id=conv_id,
+                reply=clarify_reply,
+                language_detected=lang,
+                is_setup_incomplete=False,
+            )
 
         if is_approval and db:
             explicit_prop_id_match = re.search(r"\b(prop-[a-zA-Z0-9_-]+)\b", user_message, re.IGNORECASE)
@@ -1251,7 +1946,7 @@ class GeminiInvestmentAssistant:
                     if target_prop.expires_at.tzinfo is None
                     else target_prop.expires_at
                 )
-                if now_exp > exp_dt:
+                if now_exp >= exp_dt:
                     target_prop.status = "EXPIRED"
                     await db.commit()
                     reply = f"Proposal '{explicit_id}' has expired. Please request a fresh allocation proposal."
@@ -1311,7 +2006,7 @@ class GeminiInvestmentAssistant:
                     if target_prop.expires_at.tzinfo is None
                     else target_prop.expires_at
                 )
-                if now_exp > exp_dt:
+                if now_exp >= exp_dt:
                     target_prop.status = "EXPIRED"
                     await db.commit()
                     reply = "This paper proposal has expired. Please request a fresh allocation proposal."
@@ -1326,22 +2021,20 @@ class GeminiInvestmentAssistant:
             is_retry = (target_prop.status in ("PARTIALLY_EXECUTED", "REJECTED")) or ("retry" in p_lower)
             exec_result = await self.tool_execute_paper_proposal(user_id, target_prop.id, is_retry=is_retry, db=db)
             status = exec_result.get("status")
+            raw_cash_after = exec_result.get("cash_balance_after")
+            cash_after_str = f"₹{float(raw_cash_after):,.2f}" if raw_cash_after is not None else "Unavailable"
 
             if status == "EXECUTED":
                 if lang in ("hi", "hi-Latn"):
                     reply = (
-                        f"Aapka paper order safalta-purvak execute ho gaya hai! "
-                        f"Virtual cash balance: ₹{exec_result.get('cash_balance_after', 0):,.2f}."
+                        f"Aapka paper order safalta-purvak execute ho gaya hai! Virtual cash balance: {cash_after_str}."
                     )
                 else:
-                    reply = (
-                        f"Paper allocation executed successfully! "
-                        f"Remaining virtual cash balance: ₹{exec_result.get('cash_balance_after', 0):,.2f}."
-                    )
+                    reply = f"Paper allocation executed successfully! Remaining virtual cash balance: {cash_after_str}."
             elif status == "PARTIALLY_EXECUTED":
                 reply = (
                     f"Paper allocation partially executed. Some order legs filled, but others could not be completed. "
-                    f"Check receipts for details. Remaining virtual cash: ₹{exec_result.get('cash_balance_after', 0):,.2f}."
+                    f"Check receipts for details. Remaining virtual cash: {cash_after_str}."
                 )
             elif status == "ALREADY_EXECUTED":
                 reply = "This paper proposal was already executed. No duplicate orders were placed."
@@ -1386,7 +2079,12 @@ class GeminiInvestmentAssistant:
             p_lower == w or p_lower.startswith(w + " ") or p_lower.endswith(" " + w) or f" {w} " in f" {p_lower} "
             for w in greeting_words
         )
-        if is_greeting and not any(w in p_lower for w in ["invest", "buy", "chart", "rsi", "balance", "portfolio"]):
+        if (
+            is_greeting
+            and not has_buy_intent
+            and not has_sell_intent
+            and not any(w in p_lower for w in ["invest", "buy", "chart", "rsi", "balance", "portfolio"])
+        ):
             if self.is_llm_ready():
                 sys_instruct = (
                     "You are FinEx AI Paper Investment Assistant for Indian Equities (NSE). "
@@ -1448,7 +2146,131 @@ class GeminiInvestmentAssistant:
                 is_setup_incomplete=False,
             )
 
-        # 3. Virtual Portfolio / Balance Inquiry
+        extracted_syms, unknown_syms = self._extract_symbols(user_message)
+
+        # 3. Actionable English / Hindi / Hinglish Paper Buy Order Preview (evaluated BEFORE portfolio summary)
+        if not is_advisory and (has_buy_intent or has_sell_intent):
+            if has_sell_intent:
+                return AssistantMessageResponse(
+                    message_id=msg_id,
+                    conversation_id=conv_id,
+                    reply=self._build_clarification_reply("sell_or_mixed", lang, extracted_syms, active_sym),
+                    language_detected=lang,
+                    is_setup_incomplete=False,
+                )
+
+            target_syms = list(extracted_syms)
+            if not target_syms and any(
+                p in p_lower
+                for p in (
+                    "this stock",
+                    "this share",
+                    "active chart",
+                    "current chart",
+                    "is stock",
+                    "ye share",
+                    "yeh share",
+                    "yeh stock",
+                )
+            ):
+                target_syms = [active_sym]
+
+            parsed_amt = self._extract_quantity_or_budget(user_message, p_lower)
+            amt_mode = parsed_amt.get("mode")
+
+            if amt_mode == "invalid_qty":
+                return AssistantMessageResponse(
+                    message_id=msg_id,
+                    conversation_id=conv_id,
+                    reply=self._build_clarification_reply("invalid_qty", lang, target_syms, active_sym),
+                    language_detected=lang,
+                    is_setup_incomplete=False,
+                )
+            if not target_syms and unknown_syms:
+                return AssistantMessageResponse(
+                    message_id=msg_id,
+                    conversation_id=conv_id,
+                    reply=self._build_clarification_reply(
+                        "unknown_symbol", lang, target_syms, active_sym, extra=", ".join(unknown_syms)
+                    ),
+                    language_detected=lang,
+                    is_setup_incomplete=False,
+                )
+            if not target_syms:
+                return AssistantMessageResponse(
+                    message_id=msg_id,
+                    conversation_id=conv_id,
+                    reply=self._build_clarification_reply("missing_symbol", lang, target_syms, active_sym),
+                    language_detected=lang,
+                    is_setup_incomplete=False,
+                )
+            if amt_mode == "missing":
+                return AssistantMessageResponse(
+                    message_id=msg_id,
+                    conversation_id=conv_id,
+                    reply=self._build_clarification_reply("missing_amount", lang, target_syms, active_sym),
+                    language_detected=lang,
+                    is_setup_incomplete=False,
+                )
+
+            if amt_mode == "quantity":
+                if len(target_syms) > 1:
+                    return AssistantMessageResponse(
+                        message_id=msg_id,
+                        conversation_id=conv_id,
+                        reply=self._build_clarification_reply("ambiguous_symbols", lang, target_syms, active_sym),
+                        language_detected=lang,
+                        is_setup_incomplete=False,
+                    )
+                target_sym = target_syms[0]
+                proposal = await self.tool_create_paper_proposal(
+                    user_id,
+                    [target_sym],
+                    currency="INR",
+                    conversation_id=conv_id,
+                    db=db,
+                    requested_quantities={target_sym: int(parsed_amt["quantity"])},
+                )
+                is_qty_order = True
+            else:
+                proposal = await self.tool_create_paper_proposal(
+                    user_id,
+                    target_syms,
+                    budget=float(parsed_amt["budget"]),
+                    currency="INR",
+                    conversation_id=conv_id,
+                    db=db,
+                )
+                is_qty_order = False
+
+            prop_status = proposal.get("status")
+            if prop_status == "PROPOSED":
+                reply = self._format_proposal_preview_reply(proposal, lang, is_quantity_order=is_qty_order)
+            elif prop_status == "INSUFFICIENT_BUDGET":
+                budget_val = float(proposal.get("requested_budget") or 0)
+                if lang in ("hi", "hi-Latn"):
+                    reply = (
+                        f"Aapka requested budget ₹{budget_val:,.2f} ek bhi poora share khareedne ke liye kam hai. "
+                        f"{proposal.get('error', '')} Kripya budget badhayein."
+                    )
+                else:
+                    reply = (
+                        f"Your requested budget of ₹{budget_val:,.2f} is insufficient to purchase even a single whole share. "
+                        f"{proposal.get('error', '')} Please provide a larger budget."
+                    )
+            else:
+                reply = proposal.get("error") or "Unable to prepare a virtual paper order preview."
+
+            return AssistantMessageResponse(
+                message_id=msg_id,
+                conversation_id=conv_id,
+                reply=reply,
+                language_detected=lang,
+                proposal=proposal,
+                is_setup_incomplete=False,
+            )
+
+        # 4. Ambiguous symbol + portfolio message without clear action vs inquiry
         portfolio_words = [
             "portfolio",
             "balance",
@@ -1459,49 +2281,44 @@ class GeminiInvestmentAssistant:
             "kitne paise",
             "virtual cash",
         ]
-        if any(w in p_lower for w in portfolio_words) and not any(w in p_lower for w in ["invest", "buy", "kharid"]):
-            summary = await self.tool_get_my_paper_portfolio(user_id, currency="INR", db=db)
-            cash = float(summary.get("current_cash", 1000000.0))
-            equity = float(summary.get("equity", cash))
-            positions = summary.get("positions", [])
-            pos_text = ""
-            if positions:
-                pos_text = "\n".join(
-                    [
-                        f"- **{p.get('symbol')}**: {p.get('quantity')} shares @ avg ₹{float(p.get('avg_entry_price', 0)):,.2f}"
-                        for p in positions
-                    ]
-                )
-            else:
-                pos_text = "- No open positions in your virtual ledger yet."
+        portfolio_inquiry_hints = (
+            "balance",
+            "cash",
+            "holdings",
+            "dikhao",
+            "batao",
+            "summary",
+            "status",
+            "equity",
+            "value",
+            "kitna",
+            "kitne",
+            "kya hai",
+            "what is",
+            "show",
+            "check",
+            "explain",
+            "kya kya",
+        )
+        if (
+            not is_advisory
+            and not has_buy_intent
+            and any(w in p_lower for w in portfolio_words)
+            and extracted_syms
+            and not any(h in p_lower for h in portfolio_inquiry_hints)
+        ):
+            return AssistantMessageResponse(
+                message_id=msg_id,
+                conversation_id=conv_id,
+                reply=self._build_clarification_reply("ambiguous_intent", lang, extracted_syms, active_sym),
+                language_detected=lang,
+                is_setup_incomplete=False,
+            )
 
-            if lang == "hi":
-                reply = (
-                    f"**आपका वर्चुअल पेपर पोर्टफोलियो:**\n\n"
-                    f"- उपलब्ध वर्चुअल कैश: ₹{cash:,.2f}\n"
-                    f"- कुल पोर्टफोलियो इक्विटी: ₹{equity:,.2f}\n\n"
-                    f"**सक्रिय पोजीशन्स ({len(positions)}):**\n"
-                    f"{pos_text}\n\n"
-                    f"नया पेपर ऑर्डर लगाने के लिए राशि बताएं (उदा: '₹10,000 इन्वेस्ट करो')।"
-                )
-            elif lang == "hi-Latn":
-                reply = (
-                    f"**Aapka Virtual Paper Portfolio:**\n\n"
-                    f"- Available Virtual Cash: ₹{cash:,.2f}\n"
-                    f"- Total Portfolio Equity: ₹{equity:,.2f}\n\n"
-                    f"**Active Positions ({len(positions)}):**\n"
-                    f"{pos_text}\n\n"
-                    f"Paper trading proposal ke liye budget batayein (jaise: 'Invest 10000 in {active_sym}')."
-                )
-            else:
-                reply = (
-                    f"**Your Virtual Paper Portfolio Summary:**\n\n"
-                    f"- Available Virtual Cash: ₹{cash:,.2f}\n"
-                    f"- Total Portfolio Equity: ₹{equity:,.2f}\n\n"
-                    f"**Active Positions ({len(positions)}):**\n"
-                    f"{pos_text}\n\n"
-                    f"To allocate virtual capital, say e.g. *'Invest INR 25,000 across Nifty leaders'*."
-                )
+        # 5. Virtual Portfolio / Balance Inquiry
+        if any(w in p_lower for w in portfolio_words) and not has_buy_intent:
+            summary = await self.tool_get_my_paper_portfolio(user_id, currency="INR", db=db)
+            reply = self._format_portfolio_summary_reply(summary, lang, active_sym)
             return AssistantMessageResponse(
                 message_id=msg_id,
                 conversation_id=conv_id,
@@ -1511,7 +2328,7 @@ class GeminiInvestmentAssistant:
                 is_setup_incomplete=False,
             )
 
-        # 4. Chart Context Explanation (e.g. "explain this chart", "rsi", "chart samjhao", "moving average")
+        # 6. Chart Context Explanation (e.g. "explain this chart", "rsi", "chart samjhao", "moving average")
         if any(
             w in p_lower
             for w in [
@@ -1526,11 +2343,7 @@ class GeminiInvestmentAssistant:
                 "technicals",
             ]
         ):
-            target_sym = active_sym
-            for item in INSTRUMENT_REGISTRY:
-                if item["symbol"].lower() in p_lower or item["name"].lower() in p_lower:
-                    target_sym = item["symbol"]
-                    break
+            target_sym = extracted_syms[0] if extracted_syms else active_sym
 
             chart_ctx = await self.tool_get_chart_context(target_sym, db=db)
             price = chart_ctx.get("latest_price")
@@ -1588,85 +2401,6 @@ class GeminiInvestmentAssistant:
                 reply=reply,
                 language_detected=lang,
                 evidence_cards=[chart_ctx],
-                is_setup_incomplete=False,
-            )
-
-        # 5. Paper Investment Proposal Request (e.g. "invest 10000", "invest in reliance and tcs", "10000 laga do")
-        # Must NOT be a research question ("Should I invest 10000 in Reliance?")
-        if (
-            any(w in p_lower for w in ["invest", "khareed", "kharido", "allocation", "laga do", "buy"])
-            and any(c.isdigit() for c in user_message)
-            and not is_research_query
-        ):
-            numbers = re.findall(r"\b\d[\d,]*\b", user_message.replace(",", ""))
-            budget_val = float(numbers[0]) if numbers else 10000.0
-
-            target_symbols = []
-            for item in INSTRUMENT_REGISTRY:
-                if item["symbol"].lower() in p_lower or item["name"].lower() in p_lower:
-                    target_symbols.append(item["symbol"])
-            if not target_symbols:
-                target_symbols = [active_sym, "TCS"] if active_sym != "TCS" else ["TCS", "RELIANCE"]
-
-            proposal = await self.tool_create_paper_proposal(
-                user_id, target_symbols, budget=budget_val, currency="INR", conversation_id=conv_id, db=db
-            )
-
-            if proposal.get("status") == "INSUFFICIENT_BUDGET":
-                if lang in ("hi", "hi-Latn"):
-                    reply = (
-                        f"Aapka requested budget ₹{budget_val:,.2f} ek bhi poora share khareedne ke liye kam hai. "
-                        f"{proposal.get('error', '')} Kripya budget badhayein."
-                    )
-                else:
-                    reply = (
-                        f"Your requested budget of ₹{budget_val:,.2f} is insufficient to purchase even a single whole share. "
-                        f"{proposal.get('error', '')} Please provide a larger budget."
-                    )
-                return AssistantMessageResponse(
-                    message_id=msg_id,
-                    conversation_id=conv_id,
-                    reply=reply,
-                    language_detected=lang,
-                    proposal=proposal,
-                    is_setup_incomplete=False,
-                )
-
-            alloc_details = "\n".join(
-                [
-                    f"- **{a['symbol']}**: {a['quantity']} shares @ ₹{a['estimated_price']:,.2f} (Total: ₹{a['estimated_total']:,.2f})"
-                    for a in proposal.get("allocations", [])
-                ]
-            )
-
-            if lang == "hi":
-                reply = (
-                    f"मैंने आपके लिए ₹{budget_val:,.2f} का सिमुलेटेड आवंटन प्रस्ताव तैयार किया है:\n\n"
-                    f"{alloc_details}\n\n"
-                    f"कुल अनुमानित लागत: ₹{proposal.get('estimated_allocation_total', 0):,.2f}.\n"
-                    f"यदि आप सहमत हैं, तो **'हाँ'** या **'Confirm'** कहें। यह प्रस्ताव 10 मिनट के लिए मान्य है।"
-                )
-            elif lang == "hi-Latn":
-                reply = (
-                    f"Maine aapke liye ₹{budget_val:,.2f} ka paper allocation proposal banaya hai:\n\n"
-                    f"{alloc_details}\n\n"
-                    f"Estimated total: ₹{proposal.get('estimated_allocation_total', 0):,.2f}.\n"
-                    f"Kya aap isse execute karna chahte hain? Confirm karne ke liye **'Yes'** ya **'Haan'** kahein."
-                )
-            else:
-                reply = (
-                    f"Here is a proposed paper allocation for ₹{budget_val:,.2f} of virtual balance:\n\n"
-                    f"{alloc_details}\n\n"
-                    f"Total Estimated Outlay: ₹{proposal.get('estimated_allocation_total', 0):,.2f} virtual INR.\n"
-                    f"To authorize execution, please reply **'Yes'** or **'Confirm'**. Proposal expires in 10 minutes."
-                )
-
-            return AssistantMessageResponse(
-                message_id=msg_id,
-                conversation_id=conv_id,
-                reply=reply,
-                language_detected=lang,
-                proposal=proposal,
                 is_setup_incomplete=False,
             )
 

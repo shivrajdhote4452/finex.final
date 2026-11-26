@@ -14,6 +14,7 @@ Implements:
 7. Separation from real-money brokerages.
 """
 
+import asyncio
 import hashlib
 import logging
 import uuid
@@ -205,6 +206,8 @@ class PaperTradingEngine:
 
     def __init__(self, market_provider: Optional[RealMarketDataProvider] = None) -> None:
         self._market_provider = market_provider
+        self._cached_default_provider: Optional[Any] = None
+        self._cached_provider_key: Optional[tuple] = None
 
     @property
     def market_provider(self) -> Any:
@@ -213,19 +216,40 @@ class PaperTradingEngine:
         from backend.app.config import Environment, get_settings
 
         settings = get_settings()
-        if settings.ENVIRONMENT == Environment.TESTING or getattr(settings, "MARKET_ALLOW_FIXTURES", False):
-            return RealMarketDataProvider(force_cache=True, allow_fixture_fallback=True)
+        env = settings.ENVIRONMENT
+        allow_fixtures = bool(getattr(settings, "MARKET_ALLOW_FIXTURES", False))
+        mode = getattr(settings, "MARKET_DATA_MODE", "")
 
-        try:
-            from backend.app.dependencies import get_market_data_provider
+        if env == Environment.TESTING:
+            key = ("testing", env, allow_fixtures, mode)
+            if self._cached_default_provider is None or self._cached_provider_key != key:
+                self._cached_default_provider = RealMarketDataProvider(force_cache=True, allow_fixture_fallback=True)
+                self._cached_provider_key = key
+            return self._cached_default_provider
 
-            return get_market_data_provider()
-        except Exception:
-            return RealMarketDataProvider(force_cache=False, allow_fixture_fallback=False)
+        if mode == "INDIAN_LIVE_DATA":
+            try:
+                from backend.app.dependencies import get_angel_adapter
+
+                angel = get_angel_adapter()
+                if angel.is_configured():
+                    return angel
+            except Exception as exc:
+                logger.warning("Failed initializing Angel One adapter for PaperTradingEngine: %s", exc)
+
+        key = ("live", env, allow_fixtures, mode)
+        if self._cached_default_provider is None or self._cached_provider_key != key:
+            self._cached_default_provider = RealMarketDataProvider(
+                force_cache=False, allow_fixture_fallback=allow_fixtures
+            )
+            self._cached_provider_key = key
+        return self._cached_default_provider
 
     @market_provider.setter
     def market_provider(self, value: Optional[RealMarketDataProvider]):
         self._market_provider = value
+        self._cached_default_provider = None
+        self._cached_provider_key = None
 
     def get_or_create_account(self, user_id: str) -> Dict:
         """Fetch or bootstrap the default paper trading account (₹1,00,000 initial virtual cash)."""
@@ -272,7 +296,9 @@ class PaperTradingEngine:
 
         if hasattr(provider, "_cache") and norm in provider._cache:
             cached = provider._cache[norm]
-            if hasattr(provider, "_evaluate_freshness"):
+            if cached.source == "test_fixture_baseline_snapshot" and getattr(provider, "allow_fixture_fallback", False):
+                is_delayed, is_stale, status = False, False, "fresh"
+            elif hasattr(provider, "_evaluate_freshness"):
                 is_delayed, is_stale, status = provider._evaluate_freshness(cached.observed_at)
             else:
                 is_delayed, is_stale, status = False, False, "fresh"
@@ -315,9 +341,132 @@ class PaperTradingEngine:
     def get_market_price(self, symbol: str) -> Optional[Decimal]:
         """Fetch verified observation price for symbol if fresh."""
         q = self.get_market_quote_sync(symbol)
-        if q and not q.is_stale and q.data_status != "stale":
+        if self._is_usable_quote(q):
             return q.price
         return None
+
+    @staticmethod
+    def _is_usable_quote(quote: Optional[Quote]) -> bool:
+        """Return True when quote has a strictly positive price and is not stale."""
+        return bool(
+            quote
+            and quote.price is not None
+            and Decimal(str(quote.price)) > Decimal("0.00")
+            and not quote.is_stale
+            and quote.data_status != "stale"
+        )
+
+    async def _resolve_market_quote_async(self, symbol: str) -> Optional[Quote]:
+        """Resolve the active quote asynchronously, permitting fixture fallback only when enabled."""
+        provider = self.market_provider
+        quote: Optional[Quote] = None
+        try:
+            quote = await provider.get_latest_quote(symbol)
+        except Exception as exc:
+            logger.warning("Async quote lookup failed for %s: %s", symbol, exc)
+        if not quote and getattr(provider, "allow_fixture_fallback", False):
+            quote = self.get_market_quote_sync(symbol)
+        return quote
+
+    async def _resolve_quotes_for_symbols_async(self, symbols: List[str]) -> Dict[str, Optional[Quote]]:
+        """Resolve latest quotes concurrently for a list of unique symbols."""
+        unique_syms = list(dict.fromkeys(s for s in symbols if s))
+        if not unique_syms:
+            return {}
+        results = await asyncio.gather(
+            *(self._resolve_market_quote_async(sym) for sym in unique_syms),
+            return_exceptions=True,
+        )
+        quote_map: Dict[str, Optional[Quote]] = {}
+        for sym, res in zip(unique_syms, results, strict=True):
+            if isinstance(res, Exception):
+                logger.warning("Unexpected quote lookup error for %s during valuation: %s", sym, res)
+                quote_map[sym] = None
+            else:
+                quote_map[sym] = res
+        return quote_map
+
+    def _build_portfolio_summary_payload(
+        self,
+        *,
+        acct_id: str,
+        currency: str,
+        cash: Decimal,
+        reset_count: int,
+        positions: List[Dict[str, Any]],
+        quote_by_symbol: Dict[str, Optional[Quote]],
+    ) -> Dict:
+        """Assemble deterministic portfolio valuation metrics from resolved quotes."""
+        pos_list = []
+        total_market_val = Decimal("0.00")
+        total_cost_basis = Decimal("0.00")
+
+        for pos in positions:
+            sym = pos["symbol"]
+            qty = Decimal(str(pos["quantity"]))
+            avg_cost = Decimal(str(pos["average_buy_price"]))
+            cost_basis = Decimal(str(pos["total_cost_basis"]))
+
+            quote = quote_by_symbol.get(sym)
+            if self._is_usable_quote(quote) and quote is not None:
+                current_price = Decimal(str(quote.price))
+                valuation_source = "market_quote"
+                quote_source = quote.source
+                quote_observed_at = quote.observed_at.isoformat() if quote.observed_at else None
+                quote_status = quote.data_status
+            else:
+                current_price = avg_cost
+                valuation_source = "cost_basis_fallback"
+                quote_source = quote.source if quote else None
+                quote_observed_at = quote.observed_at.isoformat() if (quote and quote.observed_at) else None
+                quote_status = quote.data_status if quote else "unavailable"
+
+            market_val = (qty * current_price).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            unrealized_pnl = (market_val - cost_basis).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            pnl_pct = (
+                (unrealized_pnl / cost_basis * Decimal("100.00")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                if cost_basis > 0
+                else Decimal("0.00")
+            )
+
+            total_market_val += market_val
+            total_cost_basis += cost_basis
+
+            pos_list.append(
+                {
+                    "symbol": sym,
+                    "quantity": float(qty),
+                    "average_buy_price": float(avg_cost),
+                    "avg_cost": float(avg_cost),
+                    "current_price": float(current_price),
+                    "market_value": float(market_val),
+                    "cost_basis": float(cost_basis),
+                    "unrealized_pnl": float(unrealized_pnl),
+                    "unrealized_pnl_pct": float(pnl_pct),
+                    "valuation_source": valuation_source,
+                    "quote_source": quote_source,
+                    "quote_observed_at": quote_observed_at,
+                    "quote_status": quote_status,
+                }
+            )
+
+        total_equity = cash + total_market_val
+        total_unrealized = total_market_val - total_cost_basis
+
+        return {
+            "account_id": acct_id,
+            "currency": currency,
+            "cash_balance": float(cash),
+            "current_cash": float(cash),
+            "positions_market_value": float(total_market_val),
+            "total_cost_basis": float(total_cost_basis),
+            "total_equity": float(total_equity),
+            "total_portfolio_value": float(total_equity),
+            "unrealized_pnl": float(total_unrealized),
+            "positions": pos_list,
+            "reset_count": reset_count,
+            "disclaimer": self.SIMULATION_DISCLAIMER,
+        }
 
     def execute_order(self, user_id: str, payload: OrderSubmitRequest) -> ExecutionResult:
         """Atomic market order execution with idempotency, cash check, and ledger updates."""
@@ -883,60 +1032,31 @@ class PaperTradingEngine:
         """Calculate total equity, positions valuation, unrealized P&L deterministically."""
         acct = self.get_or_create_account(user_id)
         acct_id = acct["id"]
-        positions = _POSITIONS_STORE.get(acct_id, {})
+        positions = list(_POSITIONS_STORE.get(acct_id, {}).values())
+        quote_by_symbol = {p["symbol"]: self.get_market_quote_sync(p["symbol"]) for p in positions}
+        return self._build_portfolio_summary_payload(
+            acct_id=acct_id,
+            currency=acct["currency"],
+            cash=acct["current_cash"],
+            reset_count=acct["reset_count"],
+            positions=positions,
+            quote_by_symbol=quote_by_symbol,
+        )
 
-        pos_list = []
-        total_market_val = Decimal("0.00")
-        total_cost_basis = Decimal("0.00")
-
-        for sym, pos in positions.items():
-            qty = pos["quantity"]
-            avg_cost = pos["average_buy_price"]
-            cost_basis = pos["total_cost_basis"]
-            current_price = self.get_market_price(sym) or avg_cost
-            market_val = (qty * current_price).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-            unrealized_pnl = (market_val - cost_basis).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-            pnl_pct = (
-                (unrealized_pnl / cost_basis * Decimal("100.00")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-                if cost_basis > 0
-                else Decimal("0.00")
-            )
-
-            total_market_val += market_val
-            total_cost_basis += cost_basis
-
-            pos_list.append(
-                {
-                    "symbol": sym,
-                    "quantity": float(qty),
-                    "average_buy_price": float(avg_cost),
-                    "avg_cost": float(avg_cost),
-                    "current_price": float(current_price),
-                    "market_value": float(market_val),
-                    "cost_basis": float(cost_basis),
-                    "unrealized_pnl": float(unrealized_pnl),
-                    "unrealized_pnl_pct": float(pnl_pct),
-                }
-            )
-
-        cash = acct["current_cash"]
-        total_equity = cash + total_market_val
-        total_unrealized = total_market_val - total_cost_basis
-
-        return {
-            "account_id": acct_id,
-            "currency": acct["currency"],
-            "cash_balance": float(cash),
-            "current_cash": float(cash),
-            "positions_market_value": float(total_market_val),
-            "total_cost_basis": float(total_cost_basis),
-            "total_equity": float(total_equity),
-            "total_portfolio_value": float(total_equity),
-            "unrealized_pnl": float(total_unrealized),
-            "positions": pos_list,
-            "reset_count": acct["reset_count"],
-            "disclaimer": self.SIMULATION_DISCLAIMER,
-        }
+    async def get_portfolio_summary_async(self, user_id: str) -> Dict:
+        """Calculate in-memory portfolio summary resolving live/cached quotes asynchronously."""
+        acct = self.get_or_create_account(user_id)
+        acct_id = acct["id"]
+        positions = list(_POSITIONS_STORE.get(acct_id, {}).values())
+        quote_by_symbol = await self._resolve_quotes_for_symbols_async([p["symbol"] for p in positions])
+        return self._build_portfolio_summary_payload(
+            acct_id=acct_id,
+            currency=acct["currency"],
+            cash=acct["current_cash"],
+            reset_count=acct["reset_count"],
+            positions=positions,
+            quote_by_symbol=quote_by_symbol,
+        )
 
     def execute_option_order(self, user_id: str, payload: OptionOrderSubmitRequest) -> OptionExecutionResult:
         """Atomic execution of long-only paper options buy order with deterministic cost & risk math."""
@@ -2105,9 +2225,7 @@ class PaperTradingEngine:
                     return ExecutionResult(**rec_dict)
 
             # 2. Price verification & Limit marketability rules
-            quote = await self.market_provider.get_latest_quote(sym)
-            if not quote and getattr(self.market_provider, "allow_fixture_fallback", False):
-                quote = self.get_market_quote_sync(sym)
+            quote = await self._resolve_market_quote_async(sym)
             order_id = f"ord-{uuid.uuid4().hex[:12]}"
 
             if not quote:
@@ -2562,59 +2680,25 @@ class PaperTradingEngine:
             res_pos = await session.execute(stmt_pos)
             positions = res_pos.scalars().all()
 
-            pos_list = []
-            total_market_val = Decimal("0.00")
-            total_cost_basis = Decimal("0.00")
+            pos_records = [
+                {
+                    "symbol": pos.symbol,
+                    "quantity": pos.quantity,
+                    "average_buy_price": pos.average_buy_price,
+                    "total_cost_basis": pos.total_cost_basis,
+                }
+                for pos in positions
+            ]
+            quote_by_symbol = await self._resolve_quotes_for_symbols_async([r["symbol"] for r in pos_records])
 
-            for pos in positions:
-                sym = pos.symbol
-                qty = Decimal(str(pos.quantity))
-                avg_cost = Decimal(str(pos.average_buy_price))
-                cost_basis = Decimal(str(pos.total_cost_basis))
-                current_price = self.get_market_price(sym) or avg_cost
-                market_val = (qty * current_price).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-                unrealized_pnl = (market_val - cost_basis).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-                pnl_pct = (
-                    (unrealized_pnl / cost_basis * Decimal("100.00")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-                    if cost_basis > 0
-                    else Decimal("0.00")
-                )
-
-                total_market_val += market_val
-                total_cost_basis += cost_basis
-
-                pos_list.append(
-                    {
-                        "symbol": sym,
-                        "quantity": float(qty),
-                        "average_buy_price": float(avg_cost),
-                        "avg_cost": float(avg_cost),
-                        "current_price": float(current_price),
-                        "market_value": float(market_val),
-                        "cost_basis": float(cost_basis),
-                        "unrealized_pnl": float(unrealized_pnl),
-                        "unrealized_pnl_pct": float(pnl_pct),
-                    }
-                )
-
-            cash = Decimal(str(acct.current_cash))
-            total_equity = cash + total_market_val
-            total_unrealized = total_market_val - total_cost_basis
-
-            return {
-                "account_id": acct_id,
-                "currency": acct.currency,
-                "cash_balance": float(cash),
-                "current_cash": float(cash),
-                "positions_market_value": float(total_market_val),
-                "total_cost_basis": float(total_cost_basis),
-                "total_equity": float(total_equity),
-                "total_portfolio_value": float(total_equity),
-                "unrealized_pnl": float(total_unrealized),
-                "positions": pos_list,
-                "reset_count": acct.reset_count,
-                "disclaimer": self.SIMULATION_DISCLAIMER,
-            }
+            return self._build_portfolio_summary_payload(
+                acct_id=acct_id,
+                currency=acct.currency,
+                cash=Decimal(str(acct.current_cash)),
+                reset_count=acct.reset_count,
+                positions=pos_records,
+                quote_by_symbol=quote_by_symbol,
+            )
         finally:
             if owns_session:
                 await session.close()
