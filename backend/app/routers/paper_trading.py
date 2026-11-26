@@ -16,12 +16,14 @@ from typing import Optional
 
 from backend.app.core.envelope import create_response_envelope
 from backend.app.database import get_db
+from backend.app.dependencies import get_angel_adapter
 from backend.app.domain.paper_trading_service import (
     OptionOrderSubmitRequest,
     OrderSubmitRequest,
     PaperTradingEngine,
 )
 from backend.app.routers.auth import extract_authenticated_user_id, get_current_user_id, is_owner
+from backend.app.services.angel_adapter import AngelOneMarketAdapter
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -226,6 +228,7 @@ async def submit_paper_option_order(
     x_idempotency_key: Optional[str] = Header(None, alias="X-Idempotency-Key"),
     current_user: dict = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
+    angel_adapter: AngelOneMarketAdapter = Depends(get_angel_adapter),
 ):
     """Execute simulated long-only options buy order with deterministic cost & risk math."""
     cid = getattr(request.state, "correlation_id", None)
@@ -239,7 +242,7 @@ async def submit_paper_option_order(
         )
     payload.idempotency_key = key
 
-    result = await engine.execute_option_order_db(user_id, payload, db=db)
+    result = await engine.execute_option_order_db(user_id, payload, db=db, angel_adapter=angel_adapter)
     return create_response_envelope(data=result.model_dump(mode="json"), correlation_id=cid)
 
 

@@ -1378,6 +1378,7 @@ class PaperTradingEngine:
         user_id: str,
         payload: OptionOrderSubmitRequest,
         db: Optional[AsyncSession] = None,
+        angel_adapter: Optional[object] = None,
     ) -> OptionExecutionResult:
         """Execute option buy order with atomic PostgreSQL locking, authoritative pricing, and persistence."""
         if db is None:
@@ -1474,21 +1475,73 @@ class PaperTradingEngine:
                 receipt["replayed"] = True
                 return OptionExecutionResult(**receipt)
 
-        # Authoritative server-side option premium calculation (never fill arbitrarily at client limit_premium)
+        # Authoritative server-side option premium calculation (never fill arbitrarily at client limit_premium).
+        # Prefer live Angel One option chain LTP when configured so fills align with displayed quotes.
         quote = await self.market_provider.get_latest_quote(underlying)
         if not quote:
             quote = self.get_market_quote_sync(underlying)
         spot = float(quote.price) if quote else 24000.0
-        time_to_exp_years = max(days_to_expiry / 365.0, 1.0 / (365.0 * 24.0))
-        model_iv = calculate_model_option_volatility(underlying, float(strike), spot, opt_type)
-        calc_price, _ = calculate_black_scholes_price_and_greeks(
-            spot=spot,
-            strike=float(strike),
-            time_to_expiry_years=time_to_exp_years,
-            volatility=model_iv,
-            option_type=opt_type,
-        )
-        fill_premium = Decimal(str(calc_price)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        fill_premium: Optional[Decimal] = None
+
+        if (
+            angel_adapter is not None
+            and callable(getattr(angel_adapter, "is_configured", None))
+            and angel_adapter.is_configured()
+            and not getattr(angel_adapter, "is_circuit_open", False)
+        ):
+            try:
+                chain_data = await angel_adapter.get_option_chain(
+                    underlying=underlying,
+                    expiry=payload.expiry,
+                    spot_price=spot,
+                    observed_at=getattr(quote, "observed_at", None),
+                )
+                strikes = (
+                    chain_data.get("strikes", [])
+                    if isinstance(chain_data, dict)
+                    else getattr(chain_data, "strikes", []) or []
+                )
+                side_key = "call" if opt_type == "CE" else "put"
+                target_strike = float(strike)
+                for row in strikes:
+                    row_strike = (
+                        row.get("strike_price") if isinstance(row, dict) else getattr(row, "strike_price", None)
+                    )
+                    if row_strike is None or abs(float(row_strike) - target_strike) >= 0.01:
+                        continue
+                    contract_obj = row.get(side_key) if isinstance(row, dict) else getattr(row, side_key, None)
+                    if not contract_obj:
+                        continue
+                    live_ltp = (
+                        contract_obj.get("ltp")
+                        if isinstance(contract_obj, dict)
+                        else getattr(contract_obj, "ltp", None)
+                    )
+                    if live_ltp is not None:
+                        cand_premium = Decimal(str(live_ltp)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                        if cand_premium > Decimal("0.00"):
+                            fill_premium = cand_premium
+                            break
+            except Exception as exc:
+                logger.warning(
+                    "Live Angel One option premium lookup bypassed for %s %s %s: %s",
+                    underlying,
+                    strike,
+                    opt_type,
+                    exc,
+                )
+
+        if fill_premium is None:
+            time_to_exp_years = max(days_to_expiry / 365.0, 1.0 / (365.0 * 24.0))
+            model_iv = calculate_model_option_volatility(underlying, float(strike), spot, opt_type)
+            calc_price, _ = calculate_black_scholes_price_and_greeks(
+                spot=spot,
+                strike=float(strike),
+                time_to_expiry_years=time_to_exp_years,
+                volatility=model_iv,
+                option_type=opt_type,
+            )
+            fill_premium = Decimal(str(calc_price)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
         if payload.limit_premium is not None and payload.limit_premium > Decimal("0.00"):
             if fill_premium > payload.limit_premium:

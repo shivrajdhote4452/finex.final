@@ -684,6 +684,7 @@ async def test_options_long_symbol_replay_resettlement_and_pricing_alignment(app
     token = create_access_token(uid, "optcompat@example.com", "Option Compat")
     headers = {"Authorization": f"Bearer {token}"}
     today_expiry = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    future_expiry = (datetime.now(timezone.utc) + timedelta(days=14)).strftime("%Y-%m-%d")
     long_contract = "NIFTY5029OCT2624000CE"  # 21 chars (> PaperOrder.symbol VARCHAR(20))
 
     async with AsyncSessionLocal() as session:
@@ -702,8 +703,8 @@ async def test_options_long_symbol_replay_resettlement_and_pricing_alignment(app
 
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            # 1. Option chain OTM strike limit_premium == displayed LTP must fill cleanly
-            chain_res = await client.get("/api/v1/market/options/chain/NIFTY 50")
+            # 1. Option chain OTM strike limit_premium == displayed LTP must fill cleanly (future expiry stays open)
+            chain_res = await client.get(f"/api/v1/market/options/chain/NIFTY 50?expiry={future_expiry}")
             assert chain_res.status_code == 200
             strikes = chain_res.json()["data"]["strikes"]
             otm_call = strikes[-1]["call"]
@@ -929,5 +930,163 @@ async def test_concurrent_equity_and_option_order_integrity():
             await session.execute(delete(PaperPosition).where(PaperPosition.account_id == acct_id))
             await session.execute(delete(PaperOrder).where(PaperOrder.account_id == acct_id))
             await session.execute(delete(PaperAccount).where(PaperAccount.id == acct_id))
+            await session.execute(delete(User).where(User.id == uid))
+            await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_live_angel_option_chain_pricing_alignment_and_slippage_risk():
+    """Live Angel One option chain LTP aligns order execution with displayed quotes and enforces slippage limits."""
+    from backend.app.dependencies import get_angel_adapter
+    from backend.app.services.angel_adapter import AngelOneMarketAdapter
+
+    class LiveFakeAngelAdapter(AngelOneMarketAdapter):
+        def __init__(self):
+            super().__init__(api_key="test-key")
+            self.ce_ltp = 145.50
+            self.pe_ltp = 820.25
+
+        def is_configured(self) -> bool:
+            return True
+
+        async def get_option_chain(self, underlying: str, expiry=None, spot_price=None, observed_at=None):
+            return {
+                "underlying": underlying,
+                "selected_expiry": expiry,
+                "source": "ANGEL_ONE_SMARTAPI",
+                "chain_type": "REAL_MARKET",
+                "strikes": [
+                    {
+                        "strike_price": 24000.0,
+                        "call": {
+                            "contract_symbol": "NIFTY26LIVE24000CE",
+                            "ltp": self.ce_ltp,
+                        },
+                        "put": {
+                            "contract_symbol": "NIFTY26LIVE24000PE",
+                            "ltp": self.pe_ltp,
+                        },
+                    }
+                ],
+            }
+
+    fake_angel = LiveFakeAngelAdapter()
+    app = create_app()
+    app.dependency_overrides[get_angel_adapter] = lambda: fake_angel
+
+    uid = f"usr-sec-angel-opt-{uuid.uuid4().hex[:6]}"
+    token = create_access_token(uid, "angelopt@example.com", "Angel Option")
+    headers = {"Authorization": f"Bearer {token}"}
+    future_expiry = (datetime.now(timezone.utc) + timedelta(days=20)).strftime("%Y-%m-%d")
+
+    async with AsyncSessionLocal() as session:
+        session.add(
+            User(
+                id=uid,
+                email="angelopt@example.com",
+                provider="email",
+                provider_subject=f"sub-{uid}",
+                password_hash=hash_password("StrongPass!123"),
+                is_active=True,
+                is_verified=True,
+            )
+        )
+        await session.commit()
+
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            # 1. Live CE LTP (145.50) below BS model (~350+) must FILL at live LTP, not falsely reject
+            buy_ce = await client.post(
+                "/api/v1/paper-trading/options/orders",
+                json={
+                    "underlying": "NIFTY 50",
+                    "contract_symbol": "NIFTY26LIVE24000CE",
+                    "option_type": "CE",
+                    "strike": 24000,
+                    "expiry": future_expiry,
+                    "lots": 1,
+                    "limit_premium": 145.50,
+                    "risk_acknowledged": True,
+                    "idempotency_key": f"idemp-angel-ce-{uuid.uuid4().hex[:8]}",
+                },
+                headers=headers,
+            )
+            assert buy_ce.status_code == 200
+            ce_data = buy_ce.json()["data"]
+            assert ce_data["status"] == "FILLED"
+            assert Decimal(str(ce_data["fill_premium"])) == Decimal("145.50")
+            assert Decimal(str(ce_data["total_premium_paid"])) == Decimal("3637.50")
+
+            # 2. Live PE LTP (820.25) above BS model must charge authoritative live 820.25 on MARKET order
+            buy_pe = await client.post(
+                "/api/v1/paper-trading/options/orders",
+                json={
+                    "underlying": "NIFTY 50",
+                    "contract_symbol": "NIFTY26LIVE24000PE",
+                    "option_type": "PE",
+                    "strike": 24000,
+                    "expiry": future_expiry,
+                    "lots": 1,
+                    "risk_acknowledged": True,
+                    "idempotency_key": f"idemp-angel-pe-{uuid.uuid4().hex[:8]}",
+                },
+                headers=headers,
+            )
+            assert buy_pe.status_code == 200
+            pe_data = buy_pe.json()["data"]
+            assert pe_data["status"] == "FILLED"
+            assert Decimal(str(pe_data["fill_premium"])) == Decimal("820.25")
+            assert Decimal(str(pe_data["total_premium_paid"])) == Decimal("20506.25")
+
+            # 3. Remaining slippage risk: upward tick between UI chain render (145.50) and submit (152.00) rejects
+            fake_angel.ce_ltp = 152.00
+            slip_rej = await client.post(
+                "/api/v1/paper-trading/options/orders",
+                json={
+                    "underlying": "NIFTY 50",
+                    "contract_symbol": "NIFTY26LIVE24000CE",
+                    "option_type": "CE",
+                    "strike": 24000,
+                    "expiry": future_expiry,
+                    "lots": 1,
+                    "limit_premium": 145.50,
+                    "risk_acknowledged": True,
+                    "idempotency_key": f"idemp-angel-slip-{uuid.uuid4().hex[:8]}",
+                },
+                headers=headers,
+            )
+            assert slip_rej.status_code == 200
+            slip_data = slip_rej.json()["data"]
+            assert slip_data["status"] == "REJECTED"
+            assert "limit" in (slip_data.get("rejection_reason") or "").lower()
+
+            # 4. Strike absent from Angel chain falls back cleanly to server Black-Scholes MARKET valuation
+            fallback_ord = await client.post(
+                "/api/v1/paper-trading/options/orders",
+                json={
+                    "underlying": "NIFTY 50",
+                    "contract_symbol": "NIFTY26LIVE24200CE",
+                    "option_type": "CE",
+                    "strike": 24200,
+                    "expiry": future_expiry,
+                    "lots": 1,
+                    "risk_acknowledged": True,
+                    "idempotency_key": f"idemp-angel-fb-{uuid.uuid4().hex[:8]}",
+                },
+                headers=headers,
+            )
+            assert fallback_ord.status_code == 200
+            assert fallback_ord.json()["data"]["status"] == "FILLED"
+    finally:
+        app.dependency_overrides.clear()
+        async with AsyncSessionLocal() as session:
+            acct_res = await session.execute(select(PaperAccount).where(PaperAccount.user_id == uid))
+            acct = acct_res.scalar_one_or_none()
+            if acct:
+                await session.execute(delete(PaperTrade).where(PaperTrade.account_id == acct.id))
+                await session.execute(delete(PaperCashLedger).where(PaperCashLedger.account_id == acct.id))
+                await session.execute(delete(PaperOptionPosition).where(PaperOptionPosition.account_id == acct.id))
+                await session.execute(delete(PaperOrder).where(PaperOrder.account_id == acct.id))
+                await session.execute(delete(PaperAccount).where(PaperAccount.id == acct.id))
             await session.execute(delete(User).where(User.id == uid))
             await session.commit()
