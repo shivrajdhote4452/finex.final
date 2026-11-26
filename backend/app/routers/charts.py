@@ -21,7 +21,7 @@ from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 from backend.app.core.envelope import create_response_envelope
-from backend.app.core.errors import NotFoundException
+from backend.app.core.errors import ForbiddenException, NotFoundException
 from backend.app.database import get_db
 from backend.app.models.charts import (
     ChartDrawing,
@@ -29,7 +29,7 @@ from backend.app.models.charts import (
     ChartLayout,
     ReplaySession,
 )
-from backend.app.routers.auth import get_current_user_id
+from backend.app.routers.auth import extract_authenticated_user_id, get_current_user_id
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, desc, select
@@ -94,7 +94,7 @@ async def list_chart_layouts(
 ):
     """Fetch saved chart layouts for authenticated user."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     stmt = select(ChartLayout).where(ChartLayout.user_id == user_id).order_by(desc(ChartLayout.updated_at))
     res = await db.execute(stmt)
@@ -132,7 +132,7 @@ async def save_chart_layout(
 ):
     """Save or update chart layout preset."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     layout_id = f"lay-{uuid.uuid4().hex[:12]}"
     layout = ChartLayout(
@@ -165,7 +165,7 @@ async def delete_chart_layout(
 ):
     """Delete a saved chart layout."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     stmt = select(ChartLayout).where(ChartLayout.id == layout_id, ChartLayout.user_id == user_id)
     res = await db.execute(stmt)
@@ -191,7 +191,7 @@ async def get_chart_drawings(
 ):
     """Fetch persistent drawings for symbol and user, anchored to time/price coordinates."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
     clean_sym = symbol.upper()
 
     stmt = (
@@ -235,17 +235,19 @@ async def save_chart_drawing(
 ):
     """Save or update drawing annotation anchored to instrument coordinates."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
     clean_sym = payload.symbol.upper()
 
     drawing_id = payload.id or f"drw-{uuid.uuid4().hex[:12]}"
 
-    # Check if exists
-    stmt = select(ChartDrawing).where(ChartDrawing.id == drawing_id, ChartDrawing.user_id == user_id)
+    # Check if exists across users to prevent ID collision / overwrite
+    stmt = select(ChartDrawing).where(ChartDrawing.id == drawing_id)
     res = await db.execute(stmt)
     existing = res.scalar_one_or_none()
 
     if existing:
+        if existing.user_id != user_id:
+            raise ForbiddenException(message="Forbidden: You do not own this drawing identifier.")
         existing.coordinates = payload.coordinates
         existing.properties = payload.properties
         existing.drawing_type = payload.drawing_type
@@ -279,7 +281,7 @@ async def delete_chart_drawing(
 ):
     """Delete single drawing by ID."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     stmt = select(ChartDrawing).where(ChartDrawing.id == drawing_id, ChartDrawing.user_id == user_id)
     res = await db.execute(stmt)
@@ -302,7 +304,7 @@ async def clear_chart_drawings(
 ):
     """Clear all drawings for symbol and caller."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
     clean_sym = symbol.upper()
 
     stmt = delete(ChartDrawing).where(ChartDrawing.user_id == user_id, ChartDrawing.symbol == clean_sym)
@@ -323,7 +325,7 @@ async def list_indicator_templates(
 ):
     """List caller's saved indicator templates."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     stmt = (
         select(ChartIndicatorTemplate)
@@ -359,7 +361,7 @@ async def save_indicator_template(
 ):
     """Save an indicator template preset."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     tpl_id = f"tpl-{uuid.uuid4().hex[:12]}"
     template = ChartIndicatorTemplate(
@@ -388,7 +390,7 @@ async def get_replay_session(
 ):
     """Get active historical replay session and simulated clock."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     stmt = (
         select(ReplaySession)
@@ -441,7 +443,7 @@ async def set_replay_session(
     from datetime import date
 
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     sim_clock = (
         datetime.fromisoformat(payload.simulated_clock.replace("Z", "+00:00"))
@@ -499,7 +501,7 @@ async def step_replay_clock(
 ):
     """Step the simulated replay clock forward by given number of days."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     stmt = (
         select(ReplaySession)

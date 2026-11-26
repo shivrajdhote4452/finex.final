@@ -10,6 +10,8 @@ Guards & Invariants:
 4. Safe unconfigured behavior: Remains dormant with clear diagnostic message when keys are absent.
 """
 
+import re
+import urllib.parse
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Dict, List, Optional
@@ -76,17 +78,21 @@ class AlpacaPaperAdapter(AbstractMarketDataProvider):
         base_url: str = "https://paper-api.alpaca.markets",
         data_url: str = "https://data.alpaca.markets",
     ):
-        # Enforce Paper-only Host Guard
-        if "api.alpaca.markets" in base_url and "paper-api" not in base_url:
+        # Enforce Paper-only Host Allowlist on both trading base_url and market data_url
+        parsed_base = urllib.parse.urlparse(base_url.rstrip("/"))
+        parsed_data = urllib.parse.urlparse(data_url.rstrip("/"))
+        normalized_base = f"{parsed_base.scheme}://{parsed_base.netloc}"
+        normalized_data = f"{parsed_data.scheme}://{parsed_data.netloc}"
+        if normalized_base != "https://paper-api.alpaca.markets" or normalized_data != "https://data.alpaca.markets":
             raise ValueError(
-                "SECURITY REJECTION: Live trading endpoints are strictly prohibited in FinEx. "
-                "Only paper-api.alpaca.markets is permitted for simulated trading."
+                "SECURITY REJECTION: Live or non-allowlisted endpoints are strictly prohibited in FinEx. "
+                "Only paper-api.alpaca.markets and data.alpaca.markets over HTTPS are permitted."
             )
 
         self.api_key = api_key
         self.secret_key = secret_key
-        self.base_url = base_url.rstrip("/")
-        self.data_url = data_url.rstrip("/")
+        self.base_url = normalized_base
+        self.data_url = normalized_data
         self.is_configured = bool(self.api_key and self.secret_key)
 
     def _get_headers(self) -> Dict[str, str]:
@@ -103,8 +109,10 @@ class AlpacaPaperAdapter(AbstractMarketDataProvider):
         if not self.is_configured:
             return None
 
-        clean_sym = symbol.upper()
-        url = f"{self.data_url}/v2/stocks/{clean_sym}/quotes/latest"
+        clean_sym = symbol.upper().strip()
+        if not re.fullmatch(r"[A-Z0-9.-]{1,15}", clean_sym):
+            return None
+        url = f"{self.data_url}/v2/stocks/{urllib.parse.quote(clean_sym, safe='')}/quotes/latest"
         headers = self._get_headers()
 
         try:

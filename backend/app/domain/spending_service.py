@@ -687,8 +687,8 @@ class SpendingService:
     ) -> Dict[str, Any]:
         """CH-09: Support durable manual transaction entry with PII masking and categorization."""
         now = datetime.now(timezone.utc)
-        if amount <= 0:
-            raise ValueError("Amount must be greater than zero.")
+        if not amount.is_finite() or amount <= 0:
+            raise ValueError("Amount must be finite and greater than zero.")
 
         masked_desc = mask_sensitive_narrative(description)
         cat = category_id
@@ -783,6 +783,8 @@ class SpendingService:
             now = datetime.now(timezone.utc)
 
             for row_idx, row in enumerate(reader, start=1):
+                if row_idx > 10000:
+                    raise ValueError("CSV upload exceeds maximum limit of 10,000 rows.")
                 raw_d = row.get(date_key, "").strip()
                 raw_amt = row.get(amt_key, "").strip().replace(",", "")
                 raw_desc = row.get(desc_key, "").strip()
@@ -801,8 +803,8 @@ class SpendingService:
                         raise ValueError(f"Invalid date format: '{raw_d}'")
 
                     amt = Decimal(raw_amt)
-                    if amt <= 0:
-                        raise ValueError(f"Amount must be positive: {amt}")
+                    if not amt.is_finite() or amt <= 0:
+                        raise ValueError(f"Amount must be finite and positive: {amt}")
 
                     masked_desc = mask_sensitive_narrative(raw_desc)
                     cat, conf, method = categorize_transaction(masked_desc, tx_type)
@@ -1303,7 +1305,7 @@ class SpendingService:
                     total_debit += amt
                     cat = t.category_id
                     category_breakdown[cat] = category_breakdown.get(cat, Decimal("0.00")) + amt
-                else:
+                elif t.transaction_type == "CREDIT":
                     total_credit += amt
 
             net_savings = total_credit - total_debit
@@ -1338,8 +1340,8 @@ class SpendingService:
         db: Optional[AsyncSession] = None,
     ) -> Dict[str, Any]:
         """Insert manual transaction directly into PostgreSQL."""
-        if amount <= 0:
-            raise ValueError("Amount must be greater than zero.")
+        if not amount.is_finite() or amount <= 0:
+            raise ValueError("Amount must be finite and greater than zero.")
 
         masked_desc = mask_sensitive_narrative(description)
         cat = category_id

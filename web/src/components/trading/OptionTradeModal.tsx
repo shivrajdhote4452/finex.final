@@ -73,8 +73,9 @@ export const OptionTradeModal: React.FC<OptionTradeModalProps> = ({
 
       if (res && res.status === 'FILLED') {
         setReceipt(res);
+        const execPremium = Number(res.fill_premium ?? premium);
         showToast(
-          `Bought ${lots} lot(s) (${totalUnits} units) of ${contract.contract_symbol} @ ₹${premium.toFixed(2)}`,
+          `Bought ${lots} lot(s) (${totalUnits} units) of ${contract.contract_symbol} @ ₹${execPremium.toFixed(2)}`,
           'success',
           'Option Order Executed'
         );

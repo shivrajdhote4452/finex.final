@@ -1,4 +1,5 @@
 import React from 'react';
+import { sanitizeExternalUrl } from '../../utils/security';
 
 interface CleanFormattedTextProps {
   text: string;
@@ -29,13 +30,17 @@ export const renderInlineText = (text: string): React.ReactNode => {
   return parts.map((part, i) => {
     if (!part) return null;
 
-    // Markdown Link: [label](url)
+    // Markdown Link: [label](url) - validate URL scheme before rendering clickable anchor
     const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
     if (linkMatch) {
+      const safeHref = sanitizeExternalUrl(linkMatch[2]);
+      if (!safeHref) {
+        return <span key={i}>{linkMatch[1]}</span>;
+      }
       return (
         <a
           key={i}
-          href={linkMatch[2]}
+          href={safeHref}
           target="_blank"
           rel="noopener noreferrer"
           style={{

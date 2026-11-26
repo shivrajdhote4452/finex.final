@@ -1,12 +1,13 @@
+import ipaddress
 import os
 import sys
 from enum import Enum
 from functools import lru_cache
-from typing import List, Optional
+from typing import Annotated, List, Optional
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
-from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, field_validator, model_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 def sanitize_asyncpg_url(url_str: str) -> str:
@@ -95,7 +96,7 @@ class Settings(BaseSettings):
     PASSWORD_RESET_EXPIRE_MINUTES: int = Field(default=30, description="Password reset link lifetime in minutes")
 
     # CORS
-    ALLOWED_ORIGINS: List[str] = Field(
+    ALLOWED_ORIGINS: Annotated[List[str], NoDecode] = Field(
         default=[
             "http://localhost:3000",
             "http://localhost:5173",
@@ -105,6 +106,17 @@ class Settings(BaseSettings):
             "http://localhost:8080",
             "http://127.0.0.1:8080",
         ]
+    )
+    TRUSTED_PROXY_CIDRS: Annotated[List[str], NoDecode] = Field(
+        default=[
+            "127.0.0.0/8",
+            "::1/128",
+            "10.0.0.0/8",
+            "172.16.0.0/12",
+            "192.168.0.0/16",
+            "100.64.0.0/10",
+        ],
+        description="CIDRs of verified ingress/reverse proxies permitted to set forwarding IP headers",
     )
 
     # Provider Toggles & Modes
@@ -188,25 +200,70 @@ class Settings(BaseSettings):
                 return _local_url
         return sanitized
 
-    @field_validator("ALLOWED_ORIGINS", mode="before")
-    @classmethod
-    def assemble_cors_origins(cls, v):
-        origins = []
+    @staticmethod
+    def _parse_str_list(v) -> List[str]:
         if isinstance(v, str):
             try:
                 import json
 
                 parsed = json.loads(v)
                 if isinstance(parsed, list):
-                    origins = [str(i).strip() for i in parsed if str(i).strip()]
+                    return [str(i).strip() for i in parsed if str(i).strip()]
             except Exception:
-                origins = [i.strip() for i in v.split(",") if i.strip()]
-        elif isinstance(v, list):
-            origins = [str(i).strip() for i in v if str(i).strip()]
-        else:
-            origins = ["http://localhost:3000"]
+                return [i.strip() for i in v.split(",") if i.strip()]
+        if isinstance(v, list):
+            return [str(i).strip() for i in v if str(i).strip()]
+        return []
 
-        standard_origins = [
+    @field_validator("TRUSTED_PROXY_CIDRS", mode="before")
+    @classmethod
+    def assemble_trusted_proxy_cidrs(cls, v):
+        cidrs = cls._parse_str_list(v)
+        valid_cidrs: List[str] = []
+        for cidr in cidrs:
+            try:
+                ipaddress.ip_network(cidr, strict=False)
+                if cidr not in valid_cidrs:
+                    valid_cidrs.append(cidr)
+            except ValueError:
+                raise ValueError(f"Invalid CIDR entry in TRUSTED_PROXY_CIDRS: {cidr}") from None
+        return valid_cidrs
+
+    @field_validator("ALLOWED_ORIGINS", mode="before")
+    @classmethod
+    def assemble_cors_origins(cls, v):
+        origins = cls._parse_str_list(v)
+        return origins if origins else ["http://localhost:3000"]
+
+    @model_validator(mode="after")
+    def finalize_environment_cors_origins(self):
+        explicitly_set = "ALLOWED_ORIGINS" in self.model_fields_set
+        cleaned: List[str] = []
+        candidates = (
+            list(self.ALLOWED_ORIGINS) if (explicitly_set or self.ENVIRONMENT != Environment.PRODUCTION) else []
+        )
+
+        for origin in candidates:
+            if "*" in origin:
+                if self.ENVIRONMENT == Environment.PRODUCTION:
+                    raise ValueError(f"Wildcard CORS origin is forbidden in production: {origin}")
+                continue
+            parsed = urlparse(origin)
+            if parsed.scheme not in ("http", "https") or not parsed.netloc:
+                if self.ENVIRONMENT == Environment.PRODUCTION:
+                    raise ValueError(f"Invalid CORS origin format: {origin}")
+                continue
+            host = (parsed.hostname or "").lower()
+            if self.ENVIRONMENT == Environment.PRODUCTION and (
+                parsed.scheme != "https" or host in {"localhost", "127.0.0.1", "0.0.0.0"}
+            ):
+                continue
+            normalized = f"{parsed.scheme}://{parsed.netloc}"
+            if normalized not in cleaned:
+                cleaned.append(normalized)
+
+        prod_origins = ["https://www.finexai.tech", "https://finexai.tech"]
+        dev_origins = [
             "http://localhost:3000",
             "http://127.0.0.1:3000",
             "http://localhost:5173",
@@ -215,13 +272,19 @@ class Settings(BaseSettings):
             "http://127.0.0.1:8085",
             "http://localhost:8080",
             "http://127.0.0.1:8080",
-            "https://www.finexai.tech",
-            "https://finexai.tech",
         ]
-        for d in standard_origins:
-            if d not in origins:
-                origins.append(d)
-        return origins
+
+        if self.ENVIRONMENT != Environment.PRODUCTION:
+            for d in dev_origins + prod_origins:
+                if d not in cleaned:
+                    cleaned.append(d)
+        else:
+            for d in prod_origins:
+                if d not in cleaned:
+                    cleaned.append(d)
+
+        self.ALLOWED_ORIGINS = cleaned
+        return self
 
 
 @lru_cache()

@@ -12,7 +12,7 @@ from backend.app.core.errors import ForbiddenException, NotFoundException
 from backend.app.domain.company_comparison import compare_securities
 from backend.app.domain.portfolio import calculate_portfolio_valuation
 from backend.app.domain.portfolio_explainer import generate_portfolio_explanation
-from backend.app.routers.auth import get_current_user_id
+from backend.app.routers.auth import extract_authenticated_user_id, get_current_user_id
 from backend.app.routers.portfolio import _PORTFOLIO_STORE
 from fastapi import APIRouter, Depends, Query, Request
 
@@ -57,7 +57,7 @@ async def explain_portfolio_diversification(
     - Strict user ownership enforcement.
     """
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     p = _PORTFOLIO_STORE.get(portfolio_id)
     if not p:

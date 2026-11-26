@@ -97,7 +97,9 @@ async def get_readiness(request: Request, response: Response):
 
     deps = {"database": db_status.get("status")}
     if db_status.get("error"):
-        deps["database_error"] = str(db_status.get("error"))
+        settings = getattr(request.app.state, "settings", None)
+        is_prod = getattr(getattr(settings, "ENVIRONMENT", None), "value", "") == "production"
+        deps["database_error"] = "Database connectivity check failed" if is_prod else str(db_status.get("error"))
 
     data = ReadinessData(
         status="ok" if is_ready else "degraded",

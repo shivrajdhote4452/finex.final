@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { apiClient } from '../api/client';
+import { sanitizeExternalUrl } from '../utils/security';
 
 interface ChatMessage {
   id: string;
@@ -621,16 +622,19 @@ export const AskFinExScreen: React.FC = () => {
             >
               "{selectedCitation.excerpt}"
             </div>
-            {selectedCitation.source_url && (
-              <a
-                href={selectedCitation.source_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ fontSize: '11.5px', color: 'var(--color-action)', textDecoration: 'none' }}
-              >
-                🔗 Read full regulatory publication
-              </a>
-            )}
+            {(() => {
+              const safeCitationUrl = sanitizeExternalUrl(selectedCitation.source_url);
+              return safeCitationUrl ? (
+                <a
+                  href={safeCitationUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ fontSize: '11.5px', color: 'var(--color-action)', textDecoration: 'none' }}
+                >
+                  🔗 Read full regulatory publication
+                </a>
+              ) : null;
+            })()}
           </div>
         )}
 

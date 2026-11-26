@@ -2,7 +2,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from backend.app.config import Settings, get_settings
+from backend.app.config import Environment, Settings, get_settings
 from backend.app.core.errors import (
     FinExException,
     finex_exception_handler,
@@ -153,13 +153,14 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             except asyncio.CancelledError:
                 pass
 
+    is_production = getattr(app_settings.ENVIRONMENT, "value", str(app_settings.ENVIRONMENT)) == "production"
     app = FastAPI(
         title=app_settings.APP_NAME,
         version="0.1.0",
         description="FinEx - Educational Financial Platform API",
-        openapi_url=f"{app_settings.API_V1_PREFIX}/openapi.json",
-        docs_url=f"{app_settings.API_V1_PREFIX}/docs",
-        redoc_url=f"{app_settings.API_V1_PREFIX}/redoc",
+        openapi_url=None if is_production else f"{app_settings.API_V1_PREFIX}/openapi.json",
+        docs_url=None if is_production else f"{app_settings.API_V1_PREFIX}/docs",
+        redoc_url=None if is_production else f"{app_settings.API_V1_PREFIX}/redoc",
         lifespan=lifespan,
     )
 
@@ -168,20 +169,27 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     # 1. Custom Security & Observability Middlewares (Outer to Inner)
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(RequestSizeLimitMiddleware)
-    is_testing = getattr(app_settings.ENVIRONMENT, "value", str(app_settings.ENVIRONMENT)) == "testing"
+    is_testing = app_settings.ENVIRONMENT == Environment.TESTING
     rate_limit_default = 5000 if is_testing else 150
     rate_limit_auth = 1000 if is_testing else 40
     app.add_middleware(RateLimiterMiddleware, default_limit=rate_limit_default, auth_limit=rate_limit_auth)
     app.add_middleware(CorrelationIdMiddleware)
 
-    # 2. CORS Middleware
+    # 2. CORS Middleware (Exact explicitly configured trusted origins only; no wildcard domain regex)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=app_settings.ALLOWED_ORIGINS,
-        allow_origin_regex=r"https://.*\.vercel\.app",
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["*"],
+        allow_headers=[
+            "Authorization",
+            "Content-Type",
+            "X-Correlation-ID",
+            "X-Request-ID",
+            "X-Idempotency-Key",
+            "Accept",
+            "Origin",
+        ],
         expose_headers=[
             "X-Correlation-ID",
             "X-Request-ID",
@@ -217,15 +225,18 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     app.include_router(goals_router, prefix=v1_prefix)
     app.include_router(charts_router, prefix=v1_prefix)
     app.include_router(spending_router, prefix=v1_prefix)
-    app.include_router(sample_router, prefix=v1_prefix)
+    if not is_production:
+        app.include_router(sample_router, prefix=v1_prefix)
     app.include_router(admin_router, prefix=v1_prefix)
 
-    @app.get("/", include_in_schema=False)
-    async def root_redirect():
-        return RedirectResponse(url=f"{app_settings.API_V1_PREFIX}/docs")
+    if not is_production:
 
-    @app.get("/docs", include_in_schema=False)
-    async def docs_redirect():
-        return RedirectResponse(url=f"{app_settings.API_V1_PREFIX}/docs")
+        @app.get("/", include_in_schema=False)
+        async def root_redirect():
+            return RedirectResponse(url=f"{app_settings.API_V1_PREFIX}/docs")
+
+        @app.get("/docs", include_in_schema=False)
+        async def docs_redirect():
+            return RedirectResponse(url=f"{app_settings.API_V1_PREFIX}/docs")
 
     return app

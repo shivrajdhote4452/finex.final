@@ -16,7 +16,7 @@ from backend.app.domain.gemini_assistant import (
     gemini_assistant,
 )
 from backend.app.models.paper_trading import PaperProposal
-from backend.app.routers.auth import get_current_user_id
+from backend.app.routers.auth import extract_authenticated_user_id, get_current_user_id
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
@@ -78,7 +78,7 @@ async def chat_with_assistant(
 ):
     """Chat with FinEx AI investment assistant with grounded tool execution."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     chart_ctx = payload.active_chart_context or payload.chart_context
     result = await gemini_assistant.process_user_turn(
@@ -101,7 +101,7 @@ async def list_user_proposals(
 ):
     """List pending and historical paper proposals for caller."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     stmt = (
         select(PaperProposal)
@@ -144,7 +144,7 @@ async def execute_proposal(
 ):
     """Explicitly authorize and execute an unexpired paper allocation proposal."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     result = await gemini_assistant.tool_execute_paper_proposal(user_id, proposal_id, db=db)
     return create_response_envelope(data=result, correlation_id=cid)

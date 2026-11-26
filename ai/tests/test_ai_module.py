@@ -75,7 +75,7 @@ def test_ingest_corpus_documents_chunking_integrity():
 @pytest.mark.asyncio
 async def test_retriever_keyword_and_relevance():
     """Verify BM25/keyword retrieval finds relevant regulatory chunks."""
-    retriever = RegulatoryDocumentRetriever()
+    retriever = RegulatoryDocumentRetriever(chunks=ingest_corpus_documents())
 
     # Query 1: Emergency buffer
     chunks = await retriever.retrieve_relevant_chunks("emergency liquidity buffer living expenses", top_k=3)
@@ -98,7 +98,7 @@ async def test_retriever_keyword_and_relevance():
 @pytest.mark.asyncio
 async def test_retriever_metadata_filtering():
     """Verify filtering by publisher or document_id."""
-    retriever = RegulatoryDocumentRetriever()
+    retriever = RegulatoryDocumentRetriever(chunks=ingest_corpus_documents())
 
     filtered = await retriever.retrieve_relevant_chunks(
         "guidelines and rules",

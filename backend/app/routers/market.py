@@ -313,6 +313,15 @@ async def market_symbol_websocket(
     hub: MarketHub = Depends(get_market_hub),
 ):
     """Real-time market ticks streaming WebSocket endpoint for React and Flutter clients."""
+    from backend.app.config import Environment
+
+    settings = get_settings()
+    if settings.ENVIRONMENT == Environment.PRODUCTION:
+        origin = (websocket.headers.get("origin") or "").strip()
+        if origin and origin not in set(settings.ALLOWED_ORIGINS):
+            await websocket.close(code=1008)
+            return
+
     clean_sym = symbol.upper().replace(".NS", "").replace("NSE:", "").strip()
     allowed_symbols = set(FINEX_INSTRUMENTS.keys()).union({item["symbol"] for item in INSTRUMENT_REGISTRY})
 

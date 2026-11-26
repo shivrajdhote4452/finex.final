@@ -132,22 +132,37 @@ class AuthRateLimiter:
         self.login_lockout_seconds = login_lockout_seconds
         self.max_forgot_attempts = max_forgot_attempts
         self.forgot_window_seconds = forgot_window_seconds
+        self.max_tracked_keys = 10000
         self._lock = threading.Lock()
         self._login_failures: Dict[str, List[float]] = {}
         self._forgot_requests: Dict[str, List[float]] = {}
+
+    def _evict_if_full(self, store: Dict[str, List[float]], window_seconds: int, now: float) -> None:
+        if len(store) < self.max_tracked_keys:
+            return
+        stale_keys = [k for k, ts_list in store.items() if not ts_list or (now - ts_list[-1]) >= window_seconds]
+        for k in stale_keys:
+            store.pop(k, None)
+        if len(store) >= self.max_tracked_keys:
+            oldest_key = next(iter(store), None)
+            if oldest_key is not None:
+                store.pop(oldest_key, None)
 
     def check_login_rate_limit(self, identifier: str) -> Tuple[bool, int]:
         """Check if an email or IP address is currently locked out from login.
 
         Returns (is_locked, retry_after_seconds).
         """
-        key = identifier.strip().lower()
+        key = identifier.strip().lower()[:128]
         now = time.time()
         with self._lock:
             attempts = self._login_failures.get(key, [])
             # Evict attempts older than lockout window
             valid_attempts = [t for t in attempts if now - t < self.login_lockout_seconds]
-            self._login_failures[key] = valid_attempts
+            if valid_attempts:
+                self._login_failures[key] = valid_attempts
+            else:
+                self._login_failures.pop(key, None)
 
             if len(valid_attempts) >= self.max_login_failures:
                 oldest_in_window = valid_attempts[0]
@@ -157,16 +172,17 @@ class AuthRateLimiter:
 
     def record_login_failure(self, identifier: str) -> None:
         """Record an authentication failure for rate limiting."""
-        key = identifier.strip().lower()
+        key = identifier.strip().lower()[:128]
         now = time.time()
         with self._lock:
-            attempts = self._login_failures.get(key, [])
+            self._evict_if_full(self._login_failures, self.login_lockout_seconds, now)
+            attempts = [t for t in self._login_failures.get(key, []) if now - t < self.login_lockout_seconds]
             attempts.append(now)
             self._login_failures[key] = attempts
 
     def reset_login_failures(self, identifier: str) -> None:
         """Reset failed login count upon successful authentication."""
-        key = identifier.strip().lower()
+        key = identifier.strip().lower()[:128]
         with self._lock:
             self._login_failures.pop(key, None)
 
@@ -175,9 +191,10 @@ class AuthRateLimiter:
 
         Returns (is_limited, retry_after_seconds).
         """
-        key = identifier.strip().lower()
+        key = identifier.strip().lower()[:128]
         now = time.time()
         with self._lock:
+            self._evict_if_full(self._forgot_requests, self.forgot_window_seconds, now)
             requests = self._forgot_requests.get(key, [])
             valid_requests = [t for t in requests if now - t < self.forgot_window_seconds]
 

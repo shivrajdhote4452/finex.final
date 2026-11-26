@@ -21,7 +21,7 @@ from backend.app.domain.goal_engine import (
     GoalEngine,
     GoalUpdate,
 )
-from backend.app.routers.auth import get_current_user_id
+from backend.app.routers.auth import extract_authenticated_user_id, get_current_user_id
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,7 +38,7 @@ async def create_financial_goal(
 ):
     """Create a new financial goal with deterministic projection validation and PostgreSQL persistence."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     try:
         goal = await goal_engine.create_goal_db(user_id, payload, db=db)
@@ -55,7 +55,7 @@ async def list_financial_goals(
 ):
     """List financial goals configured by user from PostgreSQL."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     goals = await goal_engine.get_user_goals_db(user_id, db=db)
     return create_response_envelope(data={"goals": goals, "total": len(goals)}, correlation_id=cid)
@@ -70,7 +70,7 @@ async def get_financial_goal(
 ):
     """Retrieve details for a single financial goal from PostgreSQL."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     goal = await goal_engine.get_goal_by_id_db(user_id, goal_id, db=db)
     if not goal:
@@ -88,7 +88,7 @@ async def update_financial_goal(
 ):
     """Update goal parameters in PostgreSQL."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     try:
         updated = await goal_engine.update_goal_db(user_id, goal_id, payload, db=db)
@@ -107,7 +107,7 @@ async def record_goal_contribution(
 ):
     """Record an append-only cash deposit towards goal in PostgreSQL."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     try:
         res = await goal_engine.record_contribution_db(user_id, goal_id, payload, db=db)
@@ -125,7 +125,7 @@ async def get_goal_projection(
 ):
     """Calculate deterministic future value projection and required monthly contribution."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     try:
         proj = await goal_engine.get_goal_projection_db(user_id, goal_id, db=db)

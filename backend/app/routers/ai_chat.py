@@ -10,6 +10,7 @@ Exposes:
 - POST /ai/feedback: Submit user rating and qualitative feedback
 """
 
+import hashlib
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -21,7 +22,7 @@ from backend.app.database import get_db
 from backend.app.domain.ai_orchestration import AIOrchestrator
 from backend.app.models.core import User
 from backend.app.models.rag import AIConversation, AIFeedback, AIMessage
-from backend.app.routers.auth import get_current_user_id
+from backend.app.routers.auth import extract_authenticated_user_id, get_current_user_id
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -32,7 +33,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ai", tags=["AI Financial Assistant"])
 orchestrator = AIOrchestrator()
 
-# In-memory stores for isolated operational baseline
+_FEEDBACK_STORE: Dict[str, Dict] = {}
+
+
+def _welcome_conv_id(user_id: str) -> str:
+    """Derive a per-user default welcome conversation identifier."""
+    return f"conv-welcome-{hashlib.sha256(user_id.encode('utf-8')).hexdigest()[:12]}"
+
+
 _CONVERSATION_STORE: Dict[str, Dict] = {}
 _MESSAGE_STORE: Dict[str, List[Dict]] = {}
 _FEEDBACK_STORE: Dict[str, Dict] = {}
@@ -65,7 +73,7 @@ async def list_conversations(
 ):
     """List caller's conversations with deterministic pagination, isolation, and DB persistence."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     try:
         stmt = (
@@ -106,9 +114,9 @@ async def list_conversations(
     user_convs = [c for c in _CONVERSATION_STORE.values() if c["user_id"] == user_id and not c.get("is_deleted", False)]
     user_convs.sort(key=lambda x: x["updated_at"], reverse=True)
 
-    # If no conversation exists yet, bootstrap one default conversation
+    # If no conversation exists yet, bootstrap one per-user default conversation
     if not user_convs and offset == 0:
-        default_id = "conv-welcome-001"
+        default_id = _welcome_conv_id(user_id)
         now_dt = datetime.now(timezone.utc)
         now_str = now_dt.isoformat()
         default_c = {
@@ -182,7 +190,7 @@ async def create_conversation(
 ):
     """Create a new conversational session with DB persistence."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
     now = datetime.now(timezone.utc)
     conv_id = f"conv-{uuid.uuid4().hex[:12]}"
 
@@ -231,7 +239,7 @@ async def get_conversation_messages(
 ):
     """Fetch all messages for caller-owned conversation with DB persistence."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     try:
         conv_res = await db.execute(
@@ -300,7 +308,7 @@ async def post_message_to_conversation(
 ):
     """Submit user prompt, run RAG orchestration, and persist responses to database."""
     cid = getattr(request.state, "correlation_id", str(uuid.uuid4()))
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
     now = datetime.now(timezone.utc)
     now_str = now.isoformat()
 
@@ -319,7 +327,7 @@ async def post_message_to_conversation(
             conv = _CONVERSATION_STORE.get(conversation_id)
             if conv and conv.get("user_id") != user_id:
                 raise ForbiddenException(message="Forbidden: You do not own this conversation.")
-            if not conv and conversation_id != "conv-welcome-001":
+            if not conv and conversation_id != _welcome_conv_id(user_id):
                 raise NotFoundException(message="Conversation not found.")
             # Ensure user exists before inserting conversation
             from backend.app.domain.user_store import user_store
@@ -458,7 +466,7 @@ async def delete_conversation(
 ):
     """Soft delete a conversation with database persistence."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
 
     try:
         conv_res = await db.execute(
@@ -506,7 +514,7 @@ async def submit_ai_feedback(
 ):
     """Submit user feedback for an AI assistant message with database persistence."""
     cid = getattr(request.state, "correlation_id", None)
-    user_id = str(current_user.get("sub", current_user.get("user_id", "usr-shivraj-001")))
+    user_id = extract_authenticated_user_id(current_user)
     now = datetime.now(timezone.utc)
     fb_id = f"fb-{uuid.uuid4().hex[:12]}"
 
@@ -519,11 +527,12 @@ async def submit_ai_feedback(
         "comments": payload.comments,
         "created_at": now.isoformat(),
     }
-    _FEEDBACK_STORE[fb_id] = fb_record
 
     try:
         msg_res = await db.execute(select(AIMessage).where(AIMessage.id == payload.message_id))
         db_msg = msg_res.scalars().first()
+        if db_msg and db_msg.user_id != user_id:
+            raise ForbiddenException(message="Forbidden: You cannot submit feedback on another user's message.")
         if not db_msg:
             # Ensure placeholder conversation and message exist so feedback is persisted with valid FK
             placeholder_conv_id = f"conv-fb-{uuid.uuid4().hex[:8]}"
@@ -544,8 +553,10 @@ async def submit_ai_feedback(
                 AIMessage(
                     id=payload.message_id,
                     conversation_id=placeholder_conv_id,
+                    user_id=user_id,
                     role="assistant",
                     content="[Sample / Offline Message]",
+                    correlation_id=cid or f"fb-{uuid.uuid4().hex[:8]}",
                     created_at=now,
                 )
             )
@@ -562,7 +573,10 @@ async def submit_ai_feedback(
         )
         db.add(db_fb)
         await db.commit()
+    except ForbiddenException:
+        raise
     except Exception:
         await db.rollback()
 
+    _FEEDBACK_STORE[fb_id] = fb_record
     return create_response_envelope(data=fb_record, correlation_id=cid)
