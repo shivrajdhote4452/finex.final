@@ -246,3 +246,372 @@ def test_market_indicators_endpoint(client):
     assert data["indicator"] == "SMA"
     assert data["period"] == 2
     assert len(data["series"]) > 0
+
+
+@pytest.mark.asyncio
+async def test_hinglish_buy_intent_preview_confirmation_and_portfolio_summary_isolation():
+    """Verify exact Hinglish buy intent creates an unexecuted preview, confirms only once, and summarizes equity/avg prices accurately."""
+    import uuid
+    from datetime import datetime, timezone
+    from decimal import Decimal
+    from unittest.mock import patch
+
+    from backend.app.adapters.market_data_provider import Quote, RealMarketDataProvider
+    from backend.app.database import AsyncSessionLocal
+    from backend.app.domain.gemini_assistant import gemini_assistant
+    from backend.app.domain.paper_trading_service import OrderSubmitRequest, PaperTradingEngine
+    from backend.app.models.core import User
+    from backend.app.models.paper_trading import (
+        PaperAccount,
+        PaperCashLedger,
+        PaperOrder,
+        PaperPosition,
+        PaperProposal,
+        PaperTrade,
+    )
+    from backend.app.routers.auth import create_access_token
+    from backend.app.services.password_service import hash_password
+    from httpx import ASGITransport, AsyncClient
+    from sqlalchemy import delete, select
+
+    uid_a = f"usr-hinglish-a-{uuid.uuid4().hex[:6]}"
+    uid_b = f"usr-hinglish-b-{uuid.uuid4().hex[:6]}"
+    tok_a = create_access_token(uid_a, "hinglisha@example.com", "Hinglish User A")
+    tok_b = create_access_token(uid_b, "hinglishb@example.com", "Hinglish User B")
+    headers_a = {"Authorization": f"Bearer {tok_a}"}
+    headers_b = {"Authorization": f"Bearer {tok_b}"}
+
+    provider = RealMarketDataProvider(force_cache=True, allow_fixture_fallback=True)
+    now = datetime.now(timezone.utc)
+    for sym, px in [("RELIANCE", Decimal("2500.00")), ("TCS", Decimal("3500.00")), ("INFY", Decimal("1500.00"))]:
+        provider.set_quote_override(
+            sym,
+            Quote(
+                canonical_id=f"NSE:{sym}",
+                symbol=f"{sym}.NS",
+                price=px,
+                currency="INR",
+                observed_at=now,
+                ingested_at=now,
+                source="test_isolated_hinglish_fixture",
+                source_uri=f"urn:market-data:test:{sym}",
+                source_evidence="test-evidence",
+                served_from_cache=False,
+                is_delayed=False,
+                is_stale=False,
+                data_status="fresh",
+            ),
+        )
+    isolated_engine = PaperTradingEngine(market_provider=provider)
+    app = create_app()
+
+    async with AsyncSessionLocal() as session:
+        for uid, email in [(uid_a, "hinglisha@example.com"), (uid_b, "hinglishb@example.com")]:
+            session.add(
+                User(
+                    id=uid,
+                    email=email,
+                    provider="email",
+                    provider_subject=f"sub-{uid}",
+                    password_hash=hash_password("StrongPass!123"),
+                    is_active=True,
+                    is_verified=True,
+                )
+            )
+        await session.commit()
+
+        # Pre-seed an existing TCS holding (2 shares @ ₹3,500) so average_buy_price & total_equity != cash
+        buy_tcs = await isolated_engine.execute_order_db(
+            uid_a,
+            OrderSubmitRequest(
+                symbol="TCS",
+                side="BUY",
+                quantity=Decimal("2"),
+                order_type="MARKET",
+                idempotency_key=f"seed-tcs-{uid_a}",
+            ),
+            db=session,
+        )
+        assert buy_tcs.status == "FILLED"
+        await session.commit()
+
+        # Move TCS current price to ₹3,600 so total_equity (₹100,200) differs from both cash (₹93,000) and initial ₹100,000
+        provider.set_quote_override(
+            "TCS",
+            Quote(
+                canonical_id="NSE:TCS",
+                symbol="TCS.NS",
+                price=Decimal("3600.00"),
+                currency="INR",
+                observed_at=now,
+                ingested_at=now,
+                source="test_isolated_hinglish_fixture",
+                source_uri="urn:market-data:test:TCS",
+                source_evidence="test-evidence",
+                served_from_cache=False,
+                is_delayed=False,
+                is_stale=False,
+                data_status="fresh",
+            ),
+        )
+
+    try:
+        with (
+            patch.object(gemini_assistant, "_provider", provider),
+            patch.object(gemini_assistant, "_engine", isolated_engine),
+        ):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                # 1. Exact Hinglish buy sentence with trailing '?' and 'portfolio'
+                hinglish_msg = "muze yek reliance kaa share lena hai mere portfolio mee le do ge kya tum?"
+                chat_res = await client.post(
+                    "/api/v1/ai/assistant/chat",
+                    json={"message": hinglish_msg, "active_chart_context": {"symbol": "TCS", "timeframe": "1D"}},
+                    headers=headers_a,
+                )
+                assert chat_res.status_code == 200
+                data = chat_res.json()["data"]
+                conv_id = data["conversation_id"]
+
+                assert data["language_detected"] == "hi-Latn"
+                assert data["execution_receipt"] is None  # Must NOT execute before explicit confirmation
+                prop = data["proposal"]
+                assert prop is not None
+                assert prop["status"] == "PROPOSED"
+                assert prop["requires_approval"] is True
+                assert prop["allocations"][0]["symbol"] == "RELIANCE"
+                assert prop["allocations"][0]["side"] == "BUY"
+                assert prop["allocations"][0]["quantity"] == 1
+                assert prop["allocations"][0]["estimated_price"] == 2500.0
+                assert prop["allocations"][0]["estimated_total"] == 2500.0
+                assert "No open positions" not in data["reply"]
+                assert "RELIANCE" in data["reply"]
+
+                # Confirm zero RELIANCE orders were placed prior to approval
+                async with AsyncSessionLocal() as session:
+                    rel_orders = (
+                        (
+                            await session.execute(
+                                select(PaperOrder).where(PaperOrder.user_id == uid_a, PaperOrder.symbol == "RELIANCE")
+                            )
+                        )
+                        .scalars()
+                        .all()
+                    )
+                    assert len(rel_orders) == 0
+
+                # 2. Portfolio inquiry MUST use average_buy_price & total_equity (never ₹0.00 / equity == cash)
+                port_res = await client.post(
+                    "/api/v1/ai/assistant/chat",
+                    json={"message": "Mera virtual portfolio aur balance dikhao", "conversation_id": conv_id},
+                    headers=headers_a,
+                )
+                assert port_res.status_code == 200
+                port_data = port_res.json()["data"]
+                assert port_data["proposal"] is None
+                assert "₹93,000.00" in port_data["reply"]
+                assert "₹100,200.00" in port_data["reply"]
+                assert "₹3,500.00" in port_data["reply"]
+                assert "₹0.00" not in port_data["reply"]
+
+                # 3. Cross-tenant isolation: User B cannot execute User A's proposal
+                prop_id = prop["proposal_id"]
+                b_exec = await client.post(
+                    f"/api/v1/ai/assistant/proposals/{prop_id}/execute",
+                    headers=headers_b,
+                )
+                assert b_exec.status_code == 200
+                assert b_exec.json()["data"]["status"] == "REJECTED"
+
+                # 4. Confirmation from a different conversation must not match
+                wrong_conv = await client.post(
+                    "/api/v1/ai/assistant/chat",
+                    json={"message": "Haan", "conversation_id": f"conv-wrong-{uuid.uuid4().hex[:6]}"},
+                    headers=headers_a,
+                )
+                assert wrong_conv.status_code == 200
+                assert wrong_conv.json()["data"]["execution_receipt"] is None
+
+                # 5. Explicit Hinglish confirmation inside matching conversation executes exactly 1 share
+                confirm_res = await client.post(
+                    "/api/v1/ai/assistant/chat",
+                    json={"message": "Haan", "conversation_id": conv_id},
+                    headers=headers_a,
+                )
+                assert confirm_res.status_code == 200
+                conf_data = confirm_res.json()["data"]
+                receipt = conf_data["execution_receipt"]
+                assert receipt is not None
+                assert receipt["status"] == "EXECUTED"
+                assert receipt["receipts"][0]["symbol"] == "RELIANCE"
+                assert Decimal(str(receipt["receipts"][0]["quantity"])) == Decimal("1")
+                assert Decimal(str(receipt["receipts"][0]["fill_price"])) == Decimal("2500.00")
+                assert receipt["receipts"][0]["status"] == "FILLED"
+                assert conf_data["reply"] and "90,500.00" in conf_data["reply"]
+
+                # 6. Duplicate confirmation does NOT place a second order
+                dup_exec = await client.post(
+                    f"/api/v1/ai/assistant/proposals/{prop_id}/execute",
+                    headers=headers_a,
+                )
+                assert dup_exec.status_code == 200
+                assert dup_exec.json()["data"]["status"] == "ALREADY_EXECUTED"
+
+                async with AsyncSessionLocal() as session:
+                    rel_orders_after = (
+                        (
+                            await session.execute(
+                                select(PaperOrder).where(PaperOrder.user_id == uid_a, PaperOrder.symbol == "RELIANCE")
+                            )
+                        )
+                        .scalars()
+                        .all()
+                    )
+                    assert len(rel_orders_after) == 1
+    finally:
+        async with AsyncSessionLocal() as session:
+            for uid in (uid_a, uid_b):
+                acct = (
+                    await session.execute(select(PaperAccount).where(PaperAccount.user_id == uid))
+                ).scalar_one_or_none()
+                await session.execute(delete(PaperProposal).where(PaperProposal.user_id == uid))
+                if acct:
+                    await session.execute(delete(PaperTrade).where(PaperTrade.account_id == acct.id))
+                    await session.execute(delete(PaperCashLedger).where(PaperCashLedger.account_id == acct.id))
+                    await session.execute(delete(PaperPosition).where(PaperPosition.account_id == acct.id))
+                    await session.execute(delete(PaperOrder).where(PaperOrder.account_id == acct.id))
+                    await session.execute(delete(PaperAccount).where(PaperAccount.id == acct.id))
+                await session.execute(delete(User).where(User.id == uid))
+            await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_multilingual_buy_clarifications_research_and_unavailable_data():
+    """Verify Hindi/English buy intents, concise clarifications on ambiguity, advisory research refusal, and unavailable summary labels."""
+    import uuid
+    from datetime import datetime, timezone
+    from decimal import Decimal
+    from unittest.mock import AsyncMock, patch
+
+    from backend.app.adapters.market_data_provider import Quote, RealMarketDataProvider
+    from backend.app.database import AsyncSessionLocal
+    from backend.app.domain.paper_trading_service import PaperTradingEngine
+    from backend.app.models.core import User
+    from backend.app.models.paper_trading import PaperAccount, PaperProposal
+    from backend.app.services.password_service import hash_password
+    from sqlalchemy import delete, select
+
+    provider = RealMarketDataProvider(force_cache=True, allow_fixture_fallback=False)
+    now = datetime.now(timezone.utc)
+    for sym, px in [("RELIANCE", Decimal("2500.00")), ("TCS", Decimal("3500.00")), ("INFY", Decimal("1500.00"))]:
+        provider.set_quote_override(
+            sym,
+            Quote(
+                canonical_id=f"NSE:{sym}",
+                symbol=f"{sym}.NS",
+                price=px,
+                currency="INR",
+                observed_at=now,
+                ingested_at=now,
+                source="test_multilang_fixture",
+                source_uri=f"urn:market-data:test:{sym}",
+                source_evidence="test-evidence",
+                served_from_cache=False,
+                is_delayed=False,
+                is_stale=False,
+                data_status="fresh",
+            ),
+        )
+    assistant = GeminiInvestmentAssistant(engine=PaperTradingEngine(market_provider=provider), provider=provider)
+    uid = f"usr-multi-lang-{uuid.uuid4().hex[:6]}"
+    conv_id = f"conv-multi-{uuid.uuid4().hex[:6]}"
+
+    async with AsyncSessionLocal() as session:
+        session.add(
+            User(
+                id=uid,
+                email=f"{uid}@example.com",
+                provider="email",
+                provider_subject=f"sub-{uid}",
+                password_hash=hash_password("StrongPass!123"),
+                is_active=True,
+                is_verified=True,
+            )
+        )
+        await session.commit()
+
+    try:
+        async with AsyncSessionLocal() as session:
+            # 1. Hindi & English quantity buys create proposals without executing
+            for msg, expected_sym, expected_qty, expected_lang in [
+                ("Can you buy 2 shares of INFY for me?", "INFY", 2, "en"),
+                ("रिलायंस का एक शेयर खरीदना है", "RELIANCE", 1, "hi"),
+                ("Mere liye do share TCS ke kharid do", "TCS", 2, "hi-Latn"),
+            ]:
+                r = await assistant.process_user_turn(uid, msg, conversation_id=conv_id, db=session)
+                assert r.language_detected == expected_lang
+                assert r.execution_receipt is None
+                assert r.proposal is not None and r.proposal["status"] == "PROPOSED"
+                assert r.proposal["allocations"][0]["symbol"] == expected_sym
+                assert r.proposal["allocations"][0]["quantity"] == expected_qty
+
+            # 2. Ambiguous buy requests return concise clarification without creating proposals
+            for amb_msg in [
+                "muze ek share lena hai",
+                "I want to buy RELIANCE",
+                "buy 0 shares of RELIANCE",
+                "buy 1.5 shares of RELIANCE",
+                "buy 2 UNKNOWNXYZ shares",
+                "RELIANCE mere portfolio me?",
+                "buy or sell RELIANCE",
+            ]:
+                r = await assistant.process_user_turn(uid, amb_msg, conversation_id=conv_id, db=session)
+                assert r.proposal is None, f"Unexpected proposal for ambiguous prompt: {amb_msg}"
+                assert r.execution_receipt is None
+                assert len(r.reply) > 10
+
+            # 3. Advisory research questions in English/Hinglish never create proposals
+            for adv_msg in [
+                "Should I buy 1 RELIANCE share?",
+                "RELIANCE ka ek share lena chahiye?",
+            ]:
+                r = await assistant.process_user_turn(uid, adv_msg, conversation_id=conv_id, db=session)
+                assert r.proposal is None
+                assert r.execution_receipt is None
+
+            # 4. Unavailable summary fields are labeled 'Unavailable', never '₹0.00' or fabricated equity
+            with patch.object(
+                assistant,
+                "tool_get_my_paper_portfolio",
+                new=AsyncMock(
+                    return_value={
+                        "current_cash": None,
+                        "total_equity": None,
+                        "positions": [{"symbol": "RELIANCE", "quantity": 2, "average_buy_price": None}],
+                    }
+                ),
+            ):
+                r_unavail = await assistant.process_user_turn(
+                    uid, "What is my portfolio summary?", conversation_id=conv_id, db=session
+                )
+                assert "Unavailable" in r_unavail.reply
+                assert "₹0.00" not in r_unavail.reply
+                assert "1,000,000.00" not in r_unavail.reply
+
+            # 5. Missing market quote fails closed instead of fabricating a ₹2,500 preview
+            no_quote_provider = RealMarketDataProvider(force_cache=True, allow_fixture_fallback=False)
+            no_quote_assistant = GeminiInvestmentAssistant(
+                engine=PaperTradingEngine(market_provider=no_quote_provider), provider=no_quote_provider
+            )
+            r_no_q = await no_quote_assistant.process_user_turn(
+                uid, "Buy 1 RELIANCE share", conversation_id=conv_id, db=session
+            )
+            assert r_no_q.execution_receipt is None
+            assert r_no_q.proposal is not None and r_no_q.proposal["status"] == "QUOTE_UNAVAILABLE"
+    finally:
+        async with AsyncSessionLocal() as session:
+            acct = (await session.execute(select(PaperAccount).where(PaperAccount.user_id == uid))).scalar_one_or_none()
+            await session.execute(delete(PaperProposal).where(PaperProposal.user_id == uid))
+            if acct:
+                await session.execute(delete(PaperAccount).where(PaperAccount.id == acct.id))
+            await session.execute(delete(User).where(User.id == uid))
+            await session.commit()

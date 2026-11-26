@@ -23,6 +23,12 @@ import { FinExLiveChart } from '../components/market/FinExLiveChart';
 import { TradeTimeMachine } from '../components/market/TradeTimeMachine';
 import { CleanFormattedText } from '../components/common/CleanFormattedText';
 import { useTheme } from '../context/ThemeContext';
+import {
+  formatAllocationSubtotal,
+  formatCashBalanceAfter,
+  isExecutableProposal,
+  shouldRenderProposalCard,
+} from '../domain/chartAssistantHelpers';
 
 export interface ChartWorkspaceProps {
   onNavigate?: (tab: any) => void;
@@ -102,7 +108,7 @@ const TradingViewProWidget: React.FC<{ symbol: string; timeframe: string }> = ({
 };
 
 export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
-  const { virtualCash, holdings, ledger, marketQuotes, executeOrder } = useFinancial();
+  const { virtualCash, holdings, ledger, marketQuotes, executeOrder, refreshAccount } = useFinancial();
   const { resolvedTheme } = useTheme();
   const isLight = resolvedTheme === 'light';
 
@@ -201,6 +207,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
   const [aiInput, setAiInput] = useState<string>('');
   const [aiLoading, setAiLoading] = useState<boolean>(false);
   const [aiExecutingProposal, setAiExecutingProposal] = useState<string | null>(null);
+  const [aiConversationId, setAiConversationId] = useState<string | undefined>(undefined);
 
   // Chart Container References
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -755,7 +762,10 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
         active_indicators: Object.keys(activeIndicators).filter((k) => (activeIndicators as any)[k]),
       };
 
-      const res = await apiClient.aiAssistant.chat(userText, chartContext);
+      const res = await apiClient.aiAssistant.chat(userText, chartContext, aiConversationId);
+      if (res.conversation_id) {
+        setAiConversationId(res.conversation_id);
+      }
       const asstMsg = {
         id: `asst-${Date.now()}`,
         role: 'assistant' as const,
@@ -764,7 +774,21 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
         receipt: res.execution_receipt,
         disclaimer: res.disclaimer,
       };
-      setAiMessages((prev) => [...prev, asstMsg]);
+      setAiMessages((prev) => {
+        const receiptPropId = res.execution_receipt?.proposal_id;
+        const receiptStatus = res.execution_receipt?.status;
+        const updated = receiptPropId && receiptStatus
+          ? prev.map((m) =>
+              m.proposal?.proposal_id === receiptPropId
+                ? { ...m, proposal: { ...m.proposal, status: receiptStatus } }
+                : m
+            )
+          : prev;
+        return [...updated, asstMsg];
+      });
+      if (res.execution_receipt?.status === 'EXECUTED' || res.execution_receipt?.status === 'PARTIALLY_EXECUTED') {
+        await refreshAccount();
+      }
     } catch (err: any) {
       let errorMsg = 'Unable to reach the FinEx AI Assistant.';
       let disclaimer = 'Service temporarily unavailable.';
@@ -806,15 +830,16 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
 
   // 6. Execute AI Proposal
   const handleExecuteAiProposal = async (proposalId: string) => {
+    if (!proposalId || aiExecutingProposal) return;
     setAiExecutingProposal(proposalId);
     try {
       const res = await apiClient.aiAssistant.executeProposal(proposalId);
       const status = res?.status;
       let text = '';
       if (status === 'EXECUTED') {
-        text = `Paper proposal ${proposalId} executed successfully! Virtual cash balance: ₹${res.cash_balance_after?.toLocaleString('en-IN') || '0'}.`;
+        text = `Paper proposal ${proposalId} executed successfully! Virtual cash balance: ${formatCashBalanceAfter(res.cash_balance_after)}.`;
       } else if (status === 'PARTIALLY_EXECUTED') {
-        text = `Paper proposal ${proposalId} partially executed. Some legs filled, some could not be filled.`;
+        text = `Paper proposal ${proposalId} partially executed. Some legs filled, some could not be filled. Remaining virtual cash: ${formatCashBalanceAfter(res.cash_balance_after)}.`;
       } else if (status === 'ALREADY_EXECUTED') {
         text = `Paper proposal ${proposalId} was already executed previously. No duplicate orders were placed.`;
       } else if (status === 'EXPIRED') {
@@ -826,7 +851,11 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
       }
 
       setAiMessages((prev) => [
-        ...prev,
+        ...prev.map((m) =>
+          m.proposal?.proposal_id === proposalId && status
+            ? { ...m, proposal: { ...m.proposal, status } }
+            : m
+        ),
         {
           id: `exec-${Date.now()}`,
           role: 'assistant' as const,
@@ -835,6 +864,9 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
           disclaimer: 'Simulated paper transaction recorded in local PostgreSQL ledger.',
         },
       ]);
+      if (status === 'EXECUTED' || status === 'PARTIALLY_EXECUTED') {
+        await refreshAccount();
+      }
       loadChartData();
     } catch (err: any) {
       setAiMessages((prev) => [
@@ -2116,7 +2148,7 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                         </div>
 
                         {/* Proposal Card if AI created bounded proposal */}
-                        {m.proposal && (
+                        {shouldRenderProposalCard(m.proposal) && (
                           <div
                             style={{
                               marginTop: '8px',
@@ -2127,11 +2159,14 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                             }}
                           >
                             <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-action)', marginBottom: '4px' }}>
-                              📋 Paper Investment Proposal
+                              📋 Virtual Paper Order Preview ({m.proposal.status})
                             </div>
                             <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                              Budget: {m.proposal.currency} {m.proposal.total_budget} • Expires in{' '}
-                              {m.proposal.expires_in_minutes}m
+                              Budget: {m.proposal.currency}{' '}
+                              {typeof m.proposal.total_budget === 'number'
+                                ? m.proposal.total_budget.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                : 'Unavailable'}{' '}
+                              • Expires in {m.proposal.expires_in_minutes ?? 10}m
                             </div>
                             <div style={{ marginTop: '4px' }}>
                               {m.proposal.allocations?.map((alloc: any, idx: number) => (
@@ -2145,34 +2180,36 @@ export const ChartWorkspaceScreen: React.FC<ChartWorkspaceProps> = () => {
                                   }}
                                 >
                                   <span>
-                                    {alloc.side} {alloc.quantity}x {alloc.symbol}
+                                    {alloc.side || 'BUY'} {alloc.quantity}x {alloc.symbol}
                                   </span>
                                   <span style={{ color: 'var(--color-profit)' }}>
-                                    ₹{alloc.estimated_subtotal?.toFixed(0)}
+                                    {formatAllocationSubtotal(alloc)}
                                   </span>
                                 </div>
                               ))}
                             </div>
-                            <button
-                              onClick={() => handleExecuteAiProposal(m.proposal.proposal_id)}
-                              disabled={aiExecutingProposal === m.proposal.proposal_id}
-                              style={{
-                                marginTop: '8px',
-                                width: '100%',
-                                backgroundColor: 'var(--color-action)',
-                                color: '#FFFFFF',
-                                border: 'none',
-                                borderRadius: '3px',
-                                padding: '6px',
-                                fontWeight: 700,
-                                fontSize: '11px',
-                                cursor: 'pointer',
-                              }}
-                            >
-                              {aiExecutingProposal === m.proposal.proposal_id
-                                ? 'Executing Paper Fills...'
-                                : 'Execute Paper Proposal'}
-                            </button>
+                            {isExecutableProposal(m.proposal) && (
+                              <button
+                                onClick={() => handleExecuteAiProposal(m.proposal.proposal_id)}
+                                disabled={aiExecutingProposal === m.proposal.proposal_id}
+                                style={{
+                                  marginTop: '8px',
+                                  width: '100%',
+                                  backgroundColor: 'var(--color-action)',
+                                  color: '#FFFFFF',
+                                  border: 'none',
+                                  borderRadius: '3px',
+                                  padding: '6px',
+                                  fontWeight: 700,
+                                  fontSize: '11px',
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                {aiExecutingProposal === m.proposal.proposal_id
+                                  ? 'Executing Paper Fills...'
+                                  : 'Execute Paper Proposal'}
+                              </button>
+                            )}
                           </div>
                         )}
 

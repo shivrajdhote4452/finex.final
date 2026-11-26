@@ -1587,33 +1587,43 @@ class ApiClient {
 
   // --- AskFinEx AI Paper Investment Assistant ---
   public aiAssistant = {
-    chat: async (message: string, chartContext?: any) => {
+    chat: async (message: string, chartContext?: any, conversationId?: string) => {
       return this.request<{
+        message_id?: string;
+        conversation_id?: string;
         reply: string;
-        language: string;
+        language?: string;
+        language_detected?: string;
         proposal: {
-          proposal_id: string;
-          instruction_text: string;
+          proposal_id?: string;
+          instruction_text?: string;
           total_budget: number;
+          requested_budget?: number;
+          available_cash?: number;
           currency: string;
           allocations: Array<{
             symbol: string;
-            side: string;
+            side?: string;
             quantity: number;
-            reference_price: number;
-            estimated_subtotal: number;
+            estimated_price?: number;
+            estimated_total?: number;
+            reference_price?: number;
+            estimated_subtotal?: number;
             currency: string;
-            source: string;
+            source?: string;
           }>;
           estimated_allocation_total: number;
-          expires_at: string;
-          expires_in_minutes: number;
+          expires_at?: string;
+          expires_in_minutes?: number;
+          requires_approval?: boolean;
+          error?: string;
           status: string;
         } | null;
         execution_receipt: {
           proposal_id: string;
           status: string;
-          executed_orders: Array<{
+          receipts?: Array<any>;
+          executed_orders?: Array<{
             order_id: string;
             symbol: string;
             side: string;
@@ -1622,14 +1632,19 @@ class ApiClient {
             status: string;
             fee: number;
           }>;
-          remaining_virtual_cash: number;
-          currency: string;
+          cash_balance_after?: number;
+          remaining_virtual_cash?: number;
+          currency?: string;
         } | null;
         is_setup_incomplete?: boolean;
         disclaimer: string;
       }>('/ai/assistant/chat', {
         method: 'POST',
-        body: JSON.stringify({ message, chart_context: chartContext }),
+        body: JSON.stringify({
+          message,
+          chart_context: chartContext,
+          ...(conversationId ? { conversation_id: conversationId } : {}),
+        }),
       });
     },
 
