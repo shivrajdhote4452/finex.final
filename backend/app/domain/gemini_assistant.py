@@ -937,6 +937,7 @@ class GeminiInvestmentAssistant:
             select(PaperProposal)
             .where(PaperProposal.id == proposal_id, PaperProposal.user_id == user_id)
             .with_for_update()
+            .execution_options(populate_existing=True)
         )
         res = await db.execute(stmt)
         prop = res.scalar_one_or_none()
@@ -960,7 +961,7 @@ class GeminiInvestmentAssistant:
 
         now = datetime.now(timezone.utc)
         exp = prop.expires_at.replace(tzinfo=timezone.utc) if prop.expires_at.tzinfo is None else prop.expires_at
-        if now > exp:
+        if now >= exp:
             prop.status = "EXPIRED"
             await db.commit()
             return {
@@ -1702,22 +1703,24 @@ class GeminiInvestmentAssistant:
             )
 
         # 3. Explicit Proposal Authorization
-        # Reject negated or ambiguous authorization
-        negated_approval_phrases = [
+        # Reject negated or ambiguous authorization strictly
+        cleaned_approval = re.sub(r"[.!,\s]+$", "", p_lower).strip()
+        negated_approval_phrases = (
             "do not confirm",
             "don't confirm",
             "dont confirm",
             "not confirm",
+            "not ready to confirm",
             "do not execute",
             "don't execute",
             "dont execute",
             "never execute",
             "never confirm",
             "not sure",
-        ]
+        )
         is_negated_approval = any(neg in p_lower for neg in negated_approval_phrases)
 
-        if is_negated_approval and not is_research_query:
+        if is_negated_approval and not (is_advisory and not has_buy_intent):
             return AssistantMessageResponse(
                 message_id=msg_id,
                 conversation_id=conv_id,
@@ -1728,10 +1731,13 @@ class GeminiInvestmentAssistant:
 
         approval_tokens = {
             "yes",
+            "yes please",
             "approve",
             "confirm",
             "proceed",
             "haan",
+            "haanji",
+            "haan ji",
             "हाँ",
             "theek hai",
             "execute proposal",
@@ -1742,6 +1748,10 @@ class GeminiInvestmentAssistant:
             "yes buy",
             "confirm buy",
             "confirm order",
+            "confirm this",
+            "confirm this order",
+            "confirm this trade",
+            "confirm this proposal",
             "order confirm",
             "confirm kar do",
             "haan execute",
@@ -1750,20 +1760,107 @@ class GeminiInvestmentAssistant:
             "confirm trade",
             "execute trade",
         }
-        is_approval = (
-            not is_refusal
-            and not is_research_query
-            and not is_negated_approval
-            and (
-                p_lower in approval_tokens
-                or p_lower.startswith("confirm proposal")
-                or p_lower.startswith("execute proposal")
-                or p_lower.startswith("confirm prop-")
-                or p_lower.startswith("execute prop-")
-                or any(f"confirm {t}" in p_lower for t in ["proposal", "order", "trade", "this"])
-                or (any(p_lower == token for token in ["yes", "confirm", "approve", "proceed", "haan"]))
+        all_explicit_prop_ids = list(dict.fromkeys(re.findall(r"\bprop-[a-zA-Z0-9_-]+\b", user_message, re.IGNORECASE)))
+        hesitation_markers = (
+            "maybe",
+            "perhaps",
+            "shayad",
+            "later",
+            "baad me",
+            "baad mein",
+            "wait",
+            "ruko",
+            "not sure",
+            "kaunsa",
+            "which",
+            "status",
+            "price",
+            "details",
+        )
+        has_hesitation_or_choice = (
+            user_message.strip().endswith("?")
+            or any(re.search(rf"\b{re.escape(h)}\b", p_lower) for h in hesitation_markers)
+            or bool(re.search(r"\b(?:or|ya|but|par|agar|if)\b", p_lower))
+            or len(all_explicit_prop_ids) > 1
+        )
+        is_explicit_prop_approval = len(all_explicit_prop_ids) == 1 and bool(
+            re.fullmatch(
+                r"(?:(?:yes|haan)[,\s]+)?(?:confirm|execute|approve)\s+(?:the\s+)?(?:(?:proposal|order|trade)\s+)?prop-[a-z0-9_-]+(?:\s+please)?",
+                cleaned_approval,
             )
         )
+        is_exact_approval = (cleaned_approval in approval_tokens) or is_explicit_prop_approval
+        is_approval = (
+            not is_refusal
+            and not is_advisory
+            and not is_negated_approval
+            and not has_hesitation_or_choice
+            and is_exact_approval
+        )
+        has_confirm_or_yes_word = bool(
+            re.search(r"\b(?:yes|haan|haanji|confirm|approve|proceed|execute)\b", p_lower) or "हाँ" in user_message
+        )
+        is_portfolio_or_chart_question = any(
+            w in p_lower for w in ("portfolio", "balance", "holdings", "equity", "cash", "chart", "rsi", "sma", "macd")
+        )
+        is_ambiguous_confirmation = (
+            not is_refusal
+            and not is_negated_approval
+            and not is_approval
+            and not has_buy_intent
+            and not is_advisory
+            and not is_portfolio_or_chart_question
+            and has_confirm_or_yes_word
+            and (has_hesitation_or_choice or "confirm" in p_lower or len(cleaned_approval.split()) <= 4)
+        )
+
+        if is_ambiguous_confirmation:
+            pending_note = ""
+            if db:
+                if len(all_explicit_prop_ids) > 1:
+                    ids_str = ", ".join(f"'{pid}'" for pid in all_explicit_prop_ids)
+                    pending_note = f" Multiple proposal IDs were mentioned ({ids_str})."
+                else:
+                    pend_res = await db.execute(
+                        select(PaperProposal)
+                        .where(
+                            PaperProposal.user_id == user_id,
+                            PaperProposal.conversation_id == conv_id,
+                            PaperProposal.status.in_(["PROPOSED", "PARTIALLY_EXECUTED"]),
+                        )
+                        .order_by(PaperProposal.created_at)
+                    )
+                    pend_rows = pend_res.scalars().all()
+                    if len(pend_rows) == 1:
+                        pending_note = f" Pending proposal: '{pend_rows[0].id}' ({pend_rows[0].instruction_text})."
+                    elif len(pend_rows) > 1:
+                        pending_note = (
+                            " Pending proposals in this conversation: "
+                            + ", ".join(f"'{r.id}'" for r in pend_rows)
+                            + "."
+                        )
+            if lang == "hi-Latn":
+                clarify_reply = (
+                    f"Confirmation clear nahi hai — abhi koi paper order execute nahi kiya gaya hai.{pending_note} "
+                    "Execute karne ke liye sirf **'Haan'**, **'Yes'**, ya **'Confirm'** likhein (ya cancel karne ke liye **'Cancel'** likhein)."
+                )
+            elif lang == "hi":
+                clarify_reply = (
+                    f"पुष्टि स्पष्ट नहीं है — अभी कोई पेपर ऑर्डर निष्पादित नहीं किया गया है।{pending_note} "
+                    "निष्पादित करने के लिए स्पष्ट **'हाँ'** या **'Confirm'** लिखें (या रद्द करने के लिए **'Cancel'** लिखें)।"
+                )
+            else:
+                clarify_reply = (
+                    f"Your confirmation was ambiguous, so no paper order was executed.{pending_note} "
+                    "Please reply clearly with **'Yes'** / **'Confirm'** (or specify the proposal ID) to execute, or **'Cancel'** to discard."
+                )
+            return AssistantMessageResponse(
+                message_id=msg_id,
+                conversation_id=conv_id,
+                reply=clarify_reply,
+                language_detected=lang,
+                is_setup_incomplete=False,
+            )
 
         if is_approval and db:
             explicit_prop_id_match = re.search(r"\b(prop-[a-zA-Z0-9_-]+)\b", user_message, re.IGNORECASE)
@@ -1818,7 +1915,7 @@ class GeminiInvestmentAssistant:
                     if target_prop.expires_at.tzinfo is None
                     else target_prop.expires_at
                 )
-                if now_exp > exp_dt:
+                if now_exp >= exp_dt:
                     target_prop.status = "EXPIRED"
                     await db.commit()
                     reply = f"Proposal '{explicit_id}' has expired. Please request a fresh allocation proposal."
@@ -1878,7 +1975,7 @@ class GeminiInvestmentAssistant:
                     if target_prop.expires_at.tzinfo is None
                     else target_prop.expires_at
                 )
-                if now_exp > exp_dt:
+                if now_exp >= exp_dt:
                     target_prop.status = "EXPIRED"
                     await db.commit()
                     reply = "This paper proposal has expired. Please request a fresh allocation proposal."

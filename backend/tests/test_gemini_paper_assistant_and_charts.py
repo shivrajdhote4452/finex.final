@@ -615,3 +615,315 @@ async def test_multilingual_buy_clarifications_research_and_unavailable_data():
                 await session.execute(delete(PaperAccount).where(PaperAccount.id == acct.id))
             await session.execute(delete(User).where(User.id == uid))
             await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_order_confirmation_safety_exhaustively():
+    """Verify Haan/Yes/Confirm strictly guard expired, cancelled, executed, multiple, cross-user, wrong-conv, ambiguous, price-jump, and concurrent confirmations."""
+    import asyncio
+    import uuid
+    from datetime import datetime, timedelta, timezone
+    from decimal import Decimal
+    from unittest.mock import patch
+
+    from backend.app.adapters.market_data_provider import Quote, RealMarketDataProvider
+    from backend.app.database import AsyncSessionLocal
+    from backend.app.domain.gemini_assistant import gemini_assistant
+    from backend.app.domain.paper_trading_service import PaperTradingEngine
+    from backend.app.models.core import User
+    from backend.app.models.paper_trading import (
+        PaperAccount,
+        PaperCashLedger,
+        PaperOrder,
+        PaperPosition,
+        PaperProposal,
+        PaperTrade,
+    )
+    from backend.app.routers.auth import create_access_token
+    from backend.app.services.password_service import hash_password
+    from httpx import ASGITransport, AsyncClient
+    from sqlalchemy import delete, select
+
+    provider = RealMarketDataProvider(force_cache=True, allow_fixture_fallback=False)
+    now = datetime.now(timezone.utc)
+    for sym, px in [("RELIANCE", Decimal("2500.00")), ("TCS", Decimal("3500.00")), ("INFY", Decimal("1500.00"))]:
+        provider.set_quote_override(
+            sym,
+            Quote(
+                canonical_id=f"NSE:{sym}",
+                symbol=f"{sym}.NS",
+                price=px,
+                currency="INR",
+                observed_at=now,
+                ingested_at=now,
+                source="test_confirm_safety_fixture",
+                source_uri=f"urn:market-data:test:{sym}",
+                source_evidence="test-evidence",
+                served_from_cache=False,
+                is_delayed=False,
+                is_stale=False,
+                data_status="fresh",
+            ),
+        )
+    assistant = GeminiInvestmentAssistant(engine=PaperTradingEngine(market_provider=provider), provider=provider)
+    uid_a = f"usr-conf-a-{uuid.uuid4().hex[:6]}"
+    uid_b = f"usr-conf-b-{uuid.uuid4().hex[:6]}"
+    tok_a = create_access_token(uid_a, f"{uid_a}@example.com", "Confirm Safety A")
+    headers_a = {"Authorization": f"Bearer {tok_a}"}
+    app = create_app()
+
+    async with AsyncSessionLocal() as session:
+        for uid in (uid_a, uid_b):
+            session.add(
+                User(
+                    id=uid,
+                    email=f"{uid}@example.com",
+                    provider="email",
+                    provider_subject=f"sub-{uid}",
+                    password_hash=hash_password("StrongPass!123"),
+                    is_active=True,
+                    is_verified=True,
+                )
+            )
+        await session.commit()
+
+    async def count_orders(user_id: str) -> int:
+        async with AsyncSessionLocal() as s:
+            rows = (await s.execute(select(PaperOrder).where(PaperOrder.user_id == user_id))).scalars().all()
+            return len(rows)
+
+    try:
+        async with AsyncSessionLocal() as session:
+            # 1. Expired proposal (generic "Yes"/"Confirm" + explicit ID + execute endpoint)
+            conv_exp = f"conv-exp-{uuid.uuid4().hex[:6]}"
+            p_exp = await assistant.tool_create_paper_proposal(
+                uid_a,
+                ["RELIANCE"],
+                currency="INR",
+                conversation_id=conv_exp,
+                db=session,
+                requested_quantities={"RELIANCE": 1},
+            )
+            db_exp = (
+                await session.execute(select(PaperProposal).where(PaperProposal.id == p_exp["proposal_id"]))
+            ).scalar_one()
+            db_exp.expires_at = datetime.now(timezone.utc) - timedelta(seconds=5)
+            await session.commit()
+
+            for msg in ("Yes", "Confirm", f"confirm {p_exp['proposal_id']}"):
+                r_exp = await assistant.process_user_turn(uid_a, msg, conversation_id=conv_exp, db=session)
+                assert r_exp.execution_receipt is None
+                assert "expired" in r_exp.reply.lower() or "no active pending" in r_exp.reply.lower()
+            assert await count_orders(uid_a) == 0
+
+            # 2. Cancelled proposal must reject Yes/Haan/Confirm/explicit ID
+            conv_can = f"conv-can-{uuid.uuid4().hex[:6]}"
+            p_can = await assistant.tool_create_paper_proposal(
+                uid_a,
+                ["RELIANCE"],
+                currency="INR",
+                conversation_id=conv_can,
+                db=session,
+                requested_quantities={"RELIANCE": 1},
+            )
+            r_cancel = await assistant.process_user_turn(uid_a, "Cancel", conversation_id=conv_can, db=session)
+            assert "cancelled" in r_cancel.reply.lower()
+            for msg in ("Yes", "Haan", "Confirm", f"confirm {p_can['proposal_id']}"):
+                r_after_can = await assistant.process_user_turn(uid_a, msg, conversation_id=conv_can, db=session)
+                assert r_after_can.execution_receipt is None
+            assert await count_orders(uid_a) == 0
+
+            # 3. Ambiguous confirmations on an active pending proposal MUST clarify and NEVER execute
+            conv_amb = f"conv-amb-{uuid.uuid4().hex[:6]}"
+            r_prev = await assistant.process_user_turn(
+                uid_a, "Buy 1 RELIANCE share", conversation_id=conv_amb, db=session
+            )
+            assert r_prev.proposal is not None and r_prev.proposal["status"] == "PROPOSED"
+            prop_amb_id = r_prev.proposal["proposal_id"]
+            assert await count_orders(uid_a) == 0
+
+            for amb_conf in [
+                "Yes, maybe",
+                "Haan, shayad",
+                "Yes?",
+                "Confirm?",
+                "Confirm later",
+                "Wait before confirming this",
+                "Confirm or cancel this order",
+                "Confirm order status",
+                "Not ready to confirm this",
+                "do not confirm",
+                "Yes, what is the price?",
+            ]:
+                r_amb = await assistant.process_user_turn(uid_a, amb_conf, conversation_id=conv_amb, db=session)
+                assert r_amb.execution_receipt is None, f"Ambiguous text executed unexpectedly: {amb_conf}"
+                assert await count_orders(uid_a) == 0
+
+            # Normal portfolio question containing "confirm" still routes to portfolio summary cleanly
+            r_port_q = await assistant.process_user_turn(
+                uid_a, "Can you confirm my portfolio balance?", conversation_id=conv_amb, db=session
+            )
+            assert r_port_q.execution_receipt is None
+            assert "Virtual Paper Portfolio Summary" in r_port_q.reply
+
+            # Wrong conversation cannot confirm conv_amb's proposal via Yes/Haan/Confirm
+            for conf_word in ("Yes", "Haan", "Confirm"):
+                r_wrong = await assistant.process_user_turn(
+                    uid_a, conf_word, conversation_id=f"conv-wrong-{uuid.uuid4().hex[:4]}", db=session
+                )
+                assert r_wrong.execution_receipt is None
+
+            # Cross-user cannot execute User A's proposal
+            r_cross = await assistant.process_user_turn(
+                uid_b, f"confirm {prop_amb_id}", conversation_id=conv_amb, db=session
+            )
+            assert r_cross.execution_receipt is None
+            assert "not found for this account" in r_cross.reply
+            assert await count_orders(uid_a) == 0
+
+            # 4. Price jump exceeding approved amount rejects on "Confirm" without filling
+            provider.set_quote_override(
+                "RELIANCE",
+                Quote(
+                    canonical_id="NSE:RELIANCE",
+                    symbol="RELIANCE.NS",
+                    price=Decimal("2575.00"),
+                    currency="INR",
+                    observed_at=now,
+                    ingested_at=now,
+                    source="test_confirm_safety_fixture",
+                    source_uri="urn:market-data:test:RELIANCE",
+                    source_evidence="test-evidence",
+                    served_from_cache=False,
+                    is_delayed=False,
+                    is_stale=False,
+                    data_status="fresh",
+                ),
+            )
+            r_jump = await assistant.process_user_turn(uid_a, "Confirm", conversation_id=conv_amb, db=session)
+            assert r_jump.execution_receipt is not None and r_jump.execution_receipt["status"] == "REJECTED"
+            assert "exceeds authorized remaining budget" in r_jump.execution_receipt["error"]
+            assert await count_orders(uid_a) == 0
+
+            # Restore price and expire/clear old proposal
+            provider.set_quote_override(
+                "RELIANCE",
+                Quote(
+                    canonical_id="NSE:RELIANCE",
+                    symbol="RELIANCE.NS",
+                    price=Decimal("2500.00"),
+                    currency="INR",
+                    observed_at=now,
+                    ingested_at=now,
+                    source="test_confirm_safety_fixture",
+                    source_uri="urn:market-data:test:RELIANCE",
+                    source_evidence="test-evidence",
+                    served_from_cache=False,
+                    is_delayed=False,
+                    is_stale=False,
+                    data_status="fresh",
+                ),
+            )
+
+            # 5. Multiple pending proposals require disambiguation; multi-ID confirm rejected
+            conv_multi = f"conv-mult-{uuid.uuid4().hex[:6]}"
+            p1 = (
+                await assistant.process_user_turn(uid_a, "Buy 1 RELIANCE share", conversation_id=conv_multi, db=session)
+            ).proposal
+            p2 = (
+                await assistant.process_user_turn(uid_a, "Buy 1 INFY share", conversation_id=conv_multi, db=session)
+            ).proposal
+            assert p1 is not None and p2 is not None
+            for msg in ("Yes", "Haan", "Confirm", f"confirm {p1['proposal_id']} or {p2['proposal_id']}"):
+                r_dis = await assistant.process_user_turn(uid_a, msg, conversation_id=conv_multi, db=session)
+                assert r_dis.execution_receipt is None
+            assert await count_orders(uid_a) == 0
+
+            # Confirm specifically p2 via explicit ID -> executes ONLY INFY; p1 remains PROPOSED
+            r_p2 = await assistant.process_user_turn(
+                uid_a, f"confirm {p2['proposal_id']}", conversation_id=conv_multi, db=session
+            )
+            assert r_p2.execution_receipt is not None and r_p2.execution_receipt["status"] == "EXECUTED"
+            assert await count_orders(uid_a) == 1
+            p1_db = (
+                await session.execute(select(PaperProposal).where(PaperProposal.id == p1["proposal_id"]))
+            ).scalar_one()
+            assert p1_db.status == "PROPOSED"
+
+            # Repeated confirmations on executed p2 create zero additional orders
+            r_rep = await assistant.process_user_turn(
+                uid_a, f"confirm {p2['proposal_id']}", conversation_id=conv_multi, db=session
+            )
+            assert r_rep.execution_receipt is None
+            assert "already been executed" in r_rep.reply.lower()
+            assert await count_orders(uid_a) == 1
+
+            # 6. Concurrent confirmations via process_user_turn (across separate DB sessions) execute p1 strictly once
+            async def confirm_turn_race(phrase: str):
+                async with AsyncSessionLocal() as s:
+                    return await assistant.process_user_turn(uid_a, phrase, conversation_id=conv_multi, db=s)
+
+            race_turn_res = await asyncio.gather(
+                confirm_turn_race("Yes"),
+                confirm_turn_race("Haan"),
+                confirm_turn_race("Confirm"),
+                confirm_turn_race("Yes"),
+            )
+            exec_hits = [
+                r for r in race_turn_res if r.execution_receipt and r.execution_receipt.get("status") == "EXECUTED"
+            ]
+            assert len(exec_hits) == 1
+            assert await count_orders(uid_a) == 2
+
+            # 7. Concurrent HTTP /proposals/{id}/execute calls on a fresh proposal execute strictly once
+            conv_http = f"conv-http-{uuid.uuid4().hex[:6]}"
+            p3 = await assistant.tool_create_paper_proposal(
+                uid_a, ["TCS"], currency="INR", conversation_id=conv_http, db=session, requested_quantities={"TCS": 1}
+            )
+            p3_id = p3["proposal_id"]
+
+        with (
+            patch.object(gemini_assistant, "_provider", provider),
+            patch.object(gemini_assistant, "_engine", assistant.engine),
+        ):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+                http_res = await asyncio.gather(
+                    *[
+                        client.post(f"/api/v1/ai/assistant/proposals/{p3_id}/execute", headers=headers_a)
+                        for _ in range(4)
+                    ]
+                )
+                statuses = [r.json()["data"]["status"] for r in http_res]
+                assert statuses.count("EXECUTED") == 1
+                assert statuses.count("ALREADY_EXECUTED") == 3
+                assert await count_orders(uid_a) == 3
+
+        # Verify exact ledger, cash (100,000 - 1500 INFY - 2500 RELIANCE - 3500 TCS = 92,500), and holdings
+        async with AsyncSessionLocal() as session:
+            acct = (await session.execute(select(PaperAccount).where(PaperAccount.user_id == uid_a))).scalar_one()
+            assert Decimal(str(acct.current_cash)) == Decimal("92500.00")
+            pos_rows = (
+                (await session.execute(select(PaperPosition).where(PaperPosition.account_id == acct.id)))
+                .scalars()
+                .all()
+            )
+            assert {p.symbol: Decimal(str(p.quantity)) for p in pos_rows} == {
+                "INFY": Decimal("1"),
+                "RELIANCE": Decimal("1"),
+                "TCS": Decimal("1"),
+            }
+    finally:
+        async with AsyncSessionLocal() as session:
+            for uid in (uid_a, uid_b):
+                acct = (
+                    await session.execute(select(PaperAccount).where(PaperAccount.user_id == uid))
+                ).scalar_one_or_none()
+                await session.execute(delete(PaperProposal).where(PaperProposal.user_id == uid))
+                if acct:
+                    await session.execute(delete(PaperTrade).where(PaperTrade.account_id == acct.id))
+                    await session.execute(delete(PaperCashLedger).where(PaperCashLedger.account_id == acct.id))
+                    await session.execute(delete(PaperPosition).where(PaperPosition.account_id == acct.id))
+                    await session.execute(delete(PaperOrder).where(PaperOrder.account_id == acct.id))
+                    await session.execute(delete(PaperAccount).where(PaperAccount.id == acct.id))
+                await session.execute(delete(User).where(User.id == uid))
+            await session.commit()
